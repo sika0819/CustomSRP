@@ -604,8 +604,8 @@ namespace CustomSRP.Editor
             material.SetFloat("_ShadowLift", 0.95f);
             material.SetColor("_ShadowTint", new Color(0.42f, 0.48f, 0.72f, 1f));
             material.SetColor("_ShadowWarm", new Color(0.62f, 0.45f, 0.32f, 1f));
-            material.SetFloat("_ShadowWobble", 0.4f);
-            material.SetFloat("_ShadowBrushScale", 1.2f);
+            material.SetFloat("_ShadowWobble", 0.55f);
+            material.SetFloat("_ShadowBrushScale", 1.6f);
             material.SetColor("_SpecularColor", new Color(0.5f, 0.45f, 0.38f, 1f));
             material.SetFloat("_SpecularThreshold", 0.88f);
             material.SetColor("_AmbientColor", new Color(0.52f, 0.5f, 0.44f, 1f));

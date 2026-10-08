@@ -14,6 +14,16 @@ half QuantizeNdotL(half ndotL, half steps)
     return floor(ndotL * steps) / (steps - 1.0h);
 }
 
+// Move the shadow lookup so a hard shadow-map edge follows paint strokes.
+void OffsetSurfaceForOilShadow(inout Surface surfaceWS, half brush, half wobble)
+{
+    half along = brush - 0.5h;
+    half across = frac(brush * 1.618h + 0.37h) - 0.5h;
+    float reach = (float)wobble * 6.0;
+    surfaceWS.position.x += (float)along * reach;
+    surfaceWS.position.z += (float)across * reach;
+}
+
 // Soft lit amount with brush-warped threshold — broken paint edge, not binary black.
 half PainterlyLitAmount(half attenuation, half brush, half wobble)
 {

@@ -3,7 +3,7 @@
 
 // Caller declares _OutlineBrushMap, sampler_OutlineBrushMap,
 // _OutlineBrushMap_ST, and _ShadowBrushScale.
-// worldFrequency is UV per meter (objects ~0.25, terrain ~0.008).
+// worldFrequency is UV per meter. Objects and terrain receivers both use ~0.25.
 half SampleOilShadowBrush(float3 positionWS, float2 uv, float worldFrequency)
 {
 #if defined(SHADER_STAGE_FRAGMENT)

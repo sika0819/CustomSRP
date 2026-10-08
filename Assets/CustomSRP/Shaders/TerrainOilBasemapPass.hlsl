@@ -106,10 +106,11 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
         GetFragment(input.positionCS_SS).positionSS, 0);
     surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
 
-    half brush = SampleOilShadowBrush(input.positionWS, input.uv, 0.008);
+    half brush = SampleOilShadowBrush(input.positionWS, input.uv, 0.25);
 #if defined(_CANVAS_ON)
     brush = saturate(brush * 0.75h + thicknessMask * 0.35h);
 #endif
+    OffsetSurfaceForOilShadow(surface, brush, (half)_ShadowWobble);
 
     half3 color = OilNPRLighting(
         surface,

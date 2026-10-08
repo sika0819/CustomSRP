@@ -699,18 +699,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 2352721835153816682, guid: 9b30f1bc292054d16bcdef85d013255f, type: 3}
-      propertyPath: m_MaterialTemplate
-      value: 
-      objectReference: {fileID: 2100000, guid: 32b763f1f64554cce96d606217f1fd84, type: 2}
-    - target: {fileID: 2352721835153816682, guid: 9b30f1bc292054d16bcdef85d013255f, type: 3}
-      propertyPath: m_ShadowCastingMode
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2352721835153816682, guid: 9b30f1bc292054d16bcdef85d013255f, type: 3}
-      propertyPath: m_DrawTreesAndFoliage
-      value: 1
-      objectReference: {fileID: 0}
     - target: {fileID: 2844971883956874182, guid: 9b30f1bc292054d16bcdef85d013255f, type: 3}
       propertyPath: m_LocalPosition.x
       value: -549
@@ -754,10 +742,6 @@ PrefabInstance:
     - target: {fileID: 9018122098284218389, guid: 9b30f1bc292054d16bcdef85d013255f, type: 3}
       propertyPath: m_Name
       value: MonurikiTerrain
-      objectReference: {fileID: 0}
-    - target: {fileID: 9018122098284218389, guid: 9b30f1bc292054d16bcdef85d013255f, type: 3}
-      propertyPath: m_IsActive
-      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

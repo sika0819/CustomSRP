@@ -84,6 +84,7 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
 #if defined(_CANVAS_ON)
     brush = saturate(brush * 0.75h + thicknessMask * 0.35h);
 #endif
+    OffsetSurfaceForOilShadow(surface, brush, (half)_ShadowWobble);
 
     half3 color = OilNPRLighting(
         surface,

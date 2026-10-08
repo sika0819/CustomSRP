@@ -39,8 +39,8 @@ Shader "CustomSRP/TerrainOilNPR"
         _ShadowLift ("Shadow Lift", Range(0, 1.5)) = 0.95
         _ShadowTint ("Shadow Cool Tint", Color) = (0.42, 0.48, 0.72, 1)
         _ShadowWarm ("Shadow Warm Tint", Color) = (0.62, 0.45, 0.32, 1)
-        _ShadowWobble ("Shadow Brush Edge", Range(0, 1)) = 0.4
-        _ShadowBrushScale ("Shadow Brush Scale", Range(0.2, 8)) = 1.2
+        _ShadowWobble ("Shadow Brush Edge", Range(0, 1)) = 0.55
+        _ShadowBrushScale ("Shadow Brush Scale", Range(0.2, 8)) = 1.6
         _SpecularColor ("Specular", Color) = (0.5, 0.45, 0.38, 1)
         _SpecularThreshold ("Specular Threshold", Range(0, 1)) = 0.88
         _AmbientColor ("Ambient", Color) = (0.52, 0.5, 0.44, 1)

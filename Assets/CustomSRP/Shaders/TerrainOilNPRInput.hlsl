@@ -168,8 +168,8 @@ half GetCanvasThicknessMask(half4 canvas)
 
 half SampleShadowBrush(float3 positionWS, float2 controlUV)
 {
-    // ~1.3 km island: 0.008 UV/m keeps strokes readable from the scenic camera.
-    return SampleOilShadowBrush(positionWS, controlUV, 0.008);
+    // Same stroke size as OilNPR objects, so a few-meter cast shadow still breaks into paint.
+    return SampleOilShadowBrush(positionWS, controlUV, 0.25);
 }
 
 // Terrain often has no tangents — build a stable TBN from world normal.
