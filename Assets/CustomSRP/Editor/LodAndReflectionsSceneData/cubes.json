@@ -1,0 +1,146 @@
+[
+  {
+    "name": "LOD Group Cube",
+    "pos": [
+      0.93,
+      0.5,
+      -5.81
+    ],
+    "scale": 1.0,
+    "eulerY": 2.269,
+    "metallic": 0.0,
+    "smoothness": 0.903
+  },
+  {
+    "name": "LOD Group Cube (1)",
+    "pos": [
+      4.1,
+      1.0,
+      -0.14
+    ],
+    "scale": 2.0,
+    "eulerY": -20.759,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Cube (2)",
+    "pos": [
+      -0.52,
+      0.75,
+      1.25
+    ],
+    "scale": 1.5,
+    "eulerY": 12.465,
+    "metallic": 0.143,
+    "smoothness": 0.845
+  },
+  {
+    "name": "LOD Group Cube (3)",
+    "pos": [
+      -1.47,
+      0.5,
+      -6.67
+    ],
+    "scale": 1.0,
+    "eulerY": 51.677,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Cube (4)",
+    "pos": [
+      -6.2,
+      0.5,
+      5.53
+    ],
+    "scale": 1.0,
+    "eulerY": 74.146,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Cube (5)",
+    "pos": [
+      5.62,
+      0.5,
+      -8.6
+    ],
+    "scale": 1.0,
+    "eulerY": 129.963,
+    "metallic": 0.0,
+    "smoothness": 0.987
+  },
+  {
+    "name": "LOD Group Cube (6)",
+    "pos": [
+      7.44,
+      0.5,
+      5.73
+    ],
+    "scale": 1.0,
+    "eulerY": -0.62,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Cube (7)",
+    "pos": [
+      -6.83,
+      0.5,
+      -4.17
+    ],
+    "scale": 1.0,
+    "eulerY": 97.738,
+    "metallic": 1.0,
+    "smoothness": 0.651
+  },
+  {
+    "name": "LOD Group Cube (8)",
+    "pos": [
+      1.74,
+      1.0,
+      5.12
+    ],
+    "scale": 2.0,
+    "eulerY": 35.0,
+    "metallic": 0.773,
+    "smoothness": 0.861
+  },
+  {
+    "name": "LOD Group Cube (9)",
+    "pos": [
+      -3.26,
+      0.75,
+      7.73
+    ],
+    "scale": 1.5,
+    "eulerY": -28.542,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Cube (10)",
+    "pos": [
+      8.59,
+      0.75,
+      -1.11
+    ],
+    "scale": 1.5,
+    "eulerY": -7.399,
+    "metallic": 0.0,
+    "smoothness": 0.929
+  },
+  {
+    "name": "LOD Group Cube (11)",
+    "pos": [
+      -8.45,
+      0.75,
+      -8.64
+    ],
+    "scale": 1.5,
+    "eulerY": 23.171,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  }
+]

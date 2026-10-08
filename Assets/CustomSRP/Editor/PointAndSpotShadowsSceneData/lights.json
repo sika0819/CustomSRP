@@ -1,0 +1,594 @@
+[
+  {
+    "name": "Spot Light (3)",
+    "type": 0,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 6.9508257,
+    "spot": 69.70808,
+    "innerSpot": 44.17708,
+    "color": [
+      1.0,
+      0.99997866,
+      0.033018887,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      9.23,
+      1.37,
+      -1.5
+    ],
+    "rot": [
+      0.5930739,
+      -0.3850498,
+      -0.3850498,
+      0.5930739
+    ],
+    "euler": [
+      89.99999992451282,
+      0.0,
+      -65.98683083827075
+    ]
+  },
+  {
+    "name": "Point Light (3)",
+    "type": 2,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 1.9411316,
+    "spot": 30.0,
+    "innerSpot": 21.80208,
+    "color": [
+      0.43867922,
+      0.5769075,
+      1.0,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      6.01,
+      1.0,
+      -4.07
+    ],
+    "rot": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "name": "Point Light (4)",
+    "type": 2,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 3.3248372,
+    "spot": 30.0,
+    "innerSpot": 21.80208,
+    "color": [
+      0.4771621,
+      1.0,
+      0.4292453,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      0.27,
+      1.0,
+      7.48
+    ],
+    "rot": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "name": "Light B",
+    "type": 1,
+    "shadows": 2,
+    "intensity": 0.2,
+    "range": 10.0,
+    "spot": 30.0,
+    "innerSpot": 21.802082,
+    "color": [
+      0.3160377,
+      0.44229853,
+      1.0,
+      1.0
+    ],
+    "shadowBias": 0.0,
+    "shadowNormalBias": 1.0,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 1,
+    "pos": [
+      0.0,
+      30.0,
+      0.0
+    ],
+    "rot": [
+      0.41226825,
+      0.35209078,
+      -0.17669842,
+      0.8214893
+    ],
+    "euler": [
+      53.300001850019385,
+      46.40000433213712,
+      -1.93503561811262e-06
+    ]
+  },
+  {
+    "name": "Spot Light (1)",
+    "type": 0,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 7.9444904,
+    "spot": 77.306725,
+    "innerSpot": 49.1493,
+    "color": [
+      0.5235849,
+      0.9228956,
+      1.0,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      8.18,
+      2.15,
+      2.46
+    ],
+    "rot": [
+      0.3164206,
+      0.6489379,
+      -0.65716106,
+      -0.21655698
+    ],
+    "euler": [
+      -92.45737934710544,
+      7.747895205804412,
+      135.4359404453948
+    ]
+  },
+  {
+    "name": "Light A",
+    "type": 1,
+    "shadows": 2,
+    "intensity": 0.2,
+    "range": 10.0,
+    "spot": 30.0,
+    "innerSpot": 21.802082,
+    "color": [
+      1.0,
+      0.95686275,
+      0.8392157,
+      1.0
+    ],
+    "shadowBias": 0.0,
+    "shadowNormalBias": 1.0,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 1,
+    "pos": [
+      0.0,
+      30.0,
+      0.0
+    ],
+    "rot": [
+      0.40821788,
+      -0.23456968,
+      0.10938163,
+      0.8754261
+    ],
+    "euler": [
+      49.99999703733809,
+      -29.999994343391148,
+      -4.92138474469932e-07
+    ]
+  },
+  {
+    "name": "Light D",
+    "type": 1,
+    "shadows": 2,
+    "intensity": 0.2,
+    "range": 10.0,
+    "spot": 30.0,
+    "innerSpot": 21.802082,
+    "color": [
+      0.1462264,
+      1.0,
+      0.19360068,
+      1.0
+    ],
+    "shadowBias": 0.0,
+    "shadowNormalBias": 1.0,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 1,
+    "pos": [
+      0.0,
+      30.0,
+      0.0
+    ],
+    "rot": [
+      -0.106139295,
+      0.8731366,
+      -0.2195597,
+      -0.42209065
+    ],
+    "euler": [
+      -151.77001265413642,
+      -51.59999596687236,
+      -179.999998768408
+    ]
+  },
+  {
+    "name": "Spot Light (4)",
+    "type": 0,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 7.6876025,
+    "spot": 73.20605,
+    "innerSpot": 11.201957,
+    "color": [
+      0.4394005,
+      1.0,
+      0.3915094,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      -6.98,
+      2.1,
+      -1.26
+    ],
+    "rot": [
+      0.58900976,
+      0.21053277,
+      0.12761058,
+      0.76971364
+    ],
+    "euler": [
+      77.24122058711052,
+      10.007211891361628,
+      26.828754093589772
+    ]
+  },
+  {
+    "name": "Point Light (2)",
+    "type": 2,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 8.295777,
+    "spot": 30.0,
+    "innerSpot": 21.80208,
+    "color": [
+      1.0,
+      0.9954582,
+      0.08962262,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      -0.86,
+      1.47,
+      -2.81
+    ],
+    "rot": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "name": "Spot Light",
+    "type": 0,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 8.502679,
+    "spot": 76.609116,
+    "innerSpot": 42.430557,
+    "color": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      1.66,
+      2.41,
+      -3.22
+    ],
+    "rot": [
+      0.60757697,
+      0.03910592,
+      -0.25693145,
+      0.75053793
+    ],
+    "euler": [
+      73.82879303292812,
+      21.77188702224467,
+      -21.35392074808746
+    ]
+  },
+  {
+    "name": "Point Light (5)",
+    "type": 2,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 6.1733937,
+    "spot": 30.0,
+    "innerSpot": 21.80208,
+    "color": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      -5.22,
+      1.0,
+      -3.15
+    ],
+    "rot": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "name": "Point Light",
+    "type": 2,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 6.1733937,
+    "spot": 30.0,
+    "innerSpot": 21.80208,
+    "color": [
+      1.0,
+      0.3254717,
+      0.3254717,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      -6.64,
+      1.47,
+      4.0
+    ],
+    "rot": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "name": "Spot Light (5)",
+    "type": 0,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 6.7011886,
+    "spot": 73.20605,
+    "innerSpot": 55.951958,
+    "color": [
+      1.0,
+      0.4764151,
+      0.88522714,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      3.74,
+      4.06,
+      -0.06
+    ],
+    "rot": [
+      0.7071068,
+      0.0,
+      0.0,
+      0.7071068
+    ],
+    "euler": [
+      90.00000304885037,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "name": "Light C",
+    "type": 1,
+    "shadows": 2,
+    "intensity": 0.2,
+    "range": 10.0,
+    "spot": 30.0,
+    "innerSpot": 21.802082,
+    "color": [
+      1.0,
+      0.5330188,
+      0.5986061,
+      1.0
+    ],
+    "shadowBias": 0.0,
+    "shadowNormalBias": 1.0,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 1,
+    "pos": [
+      0.0,
+      30.0,
+      0.0
+    ],
+    "rot": [
+      0.082707606,
+      0.90929735,
+      -0.21830297,
+      0.344502
+    ],
+    "euler": [
+      -153.00000212411175,
+      41.500007281847985,
+      -179.99999957001972
+    ]
+  },
+  {
+    "name": "Spot Light (2)",
+    "type": 0,
+    "shadows": 2,
+    "intensity": 2.62,
+    "range": 10.308902,
+    "spot": 62.838856,
+    "innerSpot": 21.80208,
+    "color": [
+      1.0,
+      0.6367924,
+      0.6367924,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      -5.45,
+      2.38,
+      4.42
+    ],
+    "rot": [
+      0.7028341,
+      -0.20157273,
+      0.6459836,
+      0.21931213
+    ],
+    "euler": [
+      145.34018331337003,
+      -85.17298462624586,
+      -0.0002029256528410251
+    ]
+  },
+  {
+    "name": "Point Light (1)",
+    "type": 2,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 6.1733937,
+    "spot": 30.0,
+    "innerSpot": 21.80208,
+    "color": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      7.69,
+      1.0,
+      7.0
+    ],
+    "rot": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  }
+]

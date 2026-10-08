@@ -1,0 +1,150 @@
+[
+  {
+    "name": "Directional Light (1)",
+    "type": 1,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 10.0,
+    "spot": 30.0,
+    "innerSpot": 21.802082,
+    "color": [
+      1.0,
+      0.95686275,
+      0.8392157,
+      1.0
+    ],
+    "shadowBias": 0.0,
+    "shadowNormalBias": 1.0,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 1,
+    "pos": [
+      0.0,
+      3.0,
+      0.0
+    ],
+    "rot": [
+      0.18968126,
+      0.31371573,
+      -0.06411133,
+      0.9281666
+    ],
+    "euler": [
+      23.09999820874914,
+      37.35000069686549,
+      -3.450358290510552e-08
+    ]
+  },
+  {
+    "name": "Directional Light",
+    "type": 1,
+    "shadows": 2,
+    "intensity": 1.0,
+    "range": 10.0,
+    "spot": 30.0,
+    "innerSpot": 21.802082,
+    "color": [
+      1.0,
+      0.95686275,
+      0.8392157,
+      1.0
+    ],
+    "shadowBias": 0.0,
+    "shadowNormalBias": 1.0,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 1,
+    "pos": [
+      0.0,
+      3.0,
+      0.0
+    ],
+    "rot": [
+      0.40724778,
+      -0.24220027,
+      0.112939835,
+      0.8733458
+    ],
+    "euler": [
+      49.999994703627664,
+      -31.00000644176409,
+      1.1065275735620365e-06
+    ]
+  },
+  {
+    "name": "Spot Light",
+    "type": 0,
+    "shadows": 1,
+    "intensity": 15.61,
+    "range": 28.530136,
+    "spot": 68.276344,
+    "innerSpot": 62.27365,
+    "color": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "shadowBias": 0.05,
+    "shadowNormalBias": 0.4,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      -1.94,
+      4.59,
+      5.54
+    ],
+    "rot": [
+      0.82542104,
+      -0.1872372,
+      0.30818623,
+      0.43433124
+    ],
+    "euler": [
+      125.72879851836596,
+      -42.17619363621769,
+      -3.2016129097565384
+    ]
+  },
+  {
+    "name": "Point Light",
+    "type": 2,
+    "shadows": 2,
+    "intensity": 20.0,
+    "range": 19.629536,
+    "spot": 30.0,
+    "innerSpot": 21.80208,
+    "color": [
+      1.0,
+      0.9171053,
+      0.033018887,
+      1.0
+    ],
+    "shadowBias": 0.0,
+    "shadowNormalBias": 1.0,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 4,
+    "pos": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "rot": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  }
+]

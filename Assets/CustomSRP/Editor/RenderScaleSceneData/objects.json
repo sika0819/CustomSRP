@@ -1,0 +1,3786 @@
+[
+  {
+    "name": "Sphere (48)",
+    "mesh": "Sphere",
+    "pos": [
+      -4.59,
+      0.5,
+      -3.76
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.6350386,
+      0.9716981,
+      0.59126914,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (16)",
+    "mesh": "Cube",
+    "pos": [
+      -0.51,
+      0.96000004,
+      0.71000004
+    ],
+    "rot": [
+      0.23479217,
+      -0.8891321,
+      -0.39245555,
+      0.01718742
+    ],
+    "euler": [
+      134.40160803202747,
+      8.84298588303559,
+      -154.13844885331773
+    ],
+    "scale": [
+      0.016705777,
+      2.3734324,
+      0.016209979
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (30)",
+    "mesh": "Sphere",
+    "pos": [
+      3.01,
+      0.5,
+      -1.26
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.745283,
+      0.18361655,
+      0.03867035,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.63,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (31)",
+    "mesh": "Sphere",
+    "pos": [
+      4.43,
+      0.5,
+      -1.5
+    ],
+    "rot": [
+      -0.41178516,
+      -0.5532167,
+      0.44427913,
+      0.5718394
+    ],
+    "euler": [
+      -87.09942930304733,
+      -15.474359046304219,
+      90.40815305251493
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Transparent",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.6350386,
+      0.9716981,
+      0.59126914,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 1.0,
+    "smoothness": 0.76,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (26)",
+    "mesh": "Sphere",
+    "pos": [
+      -2.96,
+      0.5,
+      4.5
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9020385,
+      1.0,
+      0.6556604,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.66,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (9)",
+    "mesh": "Sphere",
+    "pos": [
+      1.33,
+      -0.025,
+      1.66
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.3773585,
+      0.211254,
+      0.18689924,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.71,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (10)",
+    "mesh": "Sphere",
+    "pos": [
+      4.21,
+      2.94,
+      1.08
+    ],
+    "rot": [
+      0.7022256,
+      0.419262,
+      -0.47052947,
+      -0.3312108
+    ],
+    "euler": [
+      -111.45095938721627,
+      22.526300076190356,
+      77.13653537635693
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7924528,
+      0.7924528,
+      0.7924528,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.794,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (47)",
+    "mesh": "Sphere",
+    "pos": [
+      -2.77,
+      0.5,
+      -3.59
+    ],
+    "rot": [
+      0.54802346,
+      -0.025942719,
+      0.22347179,
+      0.8056411
+    ],
+    "euler": [
+      65.45303157694332,
+      -16.662682022335062,
+      20.253714477717704
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9020385,
+      1.0,
+      0.6556604,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (26)",
+    "mesh": "Cube",
+    "pos": [
+      0.514,
+      0.34100002,
+      -1.153
+    ],
+    "rot": [
+      -0.76785094,
+      0.31633186,
+      0.12456973,
+      -0.54297477
+    ],
+    "euler": [
+      112.56890040283389,
+      -8.755512053357386,
+      -38.9314812944456
+    ],
+    "scale": [
+      0.06662163,
+      2.2906003,
+      0.064644426
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (2)",
+    "mesh": "Cube",
+    "pos": [
+      -2.65,
+      0.5,
+      -2.4
+    ],
+    "rot": [
+      -0.0,
+      0.051506158,
+      -0.0,
+      0.99867266
+    ],
+    "euler": [
+      -0.0,
+      5.904783593837316,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.6650944,
+      1.0,
+      0.77302,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (11)",
+    "mesh": "Cube",
+    "pos": [
+      5.28,
+      2.22,
+      -0.1
+    ],
+    "rot": [
+      0.005897898,
+      0.03653583,
+      0.046144884,
+      0.99824905
+    ],
+    "euler": [
+      0.8701775824489497,
+      4.151812508089986,
+      5.324864025455064
+    ],
+    "scale": [
+      0.37506,
+      4.868479,
+      0.35979
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.84474796,
+      0.759434,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (24)",
+    "mesh": "Sphere",
+    "pos": [
+      4.32,
+      0.5,
+      4.73
+    ],
+    "rot": [
+      0.6537463,
+      -0.054849397,
+      0.028048914,
+      0.754202
+    ],
+    "euler": [
+      81.93954679455258,
+      -6.857983832525193,
+      -1.6972345009349623
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.990566,
+      0.7477749,
+      0.6868548,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.916,
+    "smoothness": 0.803,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (51)",
+    "mesh": "Sphere",
+    "pos": [
+      -2.59,
+      2.5,
+      -2.57
+    ],
+    "rot": [
+      0.23793353,
+      0.015948122,
+      -0.018094638,
+      0.97098196
+    ],
+    "euler": [
+      27.50610328069995,
+      2.2684351486459406,
+      -1.579933930876917
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Transparent",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.86053616,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (55)",
+    "mesh": "Sphere",
+    "pos": [
+      5.65,
+      2.36,
+      0.02
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.86053616,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (16)",
+    "mesh": "Sphere",
+    "pos": [
+      2.92,
+      0.5,
+      2.95
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.86053616,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (49)",
+    "mesh": "Sphere",
+    "pos": [
+      6.129,
+      0.5,
+      -0.823
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Transparent",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.72484267,
+      0.6367924,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (41)",
+    "mesh": "Sphere",
+    "pos": [
+      -5.91,
+      0.5,
+      -2.59
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.86053616,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (29)",
+    "mesh": "Sphere",
+    "pos": [
+      1.35,
+      0.5,
+      -1.77
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 1.0,
+    "smoothness": 0.282,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (37)",
+    "mesh": "Sphere",
+    "pos": [
+      2.37,
+      0.5,
+      0.08
+    ],
+    "rot": [
+      -0.4610893,
+      0.80132526,
+      0.19805196,
+      0.3256531
+    ],
+    "euler": [
+      178.61944000125797,
+      44.792989905337286,
+      -120.73598243240924
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9666375,
+      0.70554465,
+      0.990566,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (13)",
+    "mesh": "Cube",
+    "pos": [
+      -1.58,
+      -0.06,
+      1.16
+    ],
+    "rot": [
+      -0.0,
+      0.051506158,
+      -0.0,
+      0.99867266
+    ],
+    "euler": [
+      -0.0,
+      5.904783593837316,
+      -0.0
+    ],
+    "scale": [
+      4.33698,
+      1.0,
+      4.6638784
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.5283019,
+      0.05233179,
+      0.48258597,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (19)",
+    "mesh": "Sphere",
+    "pos": [
+      -3.52,
+      0.5,
+      3.47
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9666375,
+      0.70554465,
+      0.990566,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (18)",
+    "mesh": "Cube",
+    "pos": [
+      0.27,
+      1.36,
+      0.14
+    ],
+    "rot": [
+      0.09511171,
+      0.8384794,
+      0.037525862,
+      0.535255
+    ],
+    "euler": [
+      158.77467654437888,
+      62.931394957748275,
+      153.9739011275228
+    ],
+    "scale": [
+      0.066621624,
+      2.2905998,
+      0.06464442
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (6)",
+    "mesh": "Cube",
+    "pos": [
+      4.57,
+      2.5,
+      1.22
+    ],
+    "rot": [
+      -0.0,
+      -0.045120794,
+      -0.0,
+      0.9989816
+    ],
+    "euler": [
+      0.0,
+      -5.172218470267631,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.68235296,
+      0.8450356,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (4)",
+    "mesh": "Cube",
+    "pos": [
+      6.5,
+      1.5,
+      -2.49
+    ],
+    "rot": [
+      -0.0,
+      0.6268484,
+      -0.0,
+      0.77914125
+    ],
+    "euler": [
+      -0.0,
+      77.63596900024483,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7294118,
+      1.0,
+      0.83057296,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (38)",
+    "mesh": "Sphere",
+    "pos": [
+      4.73,
+      0.5,
+      -2.89
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.86053616,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (21)",
+    "mesh": "Cube",
+    "pos": [
+      0.20000002,
+      0.78999996,
+      -1.26
+    ],
+    "rot": [
+      0.06491638,
+      0.8422929,
+      -0.53509593,
+      -0.0009926261
+    ],
+    "euler": [
+      -115.36152946456252,
+      3.8876831675103714,
+      173.64582038913093
+    ],
+    "scale": [
+      0.06662164,
+      2.2905998,
+      0.06464442
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (3)",
+    "mesh": "Cube",
+    "pos": [
+      6.59,
+      0.5,
+      -2.58
+    ],
+    "rot": [
+      -0.0,
+      0.2732319,
+      -0.0,
+      0.9619482
+    ],
+    "euler": [
+      -0.0,
+      31.71334944380414,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.8140866,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (14)",
+    "mesh": "Sphere",
+    "pos": [
+      0.04,
+      0.5,
+      3.09
+    ],
+    "rot": [
+      -0.5672514,
+      -0.15600897,
+      0.23089015,
+      0.774969
+    ],
+    "euler": [
+      -72.07110301024197,
+      1.1540889915630863,
+      32.34164216694432
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.6350386,
+      0.9716981,
+      0.59126914,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.676,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (25)",
+    "mesh": "Sphere",
+    "pos": [
+      -0.62,
+      0.5,
+      4.12
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.86053616,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.756,
+    "smoothness": 0.517,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (4)",
+    "mesh": "Sphere",
+    "pos": [
+      -1.05,
+      3.52,
+      1.88
+    ],
+    "rot": [
+      -0.31780112,
+      -0.58570105,
+      0.3146765,
+      0.67597
+    ],
+    "euler": [
+      -82.01934124812347,
+      -36.28652269402972,
+      81.73554750813716
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.475,
+    "metallic": 0.0,
+    "smoothness": 0.324,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (58)",
+    "mesh": "Sphere",
+    "pos": [
+      1.33,
+      0.81,
+      1.66
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.990566,
+      0.88433087,
+      0.2663314,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.0,
+    "emissionColor": [
+      4.0,
+      3.7490196,
+      0.1254902,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (42)",
+    "mesh": "Sphere",
+    "pos": [
+      -0.31,
+      0.5,
+      -4.39
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.86053616,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (7)",
+    "mesh": "Sphere",
+    "pos": [
+      -0.12,
+      0.5,
+      1.63
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.651,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (15)",
+    "mesh": "Cube",
+    "pos": [
+      1.52,
+      0.04000002,
+      0.48
+    ],
+    "rot": [
+      -0.5262996,
+      -0.55565643,
+      -0.5838947,
+      0.2707796
+    ],
+    "euler": [
+      115.23450398049145,
+      -66.28081394061245,
+      138.09396973623714
+    ],
+    "scale": [
+      0.016705777,
+      2.7752764,
+      0.016209979
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (8)",
+    "mesh": "Sphere",
+    "pos": [
+      3.25,
+      0.5,
+      -2.39
+    ],
+    "rot": [
+      -0.029683497,
+      0.5333948,
+      -0.48072577,
+      0.69535
+    ],
+    "euler": [
+      -52.23857350842829,
+      45.5002007088982,
+      -92.5524850744188
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Transparent",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9666375,
+      0.70554465,
+      0.990566,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (18)",
+    "mesh": "Sphere",
+    "pos": [
+      -2.401,
+      0.5,
+      5.916
+    ],
+    "rot": [
+      0.10893549,
+      0.43070295,
+      -0.42508945,
+      0.7886235
+    ],
+    "euler": [
+      -17.802568071476248,
+      50.52838333765562,
+      -65.1062499332358
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.72484267,
+      0.6367924,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.357,
+    "metallic": 0.353,
+    "smoothness": 0.609,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (17)",
+    "mesh": "Sphere",
+    "pos": [
+      4.7,
+      0.5,
+      3.02
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.718,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (15)",
+    "mesh": "Sphere",
+    "pos": [
+      1.63,
+      0.5,
+      5.14
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9020385,
+      1.0,
+      0.6556604,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (7)",
+    "mesh": "Cube",
+    "pos": [
+      -2.7400002,
+      1.5,
+      -2.52
+    ],
+    "rot": [
+      -0.0,
+      0.33406973,
+      -0.0,
+      0.9425484
+    ],
+    "euler": [
+      -0.0,
+      39.03195913284525,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.79901075,
+      0.6666667,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (5)",
+    "mesh": "Cube",
+    "pos": [
+      4.44,
+      1.5,
+      1.31
+    ],
+    "rot": [
+      -0.0,
+      0.2290156,
+      -0.0,
+      0.9734228
+    ],
+    "euler": [
+      -0.0,
+      26.47824727708311,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      1.0,
+      0.99623233,
+      0.6839622,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (23)",
+    "mesh": "Sphere",
+    "pos": [
+      2.87,
+      0.5,
+      4.75
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.72484267,
+      0.6367924,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.664,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (24)",
+    "mesh": "Cube",
+    "pos": [
+      -0.61,
+      1.08,
+      -0.22
+    ],
+    "rot": [
+      -0.28703886,
+      0.5831257,
+      0.19069791,
+      0.73566806
+    ],
+    "euler": [
+      -52.188292847919044,
+      75.34105338789868,
+      -12.362157643157602
+    ],
+    "scale": [
+      0.016705777,
+      3.018992,
+      0.01620998
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (11)",
+    "mesh": "Sphere",
+    "pos": [
+      -1.61,
+      0.88,
+      1.45
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.990566,
+      0.88433087,
+      0.2663314,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.66,
+    "smoothness": 0.7,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (25)",
+    "mesh": "Cube",
+    "pos": [
+      0.54,
+      0.67700005,
+      -1.013
+    ],
+    "rot": [
+      -0.3275839,
+      -0.8395635,
+      0.36458516,
+      0.23430681
+    ],
+    "euler": [
+      -129.19418052215184,
+      -8.89165170682043,
+      133.14098396058554
+    ],
+    "scale": [
+      0.016705777,
+      2.5252314,
+      0.016209979
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (13)",
+    "mesh": "Sphere",
+    "pos": [
+      -5.75,
+      0.5,
+      2.05
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.693,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (23)",
+    "mesh": "Cube",
+    "pos": [
+      -1.118,
+      0.57000005,
+      -0.431
+    ],
+    "rot": [
+      -0.14157918,
+      0.33408248,
+      -0.60650206,
+      -0.70746
+    ],
+    "euler": [
+      -15.544652774922108,
+      -40.12341018483912,
+      86.91977438381177
+    ],
+    "scale": [
+      0.066621624,
+      2.2906,
+      0.06464441
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (56)",
+    "mesh": "Sphere",
+    "pos": [
+      5.12,
+      3.54,
+      0.08
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.990566,
+      0.7477749,
+      0.6868548,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.71,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (53)",
+    "mesh": "Sphere",
+    "pos": [
+      -0.85,
+      2.37,
+      2.16
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7924528,
+      0.7924528,
+      0.7924528,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.769,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (54)",
+    "mesh": "Sphere",
+    "pos": [
+      2.68,
+      3.23,
+      1.69
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.93453526,
+      0.49519405,
+      0.9811321,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (52)",
+    "mesh": "Sphere",
+    "pos": [
+      -1.816,
+      1.5,
+      3.493
+    ],
+    "rot": [
+      -0.41410795,
+      -0.085799456,
+      0.08277548,
+      0.9023865
+    ],
+    "euler": [
+      -49.855991769934164,
+      -4.95035697436829,
+      12.784037988506235
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Transparent",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.72484267,
+      0.6367924,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.735,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (33)",
+    "mesh": "Sphere",
+    "pos": [
+      -3.0,
+      0.5,
+      0.13
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7924528,
+      0.7924528,
+      0.7924528,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 1.0,
+    "smoothness": 0.458,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (45)",
+    "mesh": "Sphere",
+    "pos": [
+      5.29,
+      0.5,
+      -3.99
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.990566,
+      0.7477749,
+      0.6868548,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (27)",
+    "mesh": "Sphere",
+    "pos": [
+      -4.47,
+      0.5,
+      4.55
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7924528,
+      0.7924528,
+      0.7924528,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.433,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (19)",
+    "mesh": "Cube",
+    "pos": [
+      0.86,
+      0.58000004,
+      -0.59
+    ],
+    "rot": [
+      -0.8277244,
+      0.5215214,
+      0.11708976,
+      -0.1708155
+    ],
+    "euler": [
+      156.11166139127073,
+      0.8977599159486063,
+      -64.61723359466717
+    ],
+    "scale": [
+      0.06662163,
+      2.2906003,
+      0.06464441
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (40)",
+    "mesh": "Sphere",
+    "pos": [
+      -6.59,
+      0.5,
+      0.23
+    ],
+    "rot": [
+      -0.43126205,
+      -0.27560773,
+      0.36153695,
+      0.7793231
+    ],
+    "euler": [
+      -61.3510583989187,
+      -6.761724553393423,
+      53.788189193046335
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9020385,
+      1.0,
+      0.6556604,
+      1.0
+    ],
+    "alphaCutoff": 0.239,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (9)",
+    "mesh": "Cube",
+    "pos": [
+      0.38,
+      1.7,
+      2.6
+    ],
+    "rot": [
+      -0.03886918,
+      0.10960642,
+      0.0042894557,
+      0.99320555
+    ],
+    "euler": [
+      -4.482262851946808,
+      12.594928892693703,
+      -5.406075497925387e-08
+    ],
+    "scale": [
+      0.37506,
+      4.868479,
+      0.35979
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9433962,
+      0.3693485,
+      0.40823966,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (12)",
+    "mesh": "Sphere",
+    "pos": [
+      -2.95,
+      0.5,
+      1.41
+    ],
+    "rot": [
+      -0.10937659,
+      -0.21850015,
+      -0.25581622,
+      0.9353355
+    ],
+    "euler": [
+      -6.016874999923989,
+      -27.69097043131102,
+      -29.10862881242773
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.6350386,
+      0.9716981,
+      0.59126914,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (1)",
+    "mesh": "Cube",
+    "pos": [
+      -1.7,
+      0.5,
+      3.29
+    ],
+    "rot": [
+      -0.0,
+      0.109690316,
+      -0.0,
+      0.9939658
+    ],
+    "euler": [
+      -0.0,
+      12.594927766647096,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.84474796,
+      0.759434,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (32)",
+    "mesh": "Sphere",
+    "pos": [
+      -1.77,
+      0.5,
+      -0.67
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.86053616,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (3)",
+    "mesh": "Sphere",
+    "pos": [
+      6.94,
+      0.5,
+      2.63
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9666375,
+      0.70554465,
+      0.990566,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (8)",
+    "mesh": "Cube",
+    "pos": [
+      -1.02,
+      2.21,
+      2.06
+    ],
+    "rot": [
+      -0.07075533,
+      0.14158331,
+      0.0067456434,
+      0.98737144
+    ],
+    "euler": [
+      -8.255028573504218,
+      16.292747457263886,
+      -0.40082007146968374
+    ],
+    "scale": [
+      0.37506,
+      4.868479,
+      0.35979
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.61412376,
+      0.47592562,
+      0.8773585,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (46)",
+    "mesh": "Sphere",
+    "pos": [
+      -1.7,
+      0.5,
+      -4.61
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (43)",
+    "mesh": "Sphere",
+    "pos": [
+      1.46,
+      0.5,
+      -4.38
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9020385,
+      1.0,
+      0.6556604,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (14)",
+    "mesh": "Cube",
+    "pos": [
+      1.5,
+      1.08,
+      0.38
+    ],
+    "rot": [
+      0.092696406,
+      -0.03375362,
+      -0.49186215,
+      0.86506635
+    ],
+    "euler": [
+      11.16794365309435,
+      1.8790347895828228,
+      -59.059939371504285
+    ],
+    "scale": [
+      0.016705777,
+      3.0189922,
+      0.016209977
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (22)",
+    "mesh": "Cube",
+    "pos": [
+      0.020000003,
+      1.23,
+      -0.31
+    ],
+    "rot": [
+      -0.89844203,
+      0.025711404,
+      0.43737665,
+      -0.02902597
+    ],
+    "euler": [
+      173.08740503875433,
+      51.66730119334537,
+      -6.628259552359681
+    ],
+    "scale": [
+      0.06662163,
+      2.2906003,
+      0.06464442
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (10)",
+    "mesh": "Cube",
+    "pos": [
+      2.6,
+      2.01,
+      1.61
+    ],
+    "rot": [
+      -0.005399709,
+      0.19698495,
+      -0.026864199,
+      0.98002356
+    ],
+    "euler": [
+      -1.3146930166204591,
+      22.694014530520292,
+      -3.404208071199448
+    ],
+    "scale": [
+      0.37506,
+      4.868479,
+      0.35979
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.09611963,
+      0.4528302,
+      0.1931837,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (35)",
+    "mesh": "Sphere",
+    "pos": [
+      0.03,
+      0.5,
+      -3.09
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9056604,
+      0.8108846,
+      0.3972944,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (21)",
+    "mesh": "Sphere",
+    "pos": [
+      0.05,
+      0.5,
+      5.18
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (28)",
+    "mesh": "Sphere",
+    "pos": [
+      -0.4,
+      0.5,
+      -1.16
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Transparent",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.72484267,
+      0.6367924,
+      1.0,
+      0.9019608
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.651,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Plane",
+    "mesh": "Plane",
+    "pos": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "rot": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      2.0,
+      2.0,
+      2.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": null,
+    "baseColor": [
+      0.30949628,
+      0.6132076,
+      0.31628093,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (39)",
+    "mesh": "Sphere",
+    "pos": [
+      -1.51,
+      0.5,
+      -2.94
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.990566,
+      0.7477749,
+      0.6868548,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.71,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (12)",
+    "mesh": "Cube",
+    "pos": [
+      -1.93,
+      0.92,
+      0.31
+    ],
+    "rot": [
+      -0.09486389,
+      -0.18244658,
+      -0.16151288,
+      0.9652087
+    ],
+    "euler": [
+      -7.725888477451998,
+      -22.509805181869485,
+      -17.459415404369384
+    ],
+    "scale": [
+      0.37506,
+      2.638959,
+      0.35979
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.84474796,
+      0.759434,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (20)",
+    "mesh": "Cube",
+    "pos": [
+      -0.90999997,
+      0.89,
+      -0.3
+    ],
+    "rot": [
+      -0.28664795,
+      0.6864573,
+      -0.38759983,
+      -0.54440415
+    ],
+    "euler": [
+      -115.88676913922623,
+      -75.84314553006034,
+      173.3132943429487
+    ],
+    "scale": [
+      0.06662162,
+      2.2905998,
+      0.064644404
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Pincushion",
+    "mesh": "Sphere",
+    "pos": [
+      0.07,
+      0.5,
+      -0.04
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7924528,
+      0.7924528,
+      0.7924528,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.769,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (6)",
+    "mesh": "Sphere",
+    "pos": [
+      -5.09,
+      0.5,
+      0.24
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.72484267,
+      0.6367924,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (36)",
+    "mesh": "Sphere",
+    "pos": [
+      2.06,
+      0.5,
+      -3.38
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7924528,
+      0.7924528,
+      0.7924528,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (34)",
+    "mesh": "Sphere",
+    "pos": [
+      -4.57,
+      0.5,
+      -1.47
+    ],
+    "rot": [
+      -0.5032189,
+      -0.23038667,
+      0.23892877,
+      0.7978758
+    ],
+    "euler": [
+      -67.01086684743338,
+      -7.30625836962299,
+      38.18188700514258
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Transparent",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9666375,
+      0.70554465,
+      0.990566,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.777,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (57)",
+    "mesh": "Sphere",
+    "pos": [
+      0.37,
+      2.38,
+      2.36
+    ],
+    "rot": [
+      -0.4610893,
+      0.80132526,
+      0.19805196,
+      0.3256531
+    ],
+    "euler": [
+      178.61944000125797,
+      44.792989905337286,
+      -120.73598243240924
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.9666375,
+      0.70554465,
+      0.990566,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (50)",
+    "mesh": "Sphere",
+    "pos": [
+      2.58,
+      1.5,
+      1.49
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Transparent",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.86053616,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.298,
+    "metallic": 0.0,
+    "smoothness": 0.727,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (1)",
+    "mesh": "Sphere",
+    "pos": [
+      4.33,
+      0.5,
+      -0.16
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.7311321,
+      0.86053616,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (22)",
+    "mesh": "Sphere",
+    "pos": [
+      1.76,
+      0.5,
+      3.5
+    ],
+    "rot": [
+      -0.35696608,
+      -0.21209523,
+      0.24534115,
+      0.8760129
+    ],
+    "euler": [
+      -48.07163952201339,
+      -11.328820317825855,
+      36.35710070415551
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Transparent",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      0.60784316
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.819,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (17)",
+    "mesh": "Cube",
+    "pos": [
+      -1.09,
+      0.72,
+      -0.96
+    ],
+    "rot": [
+      0.16213313,
+      -0.6376151,
+      0.54552835,
+      0.5191904
+    ],
+    "euler": [
+      -75.70939534834952,
+      -57.03295756915748,
+      138.62078549671983
+    ],
+    "scale": [
+      0.016705776,
+      2.5252311,
+      0.016209979
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (5)",
+    "mesh": "Sphere",
+    "pos": [
+      -1.65,
+      1.5,
+      0.25
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.49056602,
+      0.20594516,
+      0.2455073,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 1.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (44)",
+    "mesh": "Sphere",
+    "pos": [
+      3.13,
+      0.5,
+      -4.55
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Transparent",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.6350386,
+      0.9716981,
+      0.59126914,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube",
+    "mesh": "Cube",
+    "pos": [
+      4.4500003,
+      0.5,
+      1.0
+    ],
+    "rot": [
+      -0.0,
+      -0.10203037,
+      -0.0,
+      0.9947813
+    ],
+    "euler": [
+      0.0,
+      -11.712200665892093,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      1.0,
+      0.8254717,
+      0.8254717,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (2)",
+    "mesh": "Sphere",
+    "pos": [
+      4.18,
+      0.46,
+      0.69
+    ],
+    "rot": [
+      -0.0,
+      -0.0,
+      -0.0,
+      1.0
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.72484267,
+      0.6367924,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.08,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Sphere (20)",
+    "mesh": "Sphere",
+    "pos": [
+      -4.75,
+      0.5,
+      3.1
+    ],
+    "rot": [
+      0.36280757,
+      0.37259027,
+      -0.46010774,
+      0.7196166
+    ],
+    "euler": [
+      21.333356225621582,
+      60.470893311295264,
+      -52.65850948536616
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mat": "Clip",
+    "castShadows": 1,
+    "parent": "Varied Objects",
+    "baseColor": [
+      0.990566,
+      0.7477749,
+      0.6868548,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.5,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "Cube (27)",
+    "mesh": "Cube",
+    "pos": [
+      -0.26,
+      0.65,
+      -1.07
+    ],
+    "rot": [
+      -0.8498685,
+      -0.14382644,
+      -0.0006405388,
+      -0.5069882
+    ],
+    "euler": [
+      119.41271029755914,
+      8.322679080512042,
+      14.342960705831848
+    ],
+    "scale": [
+      0.06662163,
+      2.2906,
+      0.06464442
+    ],
+    "mat": "Opaque",
+    "castShadows": 1,
+    "parent": "Pincushion",
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "alphaCutoff": 0.5,
+    "metallic": 0.0,
+    "smoothness": 0.75,
+    "emissionColor": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  }
+]

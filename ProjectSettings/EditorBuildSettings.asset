@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/CustomRPTest.unity
+    guid: b80501bba04342468f5a55574246a707
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/DrawCalls.unity
+    guid: 73e36d75b895e4b9cbaffdb27e3d236f
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/DirectionalLights.unity
+    guid: 44dc2fd5e74ba446f997dd661133621d
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/DirectionalShadows.unity
+    guid: a47fbfb6cd139433cbdfa2870df6e1d0
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/BakedLight.unity
+    guid: 88bbe50ec507546478f6545b50bb080f
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/ShadowMasks.unity
+    guid: dfb7fcd9c45a44ea86eca8cb9a09dde1
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/LodAndReflections.unity
+    guid: 1b65e57698db347a7be2e2ced758cc5b
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/ComplexMaps.unity
+    guid: e9dddb764aaaa4d24b0435f8a834d592
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/PointAndSpotLights.unity
+    guid: bff8f2aa753314ac594a2baa0bd57480
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/PointAndSpotShadows.unity
+    guid: 55b8ebe03b22f44bb83a9694216282fd
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/PostProcessing.unity
+    guid: 3714d2636fcbc4842add06a271944511
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/Hdr.unity
+    guid: 4db651df8590649f9876a485732414ea
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/ColorGrading.unity
+    guid: d05b3822ce2ea4e80814f5d6e1368fad
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/MultipleCameras.unity
+    guid: f8c9d3e853f2c456b828c014a1e8cdc9
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/Particles.unity
+    guid: 0ff7b3bbe033d47ceb9f284f39d7f12d
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/RenderScale.unity
+    guid: 1adda8e8d46f74578862677c4cf2a6d5
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/FXAA.unity
+    guid: b77ccb349018f40dc85ed287d1a75b3a
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/Empty.unity
+    guid: a1c2e3f40567890abcde1234567890ab
+  - enabled: 1
+    path: Assets/CustomSRP/Scenes/MonurikiTerrain.unity
+    guid: b5c4cde1e1b354485847319d6a134ab6
+  m_configObjects: {}

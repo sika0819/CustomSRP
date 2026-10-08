@@ -1,0 +1,49 @@
+{
+  "name": "Monuriki",
+  "name_zh": "莫努里基岛",
+  "country": "Fiji",
+  "source": "NASA SRTM 1 arc-second restored footprint",
+  "source_url": "https://elevation-tiles-prod.s3.amazonaws.com/skadi/S18/S18E177.hgt.gz",
+  "tile": "S18E177",
+  "width": 2049,
+  "height": 2049,
+  "row0": "north",
+  "meters_per_pixel": {
+    "east_west": 0.6389,
+    "north_south": 0.6389
+  },
+  "elevation_min_m": 0,
+  "elevation_max_m": 178.0,
+  "surveyed_peak_m": 178.0,
+  "encoding": "uint16, 0 = 0 m, 65535 = 178.000 m, linear",
+  "raw_byte_order": "little-endian",
+  "raw_layout": "row-major, no header, first row is north",
+  "unity_terrain": {
+    "resolution": "2049 x 2049",
+    "terrain_height_m": 178.0,
+    "byte_order": "Windows (little-endian)",
+    "flip": "first row is north (row0); Import Raw may need Flip Vertically",
+    "recommended_terrain_size_m": {
+      "x": 1308.4,
+      "z": 1308.4,
+      "y": 178.0
+    },
+    "scale_note": "1:1 meters — island long axis ≈ 1150 m (Monuriki)"
+  },
+  "note": "Centered+enlarged; 1:1 scale (island length 1150 m).",
+  "files": {
+    "heightmap_raw": "monuriki_heightmap.raw",
+    "heightmap_png": "monuriki_heightmap.png",
+    "preview": "monuriki_preview.png"
+  },
+  "island_bbox_px": {
+    "y0": 149,
+    "y1": 1898,
+    "x0": 124,
+    "x1": 1923
+  },
+  "island_size_m": {
+    "north_south": 1118.1,
+    "east_west": 1150.0
+  }
+}

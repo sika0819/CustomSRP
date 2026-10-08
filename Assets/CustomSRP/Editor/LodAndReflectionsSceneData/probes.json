@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Reflection Probe",
+    "pos": [
+      5,
+      1,
+      -5
+    ]
+  },
+  {
+    "name": "Reflection Probe (1)",
+    "pos": [
+      -5,
+      1,
+      -5
+    ]
+  },
+  {
+    "name": "Reflection Probe (2)",
+    "pos": [
+      5,
+      1,
+      5
+    ]
+  },
+  {
+    "name": "Reflection Probe (3)",
+    "pos": [
+      -5,
+      1,
+      5
+    ]
+  }
+]
