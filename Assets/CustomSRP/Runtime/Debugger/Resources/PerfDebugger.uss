@@ -1,0 +1,210 @@
+.perf-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    flex-grow: 1;
+}
+
+.perf-icon {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    min-width: 120px;
+    min-height: 52px;
+    padding: 8px 12px;
+    background-color: rgba(12, 16, 22, 0.78);
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.18);
+    color: rgb(180, 255, 180);
+    -unity-font-style: bold;
+    font-size: 18px;
+    unity-text-align: middle-center;
+}
+
+.perf-panel {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    width: 640px;
+    height: 480px;
+    background-color: rgba(10, 14, 20, 0.92);
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.16);
+    flex-direction: column;
+    padding: 8px;
+}
+
+.perf-titlebar {
+    flex-direction: row;
+    align-items: center;
+    height: 36px;
+    margin-bottom: 6px;
+}
+
+.perf-title {
+    color: rgb(235, 240, 245);
+    -unity-font-style: bold;
+    font-size: 16px;
+    flex-grow: 1;
+}
+
+.perf-close {
+    width: 72px;
+    height: 28px;
+    background-color: rgba(60, 70, 85, 0.9);
+    color: white;
+    border-radius: 4px;
+    border-width: 0;
+}
+
+.perf-tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
+.perf-tab {
+    margin-right: 4px;
+    margin-bottom: 4px;
+    padding: 4px 10px;
+    height: 28px;
+    background-color: rgba(40, 48, 60, 0.95);
+    color: rgb(210, 220, 230);
+    border-radius: 4px;
+    border-width: 0;
+    font-size: 12px;
+}
+
+.perf-tab-active {
+    background-color: rgba(70, 120, 200, 0.95);
+    color: white;
+    -unity-font-style: bold;
+}
+
+.perf-content {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 0;
+    flex-direction: column;
+    background-color: rgba(0, 0, 0, 0.22);
+    border-radius: 6px;
+    padding: 6px;
+}
+
+.perf-box {
+    margin-bottom: 8px;
+    padding: 6px;
+    background-color: rgba(255, 255, 255, 0.04);
+    border-radius: 4px;
+}
+
+.perf-heading {
+    color: rgb(230, 235, 240);
+    -unity-font-style: bold;
+    margin-bottom: 4px;
+    font-size: 13px;
+}
+
+.perf-row {
+    flex-direction: row;
+    margin-bottom: 2px;
+    min-height: 20px;
+}
+
+.perf-row-title {
+    width: 180px;
+    color: rgb(170, 180, 195);
+    font-size: 12px;
+}
+
+.perf-row-value {
+    flex-grow: 1;
+    color: rgb(235, 240, 245);
+    font-size: 12px;
+    white-space: normal;
+}
+
+.perf-toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+    align-items: center;
+}
+
+.perf-button {
+    margin-right: 4px;
+    margin-bottom: 4px;
+    padding: 4px 10px;
+    height: 28px;
+    background-color: rgba(55, 95, 160, 0.95);
+    color: white;
+    border-width: 0;
+    border-radius: 4px;
+}
+
+.perf-toggle {
+    margin-right: 8px;
+    color: rgb(210, 220, 230);
+    font-size: 12px;
+}
+
+.perf-log-list {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 80px;
+    margin-bottom: 6px;
+    background-color: rgba(0, 0, 0, 0.25);
+}
+
+.perf-log-line {
+    padding: 4px 6px;
+    margin-bottom: 1px;
+    min-height: 22px;
+    white-space: normal;
+    font-size: 12px;
+    color: rgb(220, 225, 230);
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+.perf-log-line.log-warn {
+    color: rgb(255, 210, 80);
+}
+
+.perf-log-line.log-error {
+    color: rgb(255, 110, 110);
+}
+
+.perf-log-line.log-fatal {
+    color: rgb(255, 70, 70);
+    -unity-font-style: bold;
+}
+
+.perf-stack {
+    min-height: 72px;
+    max-height: 120px;
+    white-space: normal;
+    color: rgb(200, 210, 220);
+    font-size: 11px;
+    background-color: rgba(0, 0, 0, 0.3);
+    padding: 4px;
+}
+
+.perf-note {
+    color: rgb(180, 190, 200);
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.perf-mem-list {
+    max-height: 280px;
+}
+
+.perf-mem-row {
+    color: rgb(220, 225, 230);
+    font-size: 11px;
+    margin-bottom: 1px;
+}

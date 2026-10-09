@@ -1,0 +1,151 @@
+{
+  "name": "Moorea land cover",
+  "name_zh": "\u83ab\u96f7\u963f\u5c9b\u571f\u5730\u8986\u76d6",
+  "source": "ESA WorldCover 10 m 2021 v200",
+  "source_url": "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_S18W150_Map.tif",
+  "tile": "S18W150",
+  "citation": "Zanaga, D., Van De Kerchove, R., et al. 2022. ESA WorldCover 10 m 2021 v200. https://doi.org/10.5281/zenodo.7254221",
+  "attribution": "\u00a9 ESA WorldCover project / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium",
+  "license": "CC BY 4.0",
+  "aligned_to": "moorea_heightmap.json georef",
+  "width": 2049,
+  "height": 2049,
+  "row0": "north",
+  "index_encoding": "uint8 class code; 0 = nodata",
+  "georef": {
+    "center_lat": -17.538,
+    "center_lon": -149.83,
+    "lat_north": -17.463457533238728,
+    "lat_south": -17.612542466761273,
+    "lon_west": -149.90770022443203,
+    "lon_east": -149.752299775568
+  },
+  "classes": [
+    {
+      "code": 10,
+      "name": "tree_cover",
+      "name_zh": "\u6797\u5730",
+      "rgb": [
+        0,
+        100,
+        0
+      ],
+      "pixels": 1867711
+    },
+    {
+      "code": 20,
+      "name": "shrubland",
+      "name_zh": "\u704c\u6728",
+      "rgb": [
+        255,
+        187,
+        34
+      ],
+      "pixels": 87
+    },
+    {
+      "code": 30,
+      "name": "grassland",
+      "name_zh": "\u8349\u5730",
+      "rgb": [
+        255,
+        255,
+        76
+      ],
+      "pixels": 91712
+    },
+    {
+      "code": 40,
+      "name": "cropland",
+      "name_zh": "\u8015\u5730",
+      "rgb": [
+        240,
+        150,
+        255
+      ],
+      "pixels": 131
+    },
+    {
+      "code": 50,
+      "name": "built_up",
+      "name_zh": "\u5efa\u6210\u533a",
+      "rgb": [
+        250,
+        0,
+        0
+      ],
+      "pixels": 31650
+    },
+    {
+      "code": 60,
+      "name": "bare_sparse",
+      "name_zh": "\u88f8\u5730/\u7a00\u758f\u690d\u88ab",
+      "rgb": [
+        180,
+        180,
+        180
+      ],
+      "pixels": 960
+    },
+    {
+      "code": 70,
+      "name": "snow_ice",
+      "name_zh": "\u51b0\u96ea",
+      "rgb": [
+        240,
+        240,
+        240
+      ],
+      "pixels": 0
+    },
+    {
+      "code": 80,
+      "name": "water",
+      "name_zh": "\u6c34\u4f53",
+      "rgb": [
+        0,
+        100,
+        200
+      ],
+      "pixels": 2204474
+    },
+    {
+      "code": 90,
+      "name": "herbaceous_wetland",
+      "name_zh": "\u8349\u672c\u6e7f\u5730",
+      "rgb": [
+        0,
+        150,
+        160
+      ],
+      "pixels": 989
+    },
+    {
+      "code": 95,
+      "name": "mangroves",
+      "name_zh": "\u7ea2\u6811\u6797",
+      "rgb": [
+        0,
+        207,
+        117
+      ],
+      "pixels": 687
+    },
+    {
+      "code": 100,
+      "name": "moss_lichen",
+      "name_zh": "\u82d4\u85d3",
+      "rgb": [
+        250,
+        230,
+        160
+      ],
+      "pixels": 0
+    }
+  ],
+  "files": {
+    "color": "moorea_landuse.png",
+    "index": "moorea_landuse_index.png"
+  },
+  "usage": "Overlay moorea_landuse.png on moorea_preview.png. Index PNG is the class codes."
+}

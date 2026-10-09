@@ -44,7 +44,9 @@ Shader "Hidden/CustomSRP/TerrainLitAdd"
             Varyings Vert(Attributes input)
             {
                 Varyings o;
-                o.positionCS = TransformObjectToHClip(input.positionOS);
+                // Extra splat groups are not shaded here. TerrainOilNPR reads layer 4
+                // as the residual of the first control map, so this pass must not rasterize.
+                o.positionCS = float4(0.0, 0.0, 2.0, 1.0);
                 return o;
             }
 

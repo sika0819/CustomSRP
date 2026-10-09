@@ -2,7 +2,7 @@
 
 路径：[`Assets/CustomSRP/Shaders/OilNPR.shader`](../Assets/CustomSRP/Shaders/OilNPR.shader)  
 验证场景：[`Empty.unity`](../Assets/CustomSRP/Scenes/Empty.unity)（菜单 **CustomSRP → Create Empty Scene**）  
-地形：[`TerrainOilNPR.shader`](../Assets/CustomSRP/Shaders/TerrainOilNPR.shader) → [`MonurikiTerrain.unity`](../Assets/CustomSRP/Scenes/MonurikiTerrain.unity)
+地形：[`TerrainOilNPR.shader`](../Assets/CustomSRP/Shaders/TerrainOilNPR.shader) → [`MooreaTerrain.unity`](../Assets/CustomSRP/Scenes/MooreaTerrain.unity)
 
 逐物体 NPR：无全屏后处理、无 Renderer Feature。主 Pass `LightMode=CustomLit`；描边 Pass `Name=Outline` / `LightMode=SRPDefaultUnlit`。地形版无 Outline，在 splat 上做 control-UV Kuwahara。
 
@@ -75,3 +75,6 @@ Keyword（`shader_feature_local`）：`_KUWAHARA_ON`、`_CANVAS_ON`、`_INTERNAL
 | 贴图 `OilGround.png` | 地面油画笔触（大地色/橄榄绿） |
 | 贴图 `OilCanvas.png` | **线性**打包：RG 法线、B 厚度（预览紫灰正常） |
 | 贴图 `OilCanvas_Weave.png` | 织纹参考（sRGB） |
+| `LitMooreaOcean` / `OilOceanNPR` | 岛周海面。`OilOcean.png` 只提供笔触遮罩，水色是 `_DeepColor` / `_MidColor` 海蓝；近岸用浅蓝，浪花跟亮笔 |
+| `OilSkybox` / `OilSkyboxNPR` | Boluo 架构（方向笔触 + 日/月/星贴图）；`OilSkyboxTime.timeOfDay` 为 0–24 小时（06 黎明 / 12 白天 / 18 黄昏 / 00 夜晚），换算为 `_Period` 后在 Shader 内连续插值；编辑器拖时间会同步天空、环境光与平行光 |
+| Pipeline | 全局 `copyDepth=1`、`renderScale=1`（笔触不被 0.75 缩放糊掉）。Empty 相机仍关 copyDepth。阴影距离保持近景测试用，不拉到全岛 |

@@ -125,18 +125,19 @@ ShadowMasks 与 BakedLight **共用**上述材质与布局（仅 Mixed 模式不
 | `LitMultipleCamerasEmission` | 自发光对照 |
 | `UnlitMultipleCamerasRT` | Render Texture 显示用 Unlit |
 
-### Monuriki Terrain
+### Moorea Terrain
 
 | 材质 | Shader | 用途 |
 |------|--------|------|
-| `TerrainOilNPRMonuriki` | TerrainOilNPR | `Terrain.materialTemplate`（splat + 油画） |
-| `LitMonurikiOcean` | Lit Premul | 环岛海面 Plane |
+| `TerrainOilNPRMoorea` | TerrainOilNPR | `MooreaTerrain.materialTemplate` |
+| `LitMooreaOcean` | OilOceanNPR Premul | Moorea 海面 Plane（Kuwahara + 涌浪） |
+| `OilSkybox` | OilSkyboxNPR | 油画天空（`OilSkyboxTime` 0–24h → `_Period`） |
 
-生成：`Create Monuriki Terrain Scene (1:1)`。Splat 程序化细节；alphamap 高度+坡度；油画见 [terrain.md](terrain.md) / [oil-npr.md](oil-npr.md)。
+生成：`Create Moorea Terrain Scene (1:1)`（见 `moorea_osm_reference.png`）。油画见 [terrain.md](terrain.md) / [oil-npr.md](oil-npr.md)。
 
 ## 全量速查（按文件名）
 
-共 **35** 份在用（不含已清理残留）。目录下若再出现无引用 `.mat`，以生成脚本为准，可删。
+共 **34** 份在用（不含已清理残留）。目录下若再出现无引用 `.mat`，以生成脚本为准，可删。
 
 | 文件 | Shader | 队列 | Inst | Keywords（摘要） | Owner 场景 |
 |------|--------|------|------|------------------|------------|
@@ -160,8 +161,9 @@ ShadowMasks 与 BakedLight **共用**上述材质与布局（仅 Mixed 模式不
 | `LitShadowGround` | Lit | 2000 | 关 | ReceiveShadows | DirShadows / ComplexMaps |
 | `LitTextured` | Lit | 2000 | 关 | ReceiveShadows | DirectionalLights |
 | `LitTransparent` | Lit | 3000 | 关 | Premul, ShadowsDither | 多场景共用 |
-| `LitMonurikiOcean` | Lit | 3000 | 关 | Premul | MonurikiTerrain |
-| `TerrainOilNPRMonuriki` | TerrainOilNPR | 1900 | 关 | Kuwahara, Canvas, Edge, ReceiveShadows | MonurikiTerrain |
+| `LitMooreaOcean` | OilOceanNPR | 3000 | 关 | Premul | MooreaTerrain |
+| `OilSkybox` | OilSkyboxNPR | 1000 | 关 | Canvas | MooreaTerrain |
+| `TerrainOilNPRMoorea` | TerrainOilNPR | 1900 | 关 | Kuwahara, Canvas, ReceiveShadows | MooreaTerrain |
 | `UnlitBlue` / `Green` / `Red` / `Yellow` | Unlit | 2000 | 关 | — | DrawCalls（Green/Yellow 亦 Test） |
 | `UnlitClip` | Unlit | 2450 | 开 | Clipping | DrawCalls |
 | `UnlitInstanced` | Unlit | 2000 | 开 | — | DrawCalls |
@@ -174,7 +176,7 @@ ShadowMasks 与 BakedLight **共用**上述材质与布局（仅 Mixed 模式不
 
 ## 自建 / 重建约定
 
-1. 新测试材质只用 `CustomSRP/Lit`、`CustomSRP/Unlit`、`CustomSRP/OilNPR` 或 `CustomSRP/TerrainLit`；Built-in Standard 仅作 Unsupported 对照。  
+1. 新测试材质只用 `CustomSRP/Lit`、`CustomSRP/Unlit`、`CustomSRP/OilNPR`、`CustomSRP/OilSkyboxNPR` 或 `CustomSRP/TerrainLit`；Built-in Standard 仅作 Unsupported 对照。  
 2. 优先复用上表「跨场景共用」项，避免再造一份 Opague/Clip/Transparent。  
 3. 场景缺失时用对应菜单重建；不要手改 `.unity` 里的材质 GUID。  
 4. 数值以 `Create*Scene.cs` / `TestSceneUtility.CreateOrUpdate*` 为准。

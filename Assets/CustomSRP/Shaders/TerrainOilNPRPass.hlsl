@@ -2,7 +2,9 @@
 #define CUSTOM_TERRAIN_OIL_NPR_PASS_INCLUDED
 
 #include "OilNPRLighting.hlsl"
+#include "OilPaintNoise.hlsl"
 #include "TerrainOilNPRInput.hlsl"
+#include "TerrainInstancing.hlsl"
 
 struct Attributes
 {
@@ -18,7 +20,6 @@ struct Varyings
     float3 positionWS : VAR_POSITION;
     float3 normalWS : VAR_NORMAL;
     float2 controlUV : VAR_CONTROL_UV;
-    float2 canvasUV : VAR_CANVAS_UV;
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
@@ -28,41 +29,68 @@ Varyings TerrainOilNPRPassVertex(Attributes input)
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
-    output.positionWS = TransformObjectToWorld(input.positionOS);
+    float3 positionOS = input.positionOS;
+    float3 normalOS = input.normalOS;
+    float2 texcoord = input.texcoord;
+    ApplyTerrainInstancing(positionOS, normalOS, texcoord);
+
+    output.positionWS = TransformObjectToWorld(positionOS);
     output.positionCS_SS = TransformWorldToHClip(output.positionWS);
-    output.normalWS = TransformObjectToWorldNormal(input.normalOS);
-    output.controlUV = TRANSFORM_TEX(input.texcoord, _Control);
-    output.canvasUV = TransformCanvasUV(input.texcoord);
+    output.normalWS = TransformObjectToWorldNormal(normalOS);
+    output.controlUV = TRANSFORM_TEX(texcoord, _Control);
     return output;
+}
+
+// Coarser mip. Scenic cameras sit hundreds of meters up; full-res splats only burn bandwidth.
+#define TERRAIN_ALBEDO_BIAS 1.0
+
+// Control once, each land-cover albedo once, ridge rock once. UV wobble is a stable cell hash.
+half3 SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 normalWS)
+{
+    float4 control = SAMPLE_TEXTURE2D(_Control, sampler_Control, controlUV);
+    float sum4 = dot(control, 1.0);
+    float rockW = saturate((1.0 - sum4) * _RidgeAmount);
+    control /= max(sum4, 1e-5);
+
+    float n = OilHash21(floor(positionWS.xz * 0.02));
+    float2 wobble = (float2(n, frac(n * 13.7)) - 0.5) * 0.16;
+
+    float2 uv0 = TransformTerrainUV(controlUV, _Splat0_ST) + wobble;
+    float2 uv1 = TransformTerrainUV(controlUV, _Splat1_ST) + wobble.yx;
+    float2 uv2 = TransformTerrainUV(controlUV, _Splat2_ST) + wobble;
+    float2 uv3 = TransformTerrainUV(controlUV, _Splat3_ST) + wobble.yx;
+
+    half3 albedo =
+        (half3)SAMPLE_TEXTURE2D_BIAS(_Splat0, sampler_Splat0, uv0, TERRAIN_ALBEDO_BIAS).rgb * (half)control.r +
+        (half3)SAMPLE_TEXTURE2D_BIAS(_Splat1, sampler_Splat0, uv1, TERRAIN_ALBEDO_BIAS).rgb * (half)control.g +
+        (half3)SAMPLE_TEXTURE2D_BIAS(_Splat2, sampler_Splat0, uv2, TERRAIN_ALBEDO_BIAS).rgb * (half)control.b +
+        (half3)SAMPLE_TEXTURE2D_BIAS(_Splat3, sampler_Splat0, uv3, TERRAIN_ALBEDO_BIAS).rgb * (half)control.a;
+
+    float slope = 1.0 - saturate(normalize(normalWS).y);
+    float height01 = saturate(positionWS.y / max(_TerrainHeight, 1.0));
+    float ridge = smoothstep(0.2, 0.55, slope);
+    ridge = max(ridge, smoothstep(0.42, 0.72, height01) * smoothstep(0.1, 0.28, slope));
+    ridge *= _RidgeAmount * saturate(control.g + control.b);
+    ridge = smoothstep(0.08, 0.92, ridge);
+
+    float2 uvR = controlUV * _RidgeRockMap_ST.xy + _RidgeRockMap_ST.zw + wobble;
+    half3 rock = (half3)SAMPLE_TEXTURE2D_BIAS(_RidgeRockMap, sampler_RidgeRockMap, uvR, TERRAIN_ALBEDO_BIAS).rgb;
+    albedo = lerp(albedo, rock, (half)saturate(ridge + rockW));
+
+    half climate = (half)OilHash21(floor(positionWS.xz * 0.002));
+    half3 warm = albedo * half3(1.06h, 1.02h, 0.9h);
+    half3 cool = albedo * half3(0.9h, 0.97h, 1.05h);
+    albedo = lerp(cool, warm, climate);
+    return albedo * (half3)_BaseColor.rgb;
 }
 
 half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
 
-#if defined(_KUWAHARA_ON)
-    half3 albedo = SampleKuwaharaTerrain(
-        input.controlUV, (half)_KuwaharaRadius);
-#else
-    half3 albedo = SampleTerrainAlbedo(input.controlUV);
-#endif
-
-    half3 geometricNormal = normalize((half3)input.normalWS);
-    half3 normalWS = geometricNormal;
-    half thicknessMask = 0.5h;
-
-#if defined(_CANVAS_ON)
-    half4 canvas = SampleCanvas(input.canvasUV);
-    half3 normalTS = GetCanvasNormalTS(canvas, (half)_CanvasStrength);
-    float3 canvasN;
-    TerrainCanvasToWorld(normalTS, input.normalWS, canvasN);
-    normalWS = normalize(lerp(geometricNormal, (half3)canvasN, 0.55h));
-    thicknessMask = GetCanvasThicknessMask(canvas);
-#endif
-
+    half3 albedo = SampleTerrainCheap(input.controlUV, input.positionWS, input.normalWS);
+    half3 normalWS = normalize((half3)input.normalWS);
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
-    half ndotV = saturate(dot(normalWS, viewDir));
-    half paintRim = (1.0h - ndotV) * (half)_PaintThickness * thicknessMask;
 
     Surface surface;
     surface.position = input.positionWS;
@@ -80,36 +108,25 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
         GetFragment(input.positionCS_SS).positionSS, 0);
     surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
 
-    half brush = SampleShadowBrush(input.positionWS, input.controlUV);
-#if defined(_CANVAS_ON)
-    brush = saturate(brush * 0.75h + thicknessMask * 0.35h);
-#endif
-    OffsetSurfaceForOilShadow(surface, brush, (half)_ShadowWobble);
-
+    half brush = (half)OilHash21(floor(input.positionWS.xz * 0.05));
     half3 color = OilNPRLighting(
         surface,
         albedo,
-        (half3)_AmbientColor.rgb,
+        OilPeriodAmbient((half3)_AmbientColor.rgb),
         (half3)_ShadowTint.rgb,
         (half3)_ShadowWarm.rgb,
         (half3)_SpecularColor.rgb,
         (half)_SpecularThreshold,
         (half)_ShadeSteps,
-        paintRim,
+        0.0h,
         (half)_ShadowLift,
         (half)_ShadeLift,
         brush,
-        (half)_ShadowWobble);
+        (half)_ShadowWobble,
+        (half)_OilDetail);
 
-#if defined(_INTERNAL_EDGE_ON)
-    half depthEdge = fwidth((half)surface.depth);
-    half normalEdge = length(fwidth(geometricNormal));
-    half edge = saturate(depthEdge * 1.25h + normalEdge * 1.25h) * (half)_EdgeStrength;
-    edge = smoothstep(0.15h, 0.85h, edge);
-    color = lerp(color, (half3)_EdgeColor.rgb, edge * 0.55h);
-#endif
-
-    return half4(color, 1.0h);
+    color = OilWeaveTint(color, input.positionWS.xz * 0.15);
+    return half4(saturate(color), 1.0h);
 }
 
 #endif

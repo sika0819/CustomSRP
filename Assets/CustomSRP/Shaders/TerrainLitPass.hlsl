@@ -8,6 +8,7 @@
 #include "../ShaderLibrary/GI.hlsl"
 #include "../ShaderLibrary/Lighting.hlsl"
 #include "TerrainLitInput.hlsl"
+#include "TerrainInstancing.hlsl"
 
 struct Attributes
 {
@@ -35,11 +36,16 @@ Varyings TerrainLitPassVertex(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
     TRANSFER_GI_DATA(input, output);
 
-    output.positionWS = TransformObjectToWorld(input.positionOS);
+    float3 positionOS = input.positionOS;
+    float3 normalOS = input.normalOS;
+    float2 texcoord = input.texcoord;
+    ApplyTerrainInstancing(positionOS, normalOS, texcoord);
+
+    output.positionWS = TransformObjectToWorld(positionOS);
     output.positionCS_SS = TransformWorldToHClip(output.positionWS);
-    output.normalWS = TransformObjectToWorldNormal(input.normalOS);
-    // Terrain TEXCOORD0 is already 0..1 over the terrain patch.
-    output.controlUV = TRANSFORM_TEX(input.texcoord, _Control);
+    output.normalWS = TransformObjectToWorldNormal(normalOS);
+    // After instancing, texcoord is 0..1 over the full terrain.
+    output.controlUV = TRANSFORM_TEX(texcoord, _Control);
     return output;
 }
 

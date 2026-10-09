@@ -44,7 +44,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _Canvas: 1
-    - _CanvasStrength: 1
+    - _CanvasStrength: 0.08
     - _Clipping: 0
     - _Cutoff: 0.5
     - _DstBlend: 0

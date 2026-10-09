@@ -33,6 +33,7 @@ CameraRenderer             →  主循环见 [渲染循环](render-loop.md)
 | `Assets/CustomSRP/Shaders/TerrainLit.shader` | `CustomSRP/TerrainLit`，Terrain splat + `CustomLit`（对照） |
 | `Assets/CustomSRP/Shaders/TerrainOilNPR.shader` | `CustomSRP/TerrainOilNPR`，Terrain splat + Oil NPR |
 | `Assets/CustomSRP/Shaders/OilNPR.shader` | `CustomSRP/OilNPR`，油画 NPR + Outline + ShadowCaster |
+| `Assets/CustomSRP/Shaders/OilSkyboxNPR.shader` | `CustomSRP/OilSkyboxNPR`，四时段油画天空 |
 | `Assets/CustomSRP/ShaderLibrary/` | Surface / Light / BRDF / Lighting / Shadows HLSL |
 | `Assets/CustomSRP/Shaders/UnityInput.hlsl` | `UnityPerDraw` + 矩阵宏（须在 SpaceTransforms 之前）；`_ProjectionParams` |
 | `Assets/CustomSRP/Editor/CustomSrpBootstrap.cs` | 菜单挂管线 + 确保 Post FX Settings |
@@ -41,7 +42,7 @@ CameraRenderer             →  主循环见 [渲染循环](render-loop.md)
 | `Assets/CustomSRP/Editor/CreateDrawCallsScene.cs` | 菜单生成 `DrawCalls` |
 | `Assets/CustomSRP/Editor/CreateDirectionalLightsScene.cs` | 菜单生成 `DirectionalLights` |
 | `Assets/CustomSRP/Editor/CreateDirectionalShadowsScene.cs` | 菜单生成 `DirectionalShadows` |
-| `Assets/CustomSRP/Editor/CreateMonurikiTerrainScene.cs` | 菜单生成 `MonurikiTerrain`（Terrain + TerrainOilNPR） |
+| `Assets/CustomSRP/Editor/CreateMooreaTerrainScene.cs` | 菜单生成 `MooreaTerrain`（SRTM 1:1 + OSM 参考） |
 
 ## 命名空间
 

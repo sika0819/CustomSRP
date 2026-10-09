@@ -1,5 +1,4 @@
 using System.IO;
-using CustomSRP.Examples;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -136,11 +135,6 @@ namespace CustomSRP.Editor
             TestSceneUtility.CreateCapsule(
                 "OilCapsule", new Vector3(1.8f, 1.1f, -0.2f), 2.2f, mats.Clay);
 
-            var main = Object.FindFirstObjectByType<Camera>();
-            if (main != null && main.GetComponent<MobilePerfHud>() == null)
-            {
-                main.gameObject.AddComponent<MobilePerfHud>();
-            }
         }
 
         static void ConfigurePerfCamera(bool mobilePerf)

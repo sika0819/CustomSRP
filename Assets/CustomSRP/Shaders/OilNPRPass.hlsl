@@ -66,12 +66,10 @@ half4 OilNPRPassFragment(Varyings input) : SV_TARGET
     half thicknessMask = 0.5h;
 
 #if defined(_CANVAS_ON)
-    half4 canvas = SampleCanvas(config.canvasUV);
-    half3 normalTS = GetCanvasNormalTS(canvas, (half)_CanvasStrength);
-    normalWS = normalize((half3)NormalTangentToWorld(
-        (float3)normalTS, input.normalWS, input.tangentWS));
-    normalWS = normalize(lerp(geometricNormal, normalWS, 0.55h));
-    thicknessMask = GetCanvasThicknessMask(canvas);
+    half s = (half)sin(input.positionWS.x * 0.31 + input.positionWS.z * 0.17);
+    half strength = min((half)_CanvasStrength, 0.5h);
+    normalWS = normalize(geometricNormal + half3(s, 0.0h, s * 0.35h) * strength);
+    thicknessMask = s * 0.5h + 0.5h;
 #endif
 
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
@@ -101,7 +99,7 @@ half4 OilNPRPassFragment(Varyings input) : SV_TARGET
     half3 color = OilNPRLighting(
         surface,
         albedo,
-        (half3)_AmbientColor.rgb,
+        OilPeriodAmbient((half3)_AmbientColor.rgb),
         (half3)_ShadowTint.rgb,
         (half3)_ShadowWarm.rgb,
         (half3)_SpecularColor.rgb,
@@ -111,7 +109,8 @@ half4 OilNPRPassFragment(Varyings input) : SV_TARGET
         (half)_ShadowLift,
         (half)_ShadeLift,
         brush,
-        (half)_ShadowWobble);
+        (half)_ShadowWobble,
+        0.2h);
 
 #if defined(_INTERNAL_EDGE_ON)
     half depthEdge = fwidth((half)surface.depth);
@@ -121,6 +120,7 @@ half4 OilNPRPassFragment(Varyings input) : SV_TARGET
     color = lerp(color, (half3)_EdgeColor.rgb, edge * 0.65h);
 #endif
 
+    color = OilWeaveTint(color, input.positionWS.xz * 0.15);
     return half4(color, alpha);
 }
 

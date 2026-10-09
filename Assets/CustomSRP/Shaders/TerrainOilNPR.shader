@@ -36,11 +36,11 @@ Shader "CustomSRP/TerrainOilNPR"
 
         _ShadeSteps ("Shade Steps", Range(2, 8)) = 4
         _ShadeLift ("Shade Lift", Range(0, 1)) = 0.42
-        _ShadowLift ("Shadow Lift", Range(0, 1.5)) = 0.95
-        _ShadowTint ("Shadow Cool Tint", Color) = (0.42, 0.48, 0.72, 1)
-        _ShadowWarm ("Shadow Warm Tint", Color) = (0.62, 0.45, 0.32, 1)
+        _ShadowLift ("Shadow Lift", Range(0, 1.5)) = 1.05
+        _ShadowTint ("Shadow Cool Tint", Color) = (0.36, 0.46, 0.62, 1)
+        _ShadowWarm ("Shadow Warm Tint", Color) = (0.58, 0.48, 0.3, 1)
         _ShadowWobble ("Shadow Brush Edge", Range(0, 1)) = 0.55
-        _ShadowBrushScale ("Shadow Brush Scale", Range(0.2, 8)) = 1.6
+        _ShadowBrushScale ("Shadow Brush Scale", Range(0.2, 8)) = 1.35
         _SpecularColor ("Specular", Color) = (0.5, 0.45, 0.38, 1)
         _SpecularThreshold ("Specular Threshold", Range(0, 1)) = 0.88
         _AmbientColor ("Ambient", Color) = (0.52, 0.5, 0.44, 1)
@@ -50,6 +50,15 @@ Shader "CustomSRP/TerrainOilNPR"
         _EdgeColor ("Edge Color", Color) = (0.28, 0.22, 0.16, 1)
 
         _OutlineBrushMap ("Shadow Brush Mask", 2D) = "white" {}
+        _PaintMap ("Impasto", 2D) = "gray" {}
+        _PaintTile ("Impasto Tile (m)", Range(200, 4000)) = 1600
+        _PaintContrast ("Impasto Contrast", Range(0.5, 3)) = 1.75
+        _PaintRelief ("Impasto Relief", Range(0, 1)) = 1
+        _RidgeRockMap ("Ridge Rock", 2D) = "gray" {}
+        _RidgeAmount ("Ridge Rock Amount", Range(0, 1)) = 0
+        _TerrainWorldSize ("Terrain Size (m)", Float) = 16500
+        _TerrainHeight ("Terrain Height (m)", Float) = 1185
+        _OilDetail ("Oil Detail", Range(0, 1)) = 0.2
 
         [Toggle(_RECEIVE_SHADOWS)] _ReceiveShadows ("Receive Shadows", Float) = 1
     }
@@ -78,6 +87,8 @@ Shader "CustomSRP/TerrainOilNPR"
 
             HLSLPROGRAM
             #pragma target 3.5
+            #pragma multi_compile_instancing
+            #pragma instancing_options assumeuniformscaling nomatrices nolightprobe nolightmap
             #pragma shader_feature_local _KUWAHARA_ON
             #pragma shader_feature_local _CANVAS_ON
             #pragma shader_feature_local _INTERNAL_EDGE_ON
@@ -98,6 +109,8 @@ Shader "CustomSRP/TerrainOilNPR"
 
             HLSLPROGRAM
             #pragma target 3.5
+            #pragma multi_compile_instancing
+            #pragma instancing_options assumeuniformscaling nomatrices nolightprobe nolightmap
             #pragma vertex TerrainLitShadowPassVertex
             #pragma fragment TerrainLitShadowPassFragment
             #include "TerrainLitShadowPass.hlsl"

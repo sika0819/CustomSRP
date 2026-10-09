@@ -1,15 +1,15 @@
 using System.IO;
+using CustomSRP.Debugger;
 using CustomSRP.Examples;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.UI;
 
 namespace CustomSRP.Editor
 {
     /// <summary>
-    /// 四角分屏 + Rendering Layer 灯光遮罩、中心 Overlay 预乘混合、RT 相机 + Canvas RawImage。
+    /// 四角分屏 + Rendering Layer 灯光遮罩、中心 Overlay 预乘混合、RT 相机 + UIToolkit 预览。
     /// </summary>
     public static class CreateMultipleCamerasScene
     {
@@ -85,7 +85,7 @@ namespace CustomSRP.Editor
             BuildMeshBall(opaque);
             BuildLights();
             BuildCameras(rt, coldFx, glowFx);
-            BuildRtCanvas(rt);
+            BuildRtPreview(rt);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.SaveAssets();
@@ -94,7 +94,7 @@ namespace CustomSRP.Editor
             TestSceneUtility.AddToBuildSettings(ScenePath, makeFirst: false);
             Debug.Log(
                 "[CustomSRP] Created Multiple Cameras scene " +
-                "(2x2 split + overlay blend + RT canvas): " + ScenePath);
+                "(2x2 split + overlay blend + RT preview): " + ScenePath);
             EditorSceneManager.OpenScene(ScenePath);
         }
 
@@ -551,33 +551,11 @@ namespace CustomSRP.Editor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        static void BuildRtCanvas(RenderTexture rt)
+        static void BuildRtPreview(RenderTexture rt)
         {
-            var canvasGo = new GameObject(
-                "Canvas",
-                typeof(Canvas),
-                typeof(CanvasScaler),
-                typeof(GraphicRaycaster));
-            var canvas = canvasGo.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 10;
-
-            var scaler = canvasGo.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-
-            var imageGo = new GameObject("RawImage", typeof(RectTransform), typeof(RawImage));
-            imageGo.transform.SetParent(canvasGo.transform, false);
-            var rect = imageGo.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.02f, 0.02f);
-            rect.anchorMax = new Vector2(0.02f, 0.02f);
-            rect.pivot = new Vector2(0f, 0f);
-            rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = new Vector2(320f, 180f);
-
-            var raw = imageGo.GetComponent<RawImage>();
-            raw.texture = rt;
-            raw.color = Color.white;
+            var go = new GameObject("RtPreview");
+            var preview = go.AddComponent<RtPreviewOverlay>();
+            preview.SetTexture(rt);
         }
     }
 }

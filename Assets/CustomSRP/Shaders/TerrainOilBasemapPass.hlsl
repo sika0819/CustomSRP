@@ -2,12 +2,11 @@
 #define CUSTOM_TERRAIN_OIL_BASEMAP_PASS_INCLUDED
 
 #include "OilNPRLighting.hlsl"
+#include "OilPaintNoise.hlsl"
+#include "TerrainInstancing.hlsl"
 
 TEXTURE2D(_MainTex);
 SAMPLER(sampler_MainTex);
-
-TEXTURE2D(_CanvasMap);
-SAMPLER(sampler_CanvasMap);
 
 TEXTURE2D(_OutlineBrushMap);
 SAMPLER(sampler_OutlineBrushMap);
@@ -55,10 +54,14 @@ Varyings TerrainOilBasemapVertex(Attributes input)
     Varyings output;
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
-    output.positionWS = TransformObjectToWorld(input.positionOS);
+    float3 positionOS = input.positionOS;
+    float3 normalOS = input.normalOS;
+    float2 texcoord = input.texcoord;
+    ApplyTerrainInstancing(positionOS, normalOS, texcoord);
+    output.positionWS = TransformObjectToWorld(positionOS);
     output.positionCS_SS = TransformWorldToHClip(output.positionWS);
-    output.normalWS = TransformObjectToWorldNormal(input.normalOS);
-    output.uv = TRANSFORM_TEX(input.texcoord, _MainTex);
+    output.normalWS = TransformObjectToWorldNormal(normalOS);
+    output.uv = TRANSFORM_TEX(texcoord, _MainTex);
     return output;
 }
 
@@ -68,22 +71,16 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
 
     half3 albedo = (half3)(SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv).rgb * _BaseColor.rgb);
     half3 geometricNormal = normalize((half3)input.normalWS);
+    half slopeShade = saturate((1.0h - geometricNormal.y) * 0.35h);
+    albedo *= lerp(1.0h, 0.72h, slopeShade);
     half3 normalWS = geometricNormal;
     half thicknessMask = 0.5h;
 
 #if defined(_CANVAS_ON)
-    float2 canvasUV = input.uv * _CanvasMap_ST.xy + _CanvasMap_ST.zw;
-    half4 canvas = (half4)SAMPLE_TEXTURE2D(_CanvasMap, sampler_CanvasMap, canvasUV);
-    half2 nxy = canvas.rg * 2.0h - 1.0h;
+    half s = (half)sin(input.positionWS.x * 0.31 + input.positionWS.z * 0.17);
     half strength = min((half)_CanvasStrength, 0.5h);
-    half3 normalTS = normalize(half3(nxy * strength, 1.0h));
-    float3 n = normalize(input.normalWS);
-    float3 up = abs(n.y) < 0.999 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
-    float3 t = normalize(cross(up, n));
-    float3 b = cross(n, t);
-    float3 canvasN = normalize(t * normalTS.x + b * normalTS.y + n * normalTS.z);
-    normalWS = normalize(lerp(geometricNormal, (half3)canvasN, 0.55h));
-    thicknessMask = canvas.b;
+    normalWS = normalize(geometricNormal + half3(s, 0.0h, s * 0.35h) * strength);
+    thicknessMask = s * 0.5h + 0.5h;
 #endif
 
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
@@ -110,12 +107,11 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
 #if defined(_CANVAS_ON)
     brush = saturate(brush * 0.75h + thicknessMask * 0.35h);
 #endif
-    OffsetSurfaceForOilShadow(surface, brush, (half)_ShadowWobble);
 
     half3 color = OilNPRLighting(
         surface,
         albedo,
-        (half3)_AmbientColor.rgb,
+        OilPeriodAmbient((half3)_AmbientColor.rgb),
         (half3)_ShadowTint.rgb,
         (half3)_ShadowWarm.rgb,
         (half3)_SpecularColor.rgb,
@@ -125,9 +121,14 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
         (half)_ShadowLift,
         (half)_ShadeLift,
         brush,
-        (half)_ShadowWobble);
+        (half)_ShadowWobble,
+        0.2h);
 
-    return half4(color, 1.0h);
+    half3 shadowFloor = albedo * half3(0.18h, 0.12h, 0.26h) + half3(0.015h, 0.01h, 0.03h);
+    color = max(color, shadowFloor);
+    color = min(color, albedo * 1.2h + half3(0.06h, 0.05h, 0.04h));
+    color = OilWeaveTint(color, input.positionWS.xz * 0.15);
+    return half4(saturate(color), 1.0h);
 }
 
 #endif

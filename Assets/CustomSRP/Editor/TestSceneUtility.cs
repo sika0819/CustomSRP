@@ -358,6 +358,16 @@ namespace CustomSRP.Editor
         public const string OilAlbedoPath = TexturesPath + "/OilAlbedo.png";
         public const string OilGroundPath = TexturesPath + "/OilGround.png";
         public const string OilBrushPath = TexturesPath + "/OilBrush.png";
+        public const string OilSkyStrokePath = TexturesPath + "/OilSkyStroke.png";
+        public const string SkyboxTexturesPath = TexturesPath + "/Skybox";
+        public const string SkyOilCanvasPath = SkyboxTexturesPath + "/OilCanvas.png";
+        public const string SkyBrushStampPath = SkyboxTexturesPath + "/SkyBrush.png";
+        public const string SkySunOilPath = SkyboxTexturesPath + "/Sun_Oil.png";
+        public const string SkyMoonOilPath = SkyboxTexturesPath + "/Moon_Oil.png";
+        public const string SkyStarsOilPath = SkyboxTexturesPath + "/Stars_Oil.png";
+        public const string OilOceanPath = TexturesPath + "/OilOcean.png";
+        public const string OilOceanFoamPath = TexturesPath + "/OilOceanFoam.png";
+        public const string OilOceanGlintPath = TexturesPath + "/OilOceanGlint.png";
 
         /// <summary>
         /// Soft blotchy albedo for Kuwahara dabs (sRGB). Prefer authored OilAlbedo.png.
@@ -409,6 +419,31 @@ namespace CustomSRP.Editor
             }
 
             return AssetDatabase.LoadAssetAtPath<Texture2D>(OilBrushPath);
+        }
+
+        /// <summary>
+        /// Large flow strokes for sky (OilSkyStroke.png). Regenerate via generate_oil_sky_stroke.py.
+        /// </summary>
+        public static Texture2D EnsureOilSkyStrokeTexture()
+        {
+            if (!File.Exists(OilSkyStrokePath))
+            {
+                Debug.LogError(
+                    "[CustomSRP] Missing OilSkyStroke.png. Run:\n" +
+                    $"  python3 {TexturesPath}/generate_oil_sky_stroke.py");
+                return null;
+            }
+
+            ConfigureSrgbTextureImporter(OilSkyStrokePath);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(OilSkyStrokePath);
+            if (importer != null)
+            {
+                importer.wrapMode = TextureWrapMode.Repeat;
+                importer.filterMode = FilterMode.Bilinear;
+                importer.SaveAndReimport();
+            }
+
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(OilSkyStrokePath);
         }
 
         /// <summary>
@@ -535,6 +570,289 @@ namespace CustomSRP.Editor
             }
 
             material.SetShaderPassEnabled("Outline", outline);
+            material.enableInstancing = false;
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        public static Texture2D EnsureOilOceanTexture()
+        {
+            if (!File.Exists(OilOceanPath))
+            {
+                Debug.LogError(
+                    "[CustomSRP] Missing OilOcean.png. Expected at " + OilOceanPath);
+                return EnsureOilAlbedoTexture();
+            }
+
+            ConfigureSrgbTextureImporter(OilOceanPath);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(OilOceanPath);
+        }
+
+        public static Texture2D EnsureOilOceanFoamTexture()
+        {
+            if (!File.Exists(OilOceanFoamPath))
+            {
+                Debug.LogError(
+                    "[CustomSRP] Missing OilOceanFoam.png. Expected at " + OilOceanFoamPath);
+                return EnsureOilBrushTexture();
+            }
+
+            ConfigureSrgbTextureImporter(OilOceanFoamPath);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(OilOceanFoamPath);
+        }
+
+        public static Texture2D EnsureOilOceanGlintTexture()
+        {
+            if (!File.Exists(OilOceanGlintPath))
+            {
+                Debug.LogError(
+                    "[CustomSRP] Missing OilOceanGlint.png. Expected at " + OilOceanGlintPath);
+                return EnsureOilOceanFoamTexture();
+            }
+
+            ConfigureSrgbTextureImporter(OilOceanGlintPath);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(OilOceanGlintPath);
+        }
+
+        /// <summary>
+        /// Van Gogh–style oil ocean: stepped chroma, flow strokes, chunky foam, yellow glints.
+        /// </summary>
+        public static Material CreateOrUpdateOilOcean(
+            string path,
+            Texture2D canvasMap = null,
+            Texture2D brushMap = null,
+            Texture2D shoreHeightMap = null,
+            Vector2 shoreOriginXZ = default,
+            Vector2 shoreSizeXZ = default,
+            float shoreHeightScaleM = 1184.7f,
+            float shoreWaterLevelM = 0.35f)
+        {
+            Shader ocean = Shader.Find("CustomSRP/OilOceanNPR");
+            if (ocean == null)
+            {
+                throw new System.InvalidOperationException(
+                    "CustomSRP/OilOceanNPR shader not found.");
+            }
+
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(ocean);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            else
+            {
+                material.shader = ocean;
+            }
+
+            material.SetColor("_BaseColor", new Color(1f, 1f, 1f, 0.94f));
+            material.SetColor("_DeepColor", new Color(0.02f, 0.16f, 0.55f, 1f));
+            material.SetColor("_MidColor", new Color(0.06f, 0.42f, 0.88f, 1f));
+            material.SetColor("_ShallowColor", new Color(0.18f, 0.58f, 0.92f, 1f));
+            material.SetColor("_OchreTint", new Color(0.55f, 0.42f, 0.18f, 1f));
+            material.SetColor("_FoamColor", new Color(0.92f, 0.93f, 0.9f, 1f));
+            material.SetColor("_GlintColor", new Color(0.85f, 0.7f, 0.28f, 1f));
+            material.SetFloat("_FoamStrength", 1.7f);
+            material.SetFloat("_ShoreFoamWidth", 18f);
+            material.SetFloat("_SunPathStrength", 1.4f);
+            material.SetFloat("_SunPathWidth", 4.5f);
+            Texture2D paint = EnsureOilOceanTexture();
+            if (paint != null)
+            {
+                material.SetTexture("_PaintMap", paint);
+            }
+
+            material.SetFloat("_PaintTile", 4500f);
+            material.SetFloat("_PaintContrast", 1.2f);
+            material.SetFloat("_PaintRelief", 0.7f);
+            material.SetFloat("_ShadeSteps", 4f);
+            material.SetFloat("_ShadeLift", 0.38f);
+            material.SetFloat("_ShadowLift", 1.05f);
+            material.SetColor("_ShadowTint", new Color(0.10f, 0.24f, 0.62f, 1f));
+            material.SetColor("_ShadowWarm", new Color(0.14f, 0.36f, 0.72f, 1f));
+            material.SetFloat("_ShadowWobble", 0.45f);
+            material.SetColor("_AmbientColor", new Color(0.34f, 0.46f, 0.68f, 1f));
+            material.SetColor("_SpecularColor", new Color(0.9f, 0.88f, 0.8f, 1f));
+            material.SetFloat("_SpecularThreshold", 0.8f);
+            material.SetFloat("_PaintThickness", 0.35f);
+
+            if (shoreSizeXZ.x > 1f && shoreSizeXZ.y > 1f)
+            {
+                material.SetVector(
+                    "_ShoreOriginSize",
+                    new Vector4(shoreOriginXZ.x, shoreOriginXZ.y, shoreSizeXZ.x, shoreSizeXZ.y));
+                material.SetFloat("_ShoreHeightScale", shoreHeightScaleM);
+                material.SetFloat("_ShoreWaterLevel", shoreWaterLevelM);
+                material.SetFloat("_ShoreFeatherM", 18f);
+                material.SetFloat("_ShoreMapStrength", 1.6f);
+            }
+            else
+            {
+                material.SetFloat("_ShoreMapStrength", 0f);
+            }
+
+            if (shoreHeightMap != null)
+            {
+                material.SetTexture("_ShoreHeightMap", shoreHeightMap);
+            }
+
+            ApplySurface(material, SurfaceType.TransparentPremultiply);
+            material.SetFloat("_ReceiveShadows", 1f);
+            material.EnableKeyword("_RECEIVE_SHADOWS");
+            material.DisableKeyword("_KUWAHARA_ON");
+            material.DisableKeyword("_CANVAS_ON");
+            material.DisableKeyword("_SHADOWS_DITHER");
+            material.enableInstancing = false;
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        public static Texture2D EnsureSkyOilCanvasTexture()
+        {
+            return LoadSkyboxTexture(SkyOilCanvasPath);
+        }
+
+        static Texture2D LoadSkyboxTexture(string assetPath)
+        {
+            if (!File.Exists(assetPath))
+            {
+                Debug.LogError("[CustomSRP] Missing skybox texture: " + assetPath);
+                return null;
+            }
+
+            ConfigureSrgbTextureImporter(assetPath);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+        }
+
+        /// <summary>
+        /// Boluo-style oil sky (canvas strokes + sun and moon). timeOfDay is clock hours 0–24.
+        /// </summary>
+        public static Material CreateOrUpdateOilSkybox(
+            string path,
+            Texture2D canvasMap = null,
+            float timeOfDay = 12f)
+        {
+            Shader sky = Shader.Find(OilSkyboxTime.ShaderName);
+            if (sky == null)
+            {
+                throw new System.InvalidOperationException(
+                    "CustomSRP/OilSkyboxNPR shader not found.");
+            }
+
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(sky);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            else
+            {
+                material.shader = sky;
+            }
+
+            // canvasMap is the terrain canvas. The sky samples Textures/Skybox/OilCanvas.png.
+            _ = canvasMap;
+
+            material.DisableKeyword("_CANVAS_ON");
+            if (material.HasProperty("_Canvas"))
+            {
+                material.SetFloat("_Canvas", 0f);
+            }
+
+            if (material.HasProperty("_CanvasStrength"))
+            {
+                material.SetFloat("_CanvasStrength", 0f);
+            }
+
+            if (material.HasProperty("_CanvasMap"))
+            {
+                material.SetTexture("_CanvasMap", null);
+            }
+
+            Texture2D oilCanvas = LoadSkyboxTexture(SkyOilCanvasPath);
+            if (oilCanvas != null)
+            {
+                material.SetTexture("_OilCanvas", oilCanvas);
+                material.SetTextureScale("_OilCanvas", new Vector2(1.15f, 1f));
+            }
+
+            Texture2D sunTex = LoadSkyboxTexture(SkySunOilPath);
+            if (sunTex != null)
+            {
+                material.SetTexture("_SunTex", sunTex);
+            }
+
+            Texture2D moonTex = LoadSkyboxTexture(SkyMoonOilPath);
+            if (moonTex != null)
+            {
+                material.SetTexture("_MoonTex", moonTex);
+            }
+
+            Texture2D starsTex = LoadSkyboxTexture(SkyStarsOilPath);
+            if (starsTex != null)
+            {
+                material.SetTexture("_StarsTex", starsTex);
+            }
+
+            OilSkyboxTime.SyncSkyMaterialStatic(
+                material,
+                OilSkyboxTime.HoursToPeriod(timeOfDay),
+                brushScale: 8f,
+                brushStrength: 1f,
+                brushContrast: 1.8f,
+                brushRelief: 1f);
+
+            material.enableInstancing = false;
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        public static Material CreateOrUpdateOilCloud(string path)
+        {
+            Shader shader = Shader.Find(OilCloudLayer.ShaderName);
+            if (shader == null)
+            {
+                throw new System.InvalidOperationException(
+                    "CustomSRP/OilCloudNPR shader not found.");
+            }
+
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            else
+            {
+                material.shader = shader;
+            }
+
+            Texture2D cloudMap = AssetDatabase.LoadAssetAtPath<Texture2D>(OilCloudLayer.CloudMapPath);
+            Texture2D noiseMap = AssetDatabase.LoadAssetAtPath<Texture2D>(OilCloudLayer.NoiseMapPath);
+            Texture2D brush = AssetDatabase.LoadAssetAtPath<Texture2D>(OilCloudLayer.BrushPath);
+            if (cloudMap != null)
+            {
+                material.SetTexture("_CloudMap", cloudMap);
+            }
+
+            if (noiseMap != null)
+            {
+                material.SetTexture("_NoiseMap", noiseMap);
+                material.SetTextureScale("_NoiseMap", new Vector2(0.32f, 0.32f));
+            }
+
+            if (brush != null)
+            {
+                material.SetTexture("_CloudBrush", brush);
+            }
+
+            material.SetFloat("_UVDisturbance", 0.04f);
+            material.SetFloat("_SdfSoftness", 0.14f);
+            material.SetFloat("_SdfMin", 0.48f);
+            material.SetFloat("_SdfMax", 0.90f);
+            material.SetFloat("_TopShadow", 1f);
+            material.SetFloat("_TopHighlight", 0.92f);
+            material.SetFloat("_EdgeIntensity", 1.55f);
             material.enableInstancing = false;
             EditorUtility.SetDirty(material);
             return material;

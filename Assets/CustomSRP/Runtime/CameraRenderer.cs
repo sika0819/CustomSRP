@@ -201,6 +201,8 @@ namespace CustomSRP
 
                     SkyboxPass.Record(renderGraph, camera, textures);
 
+                    CloudPass.Record(renderGraph, camera, bufferSize, textures);
+
                     CopyAttachmentsPass.Record(
                         renderGraph,
                         useColorTexture,

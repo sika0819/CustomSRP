@@ -60,6 +60,8 @@ Shader "CustomSRP/TerrainLit"
 
             HLSLPROGRAM
             #pragma target 4.5
+            #pragma multi_compile_instancing
+            #pragma instancing_options assumeuniformscaling nomatrices nolightprobe nolightmap
             #pragma shader_feature _RECEIVE_SHADOWS
             #pragma multi_compile _ _SHADOW_FILTER_MEDIUM _SHADOW_FILTER_HIGH
             #pragma multi_compile _ _SOFT_CASCADE_BLEND
@@ -80,6 +82,8 @@ Shader "CustomSRP/TerrainLit"
 
             HLSLPROGRAM
             #pragma target 3.5
+            #pragma multi_compile_instancing
+            #pragma instancing_options assumeuniformscaling nomatrices nolightprobe nolightmap
             #pragma vertex TerrainLitShadowPassVertex
             #pragma fragment TerrainLitShadowPassFragment
             #include "TerrainLitShadowPass.hlsl"

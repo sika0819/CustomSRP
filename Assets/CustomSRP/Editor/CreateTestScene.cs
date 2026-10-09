@@ -1,6 +1,5 @@
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace CustomSRP.Editor
 {
@@ -117,56 +116,6 @@ namespace CustomSRP.Editor
             secondary.rect = new Rect(0.65f, 0.65f, 0.33f, 0.33f);
 
             TestSceneUtility.CreateCube("Cube_SecondaryMarker", new Vector3(4.2f, 0.35f, -3.2f), mats.UnlitYellow);
-
-            CreateUiButton();
-        }
-
-        static void CreateUiButton()
-        {
-            var canvasGo = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            var canvas = canvasGo.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
-            var scaler = canvasGo.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-
-            var eventSystem = Object.FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>();
-            if (eventSystem == null)
-            {
-                new GameObject(
-                    "EventSystem",
-                    typeof(UnityEngine.EventSystems.EventSystem),
-                    typeof(UnityEngine.EventSystems.StandaloneInputModule));
-            }
-
-            var buttonGo = new GameObject("Button", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
-            buttonGo.transform.SetParent(canvasGo.transform, false);
-            var rect = buttonGo.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0f, 1f);
-            rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = new Vector2(24f, -24f);
-            rect.sizeDelta = new Vector2(160f, 40f);
-            buttonGo.GetComponent<Image>().color = new Color(0.2f, 0.55f, 0.9f, 0.9f);
-
-            var textGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-            textGo.transform.SetParent(buttonGo.transform, false);
-            var textRect = textGo.GetComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = Vector2.zero;
-            textRect.offsetMax = Vector2.zero;
-            var text = textGo.GetComponent<Text>();
-            text.text = "CustomSRP";
-            text.alignment = TextAnchor.MiddleCenter;
-            text.color = Color.white;
-            text.fontSize = 18;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (text.font == null)
-            {
-                text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            }
         }
     }
 }

@@ -38,6 +38,13 @@
 - Outline：`Name = Outline`，`LightMode = SRPDefaultUnlit`，`Cull Front`
 - LOD 300 含描边；LOD 150 无描边
 
+## Oil Skybox
+
+- Shader 名：`CustomSRP/OilSkyboxNPR`
+- 队列 `Background`，`PreviewType = Skybox`；由 `CreateSkyboxRendererList` 绘制，不进 Geometry Pass
+- `_Period` 0–4：黎明 / 白天 / 黄昏 / 夜晚，小数混合到下一段
+- 场景组件 `OilSkyboxTime`（`timeOfDay` 0–24h）写 `_Period`，并转动平行光
+
 ## Terrain Lit Pass
 
 - Shader 名：`CustomSRP/TerrainLit`（详见 [terrain.md](terrain.md)）

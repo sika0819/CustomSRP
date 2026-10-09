@@ -37,6 +37,7 @@ float4 unity_OrthoParams;
 float4 _ProjectionParams;
 float4 _ScreenParams;
 float4 _ZBufferParams;
+float4 _Time;
 float3 _WorldSpaceCameraPos;
 
 #define UNITY_MATRIX_M unity_ObjectToWorld

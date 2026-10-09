@@ -3,7 +3,7 @@
 
 // Caller declares _OutlineBrushMap, sampler_OutlineBrushMap,
 // _OutlineBrushMap_ST, and _ShadowBrushScale.
-// worldFrequency is UV per meter. Objects and terrain receivers both use ~0.25.
+// worldFrequency is UV per meter. Plane and terrain receivers both use 0.25.
 half SampleOilShadowBrush(float3 positionWS, float2 uv, float worldFrequency)
 {
 #if defined(SHADER_STAGE_FRAGMENT)
@@ -12,11 +12,11 @@ half SampleOilShadowBrush(float3 positionWS, float2 uv, float worldFrequency)
         _OutlineBrushMap_ST.zw +
         positionWS.xz * (_ShadowBrushScale * worldFrequency);
 
-    // Keep one brush tile at least ~32 pixels so distance mips don't flatten strokes.
+    // Hold a little detail at distance, then let mips soften instead of staying sharp noise.
     float2 dx = ddx(brushUV);
     float2 dy = ddy(brushUV);
     float span = max(length(dx), length(dy));
-    float lodScale = max(span * 32.0, 1.0);
+    float lodScale = max(span * 10.0, 1.0);
     dx /= lodScale;
     dy /= lodScale;
 

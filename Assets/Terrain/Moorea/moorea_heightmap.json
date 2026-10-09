@@ -1,0 +1,63 @@
+{
+  "name": "Moorea",
+  "name_zh": "\u83ab\u96f7\u963f\u5c9b",
+  "country": "French Polynesia",
+  "source": "NASA SRTM 1 arc-second",
+  "source_url": "https://elevation-tiles-prod.s3.amazonaws.com/skadi/S18/S18W150.hgt.gz",
+  "tile": "S18W150",
+  "width": 2049,
+  "height": 2049,
+  "row0": "north",
+  "meters_per_pixel": {
+    "east_west": 8.056640625,
+    "north_south": 8.056640625
+  },
+  "elevation_min_m": 0,
+  "elevation_max_m": 1184.7,
+  "surveyed_peak_m": 1207.0,
+  "encoding": "uint16, 0 = 0 m, 65535 = 1184.7 m, linear",
+  "raw_byte_order": "little-endian",
+  "raw_layout": "row-major, no header, first row is north",
+  "unity_terrain": {
+    "resolution": "2049 x 2049",
+    "terrain_height_m": 1184.7,
+    "byte_order": "Windows (little-endian)",
+    "flip": "first row is north (row0); Import Raw matches CreateMooreaTerrainScene loader",
+    "recommended_terrain_size_m": {
+      "x": 16500.0,
+      "z": 16500.0,
+      "y": 1184.7
+    },
+    "scale_note": "1:1 meters \u2014 7.2 km crop centered on Opunohu / Afareaitu (ring road + valleys)"
+  },
+  "georef": {
+    "center_lat": -17.538,
+    "center_lon": -149.83,
+    "lat_north": -17.463457533238728,
+    "lat_south": -17.612542466761273,
+    "lon_west": -149.90770022443203,
+    "lon_east": -149.752299775568
+  },
+  "osm_reference": {
+    "png": "moorea_osm_reference.png",
+    "geojson": "moorea_osm_features.geojson",
+    "attribution": "\u00a9 OpenStreetMap contributors (ODbL)",
+    "usage": "Overlay in image editor on moorea_preview.png / heightmap for road & river paint"
+  },
+  "note": "Real SRTM + OSM; wave-washed shoreline (scalloped beach, swash grooves, flat seabed).",
+  "files": {
+    "heightmap_raw": "moorea_heightmap.raw",
+    "heightmap_png": "moorea_heightmap.png",
+    "preview": "moorea_preview.png"
+  },
+  "island_bbox_px": {
+    "y0": 117,
+    "y1": 1873,
+    "x0": 6,
+    "x1": 2042
+  },
+  "island_size_m": {
+    "north_south": 14147.5,
+    "east_west": 16403.3
+  }
+}
