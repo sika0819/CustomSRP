@@ -18,7 +18,7 @@ namespace CustomSRP.Debugger
         static StyleSheet _cachedStyle;
 
         [SerializeField]
-        PerfDebuggerActiveWindowType activeWindow = PerfDebuggerActiveWindowType.OnlyOpenWhenDevelopment;
+        PerfDebuggerActiveWindowType activeWindow = PerfDebuggerActiveWindowType.AlwaysOpen;
 
         [SerializeField]
         float uiScale = 1.25f;
@@ -62,11 +62,6 @@ namespace CustomSRP.Debugger
             {
                 return;
             }
-
-            // Default gate: Editor + Development players only.
-#if !UNITY_EDITOR && !DEVELOPMENT_BUILD
-            return;
-#endif
 
             var go = new GameObject("[PerfDebugger]");
             DontDestroyOnLoad(go);
@@ -223,9 +218,7 @@ namespace CustomSRP.Debugger
             _content = new VisualElement();
             _content.AddToClassList("perf-content");
             _content.style.flexGrow = 1;
-            _content.style.flexShrink = 1;
             _content.style.flexDirection = FlexDirection.Column;
-            _content.style.minHeight = 0;
             _panel.Add(_content);
             _root.Add(_panel);
 
@@ -279,9 +272,7 @@ namespace CustomSRP.Debugger
             _content.Clear();
             var host = new VisualElement();
             host.style.flexGrow = 1;
-            host.style.flexShrink = 1;
             host.style.flexDirection = FlexDirection.Column;
-            host.style.minHeight = 0;
             _content.Add(host);
             _current.Build(host);
 
@@ -303,7 +294,11 @@ namespace CustomSRP.Debugger
             _showFull = true;
             PlayerPrefs.SetInt(PrefOpen, 1);
             ShowIconOrPanel();
-            _current?.Refresh();
+            int index = _current == null ? -1 : _windows.IndexOf(_current);
+            if (index >= 0)
+            {
+                SelectWindow(index);
+            }
         }
 
         void CloseFull()

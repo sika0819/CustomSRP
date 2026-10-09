@@ -42,10 +42,7 @@ namespace CustomSRP.Debugger
 
         protected override void OnBuild(VisualElement root)
         {
-            root.style.flexGrow = 1;
-            root.style.flexShrink = 1;
             root.style.flexDirection = FlexDirection.Column;
-            root.style.minHeight = 0;
 
             var toolbar = new VisualElement();
             toolbar.AddToClassList("perf-toolbar");
@@ -68,15 +65,17 @@ namespace CustomSRP.Debugger
 
             _logView = new ScrollView(ScrollViewMode.Vertical);
             _logView.AddToClassList("perf-log-list");
-            _logView.style.flexGrow = 1;
-            _logView.style.flexShrink = 1;
-            _logView.style.minHeight = 80;
+            _logView.style.height = 220;
+            _logView.style.minHeight = 220;
+            _logView.style.flexGrow = 0;
+            _logView.style.flexShrink = 0;
             root.Add(_logView);
 
             _stack = new Label();
             _stack.AddToClassList("perf-stack");
             _stack.style.whiteSpace = WhiteSpace.Normal;
-            _stack.style.minHeight = 64;
+            _stack.style.height = 88;
+            _stack.style.color = new Color(0.82f, 0.86f, 0.9f);
             root.Add(_stack);
             _dirty = true;
         }
@@ -116,6 +115,12 @@ namespace CustomSRP.Debugger
                 var line = new Label(FormatLine(captured));
                 line.AddToClassList("perf-log-line");
                 line.AddToClassList(ClassFor(captured.Type));
+                line.style.color = ColorFor(captured.Type);
+                line.style.whiteSpace = WhiteSpace.Normal;
+                line.style.fontSize = 12;
+                line.style.marginBottom = 2;
+                line.style.paddingLeft = 4;
+                line.style.paddingRight = 4;
                 line.pickingMode = PickingMode.Position;
                 line.RegisterCallback<ClickEvent>(_ => Select(captured));
                 _logView.Add(line);
@@ -124,7 +129,10 @@ namespace CustomSRP.Debugger
             if (shown == 0)
             {
                 var empty = new Label("No logs yet.");
-                empty.AddToClassList("perf-note");
+                empty.style.color = new Color(0.75f, 0.8f, 0.86f);
+                empty.style.fontSize = 13;
+                empty.style.paddingTop = 8;
+                empty.style.paddingLeft = 4;
                 _logView.Add(empty);
             }
 
@@ -224,6 +232,15 @@ namespace CustomSRP.Debugger
 
         static string Truncate(string s, int max) =>
             string.IsNullOrEmpty(s) || s.Length <= max ? s : s.Substring(0, max) + "…";
+
+        static Color ColorFor(LogType type) =>
+            type switch
+            {
+                LogType.Warning => new Color(1f, 0.82f, 0.31f),
+                LogType.Error => new Color(1f, 0.43f, 0.43f),
+                LogType.Exception => new Color(1f, 0.28f, 0.28f),
+                _ => new Color(0.9f, 0.92f, 0.94f),
+            };
 
         static string ClassFor(LogType type) =>
             type switch

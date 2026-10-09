@@ -87,8 +87,6 @@
 
 .perf-content {
     flex-grow: 1;
-    flex-shrink: 1;
-    min-height: 0;
     flex-direction: column;
     background-color: rgba(0, 0, 0, 0.22);
     border-radius: 6px;
@@ -153,9 +151,8 @@
 }
 
 .perf-log-list {
-    flex-grow: 1;
-    flex-shrink: 1;
-    min-height: 80px;
+    height: 220px;
+    min-height: 220px;
     margin-bottom: 6px;
     background-color: rgba(0, 0, 0, 0.25);
 }
