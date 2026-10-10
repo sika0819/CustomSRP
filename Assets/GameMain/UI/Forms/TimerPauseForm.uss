@@ -1,0 +1,90 @@
+.game-timer-pause-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.game-timer-pause-form__timerdialog {
+    position: absolute;
+    left: 50%;
+    margin-left: -540px;
+    top: 100%;
+    margin-top: -1074px;
+    margin-right: 0;
+    width: 1080px;
+    margin-bottom: 0;
+    height: 1023.87px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-color: rgba(255, 255, 255, 1.000);
+}
+.game-timer-pause-form__icon {
+    position: absolute;
+    left: 50%;
+    margin-left: -135px;
+    top: 100%;
+    margin-top: -914px;
+    margin-right: 0;
+    width: 270px;
+    margin-bottom: 0;
+    height: 270px;
+    background-image: url("../Textures/TimerPauseForm/icon.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-timer-pause-form__description {
+    position: absolute;
+    left: 50%;
+    margin-left: -433.5px;
+    top: 100%;
+    margin-top: -458.65px;
+    margin-right: 0;
+    width: 867px;
+    margin-bottom: 0;
+    height: 107.65px;
+    -unity-text-align: upper-center;
+    font-size: 39px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-timer-pause-form__close-button {
+    position: absolute;
+    left: 50%;
+    margin-left: -433.5px;
+    top: 100%;
+    margin-top: -242.94px;
+    margin-right: 0;
+    width: 867px;
+    margin-bottom: 0;
+    height: 172.94px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/TimerPauseForm/close-button.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-timer-pause-form__title {
+    position: absolute;
+    left: 50%;
+    margin-left: -433.5px;
+    top: 100%;
+    margin-top: -588px;
+    margin-right: 0;
+    width: 867px;
+    margin-bottom: 0;
+    height: 101px;
+    -unity-text-align: upper-center;
+    font-size: 72px;
+    color: rgba(25, 25, 26, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}

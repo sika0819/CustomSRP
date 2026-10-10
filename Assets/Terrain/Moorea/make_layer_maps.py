@@ -112,10 +112,14 @@ def mask_from_height(h: np.ndarray, spec: dict) -> np.ndarray:
     return np.stack((metal, ao, height, smooth), axis=-1)
 
 
-def seam(img: np.ndarray) -> tuple[float, float]:
-    lr = np.abs(img[:, 0].astype(np.float32) - img[:, -1].astype(np.float32)).mean()
-    tb = np.abs(img[0].astype(np.float32) - img[-1].astype(np.float32)).mean()
-    return float(lr), float(tb)
+def wrap_ratio(img: np.ndarray) -> tuple[float, float]:
+    """1 means the tile edge steps like an interior pixel. 0 is a welded edge."""
+    a = img.astype(np.float32)
+    step_h = np.abs(a[:, 1:] - a[:, :-1]).mean()
+    step_v = np.abs(a[1:] - a[:-1]).mean()
+    wrap_h = np.abs(a[:, 0] - a[:, -1]).mean()
+    wrap_v = np.abs(a[0] - a[-1]).mean()
+    return float(wrap_h / (step_h + 1e-8)), float(wrap_v / (step_v + 1e-8))
 
 
 def u8(img: np.ndarray) -> np.ndarray:
@@ -312,16 +316,20 @@ def main() -> None:
         Image.fromarray(u8(normal), mode="RGB").save(normal_path)
         Image.fromarray(u8(mask), mode="RGBA").save(mask_path)
 
-        normal_guid = existing_guid(normal_path.with_suffix(".png.meta")) or uuid.uuid4().hex
-        mask_guid = existing_guid(mask_path.with_suffix(".png.meta")) or uuid.uuid4().hex
-        write_meta(normal_path.with_suffix(".png.meta"), normal_guid, normal=True)
-        write_meta(mask_path.with_suffix(".png.meta"), mask_guid, normal=False)
+        normal_meta = normal_path.with_suffix(".png.meta")
+        mask_meta = mask_path.with_suffix(".png.meta")
+        normal_guid = existing_guid(normal_meta) or uuid.uuid4().hex
+        mask_guid = existing_guid(mask_meta) or uuid.uuid4().hex
+        if not normal_meta.exists():
+            write_meta(normal_meta, normal_guid, normal=True)
+        if not mask_meta.exists():
+            write_meta(mask_meta, mask_guid, normal=False)
         assign_layer(ROOT / spec["layer"], normal_guid, mask_guid)
 
         n = normal * 2.0 - 1.0
         nz = float(n[..., 2].mean())
-        nseam = seam(u8(normal))
-        mseam = seam(u8(mask))
+        nseam = wrap_ratio(u8(normal))
+        mseam = wrap_ratio(u8(mask))
         print(
             name,
             "nz",
@@ -332,12 +340,12 @@ def main() -> None:
             round(float(mask[..., 1].mean()), 3),
             "height",
             round(float(mask[..., 2].mean()), 3),
-            "normal seam",
-            round(nseam[0], 3),
-            round(nseam[1], 3),
-            "mask seam",
-            round(mseam[0], 3),
-            round(mseam[1], 3),
+            "normal wrap",
+            round(nseam[0], 2),
+            round(nseam[1], 2),
+            "mask wrap",
+            round(mseam[0], 2),
+            round(mseam[1], 2),
         )
 
 

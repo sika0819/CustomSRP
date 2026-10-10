@@ -1,0 +1,13 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="PresetForm.uss" />
+    <ui:VisualElement name="root" class="game-preset-form__root">
+        <ui:Label name="title" class="game-preset-form__title" text="预设" />
+        <ui:VisualElement name="scrollTrackActive" class="game-preset-form__scroll-track-active" />
+        <ui:Label name="description" class="game-preset-form__description" text="设置场景预设
+点击以下预设可快速切换场景哦～" />
+        <ui:VisualElement name="scrollTrack" class="game-preset-form__scroll-track" />
+        <ui:Button name="presetButton" class="game-preset-form__preset-button">
+            <ui:ListView name="presetList" class="game-preset-form__preset-list" />
+        </ui:Button>
+    </ui:VisualElement>
+</ui:UXML>

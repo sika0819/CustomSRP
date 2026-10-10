@@ -44,9 +44,19 @@ Varyings TerrainOilNPRPassVertex(Attributes input)
 // Coarser mip. Scenic cameras sit hundreds of meters up; full-res splats only burn bandwidth.
 #define TERRAIN_ALBEDO_BIAS 1.0
 
-// Control once, each land-cover albedo once, ridge rock once. UV wobble is a stable cell hash.
-half3 SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 normalWS)
+struct TerrainOilSample
 {
+    half3 albedo;
+    half3 normalWS;
+    half occlusion;
+    half smoothness;
+};
+
+// Control once, each land-cover albedo once, ridge rock once. UV wobble is a stable cell hash.
+// Layer normals and masks share those UVs so the bump and the height blend sit on the paint.
+TerrainOilSample SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 geomNormalWS)
+{
+    TerrainOilSample s;
     float4 control = SAMPLE_TEXTURE2D(_Control, sampler_Control, controlUV);
     float sum4 = dot(control, 1.0);
     float rockW = saturate((1.0 - sum4) * _RidgeAmount);
@@ -60,13 +70,30 @@ half3 SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 normalWS)
     float2 uv2 = TransformTerrainUV(controlUV, _Splat2_ST) + wobble;
     float2 uv3 = TransformTerrainUV(controlUV, _Splat3_ST) + wobble.yx;
 
+    half4 m0 = SampleLayerMask(TEXTURE2D_ARGS(_Mask0, sampler_Splat0), uv0, _LayerHasMask0, _MaskMapRemapScale0, _MaskMapRemapOffset0);
+    half4 m1 = SampleLayerMask(TEXTURE2D_ARGS(_Mask1, sampler_Splat0), uv1, _LayerHasMask1, _MaskMapRemapScale1, _MaskMapRemapOffset1);
+    half4 m2 = SampleLayerMask(TEXTURE2D_ARGS(_Mask2, sampler_Splat0), uv2, _LayerHasMask2, _MaskMapRemapScale2, _MaskMapRemapOffset2);
+    half4 m3 = SampleLayerMask(TEXTURE2D_ARGS(_Mask3, sampler_Splat0), uv3, _LayerHasMask3, _MaskMapRemapScale3, _MaskMapRemapOffset3);
+
+    control = TerrainHeightBlend(control, float4(m0.b, m1.b, m2.b, m3.b));
+
+    half ao0 = _LayerHasMask0 > 0.5 ? m0.g : (half)(_MaskMapRemapScale0.g + _MaskMapRemapOffset0.g);
+    half ao1 = _LayerHasMask1 > 0.5 ? m1.g : (half)(_MaskMapRemapScale1.g + _MaskMapRemapOffset1.g);
+    half ao2 = _LayerHasMask2 > 0.5 ? m2.g : (half)(_MaskMapRemapScale2.g + _MaskMapRemapOffset2.g);
+    half ao3 = _LayerHasMask3 > 0.5 ? m3.g : (half)(_MaskMapRemapScale3.g + _MaskMapRemapOffset3.g);
+    half sm0 = _LayerHasMask0 > 0.5 ? m0.a : (half)_Smoothness0;
+    half sm1 = _LayerHasMask1 > 0.5 ? m1.a : (half)_Smoothness1;
+    half sm2 = _LayerHasMask2 > 0.5 ? m2.a : (half)_Smoothness2;
+    half sm3 = _LayerHasMask3 > 0.5 ? m3.a : (half)_Smoothness3;
+
     half3 albedo =
         (half3)SAMPLE_TEXTURE2D_BIAS(_Splat0, sampler_Splat0, uv0, TERRAIN_ALBEDO_BIAS).rgb * (half)control.r +
         (half3)SAMPLE_TEXTURE2D_BIAS(_Splat1, sampler_Splat0, uv1, TERRAIN_ALBEDO_BIAS).rgb * (half)control.g +
         (half3)SAMPLE_TEXTURE2D_BIAS(_Splat2, sampler_Splat0, uv2, TERRAIN_ALBEDO_BIAS).rgb * (half)control.b +
         (half3)SAMPLE_TEXTURE2D_BIAS(_Splat3, sampler_Splat0, uv3, TERRAIN_ALBEDO_BIAS).rgb * (half)control.a;
 
-    float slope = 1.0 - saturate(normalize(normalWS).y);
+    float3 geomN = normalize(geomNormalWS);
+    float slope = 1.0 - saturate(geomN.y);
     float height01 = saturate(positionWS.y / max(_TerrainHeight, 1.0));
     float ridge = smoothstep(0.2, 0.55, slope);
     ridge = max(ridge, smoothstep(0.42, 0.72, height01) * smoothstep(0.1, 0.28, slope));
@@ -81,15 +108,36 @@ half3 SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 normalWS)
     half3 warm = albedo * half3(1.06h, 1.02h, 0.9h);
     half3 cool = albedo * half3(0.9h, 0.97h, 1.05h);
     albedo = lerp(cool, warm, climate);
-    return albedo * (half3)_BaseColor.rgb;
+    s.occlusion =
+        ao0 * (half)control.r +
+        ao1 * (half)control.g +
+        ao2 * (half)control.b +
+        ao3 * (half)control.a;
+    s.smoothness =
+        sm0 * (half)control.r +
+        sm1 * (half)control.g +
+        sm2 * (half)control.b +
+        sm3 * (half)control.a;
+    albedo *= s.occlusion;
+
+    half3 nTS =
+        (half3)DecodeNormal(SAMPLE_TEXTURE2D(_Normal0, sampler_Splat0, uv0), _NormalScale0) * (half)control.r +
+        (half3)DecodeNormal(SAMPLE_TEXTURE2D(_Normal1, sampler_Splat0, uv1), _NormalScale1) * (half)control.g +
+        (half3)DecodeNormal(SAMPLE_TEXTURE2D(_Normal2, sampler_Splat0, uv2), _NormalScale2) * (half)control.b +
+        (half3)DecodeNormal(SAMPLE_TEXTURE2D(_Normal3, sampler_Splat0, uv3), _NormalScale3) * (half)control.a;
+    nTS.z += 1e-4h;
+    s.normalWS = (half3)TerrainDetailToWorld(normalize(nTS), geomN);
+    s.albedo = albedo * (half3)_BaseColor.rgb;
+    return s;
 }
 
 half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
 
-    half3 albedo = SampleTerrainCheap(input.controlUV, input.positionWS, input.normalWS);
-    half3 normalWS = normalize((half3)input.normalWS);
+    TerrainOilSample terrain = SampleTerrainCheap(input.controlUV, input.positionWS, input.normalWS);
+    half3 albedo = terrain.albedo;
+    half3 normalWS = normalize(terrain.normalWS);
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
 
     Surface surface;
@@ -101,8 +149,8 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
     surface.color = (float3)albedo;
     surface.alpha = 1.0;
     surface.metallic = 0.0;
-    surface.occlusion = 1.0;
-    surface.smoothness = 0.0;
+    surface.occlusion = (float)terrain.occlusion;
+    surface.smoothness = (float)terrain.smoothness;
     surface.fresnelStrength = 0.0;
     surface.dither = InterleavedGradientNoise(
         GetFragment(input.positionCS_SS).positionSS, 0);
@@ -124,6 +172,14 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
         brush,
         (half)_ShadowWobble,
         (half)_OilDetail);
+
+    if (terrain.smoothness > 0.02h && GetDirectionalLightCount() > 0)
+    {
+        half3 L = (half3)_DirectionalLightData[0].directionAndMask.xyz;
+        half3 H = normalize(L + viewDir);
+        half spec = pow(saturate(dot(normalWS, H)), lerp(24.0h, 96.0h, terrain.smoothness));
+        color += spec * terrain.smoothness * (half3)_SpecularColor.rgb * 0.28h;
+    }
 
     color = OilWeaveTint(color, input.positionWS.xz * 0.15);
     return half4(saturate(color), 1.0h);

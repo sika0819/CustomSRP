@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "com.coplaydev.unity-mcp": "file:MCPForUnity",
+    "com.jiangyin.gameframework": "file:com.jiangyin.gameframework",
     "com.unity.burst": "2.0.0",
     "com.unity.mathematics": "1.4.0",
     "com.unity.multiplayer.center": "2.0.1",

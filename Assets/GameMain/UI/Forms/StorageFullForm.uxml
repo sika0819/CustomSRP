@@ -1,0 +1,14 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="StorageFullForm.uss" />
+    <ui:VisualElement name="root" class="game-storage-full-form__root">
+        <ui:VisualElement name="ingamestorageFullstorageview" class="game-storage-full-form__ingamestorage-fullstorageview" />
+        <ui:VisualElement name="storageFullstoragepage" class="game-storage-full-form__storage-fullstoragepage">
+            <ui:Button name="storageFullstoragepageButton" class="game-storage-full-form__storage-fullstoragepage-button">
+                <ui:Label name="labeltmp" class="game-storage-full-form__labeltmp" text="我知道了" />
+            </ui:Button>
+            <ui:VisualElement name="hinticon" class="game-storage-full-form__hinticon" />
+            <ui:Label name="labeltitle" class="game-storage-full-form__labeltitle" text="温馨提示" />
+            <ui:Label name="labelinfo" class="game-storage-full-form__labelinfo" text="设备存储空间不足，需至少预留600MB空间才能下载，建议清理存储空间后重试”，无法启动下载。" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

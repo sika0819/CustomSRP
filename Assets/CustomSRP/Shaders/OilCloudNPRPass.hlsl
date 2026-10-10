@@ -85,6 +85,10 @@ half4 CloudFragment(CloudVaryings input) : SV_Target
     float2 cloudUV = input.uv + (noise - 0.5) * disturb;
     cloudUV = clamp(cloudUV, cellMin + float2(0.003, 0.006), cellMax - float2(0.003, 0.006));
     float4 baseMap = SAMPLE_TEXTURE2D_LOD(_CloudMap, sampler_CloudMap, cloudUV, 0);
+    // Mip 0 coverage is a one-texel cliff. Block compression turns that cliff
+    // into squares. A low mip feathers the rim; belly paint stays on mip 0.
+    float4 rimMap = SAMPLE_TEXTURE2D_LOD(_CloudMap, sampler_CloudMap, cloudUV, 1.5);
+    float sdf = lerp(baseMap.b, rimMap.b, 0.85);
 
     float3 sunD = _OilCloudSunDir;
     if (dot(sunD, sunD) < 1e-6)
@@ -100,16 +104,17 @@ half4 CloudFragment(CloudVaryings input) : SV_Target
     float soft = _SdfSoftness * lerp(1.0, 1.75, dawn);
     float softLo = sdfThreshold - soft;
     float softHi = max(sdfThreshold, softLo + 1e-3);
-    float shape = smoothstep(softLo, softHi, baseMap.b);
-    float alpha = shape * baseMap.a;
-    if (alpha < 0.015)
+    float shape = smoothstep(softLo, softHi, sdf);
+    float alpha = shape * rimMap.a;
+    if (alpha < 0.008)
     {
         clip(-1.0);
         return half4(0.0h, 0.0h, 0.0h, 0.0h);
     }
 
-    // Body covers the sun disc. The SDF edge stays soft.
-    alpha = lerp(alpha, 1.0, smoothstep(0.25, 0.70, alpha));
+    // Opaque core still covers the sun. Crushing from 0.25 made the rim a
+    // one-texel stair, so only the core is forced opaque.
+    alpha = lerp(alpha, 1.0, smoothstep(0.58, 0.90, alpha));
     float nightAmt = saturate(_OilCloudNight);
     float zenith = saturate(dirW.y);
     alpha *= lerp(1.0, lerp(1.0, 0.42, zenith), nightAmt);
@@ -140,7 +145,7 @@ half4 CloudFragment(CloudVaryings input) : SV_Target
     half3 zenithCol = (half3)_OilCloudZenith.rgb;
     half3 shadowTop = lerp(body, zenithCol, shadowW * (1.0h - belly * 0.35h));
 
-    float thick = saturate((baseMap.b - sdfThreshold) / max(soft * 2.6, 0.20));
+    float thick = saturate((sdf - sdfThreshold) / max(soft * 2.6, 0.20));
     float shade = saturate(thick * (1.12 - (float)belly));
     half3 color = shadowTop * (half)lerp(1.0, lerp(0.60, 0.92, (float)belly), shade * 0.72);
 
@@ -152,7 +157,7 @@ half4 CloudFragment(CloudVaryings input) : SV_Target
     color = lerp(color, highlight, saturate(topMask * lightW));
 
     float outer = saturate(4.0 * shape * (1.0 - shape));
-    float band = 1.0 - saturate(abs(baseMap.b - sdfThreshold) / max(soft * 0.62, 0.04));
+    float band = 1.0 - saturate(abs(sdf - sdfThreshold) / max(soft * 0.62, 0.04));
     band *= band;
     float fringe = max(outer, max(band, saturate(baseMap.g)));
     fringe = saturate(fringe);

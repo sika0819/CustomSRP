@@ -1,0 +1,8 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="PlayingBadge.uss" />
+    <ui:VisualElement name="root" class="game-playing-badge__root">
+        <ui:VisualElement name="barLeft" class="game-playing-badge__bar-left" />
+        <ui:VisualElement name="barRight" class="game-playing-badge__bar-right" />
+        <ui:VisualElement name="barCenter" class="game-playing-badge__bar-center" />
+    </ui:VisualElement>
+</ui:UXML>

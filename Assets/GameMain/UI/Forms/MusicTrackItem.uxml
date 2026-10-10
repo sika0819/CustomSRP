@@ -1,0 +1,18 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="MusicTrackItem.uss" />
+    <ui:VisualElement name="root" class="game-music-track-item__root">
+        <ui:Button name="musicButton" class="game-music-track-item__music-button" />
+        <ui:VisualElement name="downloading" class="game-music-track-item__downloading" />
+        <ui:VisualElement name="downloaderror" class="game-music-track-item__downloaderror" />
+        <ui:VisualElement name="panel" class="game-music-track-item__panel">
+            <ui:Label name="label1" class="game-music-track-item__label1">
+                <ui:VisualElement name="downloadsuccess" class="game-music-track-item__downloadsuccess" />
+            </ui:Label>
+            <ui:Label name="label0" class="game-music-track-item__label0">
+                <ui:VisualElement name="downloadsuccess2" class="game-music-track-item__downloadsuccess2" />
+            </ui:Label>
+        </ui:VisualElement>
+        <ui:VisualElement name="notdownload" class="game-music-track-item__notdownload" />
+        <ui:VisualElement name="playinganima" class="game-music-track-item__playinganima" />
+    </ui:VisualElement>
+</ui:UXML>

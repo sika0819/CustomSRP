@@ -368,6 +368,7 @@ namespace CustomSRP.Editor
         public const string OilOceanPath = TexturesPath + "/OilOcean.png";
         public const string OilOceanFoamPath = TexturesPath + "/OilOceanFoam.png";
         public const string OilOceanGlintPath = TexturesPath + "/OilOceanGlint.png";
+        public const string OilSunStrokePath = TexturesPath + "/OilSunStroke.png";
 
         /// <summary>
         /// Soft blotchy albedo for Kuwahara dabs (sRGB). Prefer authored OilAlbedo.png.
@@ -660,6 +661,12 @@ namespace CustomSRP.Editor
             if (paint != null)
             {
                 material.SetTexture("_PaintMap", paint);
+            }
+
+            Texture2D sunStroke = AssetDatabase.LoadAssetAtPath<Texture2D>(OilSunStrokePath);
+            if (sunStroke != null)
+            {
+                material.SetTexture("_SparkleBrush", sunStroke);
             }
 
             material.SetFloat("_PaintTile", 4500f);

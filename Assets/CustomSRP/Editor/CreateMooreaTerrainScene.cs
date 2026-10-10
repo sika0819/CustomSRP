@@ -901,93 +901,11 @@ namespace CustomSRP.Editor
                 }
             }
 
-            MakePixelsSeamless(pixels, size, size, band: size / 8);
+            // TileNoise is periodic. Do not average opposite edges — that prints a soft grid.
             tex.SetPixels(pixels);
             tex.Apply(false, false);
             File.WriteAllBytes(path, tex.EncodeToPNG());
             Object.DestroyImmediate(tex);
-        }
-
-        /// <summary>
-        /// Force opposite edges to match so Repeat wrap does not print a tile grid.
-        /// </summary>
-        static void MakePixelsSeamless(Color[] pixels, int width, int height, int band)
-        {
-            band = Mathf.Clamp(band, 8, Mathf.Min(width, height) / 2);
-            for (int y = 0; y < height; y++)
-            {
-                for (int c = 0; c < 4; c++)
-                {
-                    float avg = 0.5f * (GetCh(pixels, width, 0, y, c) + GetCh(pixels, width, width - 1, y, c));
-                    SetCh(pixels, width, 0, y, c, avg);
-                    SetCh(pixels, width, width - 1, y, c, avg);
-                }
-
-                for (int i = 1; i < band; i++)
-                {
-                    float t = i / (float)band;
-                    float alpha = 0.55f * (1f - t) * (1f - t);
-                    for (int c = 0; c < 4; c++)
-                    {
-                        float a = GetCh(pixels, width, i, y, c);
-                        float b = GetCh(pixels, width, width - 1 - i, y, c);
-                        float avg = 0.5f * (a + b);
-                        SetCh(pixels, width, i, y, c, Mathf.Lerp(a, avg, alpha));
-                        SetCh(pixels, width, width - 1 - i, y, c, Mathf.Lerp(b, avg, alpha));
-                    }
-                }
-            }
-
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < 4; c++)
-                {
-                    float avg = 0.5f * (GetCh(pixels, width, x, 0, c) + GetCh(pixels, width, x, height - 1, c));
-                    SetCh(pixels, width, x, 0, c, avg);
-                    SetCh(pixels, width, x, height - 1, c, avg);
-                }
-
-                for (int i = 1; i < band; i++)
-                {
-                    float t = i / (float)band;
-                    float alpha = 0.55f * (1f - t) * (1f - t);
-                    for (int c = 0; c < 4; c++)
-                    {
-                        float a = GetCh(pixels, width, x, i, c);
-                        float b = GetCh(pixels, width, x, height - 1 - i, c);
-                        float avg = 0.5f * (a + b);
-                        SetCh(pixels, width, x, i, c, Mathf.Lerp(a, avg, alpha));
-                        SetCh(pixels, width, x, height - 1 - i, c, Mathf.Lerp(b, avg, alpha));
-                    }
-                }
-            }
-        }
-
-        static float GetCh(Color[] pixels, int width, int x, int y, int c)
-        {
-            Color col = pixels[y * width + x];
-            return c switch
-            {
-                0 => col.r,
-                1 => col.g,
-                2 => col.b,
-                _ => col.a
-            };
-        }
-
-        static void SetCh(Color[] pixels, int width, int x, int y, int c, float v)
-        {
-            int i = y * width + x;
-            Color col = pixels[i];
-            switch (c)
-            {
-                case 0: col.r = v; break;
-                case 1: col.g = v; break;
-                case 2: col.b = v; break;
-                default: col.a = v; break;
-            }
-
-            pixels[i] = col;
         }
 
         static float TileNoise(float x, float y, int period)
@@ -1738,7 +1656,7 @@ namespace CustomSRP.Editor
             var surface = sea.AddComponent<OilOceanSurface>();
             surface.gridScale = scale.SizeX;
             // ~90 quads across the island. The fragment shader paints the short crests.
-            surface.vertexDistance = 180f;
+            surface.vertexDistance = Mathf.Max(400f, scale.SizeX / OilOceanSurface.MaxSubdivisions);
             surface.followCamera = true;
             surface.terrain = terrain;
             surface.waveHeight = 6.5f;
@@ -1861,8 +1779,8 @@ namespace CustomSRP.Editor
 
             var so = new SerializedObject(crp);
             SerializedProperty settings = so.FindProperty("settings");
-            // Depth copy feeds shore foam soft-intersection on OilOceanNPR.
-            settings.FindPropertyRelative("copyColor").boolValue = false;
+            // Color + depth copies feed OilOceanNPR refraction and shore foam.
+            settings.FindPropertyRelative("copyColor").boolValue = true;
             settings.FindPropertyRelative("copyDepth").boolValue = true;
             settings.FindPropertyRelative("overridePostFX").boolValue = true;
             settings.FindPropertyRelative("postFXSettings").objectReferenceValue = null;

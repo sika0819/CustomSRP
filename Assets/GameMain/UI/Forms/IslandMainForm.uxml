@@ -1,0 +1,99 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="IslandMainForm.uss" />
+    <ui:VisualElement name="root" class="game-island-main-form__root">
+        <ui:VisualElement name="profile" class="game-island-main-form__profile">
+            <ui:VisualElement name="profile2" class="game-island-main-form__profile2" />
+            <ui:Label name="unreadBadge" class="game-island-main-form__unread-badge" text="●" />
+        </ui:VisualElement>
+        <ui:VisualElement name="toolRow" class="game-island-main-form__tool-row">
+            <ui:Button name="toolRowButton" class="game-island-main-form__tool-row-button">
+                <ui:Label name="labellegacy" class="game-island-main-form__labellegacy" text="旋转偏移量X+" />
+            </ui:Button>
+            <ui:Button name="toolRowButton2" class="game-island-main-form__tool-row-button2">
+                <ui:Label name="labellegacy2" class="game-island-main-form__labellegacy2" text="高度-" />
+            </ui:Button>
+            <ui:Button name="toolRowButton3" class="game-island-main-form__tool-row-button3">
+                <ui:Label name="labellegacy3" class="game-island-main-form__labellegacy3" text="旋转偏移量Z-" />
+            </ui:Button>
+            <ui:Button name="toolRowButton4" class="game-island-main-form__tool-row-button4">
+                <ui:Label name="labellegacy4" class="game-island-main-form__labellegacy4" text="高度+" />
+            </ui:Button>
+            <ui:Button name="toolRowButton5" class="game-island-main-form__tool-row-button5">
+                <ui:Label name="labellegacy5" class="game-island-main-form__labellegacy5" text="旋转偏移量Y+" />
+            </ui:Button>
+            <ui:Button name="toolRowButton6" class="game-island-main-form__tool-row-button6">
+                <ui:Label name="labellegacy6" class="game-island-main-form__labellegacy6" text="旋转偏移量X-" />
+            </ui:Button>
+            <ui:Button name="toolRowButton7" class="game-island-main-form__tool-row-button7">
+                <ui:Label name="labellegacy7" class="game-island-main-form__labellegacy7" text="旋转偏移量Y-" />
+            </ui:Button>
+            <ui:Button name="toolRowButton8" class="game-island-main-form__tool-row-button8">
+                <ui:Label name="labellegacy8" class="game-island-main-form__labellegacy8" text="旋转偏移量Z+" />
+            </ui:Button>
+        </ui:VisualElement>
+        <ui:VisualElement name="activityEntry" class="game-island-main-form__activity-entry">
+            <ui:Button name="closeButton" class="game-island-main-form__close-button" />
+        </ui:VisualElement>
+        <ui:Button name="toolButton" class="game-island-main-form__tool-button">
+            <ui:Label name="labellegacy9" class="game-island-main-form__labellegacy9" text="Tool" />
+        </ui:Button>
+        <ui:VisualElement name="timeBackground2" class="game-island-main-form__time-background2">
+            <ui:VisualElement name="timeBackground22" class="game-island-main-form__time-background22" />
+            <ui:VisualElement name="timeHand" class="game-island-main-form__time-hand">
+                <ui:VisualElement name="colorSwatch" class="game-island-main-form__color-swatch" />
+                <ui:VisualElement name="hand" class="game-island-main-form__hand" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="presetIcon" class="game-island-main-form__preset-icon">
+            <ui:VisualElement name="presetIcon2" class="game-island-main-form__preset-icon2" />
+            <ui:VisualElement name="background" class="game-island-main-form__background" />
+        </ui:VisualElement>
+        <ui:VisualElement name="timerBackground" class="game-island-main-form__timer-background">
+            <ui:VisualElement name="timerActive" class="game-island-main-form__timer-active">
+                <ui:VisualElement name="timerFill" class="game-island-main-form__timer-fill" />
+                <ui:VisualElement name="topRule" class="game-island-main-form__top-rule" />
+                <ui:VisualElement name="topRightDecor" class="game-island-main-form__top-right-decor" />
+                <ui:VisualElement name="dialSpin" class="game-island-main-form__dial-spin" />
+            </ui:VisualElement>
+            <ui:VisualElement name="timerBackground2" class="game-island-main-form__timer-background2" />
+            <ui:VisualElement name="timerIdle" class="game-island-main-form__timer-idle" />
+        </ui:VisualElement>
+        <ui:VisualElement name="pauseHint" class="game-island-main-form__pause-hint">
+            <ui:Label name="labeltmp" class="game-island-main-form__labeltmp" text="音频中断，滑动屏幕继续播放" />
+        </ui:VisualElement>
+        <ui:VisualElement name="timeDial" class="game-island-main-form__time-dial">
+            <ui:VisualElement name="timeLabel" class="game-island-main-form__time-label" />
+            <ui:VisualElement name="timeIcon2" class="game-island-main-form__time-icon2" />
+            <ui:VisualElement name="timeIcon1" class="game-island-main-form__time-icon1" />
+        </ui:VisualElement>
+        <ui:VisualElement name="volumeBackground" class="game-island-main-form__volume-background">
+            <ui:VisualElement name="volumeBackground2" class="game-island-main-form__volume-background2" />
+            <ui:VisualElement name="volume" class="game-island-main-form__volume">
+                <ui:VisualElement name="effectvolumeyuan" class="game-island-main-form__effectvolumeyuan" />
+                <ui:VisualElement name="volumeTrack1" class="game-island-main-form__volume-track1" />
+                <ui:VisualElement name="musicvolumeyuan" class="game-island-main-form__musicvolumeyuan" />
+                <ui:VisualElement name="volumeTrack2" class="game-island-main-form__volume-track2" />
+                <ui:VisualElement name="volumeTrack" class="game-island-main-form__volume-track" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="weatherBackground" class="game-island-main-form__weather-background">
+            <ui:VisualElement name="weatherBackground2" class="game-island-main-form__weather-background2" />
+            <ui:VisualElement name="weatherIcon" class="game-island-main-form__weather-icon" />
+        </ui:VisualElement>
+        <ui:VisualElement name="musicBackground" class="game-island-main-form__music-background">
+            <ui:VisualElement name="musicBackground2" class="game-island-main-form__music-background2" />
+            <ui:VisualElement name="musicPause" class="game-island-main-form__music-pause" />
+            <ui:VisualElement name="musicPlaying" class="game-island-main-form__music-playing">
+                <ui:VisualElement name="barCenter" class="game-island-main-form__bar-center" />
+                <ui:VisualElement name="barRight" class="game-island-main-form__bar-right" />
+                <ui:VisualElement name="barLeft" class="game-island-main-form__bar-left" />
+            </ui:VisualElement>
+            <ui:VisualElement name="musicIcon" class="game-island-main-form__music-icon" />
+        </ui:VisualElement>
+        <ui:VisualElement name="defaultState2" class="game-island-main-form__default-state2">
+            <ui:VisualElement name="defaultState22" class="game-island-main-form__default-state22" />
+            <ui:VisualElement name="pressureLoading" class="game-island-main-form__pressure-loading" />
+            <ui:VisualElement name="background2" class="game-island-main-form__background2" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

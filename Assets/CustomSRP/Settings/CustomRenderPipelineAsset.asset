@@ -15,9 +15,9 @@ MonoBehaviour:
   settings:
     cameraBuffer:
       allowHDR: 0
-      copyColor: 0
+      copyColor: 1
       copyColorReflection: 0
-      copyDepth: 0
+      copyDepth: 1
       copyDepthReflection: 0
       renderScale: 0.75
       bicubicRescaling: 1

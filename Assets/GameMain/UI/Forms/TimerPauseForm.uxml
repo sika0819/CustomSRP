@@ -1,0 +1,12 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="TimerPauseForm.uss" />
+    <ui:VisualElement name="root" class="game-timer-pause-form__root">
+        <ui:Button name="timerdialog" class="game-timer-pause-form__timerdialog">
+            <ui:VisualElement name="icon" class="game-timer-pause-form__icon" />
+            <ui:Label name="description" class="game-timer-pause-form__description" text="当前机型暂不支持后台播放,返回前台已自
+动恢复播放" />
+            <ui:Button name="closeButton" class="game-timer-pause-form__close-button" />
+            <ui:Label name="title" class="game-timer-pause-form__title" text="温馨提示" />
+        </ui:Button>
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,116 @@
+.game-storage-full-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.game-storage-full-form__storage-fullstoragepage {
+    position: absolute;
+    left: 50%;
+    margin-left: -466.5px;
+    top: 100%;
+    margin-top: -1173px;
+    margin-right: 0;
+    width: 933px;
+    margin-bottom: 0;
+    height: 1023px;
+    background-image: url("../Textures/StorageFullForm/storage-fullstoragepage.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-storage-full-form__storage-fullstoragepage-button {
+    position: absolute;
+    left: 50%;
+    margin-left: -372.5px;
+    top: 50%;
+    margin-top: 278px;
+    margin-right: 0;
+    width: 765px;
+    margin-bottom: 0;
+    height: 156px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/StorageFullForm/storage-fullstoragepage-button.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-storage-full-form__labeltmp {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 50px;
+    color: rgba(255, 255, 255, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-storage-full-form__hinticon {
+    position: absolute;
+    left: 50%;
+    margin-left: -120px;
+    top: 50%;
+    margin-top: -389px;
+    margin-right: 0;
+    width: 240px;
+    margin-bottom: 0;
+    height: 240px;
+    background-image: url("../Textures/StorageFullForm/hinticon.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-storage-full-form__labeltitle {
+    position: absolute;
+    left: 50%;
+    margin-left: -169.52px;
+    top: 50%;
+    margin-top: -76.48px;
+    margin-right: 0;
+    width: 339.04px;
+    margin-bottom: 0;
+    height: 76.48px;
+    -unity-text-align: middle-center;
+    font-size: 66px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-storage-full-form__labelinfo {
+    position: absolute;
+    left: 50%;
+    margin-left: -372.5px;
+    top: 50%;
+    margin-top: 55.55px;
+    margin-right: 0;
+    width: 765px;
+    margin-bottom: 0;
+    height: 174.89px;
+    -unity-text-align: upper-center;
+    font-size: 39px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-storage-full-form__ingamestorage-fullstorageview {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    background-color: rgba(0, 0, 0, 0.800);
+}

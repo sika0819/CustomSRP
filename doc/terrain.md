@@ -62,7 +62,7 @@ Unity **Terrain** 走本管线 **Opaque GeometryPass**：`CustomSRP/TerrainOilNP
 
 ## 贴图无缝验收
 
-Splat / OilCanvas / OilBrush 必须 **Repeat**，且左右、上下边缘像素差 ≈ 0。
+Splat / OilCanvas / OilBrush 必须 **Repeat**。平铺接缝的梯度要接近图块内部；把对边平均成同一像素会留下一条发糊的焊线。
 
 ## 限制（MVP）
 
@@ -71,6 +71,15 @@ Splat / OilCanvas / OilBrush 必须 **Repeat**，且左右、上下边缘像素�
 - OSM 仅作 **2D 参考**，不会自动写入 alphamap
 - 土地覆盖会写入 alphamap（菜单 **Repaint Moorea Land Cover**），并在草/林上叠山脊岩石层
 - 旧 `CustomSRP/TerrainLit` 仍保留作对照
+
+## 岛屿 Terrain（Boluo）
+
+场景：`Assets/CustomSRP/Scenes/IslandTerrain.unity`  
+菜单：**CustomSRP → Create Island Terrain Scene**  
+数据：`Assets/Terrain/Island/IslandTerrainData.asset`（源：BoluoUnity `New Terrain 2`）  
+材质：`TerrainOilNPRIsland.mat` → `CustomSRP/TerrainOilNPR`
+
+油画 Pass 只采样前 4 层。源数据多于 4 层时，菜单把权重收成沙（R）/ 草（G）/ 土（B）/ 岩（A），`_RidgeAmount = 0`（岩石在 alphamap 里，不再用残差）。`drawInstanced` 开，`heightmapPixelError = 5`，basemap 距离大于相机。树和草先不画（`drawTreesAndFoliage` 关）；以后用带 `CustomLit` 的网格实例，不用 Terrain 公告牌。
 
 ## 相关
 

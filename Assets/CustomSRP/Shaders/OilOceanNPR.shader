@@ -9,6 +9,7 @@ Shader "CustomSRP/OilOceanNPR"
         _OchreTint ("Yellow Ochre", Color) = (0.55, 0.42, 0.18, 1)
         _FoamColor ("Titanium White", Color) = (0.92, 0.93, 0.9, 1)
         _GlintColor ("Ochre Sun Dash", Color) = (0.85, 0.7, 0.28, 1)
+        _SparkleBrush ("Sun Stroke", 2D) = "black" {}
         _PaintThickness ("Paint Rim", Range(0, 2)) = 0.35
         _PaintMap ("Oil Paint", 2D) = "gray" {}
         _PaintTile ("Paint Tile (m)", Range(200, 8000)) = 4500
@@ -16,6 +17,14 @@ Shader "CustomSRP/OilOceanNPR"
         _PaintRelief ("Paint Relief", Range(0, 1)) = 0.7
 
         _FoamStrength ("Foam Strength", Range(0, 2)) = 1.7
+        _FoamMap ("Foam Brush", 2D) = "white" {}
+        _IntersectionTiling ("Foam Tile", Range(0.02, 0.25)) = 0.1
+        _IntersectionSpeed ("Foam Drift (m/s)", Range(0, 4)) = 1.6
+        _IntersectionClipping ("Foam Clip", Range(0.15, 0.9)) = 0.34
+        _IntersectionDistortion ("Foam Distort (m)", Range(0, 40)) = 2
+        _IntersectionLength ("Foam Depth (m)", Range(0.15, 1.2)) = 0.45
+        _RefractionStrength ("Refraction", Range(0, 1)) = 0.7
+        _DepthVertical ("Depth Absorption", Range(0.3, 4)) = 0.85
         _ShoreFoamWidth ("Shore Foam Width (m)", Range(8, 28)) = 18
         _ShoreHeightMap ("Terrain Height (01)", 2D) = "black" {}
         _ShoreOriginSize ("Shore Origin/Size XZ", Vector) = (0, 0, 16500, 16500)

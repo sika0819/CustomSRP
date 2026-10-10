@@ -1,0 +1,154 @@
+.game-music-track-item__root {
+    position: relative;
+    width: 1035px;
+    height: 144px;
+}
+
+.game-music-track-item__downloading {
+    position: absolute;
+    left: 100%;
+    margin-left: -144px;
+    top: 0;
+    margin-top: 40.49px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 60px;
+    display: none;
+    background-image: url("../Textures/MusicTrackItem/downloading.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-music-track-item__downloaderror {
+    position: absolute;
+    left: 100%;
+    margin-left: -144px;
+    top: 0;
+    margin-top: 40.49px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 60px;
+    display: none;
+    background-image: url("../Textures/MusicTrackItem/downloaderror.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-music-track-item__panel {
+    position: absolute;
+    left: 0;
+    margin-left: 84.8px;
+    top: 50%;
+    margin-top: -31.51px;
+    margin-right: 0;
+    width: 838.04px;
+    margin-bottom: 0;
+    height: 63.01px;
+    background-color: rgba(255, 255, 255, 1.000);
+}
+.game-music-track-item__label1 {
+    position: absolute;
+    left: 0;
+    margin-left: 403.5px;
+    top: 50%;
+    margin-top: 31.01px;
+    margin-right: 0;
+    margin-bottom: 0;
+    display: none;
+    -unity-text-align: upper-left;
+    font-size: 45px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-track-item__downloadsuccess {
+    position: absolute;
+    left: 100%;
+    margin-left: 6px;
+    top: 50%;
+    margin-top: -16px;
+    margin-right: 0;
+    width: 16px;
+    margin-bottom: 0;
+    height: 16px;
+    display: none;
+    background-image: url("../Textures/MusicTrackItem/downloadsuccess.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-music-track-item__label0 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 50%;
+    margin-top: 31.01px;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-left;
+    font-size: 45px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-track-item__downloadsuccess2 {
+    position: absolute;
+    left: 100%;
+    margin-left: 6px;
+    top: 50%;
+    margin-top: -16px;
+    margin-right: 0;
+    width: 16px;
+    margin-bottom: 0;
+    height: 16px;
+    display: none;
+    background-image: url("../Textures/MusicTrackItem/downloadsuccess2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-music-track-item__notdownload {
+    position: absolute;
+    left: 100%;
+    margin-left: -144px;
+    top: 0;
+    margin-top: 40.49px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 60px;
+    display: none;
+    background-image: url("../Textures/MusicTrackItem/notdownload.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-music-track-item__playinganima {
+    position: absolute;
+    left: 100%;
+    margin-left: -144px;
+    top: 0;
+    margin-top: 40.49px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 60px;
+    display: none;
+    background-color: rgba(255, 255, 255, 1.000);
+}
+.game-music-track-item__music-button {
+    position: absolute;
+    left: 50%;
+    margin-left: -517.5px;
+    top: 100%;
+    margin-top: -816px;
+    margin-right: 0;
+    width: 1035px;
+    margin-bottom: 0;
+    height: 144px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-color: rgba(245, 245, 245, 1.000);
+}

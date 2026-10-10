@@ -1,0 +1,199 @@
+.game-weather-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.game-weather-form__weather-dialog {
+    position: absolute;
+    left: 50%;
+    margin-left: -517.5px;
+    top: 100%;
+    margin-top: -855px;
+    margin-right: 0;
+    width: 1035px;
+    margin-bottom: 0;
+    height: 735px;
+    background-image: url("../Textures/WeatherForm/weather-dialog.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-weather-form__level-background {
+    position: absolute;
+    left: 50%;
+    margin-left: -433.5px;
+    top: 100%;
+    margin-top: -408px;
+    margin-right: 0;
+    width: 867px;
+    margin-bottom: 0;
+    height: 204px;
+    background-image: url("../Textures/WeatherForm/level-background.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-weather-form__list {
+    position: absolute;
+    left: 50%;
+    margin-left: -252px;
+    top: 100%;
+    margin-top: -771px;
+    margin-right: 0;
+    width: 504px;
+    margin-bottom: 0;
+    height: 101px;
+    background-color: rgba(255, 255, 255, 0.000);
+    picking-mode: Ignore;
+}
+.game-weather-form__huadong {
+    position: absolute;
+    left: 50%;
+    margin-left: -252px;
+    top: 50%;
+    margin-top: -50px;
+    margin-right: 0;
+    width: 504px;
+    margin-bottom: 0;
+    height: 100px;
+    picking-mode: Ignore;
+}
+.game-weather-form__feng-button {
+    position: absolute;
+    left: 50%;
+    margin-left: -196.51px;
+    top: 50%;
+    margin-top: -44.51px;
+    margin-right: 0;
+    width: 60.01px;
+    margin-bottom: 0;
+    height: 84.01px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    -unity-text-align: upper-center;
+    font-size: 60px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-weather-form__wu-button {
+    position: absolute;
+    left: 50%;
+    margin-left: 136.5px;
+    top: 50%;
+    margin-top: -44.51px;
+    margin-right: 0;
+    width: 60.01px;
+    margin-bottom: 0;
+    height: 84.01px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    -unity-text-align: upper-center;
+    font-size: 60px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-weather-form__yu-button {
+    position: absolute;
+    left: 50%;
+    margin-left: -30px;
+    top: 50%;
+    margin-top: -44.51px;
+    margin-right: 0;
+    width: 60.01px;
+    margin-bottom: 0;
+    height: 84.01px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    -unity-text-align: upper-center;
+    font-size: 60px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-weather-form__tab {
+    position: absolute;
+    left: 50%;
+    margin-left: -21px;
+    top: 100%;
+    margin-top: 13px;
+    margin-right: 0;
+    width: 42px;
+    margin-bottom: 0;
+    height: 9px;
+    background-image: url("../Textures/WeatherForm/tab.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-weather-form__drag-handle {
+    position: absolute;
+    left: 50%;
+    margin-left: -403.5px;
+    top: 100%;
+    margin-top: -378px;
+    margin-right: 0;
+    width: 144px;
+    margin-bottom: 0;
+    height: 144px;
+    background-color: rgba(255, 255, 255, 0.000);
+}
+.game-weather-form__labeltmp {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 42px;
+    color: rgba(61, 61, 61, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-weather-form__dian {
+    position: absolute;
+    left: 0;
+    margin-left: -90px;
+    top: 0;
+    margin-top: -90px;
+    margin-right: 0;
+    width: 324px;
+    margin-bottom: 0;
+    height: 324px;
+    background-image: url("../Textures/Shared/dian.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-weather-form__description {
+    position: absolute;
+    left: 50%;
+    margin-left: 0;
+    top: 100%;
+    margin-top: -490px;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-center;
+    font-size: 39px;
+    color: rgba(186, 200, 195, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}

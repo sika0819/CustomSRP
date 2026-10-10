@@ -1,0 +1,32 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="VolumeForm.uss" />
+    <ui:VisualElement name="root" class="game-volume-form__root">
+        <ui:Label name="caption11" class="game-volume-form__caption11" text="100" />
+        <ui:VisualElement name="presetdian1" class="game-volume-form__presetdian1">
+            <ui:VisualElement name="presetdian12" class="game-volume-form__presetdian12" />
+        </ui:VisualElement>
+        <ui:VisualElement name="presetdian2" class="game-volume-form__presetdian2">
+            <ui:VisualElement name="presetdian" class="game-volume-form__presetdian" />
+        </ui:VisualElement>
+        <ui:Label name="caption21" class="game-volume-form__caption21" text="100" />
+        <ui:Label name="caption1" class="game-volume-form__caption1" text="音乐调节" />
+        <ui:Label name="caption2" class="game-volume-form__caption2" text="音效调节" />
+        <ui:VisualElement name="backgroundtiao1" class="game-volume-form__backgroundtiao1">
+            <ui:VisualElement name="huangdongyanse1" class="game-volume-form__huangdongyanse1" />
+            <ui:VisualElement name="backgroundtiao12" class="game-volume-form__backgroundtiao12" />
+        </ui:VisualElement>
+        <ui:VisualElement name="background" class="game-volume-form__background" />
+        <ui:VisualElement name="title" class="game-volume-form__title">
+            <ui:Label name="t1" class="game-volume-form__t1" text="音量调节" />
+            <ui:Label name="t2" class="game-volume-form__t2" text="调节音量，左滑关闭，右滑增加哦～" />
+        </ui:VisualElement>
+        <ui:VisualElement name="backgroundtiao2" class="game-volume-form__backgroundtiao2">
+            <ui:VisualElement name="backgroundtiao22" class="game-volume-form__backgroundtiao22" />
+            <ui:VisualElement name="huangdongyanse2" class="game-volume-form__huangdongyanse2" />
+        </ui:VisualElement>
+        <ui:VisualElement name="yuandian" class="game-volume-form__yuandian">
+            <ui:VisualElement name="dian" class="game-volume-form__dian" />
+            <ui:Label name="value" class="game-volume-form__value" text="0" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

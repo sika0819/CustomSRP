@@ -23,6 +23,23 @@ Shader "CustomSRP/TerrainOilNPR"
         [HideInInspector] _NormalScale1 ("Normal Scale 1", Float) = 1
         [HideInInspector] _NormalScale2 ("Normal Scale 2", Float) = 1
         [HideInInspector] _NormalScale3 ("Normal Scale 3", Float) = 1
+        [HideInInspector] _Mask0 ("Mask 0 (R)", 2D) = "grey" {}
+        [HideInInspector] _Mask1 ("Mask 1 (G)", 2D) = "grey" {}
+        [HideInInspector] _Mask2 ("Mask 2 (B)", 2D) = "grey" {}
+        [HideInInspector] _Mask3 ("Mask 3 (A)", 2D) = "grey" {}
+        [HideInInspector] _MaskMapRemapScale0 ("Mask Remap Scale 0", Vector) = (1, 1, 1, 1)
+        [HideInInspector] _MaskMapRemapScale1 ("Mask Remap Scale 1", Vector) = (1, 1, 1, 1)
+        [HideInInspector] _MaskMapRemapScale2 ("Mask Remap Scale 2", Vector) = (1, 1, 1, 1)
+        [HideInInspector] _MaskMapRemapScale3 ("Mask Remap Scale 3", Vector) = (1, 1, 1, 1)
+        [HideInInspector] _MaskMapRemapOffset0 ("Mask Remap Offset 0", Vector) = (0, 0, 0, 0)
+        [HideInInspector] _MaskMapRemapOffset1 ("Mask Remap Offset 1", Vector) = (0, 0, 0, 0)
+        [HideInInspector] _MaskMapRemapOffset2 ("Mask Remap Offset 2", Vector) = (0, 0, 0, 0)
+        [HideInInspector] _MaskMapRemapOffset3 ("Mask Remap Offset 3", Vector) = (0, 0, 0, 0)
+        [HideInInspector] _LayerHasMask0 ("Layer Has Mask 0", Float) = 1
+        [HideInInspector] _LayerHasMask1 ("Layer Has Mask 1", Float) = 1
+        [HideInInspector] _LayerHasMask2 ("Layer Has Mask 2", Float) = 1
+        [HideInInspector] _LayerHasMask3 ("Layer Has Mask 3", Float) = 1
+        _HeightTransition ("Mask Height Transition", Range(0, 1)) = 0.5
         [HideInInspector] _TerrainHolesTexture ("Holes Map (RGB)", 2D) = "white" {}
 
         _BaseColor ("Tint", Color) = (1, 1, 1, 1)

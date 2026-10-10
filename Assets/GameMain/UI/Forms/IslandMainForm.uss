@@ -1,0 +1,1066 @@
+.game-island-main-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.game-island-main-form__profile {
+    position: absolute;
+    left: 100%;
+    margin-left: -156px;
+    top: 0;
+    margin-top: 174px;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/profile.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__profile2 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/profile2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__unread-badge {
+    position: absolute;
+    left: 100%;
+    margin-left: -36px;
+    top: 0;
+    margin-top: 18px;
+    margin-right: 0;
+    width: 18px;
+    margin-bottom: 0;
+    height: 18px;
+    -unity-text-align: middle-center;
+    font-size: 42px;
+    color: rgba(243, 44, 44, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__tool-row {
+    position: absolute;
+    left: 50%;
+    margin-left: -50px;
+    top: 50%;
+    margin-top: -50px;
+    margin-right: 0;
+    width: 100px;
+    margin-bottom: 0;
+    height: 100px;
+    display: none;
+    picking-mode: Ignore;
+}
+.game-island-main-form__tool-row-button {
+    position: absolute;
+    left: 100%;
+    margin-left: -501px;
+    top: 0;
+    margin-top: -137px;
+    margin-right: 0;
+    width: 150px;
+    margin-bottom: 0;
+    height: 100px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/IslandMainForm/tool-row-button.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__labellegacy {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 34px;
+    color: rgba(49, 49, 49, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__tool-row-button2 {
+    position: absolute;
+    left: 100%;
+    margin-left: 158px;
+    top: 0;
+    margin-top: 11px;
+    margin-right: 0;
+    width: 150px;
+    margin-bottom: 0;
+    height: 100px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/IslandMainForm/tool-row-button2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__labellegacy2 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 34px;
+    color: rgba(49, 49, 49, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__tool-row-button3 {
+    position: absolute;
+    left: 100%;
+    margin-left: -54px;
+    top: 0;
+    margin-top: 11px;
+    margin-right: 0;
+    width: 150px;
+    margin-bottom: 0;
+    height: 100px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/IslandMainForm/tool-row-button3.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__labellegacy3 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 34px;
+    color: rgba(49, 49, 49, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__tool-row-button4 {
+    position: absolute;
+    left: 100%;
+    margin-left: 158px;
+    top: 0;
+    margin-top: -137px;
+    margin-right: 0;
+    width: 150px;
+    margin-bottom: 0;
+    height: 100px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/IslandMainForm/tool-row-button4.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__labellegacy4 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 34px;
+    color: rgba(49, 49, 49, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__tool-row-button5 {
+    position: absolute;
+    left: 100%;
+    margin-left: -279px;
+    top: 0;
+    margin-top: -137px;
+    margin-right: 0;
+    width: 150px;
+    margin-bottom: 0;
+    height: 100px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/IslandMainForm/tool-row-button5.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__labellegacy5 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 34px;
+    color: rgba(49, 49, 49, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__tool-row-button6 {
+    position: absolute;
+    left: 100%;
+    margin-left: -501px;
+    top: 0;
+    margin-top: 11px;
+    margin-right: 0;
+    width: 150px;
+    margin-bottom: 0;
+    height: 100px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/IslandMainForm/tool-row-button6.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__labellegacy6 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 34px;
+    color: rgba(49, 49, 49, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__tool-row-button7 {
+    position: absolute;
+    left: 100%;
+    margin-left: -279px;
+    top: 0;
+    margin-top: 11px;
+    margin-right: 0;
+    width: 150px;
+    margin-bottom: 0;
+    height: 100px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/IslandMainForm/tool-row-button7.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__labellegacy7 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 34px;
+    color: rgba(49, 49, 49, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__tool-row-button8 {
+    position: absolute;
+    left: 100%;
+    margin-left: -54px;
+    top: 0;
+    margin-top: -137px;
+    margin-right: 0;
+    width: 150px;
+    margin-bottom: 0;
+    height: 100px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/IslandMainForm/tool-row-button8.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__labellegacy8 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 34px;
+    color: rgba(49, 49, 49, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__activity-entry {
+    position: absolute;
+    left: 100%;
+    margin-left: -156px;
+    top: 0;
+    margin-top: 486px;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 132px;
+    display: none;
+    background-image: url("../Textures/IslandMainForm/activity-entry.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__close-button {
+    position: absolute;
+    left: 0;
+    margin-left: 96px;
+    top: 0;
+    margin-top: -24px;
+    margin-right: 0;
+    width: 48px;
+    margin-bottom: 0;
+    height: 48px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/IslandMainForm/close-button.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__tool-button {
+    position: absolute;
+    left: 100%;
+    margin-left: -148px;
+    top: 0;
+    margin-top: 700px;
+    margin-right: 0;
+    width: 100px;
+    margin-bottom: 0;
+    height: 100px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/IslandMainForm/tool-button.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__labellegacy9 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 45px;
+    color: rgba(49, 49, 49, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__time-background2 {
+    position: absolute;
+    left: 0;
+    margin-left: 48px;
+    top: 0;
+    margin-top: 174px;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-color: rgba(255, 255, 255, 0.000);
+}
+.game-island-main-form__time-background22 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/time-background22.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__time-hand {
+    position: absolute;
+    left: 50%;
+    margin-left: -54px;
+    top: 50%;
+    margin-top: -54px;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    picking-mode: Ignore;
+}
+.game-island-main-form__color-swatch {
+    position: absolute;
+    left: 0;
+    margin-left: 6.35px;
+    top: 0;
+    margin-top: 23.4px;
+    margin-right: 0;
+    width: 25.22px;
+    margin-bottom: 0;
+    height: 61.1px;
+    background-image: url("../Textures/IslandMainForm/color-swatch.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__hand {
+    position: absolute;
+    left: 0;
+    margin-left: 15.88px;
+    top: 0;
+    margin-top: 41.29px;
+    margin-right: 0;
+    width: 50.82px;
+    margin-bottom: 0;
+    height: 25.41px;
+    background-image: url("../Textures/IslandMainForm/hand.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__preset-icon {
+    position: absolute;
+    left: 0;
+    margin-left: 48px;
+    top: 100%;
+    margin-top: -240px;
+    margin-right: 0;
+    width: 120px;
+    margin-bottom: 0;
+    height: 120px;
+    background-color: rgba(255, 255, 255, 0.000);
+}
+.game-island-main-form__preset-icon2 {
+    position: absolute;
+    left: 50%;
+    margin-left: -48px;
+    top: 50%;
+    margin-top: -48px;
+    margin-right: 0;
+    width: 96px;
+    margin-bottom: 0;
+    height: 96px;
+    background-image: url("../Textures/IslandMainForm/preset-icon2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__background {
+    position: absolute;
+    left: 50%;
+    margin-left: -60px;
+    top: 50%;
+    margin-top: -60px;
+    margin-right: 0;
+    width: 120px;
+    margin-bottom: 0;
+    height: 120px;
+    background-image: url("../Textures/IslandMainForm/background.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(0, 0, 0, 0.200);
+    picking-mode: Ignore;
+}
+.game-island-main-form__timer-background {
+    position: absolute;
+    left: 100%;
+    margin-left: -156px;
+    top: 0;
+    margin-top: 330px;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-color: rgba(255, 255, 255, 0.000);
+}
+.game-island-main-form__timer-active {
+    position: absolute;
+    left: 100%;
+    margin-left: -108px;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    picking-mode: Ignore;
+}
+.game-island-main-form__timer-fill {
+    position: absolute;
+    left: 50%;
+    margin-left: -54px;
+    top: 50%;
+    margin-top: -54px;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/timer-fill.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__top-rule {
+    position: absolute;
+    left: 0;
+    margin-left: 41.85px;
+    top: 0;
+    margin-top: 20.25px;
+    margin-right: 0;
+    width: 24.3px;
+    margin-bottom: 0;
+    height: 8.1px;
+    background-image: url("../Textures/IslandMainForm/top-rule.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__top-right-decor {
+    position: absolute;
+    left: 0;
+    margin-left: 74px;
+    top: 0;
+    margin-top: 33px;
+    margin-right: 0;
+    width: 12px;
+    margin-bottom: 0;
+    height: 13px;
+    background-image: url("../Textures/IslandMainForm/top-right-decor.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__dial-spin {
+    position: absolute;
+    left: 50%;
+    margin-left: -27px;
+    top: 50%;
+    margin-top: -21.6px;
+    margin-right: 0;
+    width: 54px;
+    margin-bottom: 0;
+    height: 54px;
+    background-image: url("../Textures/IslandMainForm/dial-spin.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__timer-background2 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/timer-background2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__timer-idle {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/timer-idle.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__pause-hint {
+    position: absolute;
+    left: 50%;
+    margin-left: -289.5px;
+    top: 50%;
+    margin-top: -61.5px;
+    margin-right: 0;
+    width: 579px;
+    margin-bottom: 0;
+    height: 123px;
+    background-image: url("../Textures/IslandMainForm/pause-hint.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-island-main-form__labeltmp {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 38px;
+    color: rgba(255, 255, 255, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-island-main-form__time-dial {
+    position: absolute;
+    left: 50%;
+    margin-left: -181.5px;
+    top: 50%;
+    margin-top: -798px;
+    margin-right: 0;
+    width: 360px;
+    margin-bottom: 0;
+    height: 480px;
+    picking-mode: Ignore;
+}
+.game-island-main-form__time-label {
+    position: absolute;
+    left: 0;
+    margin-left: 8px;
+    top: 0;
+    margin-top: 397px;
+    margin-right: 0;
+    width: 342px;
+    margin-bottom: 0;
+    height: 166.5px;
+    background-image: url("../Textures/IslandMainForm/time-label.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__time-icon2 {
+    position: absolute;
+    left: 50%;
+    margin-left: -60px;
+    top: 0;
+    margin-top: 60px;
+    margin-right: 0;
+    width: 120px;
+    margin-bottom: 0;
+    height: 120px;
+    background-image: url("../Textures/IslandMainForm/time-icon2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__time-icon1 {
+    position: absolute;
+    left: 50%;
+    margin-left: -60px;
+    top: 0;
+    margin-top: 60px;
+    margin-right: 0;
+    width: 120px;
+    margin-bottom: 0;
+    height: 120px;
+    background-image: url("../Textures/IslandMainForm/time-icon1.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__volume-background {
+    position: absolute;
+    left: 0;
+    margin-left: 48px;
+    top: 0;
+    margin-top: 651px;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-color: rgba(255, 255, 255, 0.000);
+}
+.game-island-main-form__volume-background2 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/volume-background2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__volume {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    picking-mode: Ignore;
+}
+.game-island-main-form__effectvolumeyuan {
+    position: absolute;
+    left: 0;
+    margin-left: 24px;
+    top: 0;
+    margin-top: 58px;
+    margin-right: 0;
+    width: 22px;
+    margin-bottom: 0;
+    height: 22px;
+    background-image: url("../Textures/IslandMainForm/effectvolumeyuan.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__volume-track1 {
+    position: absolute;
+    left: 0;
+    margin-left: 24px;
+    top: 0;
+    margin-top: 33px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 12px;
+    background-image: url("../Textures/IslandMainForm/volume-track1.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__musicvolumeyuan {
+    position: absolute;
+    left: 0;
+    margin-left: 62px;
+    top: 0;
+    margin-top: 28px;
+    margin-right: 0;
+    width: 22px;
+    margin-bottom: 0;
+    height: 22px;
+    background-image: url("../Textures/IslandMainForm/musicvolumeyuan.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__volume-track2 {
+    position: absolute;
+    left: 0;
+    margin-left: 24px;
+    top: 0;
+    margin-top: 63px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 12px;
+    background-image: url("../Textures/IslandMainForm/volume-track2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__volume-track {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/volume-track.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__weather-background {
+    position: absolute;
+    left: 0;
+    margin-left: 48px;
+    top: 0;
+    margin-top: 330px;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-color: rgba(255, 255, 255, 0.000);
+}
+.game-island-main-form__weather-background2 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/weather-background2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__weather-icon {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/weather-icon.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__music-background {
+    position: absolute;
+    left: 0;
+    margin-left: 48px;
+    top: 0;
+    margin-top: 486px;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-color: rgba(255, 255, 255, 0.000);
+}
+.game-island-main-form__music-background2 {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/music-background2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__music-pause {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    display: none;
+    background-image: url("../Textures/IslandMainForm/music-pause.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__music-playing {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    picking-mode: Ignore;
+}
+.game-island-main-form__bar-center {
+    position: absolute;
+    left: 50%;
+    margin-left: -5px;
+    top: 50%;
+    margin-top: -25px;
+    margin-right: 0;
+    width: 10px;
+    margin-bottom: 0;
+    height: 45px;
+    background-image: url("../Textures/IslandMainForm/bar-center.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(166, 255, 0, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__bar-right {
+    position: absolute;
+    left: 50%;
+    margin-left: 13px;
+    top: 50%;
+    margin-top: -10px;
+    margin-right: 0;
+    width: 10px;
+    margin-bottom: 0;
+    height: 30px;
+    background-image: url("../Textures/IslandMainForm/bar-right.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__bar-left {
+    position: absolute;
+    left: 50%;
+    margin-left: -23px;
+    top: 50%;
+    margin-top: 0;
+    margin-right: 0;
+    width: 10px;
+    margin-bottom: 0;
+    height: 20px;
+    background-image: url("../Textures/IslandMainForm/bar-left.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__music-icon {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 108px;
+    margin-bottom: 0;
+    height: 108px;
+    background-image: url("../Textures/IslandMainForm/music-icon.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__default-state2 {
+    position: absolute;
+    left: 100%;
+    margin-left: -168px;
+    top: 100%;
+    margin-top: -240px;
+    margin-right: 0;
+    width: 120px;
+    margin-bottom: 0;
+    height: 120px;
+    background-color: rgba(255, 255, 255, 0.000);
+}
+.game-island-main-form__default-state22 {
+    position: absolute;
+    left: 50%;
+    margin-left: -48px;
+    top: 50%;
+    margin-top: -48px;
+    margin-right: 0;
+    width: 96px;
+    margin-bottom: 0;
+    height: 96px;
+    background-image: url("../Textures/IslandMainForm/default-state22.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__pressure-loading {
+    position: absolute;
+    left: 50%;
+    margin-left: -60px;
+    top: 50%;
+    margin-top: -60px;
+    margin-right: 0;
+    width: 120px;
+    margin-bottom: 0;
+    height: 120px;
+    display: none;
+    background-image: url("../Textures/IslandMainForm/pressure-loading.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-island-main-form__background2 {
+    position: absolute;
+    left: 50%;
+    margin-left: -60px;
+    top: 50%;
+    margin-top: -60px;
+    margin-right: 0;
+    width: 120px;
+    margin-bottom: 0;
+    height: 120px;
+    background-image: url("../Textures/IslandMainForm/background2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(0, 0, 0, 0.200);
+    picking-mode: Ignore;
+}

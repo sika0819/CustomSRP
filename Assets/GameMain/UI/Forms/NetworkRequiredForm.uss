@@ -1,0 +1,116 @@
+.game-network-required-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.game-network-required-form__mobile-datainusepage {
+    position: absolute;
+    left: 50%;
+    margin-left: -466.5px;
+    top: 100%;
+    margin-top: -1089px;
+    margin-right: 0;
+    width: 933px;
+    margin-bottom: 0;
+    height: 969px;
+    background-image: url("../Textures/NetworkRequiredForm/mobile-datainusepage.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-network-required-form__labelinfo {
+    position: absolute;
+    left: 50%;
+    margin-left: -382.5px;
+    top: 50%;
+    margin-top: 80.5px;
+    margin-right: 0;
+    width: 765px;
+    margin-bottom: 0;
+    height: 114.92px;
+    -unity-text-align: upper-center;
+    font-size: 39px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-network-required-form__labeltitle {
+    position: absolute;
+    left: 50%;
+    margin-left: -438px;
+    top: 50%;
+    margin-top: -60.5px;
+    margin-right: 0;
+    width: 876px;
+    margin-bottom: 0;
+    height: 93px;
+    -unity-text-align: middle-center;
+    font-size: 66px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-network-required-form__hinticon {
+    position: absolute;
+    left: 50%;
+    margin-left: -128px;
+    top: 50%;
+    margin-top: -388.5px;
+    margin-right: 0;
+    width: 256px;
+    margin-bottom: 0;
+    height: 256px;
+    background-image: url("../Textures/NetworkRequiredForm/hinticon.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-network-required-form__mobile-datainusepage-button {
+    position: absolute;
+    left: 50%;
+    margin-left: -382.5px;
+    top: 50%;
+    margin-top: 256.5px;
+    margin-right: 0;
+    width: 765px;
+    margin-bottom: 0;
+    height: 156px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/NetworkRequiredForm/mobile-datainusepage-button.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-network-required-form__labeltmp {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 50px;
+    color: rgba(255, 255, 255, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-network-required-form__ingameneednetworkview {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    background-color: rgba(0, 0, 0, 0.800);
+}

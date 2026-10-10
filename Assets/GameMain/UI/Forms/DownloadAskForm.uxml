@@ -1,0 +1,17 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="DownloadAskForm.uss" />
+    <ui:VisualElement name="root" class="game-download-ask-form__root">
+        <ui:VisualElement name="ingamerequestdownloadview" class="game-download-ask-form__ingamerequestdownloadview" />
+        <ui:VisualElement name="mobileDatainusepage" class="game-download-ask-form__mobile-datainusepage">
+            <ui:Label name="labelinfo" class="game-download-ask-form__labelinfo" text="此区域需要额外下载资源包（约xxxMB），下载后即可进入并体验完整内容。" />
+            <ui:Label name="labeltitle" class="game-download-ask-form__labeltitle" text="前方区域未下载" />
+            <ui:VisualElement name="hinticon" class="game-download-ask-form__hinticon" />
+            <ui:Button name="mobileDatainusepageButton" class="game-download-ask-form__mobile-datainusepage-button">
+                <ui:Label name="labeltmp" class="game-download-ask-form__labeltmp" text="立即下载" />
+            </ui:Button>
+            <ui:Button name="mobileDatainusepageButton2" class="game-download-ask-form__mobile-datainusepage-button2">
+                <ui:Label name="labeltmp2" class="game-download-ask-form__labeltmp2" text="返回" />
+            </ui:Button>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

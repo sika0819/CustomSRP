@@ -1,5 +1,4 @@
 using Unity.Collections;
-using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -10,18 +9,20 @@ using UnityEditor;
 namespace CustomSRP
 {
     /// <summary>
-    /// One camera-sized water tile. The mesh is a rest plane; OilOceanNPR displaces
-    /// it in the vertex shader. The coast mask is baked from TerrainData heights, not a PNG.
+    /// Boluo WaterGrid pattern: one rest-pose tile that follows the camera.
+    /// Gerstner swell is in the vertex shader (world XZ, so sliding the tile does not
+    /// swim the waves). Paint ripples stay in the fragment, so the grid only has to
+    /// hold a ~2 km swell — about 32 segments across the island, not a 10 m mesh.
     /// </summary>
     [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public class OilOceanSurface : MonoBehaviour
     {
-        [Header("Grid (Boluo DaoYu WaterGrid)")]
-        [Tooltip("Tile length in meters. DaoYu uses 2500.")]
+        [Header("Grid (Boluo WaterGrid)")]
+        [Tooltip("Tile length in meters. Covers the island; the tile recenters on the camera.")]
         public float gridScale = 2500f;
-        [Tooltip("Meters between vertices. DaoYu uses 10. Larger means fewer vertices.")]
-        public float vertexDistance = 10f;
+        [Tooltip("Meters between vertices. Swell is ~2 km, so ~500 m is enough. Ripples are shaded, not meshed.")]
+        public float vertexDistance = 500f;
         [Tooltip("Keep the tile centered on the camera and snap to the vertex grid.")]
         public bool followCamera = true;
 
@@ -29,20 +30,17 @@ namespace CustomSRP
         [Tooltip("Coast mask uses this terrain's heightmap, not moorea_heightmap.png.")]
         public Terrain terrain;
 
-        [Header("Paint waves (Job)")]
+        [Header("Swell (vertex shader)")]
         public float waveHeight = 6.5f;
         public float boundsPadding = 4f;
-        public bool animateInEditMode;
-        public int jobBatchSize = 64;
 
         const string MeshName = "OilOceanGrid";
 
         /// <summary>
-        /// Hard cap. A 16 km tile at 10 m spacing is ~2.7M vertices and ~5.4M triangles,
-        /// and play mode rewrites that mesh every frame. Swell wavelength is hundreds of
-        /// meters; the fragment shader paints the short crests.
+        /// 32 segments across the tile. Finer than this does not show up: the swell
+        /// wavelength is about 2 km and the fragment shader paints the short waves.
         /// </summary>
-        public const int MaxSubdivisions = 256;
+        public const int MaxSubdivisions = 32;
 
         static readonly int ShoreMapId = Shader.PropertyToID("_ShoreHeightMap");
         static readonly int ShoreOriginId = Shader.PropertyToID("_ShoreOriginSize");
@@ -58,8 +56,6 @@ namespace CustomSRP
         NativeArray<int> meshIndices;
         int vertexCount;
         int indexCount;
-        JobHandle pendingJob;
-        bool jobScheduled;
         static int enableDepth;
 
         void OnEnable()
@@ -97,7 +93,6 @@ namespace CustomSRP
 
         void OnDisable()
         {
-            CompleteJob();
             if (Application.isPlaying)
             {
                 DisposeMeshCpu();
@@ -106,7 +101,6 @@ namespace CustomSRP
 
         void OnDestroy()
         {
-            CompleteJob();
             DisposeMeshCpu();
             DestroyShoreHeight();
             if (mesh == null)
@@ -134,6 +128,45 @@ namespace CustomSRP
             }
 
             ApplyWaveHeight();
+            SyncShoreWaterLevel();
+        }
+
+        // The heightmap is built once. The waterline has to follow the ocean
+        // height, or the column stays 0 and both foam and refraction miss the shore.
+        void SyncShoreWaterLevel()
+        {
+            if (terrain == null)
+            {
+                terrain = FindAnyObjectByType<Terrain>();
+            }
+
+            if (terrain == null)
+            {
+                return;
+            }
+
+            var renderer = GetComponent<MeshRenderer>();
+            if (renderer == null)
+            {
+                return;
+            }
+
+            shoreBlock ??= new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(shoreBlock);
+            if (shoreBlock.GetTexture(ShoreMapId) == null)
+            {
+                ApplyTerrainShore();
+                return;
+            }
+
+            float water = transform.position.y - terrain.transform.position.y;
+            if (Mathf.Approximately(shoreBlock.GetFloat(ShoreWaterId), water))
+            {
+                return;
+            }
+
+            shoreBlock.SetFloat(ShoreWaterId, water);
+            renderer.SetPropertyBlock(shoreBlock);
         }
 
         void ApplyWaveHeight()
@@ -144,7 +177,6 @@ namespace CustomSRP
         [ContextMenu("Rebuild Ocean Mesh")]
         public void Rebuild()
         {
-            CompleteJob();
             DisposeMeshCpu();
             BuildPlane();
             EnsureMesh();
@@ -434,17 +466,6 @@ namespace CustomSRP
                 indexCount,
                 bounds);
             meshFilter.sharedMesh = mesh;
-        }
-
-        void CompleteJob()
-        {
-            if (!jobScheduled)
-            {
-                return;
-            }
-
-            pendingJob.Complete();
-            jobScheduled = false;
         }
     }
 }

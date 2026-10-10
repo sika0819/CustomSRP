@@ -1,0 +1,159 @@
+.game-preset-item__root {
+    position: relative;
+    width: 264px;
+    height: 337px;
+}
+
+.game-preset-item__zhanweitu2-button {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 264px;
+    margin-bottom: 0;
+    height: 264px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/PresetItem/zhanweitu2-button.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-preset-item__vip {
+    position: absolute;
+    left: 100%;
+    margin-left: -96px;
+    top: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 96px;
+    margin-bottom: 0;
+    height: 51px;
+    background-image: url("../Textures/PresetItem/vip.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-preset-item__bofangzhuangtai {
+    position: absolute;
+    left: 0;
+    margin-left: 24px;
+    top: 0;
+    margin-top: 162px;
+    margin-right: 0;
+    width: 78px;
+    margin-bottom: 0;
+    height: 78px;
+    background-image: url("../Textures/PresetItem/bofangzhuangtai.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-preset-item__statewaitdownload {
+    position: absolute;
+    left: 50%;
+    margin-left: -30px;
+    top: 50%;
+    margin-top: -30px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 60px;
+    display: none;
+    background-image: url("../Textures/PresetItem/statewaitdownload.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-preset-item__stateerror {
+    position: absolute;
+    left: 50%;
+    margin-left: -30px;
+    top: 50%;
+    margin-top: -30px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 60px;
+    display: none;
+    background-image: url("../Textures/PresetItem/stateerror.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-preset-item__statedownloadsuccess {
+    position: absolute;
+    left: 50%;
+    margin-left: -30px;
+    top: 50%;
+    margin-top: -30px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 60px;
+    display: none;
+    background-image: url("../Textures/PresetItem/statedownloadsuccess.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-preset-item__statedownloading {
+    position: absolute;
+    left: 50%;
+    margin-left: -30px;
+    top: 50%;
+    margin-top: -30px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 60px;
+    display: none;
+    picking-mode: Ignore;
+}
+.game-preset-item__fill {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    background-color: rgba(255, 255, 255, 1.000);
+}
+.game-preset-item__stateready {
+    position: absolute;
+    left: 50%;
+    margin-left: -30px;
+    top: 50%;
+    margin-top: -30px;
+    margin-right: 0;
+    width: 60px;
+    margin-bottom: 0;
+    height: 60px;
+    background-image: url("../Textures/PresetItem/stateready.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-preset-item__presetitem {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 282px;
+    margin-right: 0;
+    width: 264px;
+    margin-bottom: 0;
+    height: 55px;
+    -unity-text-align: upper-center;
+    font-size: 39px;
+    color: rgba(25, 25, 26, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}

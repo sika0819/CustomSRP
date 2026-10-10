@@ -28,6 +28,13 @@ CBUFFER_START(UnityPerMaterial)
     float _SunPathStrength;
     float _SunPathWidth;
     float _FoamStrength;
+    float _IntersectionTiling;
+    float _IntersectionSpeed;
+    float _IntersectionClipping;
+    float _IntersectionDistortion;
+    float _IntersectionLength;
+    float _RefractionStrength;
+    float _DepthVertical;
     float4 _PaintMap_ST;
     float _PaintTile;
     float _PaintContrast;

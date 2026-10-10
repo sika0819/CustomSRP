@@ -249,6 +249,10 @@ namespace CustomSRP
 
                 renderGraph.EndRecordingAndExecute();
                 context.ExecuteCommandBuffer(commandBuffer);
+                if (camera.cameraType == CameraType.Game)
+                {
+                    context.DrawUIOverlay(camera);
+                }
                 context.Submit();
             }
             finally

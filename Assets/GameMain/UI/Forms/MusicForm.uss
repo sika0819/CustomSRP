@@ -1,0 +1,213 @@
+.game-music-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.game-music-form__hintwindows {
+    position: absolute;
+    left: 50%;
+    margin-left: -123px;
+    top: 50%;
+    margin-top: -403px;
+    margin-right: 0;
+    width: 246px;
+    margin-bottom: 0;
+    height: 126px;
+    background-image: url("../Textures/MusicForm/hintwindows.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-music-form__labeltmp {
+    position: absolute;
+    left: 0;
+    margin-left: 23px;
+    top: 0;
+    margin-top: 22.19px;
+    margin-right: 0;
+    width: 200px;
+    margin-bottom: 0;
+    height: 81.62px;
+    -unity-text-align: middle-center;
+    font-size: 36px;
+    color: rgba(255, 255, 255, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-form__music-dialogkapian {
+    position: absolute;
+    left: 50%;
+    margin-left: -517.5px;
+    top: 100%;
+    margin-top: -1557px;
+    margin-right: 0;
+    width: 1035px;
+    margin-bottom: 0;
+    height: 1437px;
+    background-image: url("../Textures/MusicForm/music-dialogkapian.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-music-form__hlist {
+    position: absolute;
+    left: 50%;
+    margin-left: -394px;
+    top: 100%;
+    margin-top: -1353px;
+    margin-right: 0;
+    width: 788px;
+    margin-bottom: 0;
+    height: 101px;
+    background-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-music-form__biao {
+    position: absolute;
+    left: 50%;
+    margin-left: -19.5px;
+    top: 100%;
+    margin-top: 17px;
+    margin-right: 0;
+    width: 42px;
+    margin-bottom: 0;
+    height: 9px;
+    background-image: url("../Textures/MusicForm/biao.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-music-form__huadong {
+    position: absolute;
+    left: 50%;
+    margin-left: -50px;
+    top: 50%;
+    margin-top: -50px;
+    margin-right: 0;
+    width: 100px;
+    margin-bottom: 0;
+    height: 100px;
+    picking-mode: Ignore;
+}
+.game-music-form__u6563u6b65 {
+    position: absolute;
+    left: 50%;
+    margin-left: -168.5px;
+    top: 50%;
+    margin-top: 4.1px;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-center;
+    font-size: 48px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-form__u65c5u884c {
+    position: absolute;
+    left: 50%;
+    margin-left: 1.5px;
+    top: 50%;
+    margin-top: 3.9px;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-center;
+    font-size: 72px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-form__u5de5u4f5c {
+    position: absolute;
+    left: 50%;
+    margin-left: 341.5px;
+    top: 50%;
+    margin-top: 4.1px;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-center;
+    font-size: 48px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-form__u9a7eu8f66 {
+    position: absolute;
+    left: 50%;
+    margin-left: -338.5px;
+    top: 50%;
+    margin-top: 4.1px;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-center;
+    font-size: 48px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-form__u5b66u4e60 {
+    position: absolute;
+    left: 50%;
+    margin-left: 171.5px;
+    top: 50%;
+    margin-top: 4.1px;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-center;
+    font-size: 48px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: nowrap;
+    translate: -50% -50%;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-form__mode-button {
+    position: absolute;
+    left: 100%;
+    margin-left: -262px;
+    top: 0;
+    margin-top: 254.4px;
+    margin-right: 0;
+    width: 180px;
+    margin-bottom: 0;
+    height: 84px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-color: rgba(255, 255, 255, 1.000);
+}
+.game-music-form__title {
+    position: absolute;
+    left: 50%;
+    margin-left: -431.48px;
+    top: 100%;
+    margin-top: -1170.01px;
+    margin-right: 0;
+    width: 347.04px;
+    margin-bottom: 0;
+    height: 58.81px;
+    -unity-text-align: upper-left;
+    font-size: 42px;
+    color: rgba(135, 135, 145, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-form__music-list {
+    position: absolute;
+    left: 50%;
+    margin-left: -517.51px;
+    top: 100%;
+    margin-top: -1056px;
+    margin-right: 0;
+    width: 1035px;
+    margin-bottom: 0;
+    height: 990px;
+    flex-grow: 1;
+}

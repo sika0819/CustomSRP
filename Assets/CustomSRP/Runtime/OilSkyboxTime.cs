@@ -122,7 +122,7 @@ namespace CustomSRP
         // Moorea 17.538°S, 149.83°W, UTC−10. Equinox sun (declination ≈ 0), +Z north, azimuth from north.
         // Anchors: 06:00 / 12:00 / 18:00 / 00:00 → period 0 / 1 / 2 / 3.
         // Intensity follows sin(elevation), floored through twilight.
-        // Linear color: 清晨淡金 / 白天淡黄 / 黄昏淡橘红 / 夜晚蓝黑.
+        // Linear color: 清晨淡金 / 白天白 / 黄昏淡橘红 / 夜晚蓝黑.
         static readonly LightPreset[] LightPresets =
         {
             new()
@@ -133,7 +133,7 @@ namespace CustomSRP
             new()
             {
                 elevation = 72.44f, azimuth = 5.96f,
-                color = new Color(1.00f, 0.93f, 0.55f), intensity = 2.0f,
+                color = Color.white, intensity = 2.0f,
             },
             new()
             {

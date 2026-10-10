@@ -1,0 +1,17 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="MobileDataForm.uss" />
+    <ui:VisualElement name="root" class="game-mobile-data-form__root">
+        <ui:VisualElement name="ingamemobileDataview" class="game-mobile-data-form__ingamemobile-dataview" />
+        <ui:VisualElement name="mobileDatainusepage" class="game-mobile-data-form__mobile-datainusepage">
+            <ui:Label name="labelinfo" class="game-mobile-data-form__labelinfo" text="需要下载约 500MB 音频资源，当前使用移动数据，下载可能产生流量费用。" />
+            <ui:Label name="labeltitle" class="game-mobile-data-form__labeltitle" text="正在使用蜂窝数据" />
+            <ui:VisualElement name="hinticon" class="game-mobile-data-form__hinticon" />
+            <ui:Button name="mobileDatainusepageButton" class="game-mobile-data-form__mobile-datainusepage-button">
+                <ui:Label name="labeltmp" class="game-mobile-data-form__labeltmp" text="继续下载" />
+            </ui:Button>
+            <ui:Button name="mobileDatainusepageButton2" class="game-mobile-data-form__mobile-datainusepage-button2">
+                <ui:Label name="labeltmp2" class="game-mobile-data-form__labeltmp2" text="切换Wi-Fi后下载" />
+            </ui:Button>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

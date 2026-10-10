@@ -1,0 +1,89 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="LoadingForm.uss" />
+    <ui:VisualElement name="root" class="game-loading-form__root">
+        <ui:VisualElement name="campfireStill" class="game-loading-form__campfire-still" />
+        <ui:VisualElement name="campfireVideo" class="game-loading-form__campfire-video" picking-mode="Ignore" />
+        <ui:Button name="enterIslandButton" class="game-loading-form__enter-island-button" text="进入岛屿" />
+
+        <ui:Label name="labeltmp" class="game-loading-form__labeltmp" text="3" />
+        <ui:VisualElement name="bankupdatehint" class="game-loading-form__bankupdatehint">
+            <ui:VisualElement name="mobileDatainusepage" class="game-loading-form__mobile-datainusepage">
+                <ui:VisualElement name="hinticon" class="game-loading-form__hinticon" />
+                <ui:Label name="labeltitle" class="game-loading-form__labeltitle" text="正在使用蜂窝数据" />
+                <ui:Label name="labelinfo" class="game-loading-form__labelinfo" text="需要下载约 500MB 音频资源，当前使用移动数据，下载可能产生流量费用。" />
+                <ui:Button name="mobileDatainusepageButton" class="game-loading-form__mobile-datainusepage-button">
+                    <ui:Label name="labeltmp2" class="game-loading-form__labeltmp2" text="切换Wi-Fi后下载" />
+                </ui:Button>
+                <ui:Button name="mobileDatainusepageButton2" class="game-loading-form__mobile-datainusepage-button2">
+                    <ui:Label name="labeltmp3" class="game-loading-form__labeltmp3" text="继续下载" />
+                </ui:Button>
+            </ui:VisualElement>
+            <ui:VisualElement name="filecorruptedpage" class="game-loading-form__filecorruptedpage">
+                <ui:Label name="labeltitle2" class="game-loading-form__labeltitle2" text="加载异常" />
+                <ui:Label name="labelinfo2" class="game-loading-form__labelinfo2" text="声音资源加载失败，可能是网络不稳定（如断网、网络波动）或资源包损坏导致，请检查网络连接后再重新下载~" />
+                <ui:Button name="filecorruptedpageButton" class="game-loading-form__filecorruptedpage-button">
+                    <ui:Label name="labeltmp4" class="game-loading-form__labeltmp4" text="重新下载" />
+                </ui:Button>
+                <ui:VisualElement name="hinticon2" class="game-loading-form__hinticon2" />
+                <ui:Button name="filecorruptedpageButton2" class="game-loading-form__filecorruptedpage-button2">
+                    <ui:Label name="labeltmp5" class="game-loading-form__labeltmp5" text="稍后下载" />
+                </ui:Button>
+            </ui:VisualElement>
+            <ui:VisualElement name="storageFullstoragepage" class="game-loading-form__storage-fullstoragepage">
+                <ui:Label name="labeltitle3" class="game-loading-form__labeltitle3" text="温馨提示" />
+                <ui:Label name="labelinfo3" class="game-loading-form__labelinfo3" text="设备存储空间不足，需至少预留600MB空间才能下载，建议清理存储空间后重试”，无法启动下载。" />
+                <ui:Button name="storageFullstoragepageButton" class="game-loading-form__storage-fullstoragepage-button">
+                    <ui:Label name="labeltmp6" class="game-loading-form__labeltmp6" text="我知道了" />
+                </ui:Button>
+                <ui:VisualElement name="hinticon3" class="game-loading-form__hinticon3" />
+            </ui:VisualElement>
+            <ui:VisualElement name="wifidatainusepage" class="game-loading-form__wifidatainusepage">
+                <ui:Button name="wifidatainusepageButton" class="game-loading-form__wifidatainusepage-button">
+                    <ui:Label name="labeltmp7" class="game-loading-form__labeltmp7" text="稍后再说" />
+                </ui:Button>
+                <ui:VisualElement name="hinticon4" class="game-loading-form__hinticon4" />
+                <ui:Label name="labeltitle4" class="game-loading-form__labeltitle4" text="温馨提示" />
+                <ui:Button name="wifidatainusepageButton2" class="game-loading-form__wifidatainusepage-button2">
+                    <ui:Label name="labeltmp8" class="game-loading-form__labeltmp8" text="立即下载" />
+                </ui:Button>
+                <ui:Label name="labelinfo4" class="game-loading-form__labelinfo4" text="&quot;\u9700\u8981\u4E0B\u8F7D\u7EA6 500MB \u97F3\u9891\u8D44\u6E90\uFF0C\u5F53\u524D\u5DF2\u8FDE\u63A5" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="background2" class="game-loading-form__background2">
+            <ui:VisualElement name="title" class="game-loading-form__title" />
+            <ui:VisualElement name="logo" class="game-loading-form__logo" />
+        </ui:VisualElement>
+        <ui:VisualElement name="uiloading" class="game-loading-form__uiloading">
+            <ui:Slider name="sliderprogressSlider" class="game-loading-form__sliderprogress-slider">
+                <ui:VisualElement name="background" class="game-loading-form__background" />
+                <ui:VisualElement name="handleslidearea" class="game-loading-form__handleslidearea">
+                    <ui:VisualElement name="handle" class="game-loading-form__handle" />
+                </ui:VisualElement>
+                <ui:VisualElement name="fillarea" class="game-loading-form__fillarea">
+                    <ui:VisualElement name="fill" class="game-loading-form__fill" />
+                </ui:VisualElement>
+            </ui:Slider>
+            <ui:VisualElement name="lower" class="game-loading-form__lower">
+                <ui:Label name="lower2" class="game-loading-form__lower2" text="MB 速度" />
+                <ui:Label name="labeldownloadedsize" class="game-loading-form__labeldownloadedsize" text="666" />
+                <ui:Label name="lower3" class="game-loading-form__lower3" text="正在为你下载声音资源:" />
+                <ui:Label name="labeldownloadspeed" class="game-loading-form__labeldownloadspeed" text="123MB/秒" />
+                <ui:Label name="middleline" class="game-loading-form__middleline" text="/" />
+                <ui:Label name="lower4" class="game-loading-form__lower4" text="MB" />
+                <ui:Label name="labeltotalsize" class="game-loading-form__labeltotalsize" text="888" />
+            </ui:VisualElement>
+            <ui:VisualElement name="upper" class="game-loading-form__upper">
+                <ui:Label name="upper2" class="game-loading-form__upper2" text="分钟" />
+                <ui:VisualElement name="hint" class="game-loading-form__hint">
+                    <ui:Label name="hint2" class="game-loading-form__hint2" text="更新过程中请不要关闭应用" />
+                </ui:VisualElement>
+                <ui:Label name="labelremainingtime" class="game-loading-form__labelremainingtime" text="10" />
+                <ui:Label name="upper3" class="game-loading-form__upper3" text="预计剩余时间：" />
+            </ui:VisualElement>
+            <ui:Label name="labeltitle5" class="game-loading-form__labeltitle5" text="初始化配置" />
+            <ui:Label name="labelprogress" class="game-loading-form__labelprogress" text="10%" />
+        </ui:VisualElement>
+        <ui:VisualElement name="bankupdatevideo" class="game-loading-form__bankupdatevideo" />
+        <ui:VisualElement name="bankupdatebackground" class="game-loading-form__bankupdatebackground" />
+    </ui:VisualElement>
+</ui:UXML>

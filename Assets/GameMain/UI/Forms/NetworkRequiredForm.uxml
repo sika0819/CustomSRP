@@ -1,0 +1,14 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="NetworkRequiredForm.uss" />
+    <ui:VisualElement name="root" class="game-network-required-form__root">
+        <ui:VisualElement name="ingameneednetworkview" class="game-network-required-form__ingameneednetworkview" />
+        <ui:VisualElement name="mobileDatainusepage" class="game-network-required-form__mobile-datainusepage">
+            <ui:Label name="labelinfo" class="game-network-required-form__labelinfo" text="当前设备无网络，无法下载资源包，请开启网络后继续" />
+            <ui:Label name="labeltitle" class="game-network-required-form__labeltitle" text="无网络连接" />
+            <ui:VisualElement name="hinticon" class="game-network-required-form__hinticon" />
+            <ui:Button name="mobileDatainusepageButton" class="game-network-required-form__mobile-datainusepage-button">
+                <ui:Label name="labeltmp" class="game-network-required-form__labeltmp" text="我知道了" />
+            </ui:Button>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,21 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="WeatherForm.uss" />
+    <ui:VisualElement name="root" class="game-weather-form__root">
+        <ui:VisualElement name="weatherDialog" class="game-weather-form__weather-dialog" />
+        <ui:VisualElement name="levelBackground" class="game-weather-form__level-background" />
+        <ui:VisualElement name="list" class="game-weather-form__list">
+            <ui:VisualElement name="huadong" class="game-weather-form__huadong">
+                <ui:Button name="fengButton" class="game-weather-form__feng-button" />
+                <ui:Button name="wuButton" class="game-weather-form__wu-button" />
+                <ui:Button name="yuButton" class="game-weather-form__yu-button" />
+            </ui:VisualElement>
+            <ui:VisualElement name="tab" class="game-weather-form__tab" />
+        </ui:VisualElement>
+        <ui:VisualElement name="dragHandle" class="game-weather-form__drag-handle">
+            <ui:Label name="labeltmp" class="game-weather-form__labeltmp" text="关闭" />
+            <ui:VisualElement name="dian" class="game-weather-form__dian" />
+        </ui:VisualElement>
+        <ui:Label name="description" class="game-weather-form__description" text="天气档位调节
+点击以下区域可进行档位调节哦～" />
+    </ui:VisualElement>
+</ui:UXML>

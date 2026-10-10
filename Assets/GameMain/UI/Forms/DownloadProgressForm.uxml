@@ -1,0 +1,30 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="DownloadProgressForm.uss" />
+    <ui:VisualElement name="root" class="game-download-progress-form__root">
+        <ui:VisualElement name="ingamedownloadview" class="game-download-progress-form__ingamedownloadview" />
+        <ui:VisualElement name="mobileDatainusepage" class="game-download-progress-form__mobile-datainusepage">
+            <ui:VisualElement name="labelinfo" class="game-download-progress-form__labelinfo">
+                <ui:Label name="label2" class="game-download-progress-form__label2" text="66" />
+                <ui:Label name="label1" class="game-download-progress-form__label1" text="正在为你下载资源：66MB/862MB  速度5MB/秒" />
+                <ui:Label name="label3" class="game-download-progress-form__label3" text="MB/862MB  速度5MB/秒" />
+            </ui:VisualElement>
+            <ui:VisualElement name="downloadstate" class="game-download-progress-form__downloadstate">
+                <ui:Label name="labeltmp" class="game-download-progress-form__labeltmp" text="剩余12s" />
+                <ui:Slider name="sliderprogressSlider" class="game-download-progress-form__sliderprogress-slider">
+                    <ui:VisualElement name="background" class="game-download-progress-form__background" />
+                    <ui:VisualElement name="handleslidearea" class="game-download-progress-form__handleslidearea">
+                        <ui:VisualElement name="handle" class="game-download-progress-form__handle" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="fillarea" class="game-download-progress-form__fillarea">
+                        <ui:VisualElement name="fill" class="game-download-progress-form__fill" />
+                    </ui:VisualElement>
+                </ui:Slider>
+            </ui:VisualElement>
+            <ui:Label name="labeltitle" class="game-download-progress-form__labeltitle" text="场景资源加载中..." />
+            <ui:VisualElement name="hinticon" class="game-download-progress-form__hinticon" />
+            <ui:Button name="mobileDatainusepageButton" class="game-download-progress-form__mobile-datainusepage-button">
+                <ui:Label name="labeltmp2" class="game-download-progress-form__labeltmp2" text="我知道了" />
+            </ui:Button>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

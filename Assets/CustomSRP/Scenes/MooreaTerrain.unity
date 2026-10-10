@@ -148,8 +148,8 @@ Light:
   m_Enabled: 1
   serializedVersion: 13
   m_Type: 1
-  m_Color: {r: 0.1, g: 0.16, b: 0.55, a: 1}
-  m_Intensity: 0.18
+  m_Color: {r: 1, g: 0.825, b: 0.44500002, a: 1}
+  m_Intensity: 0.9290001
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.802082
@@ -211,7 +211,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 303204565}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.5891872, y: -0.04162406, z: -0.03041403, w: 0.80635035}
+  m_LocalRotation: {x: 0.117699094, y: -0.73514473, z: 0.13222377, w: 0.6543898}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -230,9 +230,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d3f4a5162738495a0b1c2d3e4f506182, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomSRP.OilSkyboxTime
-  timeOfDay: 0
+  timeOfDay: 7.8
   timeOfDayVersion: 1
-  animate: 1
+  animate: 0
   cycleSeconds: 60
   skyboxMaterial: {fileID: 2100000, guid: f5b6c738495a6b7c1d2e3f4051627384, type: 2}
   sun: {fileID: 303204566}
@@ -300,8 +300,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomSRP.CustomRenderPipelineCamera
   settings:
-    copyColor: 0
-    copyDepth: 0
+    copyColor: 1
+    copyDepth: 1
     overridePostFX: 1
     postFXSettings: {fileID: 0}
     finalBlendMode:
@@ -382,13 +382,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 362718928}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.00033241935, y: -0.99942577, z: -0.032281175, w: -0.01029171}
-  m_LocalPosition: {x: 1992, y: 202.6, z: 8243}
+  m_LocalRotation: {x: -0.013191117, y: 0.98616886, z: 0.09756362, w: 0.13333526}
+  m_LocalPosition: {x: 1992, y: 124.9, z: 8243}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: -3.7, y: -181.18, z: 0}
+  m_LocalEulerAnglesHint: {x: -11.3, y: 164.6, z: 0}
 --- !u!1 &1343980837
 GameObject:
   m_ObjectHideFlags: 0
@@ -564,13 +564,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomSRP.OilOceanSurface
   gridScale: 16500
-  vertexDistance: 180
+  vertexDistance: 520
   followCamera: 1
   terrain: {fileID: 1343980839}
   waveHeight: 7
   boundsPadding: 4
-  animateInEditMode: 0
-  jobBatchSize: 64
 --- !u!33 &1491382870
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -588,7 +586,7 @@ Transform:
   m_GameObject: {fileID: 1491382867}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1989.1305, y: 13.1, z: 8315.218}
+  m_LocalPosition: {x: 266.12903, y: 13.1, z: 266.12903}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

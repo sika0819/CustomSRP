@@ -6,6 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/CustomSRP/Scenes/MooreaTerrain.unity
-    guid: 6dfd7bfd4ab564668a1224514298e953
+    path: Assets/CustomSRP/Scenes/IslandTerrain.unity
+    guid: 13001403b90d343de937c9a5cc9eb30b
   m_configObjects: {}

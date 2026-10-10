@@ -1,0 +1,101 @@
+.game-preset-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.game-preset-form__title {
+    position: absolute;
+    left: 50%;
+    margin-left: -433px;
+    top: 100%;
+    margin-top: -996px;
+    margin-right: 0;
+    width: 867px;
+    margin-bottom: 0;
+    height: 101px;
+    -unity-text-align: upper-center;
+    font-size: 72px;
+    color: rgba(25, 25, 26, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-preset-form__scroll-track-active {
+    position: absolute;
+    left: 50%;
+    margin-left: -2px;
+    top: 100%;
+    margin-top: -222px;
+    margin-right: 0;
+    width: 63px;
+    margin-bottom: 0;
+    height: 18px;
+    background-image: url("../Textures/PresetForm/scroll-track-active.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-preset-form__description {
+    position: absolute;
+    left: 50%;
+    margin-left: -433px;
+    top: 100%;
+    margin-top: -846px;
+    margin-right: 0;
+    width: 867px;
+    margin-bottom: 0;
+    height: 110px;
+    -unity-text-align: upper-center;
+    font-size: 39px;
+    color: rgba(186, 200, 195, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-preset-form__scroll-track {
+    position: absolute;
+    left: 50%;
+    margin-left: -118px;
+    top: 100%;
+    margin-top: -222px;
+    margin-right: 0;
+    width: 240px;
+    margin-bottom: 0;
+    height: 18px;
+    background-image: url("../Textures/PresetForm/scroll-track.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-preset-form__preset-button {
+    position: absolute;
+    left: 50%;
+    margin-left: -517.5px;
+    top: 100%;
+    margin-top: -1080px;
+    margin-right: 0;
+    width: 1035px;
+    margin-bottom: 0;
+    height: 960px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/PresetForm/preset-button.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-preset-form__preset-list {
+    position: absolute;
+    left: 50%;
+    margin-left: -522.5px;
+    top: 100%;
+    margin-top: -557px;
+    margin-right: 0;
+    width: 1045px;
+    margin-bottom: 0;
+    height: 400px;
+    flex-grow: 1;
+}

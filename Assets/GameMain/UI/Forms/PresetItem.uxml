@@ -1,0 +1,17 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="PresetItem.uss" />
+    <ui:VisualElement name="root" class="game-preset-item__root">
+        <ui:Button name="zhanweitu2Button" class="game-preset-item__zhanweitu2-button" />
+        <ui:VisualElement name="vip" class="game-preset-item__vip" />
+        <ui:VisualElement name="bofangzhuangtai" class="game-preset-item__bofangzhuangtai">
+            <ui:VisualElement name="statewaitdownload" class="game-preset-item__statewaitdownload" />
+            <ui:VisualElement name="stateerror" class="game-preset-item__stateerror" />
+            <ui:VisualElement name="statedownloadsuccess" class="game-preset-item__statedownloadsuccess" />
+            <ui:VisualElement name="statedownloading" class="game-preset-item__statedownloading">
+                <ui:VisualElement name="fill" class="game-preset-item__fill" />
+            </ui:VisualElement>
+            <ui:VisualElement name="stateready" class="game-preset-item__stateready" />
+        </ui:VisualElement>
+        <ui:Label name="presetitem" class="game-preset-item__presetitem" text="焦虑袭来" />
+    </ui:VisualElement>
+</ui:UXML>

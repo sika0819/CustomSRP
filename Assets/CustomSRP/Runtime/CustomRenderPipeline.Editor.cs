@@ -11,6 +11,9 @@ namespace CustomSRP
         partial void InitializeForEditor()
         {
             Lightmapping.SetDelegate(lightsDelegate);
+            // The engine overlay pass does not run for this pipeline in the editor.
+            // DrawUIOverlay in CameraRenderer paints UI Toolkit into the Game view.
+            UnityEngine.Rendering.SupportedRenderingFeatures.active.rendersUIOverlay = true;
         }
 
         partial void DisposeForEditor()
