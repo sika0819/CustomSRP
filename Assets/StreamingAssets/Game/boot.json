@@ -1,0 +1,7 @@
+{
+  "packageName": "DefaultPackage",
+  "version": "0.1.0",
+  "playMode": "OfflinePlayMode",
+  "yooFolder": "package",
+  "allowGuestLogin": true
+}
