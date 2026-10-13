@@ -1,0 +1,12 @@
+# Git LFS — 由 .gitignore 排除的"打包产物"以外的二进制资源走 LFS
+# 装好 git-lfs 后执行一次:git lfs install
+# 然后 git add / commit 即可;*.asset / *.png / *.fbx 会被替换为指针,真实内容存 LFS 服务器
+
+# Unity 二进制资源(场景、预制、材质、TerrainData 等都是 .asset)
+*.asset filter=lfs diff=lfs merge=lfs -text
+
+# 贴图原文件
+*.png filter=lfs diff=lfs merge=lfs -text
+
+# 模型原文件
+*.fbx filter=lfs diff=lfs merge=lfs -text
