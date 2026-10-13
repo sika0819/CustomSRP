@@ -1,0 +1,115 @@
+.volume-row {
+    overflow: visible;
+}
+
+.volume-row__track {
+    position: absolute;
+    left: 3px;
+    top: 86px;
+    width: 867px;
+    height: 204px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.volume-row__fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 867px;
+    height: 204px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/VolumeRow/fill.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    -unity-slice-left: 101px;
+    -unity-slice-right: 101px;
+    -unity-slice-top: 0px;
+    -unity-slice-bottom: 0px;
+}
+
+.volume-row__track-plate {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 867px;
+    height: 204px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/VolumeRow/track-plate.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.volume-row__knob {
+    position: absolute;
+    left: 726px;
+    top: 116px;
+    width: 144px;
+    height: 144px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    picking-mode: Position;
+    overflow: visible;
+}
+
+.volume-row__knob-face {
+    position: absolute;
+    left: -90px;
+    top: -90px;
+    width: 324px;
+    height: 324px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/VolumeRow/knob-face.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+
+.volume-row__value {
+    position: absolute;
+    left: 140.5px;
+    top: 6px;
+    width: 80px;
+    height: 40px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 36px;
+    color: rgba(135, 135, 145, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+
+.volume-row__caption {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 150px;
+    height: 50px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-left;
+    font-size: 36px;
+    color: rgba(135, 135, 145, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}

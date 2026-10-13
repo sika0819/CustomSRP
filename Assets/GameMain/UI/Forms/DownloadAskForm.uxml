@@ -1,0 +1,16 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="GameFormShared.uss" />
+    <Style src="DownloadAskForm.uss" />
+    <ui:Template name="NoticeCard" src="../Components/NoticeCard.uxml" />
+    <ui:VisualElement name="root" class="game-download-ask-form__root">
+        <ui:VisualElement name="ingamerequestdownloadview" class="game-download-ask-form__ingamerequestdownloadview" />
+        <ui:VisualElement name="stage" class="game-form-stage">
+            <ui:Instance template="NoticeCard" name="downloadAskCard" style="position: absolute; left: 50%; margin-left: -466.5px; top: 100%; margin-top: -1203px; margin-right: 0; width: 933px; margin-bottom: 0; height: 1083px;">
+                <ui:AttributeOverrides element-name="body" text="此区域需要额外下载资源包（约xxxMB），下载后即可进入并体验完整内容。" />
+                <ui:AttributeOverrides element-name="title" text="前方区域未下载" />
+                <ui:AttributeOverrides element-name="primaryLabel" text="立即下载" />
+                <ui:AttributeOverrides element-name="secondaryLabel" text="返回" />
+            </ui:Instance>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

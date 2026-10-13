@@ -1,0 +1,31 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="GameFormShared.uss" />
+    <Style src="WeatherForm.uss" />
+    <ui:Template name="LevelKnob" src="../Components/LevelKnob.uxml" />
+    <ui:VisualElement name="root" class="game-weather-form__root">
+        <ui:VisualElement name="stage" class="game-form-stage">
+            <ui:VisualElement name="weatherDialog" class="game-weather-form__weather-dialog" />
+            <ui:Instance template="LevelKnob" name="levelMedium" style="position: absolute; left: 50%; margin-left: 37.5px; top: 100%; margin-top: -378px; margin-right: 0; width: 144px; margin-bottom: 0; height: 144px;">
+            </ui:Instance>
+            <ui:Instance template="LevelKnob" name="levelSmall" style="position: absolute; left: 50%; margin-left: -184.5px; top: 100%; margin-top: -378px; margin-right: 0; width: 144px; margin-bottom: 0; height: 144px;">
+            </ui:Instance>
+            <ui:VisualElement name="levelBackground" class="game-weather-form__level-background" />
+            <ui:Instance template="LevelKnob" name="levelLarge" style="position: absolute; left: 50%; margin-left: 259.5px; top: 100%; margin-top: -378px; margin-right: 0; width: 144px; margin-bottom: 0; height: 144px;">
+            </ui:Instance>
+            <ui:VisualElement name="list" class="game-weather-form__list">
+                <ui:VisualElement name="huadong" class="game-weather-form__huadong">
+                    <ui:Button name="fengButton" class="game-weather-form__feng-button" text="风" />
+                    <ui:Button name="yuButton" class="game-weather-form__yu-button" text="雨" />
+                    <ui:Button name="wuButton" class="game-weather-form__wu-button" text="雾" />
+                </ui:VisualElement>
+                <ui:VisualElement name="tab" class="game-weather-form__tab" />
+            </ui:VisualElement>
+            <ui:Instance template="LevelKnob" name="dragHandle" style="position: absolute; left: 50%; margin-left: -403.5px; top: 100%; margin-top: -378px; margin-right: 0; width: 144px; margin-bottom: 0; height: 144px;">
+            </ui:Instance>
+            <ui:Instance template="LevelKnob" name="closeLevel" style="position: absolute; left: 50%; margin-left: -403.5px; top: 100%; margin-top: -378px; margin-right: 0; width: 144px; margin-bottom: 0; height: 144px;">
+            </ui:Instance>
+            <ui:Label name="description" class="game-weather-form__description" text="天气档位调节
+点击以下区域可进行档位调节哦～" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,28 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="HudIcon.uss" />
+    <ui:VisualElement name="hudIcon" class="hud-icon">
+        <ui:VisualElement name="plate" class="hud-icon__plate" />
+        <ui:VisualElement name="glyph" class="hud-icon__glyph" />
+        <ui:VisualElement name="musicPause" class="hud-icon__music-pause" />
+        <ui:VisualElement name="musicPlaying" class="hud-icon__music-playing">
+            <ui:VisualElement name="barCenter" class="hud-icon__bar-center" />
+            <ui:VisualElement name="barRight" class="hud-icon__bar-right" />
+            <ui:VisualElement name="barLeft" class="hud-icon__bar-left" />
+        </ui:VisualElement>
+        <ui:VisualElement name="volumeMarks" class="hud-icon__volume-marks">
+            <ui:VisualElement name="volumeTrack" class="hud-icon__volume-track" />
+            <ui:VisualElement name="volumeTrack1" class="hud-icon__volume-track1" />
+            <ui:VisualElement name="volumeTrack2" class="hud-icon__volume-track2" />
+            <ui:VisualElement name="effectvolumeyuan" class="hud-icon__effectvolumeyuan" />
+            <ui:VisualElement name="musicvolumeyuan" class="hud-icon__musicvolumeyuan" />
+        </ui:VisualElement>
+        <ui:VisualElement name="timerActive" class="hud-icon__timer-active">
+            <ui:VisualElement name="timerFill" class="hud-icon__timer-fill" />
+            <ui:VisualElement name="topRule" class="hud-icon__top-rule" />
+            <ui:VisualElement name="topRightDecor" class="hud-icon__top-right-decor" />
+            <ui:VisualElement name="dialSpin" class="hud-icon__dial-spin" />
+        </ui:VisualElement>
+        <ui:VisualElement name="timerIdle" class="hud-icon__timer-idle" />
+        <ui:Label name="badge" class="hud-icon__badge" text="●" />
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,82 @@
+.game-timer-pause-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+#timerDialog {
+    overflow: visible;
+}
+#timerDialog #noticeCard {
+    background-image: url("../Textures/NoticeCard/panel.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+#timerDialog #icon {
+    position: absolute;
+    left: 405px;
+    top: 109.87px;
+    width: 270px;
+    height: 270px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/TimerPauseForm/timer-dialog-icon.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+#timerDialog #body {
+    position: absolute;
+    left: 106.5px;
+    top: 565.22px;
+    width: 867px;
+    height: 107.65px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-center;
+    font-size: 39px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+#timerDialog #primary {
+    position: absolute;
+    left: 106.5px;
+    top: 780.93px;
+    width: 867px;
+    height: 172.94px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/TimerPauseForm/timer-dialog-primary.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+#timerDialog #title {
+    position: absolute;
+    left: 106.5px;
+    top: 435.87px;
+    width: 867px;
+    height: 101px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-center;
+    font-size: 72px;
+    color: rgba(25, 25, 26, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+#timerDialog #primaryLabel {
+    display: none;
+}
+#timerDialog #secondary {
+    display: none;
+}

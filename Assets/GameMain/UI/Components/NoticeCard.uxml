@@ -1,0 +1,14 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="NoticeCard.uss" />
+    <ui:VisualElement name="noticeCard" class="notice-card">
+        <ui:VisualElement name="icon" class="notice-card__icon" />
+        <ui:Label name="title" class="notice-card__title" text="正在使用蜂窝数据" />
+        <ui:Label name="body" class="notice-card__body" text="需要下载约 500MB 音频资源，当前使用移动数据，下载可能产生流量费用。" />
+        <ui:Button name="primary" class="notice-card__primary">
+            <ui:Label name="primaryLabel" class="notice-card__primary-label" text="继续下载" />
+        </ui:Button>
+        <ui:Button name="secondary" class="notice-card__secondary">
+            <ui:Label name="secondaryLabel" class="notice-card__secondary-label" text="切换Wi-Fi后下载" />
+        </ui:Button>
+    </ui:VisualElement>
+</ui:UXML>

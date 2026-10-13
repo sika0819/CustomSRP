@@ -1,0 +1,23 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="GameFormShared.uss" />
+    <Style src="VolumeForm.uss" />
+    <ui:Template name="VolumeRow" src="../Components/VolumeRow.uxml" />
+    <ui:VisualElement name="root" class="game-volume-form__root">
+        <ui:VisualElement name="stage" class="game-form-stage">
+            <ui:VisualElement name="background" class="game-volume-form__background" />
+            <ui:VisualElement name="yuandian" class="game-volume-form__yuandian">
+                <ui:VisualElement name="dian" class="game-volume-form__dian" />
+                <ui:Label name="value" class="game-volume-form__value" text="0" />
+            </ui:VisualElement>
+            <ui:VisualElement name="title" class="game-volume-form__title">
+                <ui:Label name="t1" class="game-volume-form__t1" text="音量调节" />
+                <ui:Label name="t2" class="game-volume-form__t2" text="调节音量，左滑关闭，右滑增加哦～" />
+            </ui:VisualElement>
+            <ui:Instance template="VolumeRow" name="musicVolume" style="position: absolute; left: 126px; top: 1590px; width: 870px; height: 290px; margin-left: 0; margin-top: 0; margin-right: 0; margin-bottom: 0;">
+            </ui:Instance>
+            <ui:Instance template="VolumeRow" name="effectVolume" style="position: absolute; left: 126px; top: 1940px; width: 870px; height: 290px; margin-left: 0; margin-top: 0; margin-right: 0; margin-bottom: 0;">
+                <ui:AttributeOverrides element-name="caption" text="音效调节" />
+            </ui:Instance>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

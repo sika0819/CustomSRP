@@ -1,0 +1,7 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="LevelKnob.uss" />
+    <ui:VisualElement name="levelKnob" class="level-knob">
+        <ui:VisualElement name="highlight" class="level-knob__highlight" />
+        <ui:Label name="label" class="level-knob__label" text="关闭" />
+    </ui:VisualElement>
+</ui:UXML>

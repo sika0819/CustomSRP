@@ -1,0 +1,274 @@
+.game-music-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+/* Boluo sheet sits 120px above the bottom; raise stage so the 1437px card is vertically centered. */
+.game-music-form__root .game-form-stage {
+    margin-top: -1597.5px; /* -1218 (stage half) - 379.5 (sheet nudge) */
+}
+
+.game-music-form__hintwindows {
+    position: absolute;
+    left: 50%;
+    margin-left: -123px;
+    top: 50%;
+    margin-top: -403px;
+    margin-right: 0;
+    width: 246px;
+    margin-bottom: 0;
+    height: 126px;
+    background-image: url("../Textures/MusicForm/hintwindows.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    -unity-slice-left: 31px;
+    -unity-slice-right: 34px;
+    -unity-slice-top: 0px;
+    -unity-slice-bottom: 0px;
+    picking-mode: Ignore;
+    opacity: 0.000;
+}
+.game-music-form__labeltmp {
+    position: absolute;
+    left: 0;
+    margin-left: 23px;
+    top: 0;
+    margin-top: 22.19px;
+    margin-right: 0;
+    width: 200px;
+    margin-bottom: 0;
+    height: 81.62px;
+    -unity-text-align: middle-center;
+    font-size: 36px;
+    color: rgba(255, 255, 255, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-form__music-dialogkapian {
+    position: absolute;
+    left: 50%;
+    margin-left: -517.5px;
+    top: 100%;
+    margin-top: -1557px;
+    margin-right: 0;
+    width: 1035px;
+    margin-bottom: 0;
+    height: 1437px;
+    background-image: url("../Textures/MusicForm/music-dialogkapian.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    -unity-slice-left: 140px;
+    -unity-slice-right: 140px;
+    -unity-slice-top: 140px;
+    -unity-slice-bottom: 140px;
+}
+.game-music-form__hlist {
+    position: absolute;
+    left: 50%;
+    margin-left: -394px;
+    top: 84px;
+    margin-top: 0;
+    margin-right: 0;
+    width: 788px;
+    margin-bottom: 0;
+    height: 101px;
+    background-color: rgba(0, 0, 0, 0);
+    picking-mode: Ignore;
+}
+.game-music-form__biao {
+    position: absolute;
+    left: 50%;
+    margin-left: -21px;
+    top: 92px;
+    margin-top: 0;
+    margin-right: 0;
+    width: 42px;
+    margin-bottom: 0;
+    height: 9px;
+    background-image: url("../Textures/MusicForm/biao.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
+}
+.game-music-form__huadong {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    width: auto;
+    height: auto;
+    picking-mode: Ignore;
+}
+.game-music-form__u6563u6b65,
+.game-music-form__u65c5u884c,
+.game-music-form__u5de5u4f5c,
+.game-music-form__u9a7eu8f66,
+.game-music-form__u5b66u4e60 {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-right: 0;
+    height: auto;
+    -unity-text-align: middle-center;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: nowrap;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+    overflow: visible;
+    min-width: 0;
+    min-height: 0;
+}
+.game-music-form__u9a7eu8f66 {
+    left: 0;
+    margin-left: 0;
+    width: 120px;
+    opacity: 0.300;
+    font-size: 48px;
+}
+.game-music-form__u6563u6b65 {
+    left: 140px;
+    margin-left: 0;
+    width: 120px;
+    opacity: 0.300;
+    font-size: 48px;
+}
+.game-music-form__u65c5u884c {
+    left: 50%;
+    margin-left: -90px;
+    width: 180px;
+    font-size: 72px;
+}
+.game-music-form__u5b66u4e60 {
+    right: 140px;
+    left: auto;
+    margin-left: 0;
+    width: 120px;
+    opacity: 0.300;
+    font-size: 48px;
+}
+.game-music-form__u5de5u4f5c {
+    right: 0;
+    left: auto;
+    margin-left: 0;
+    width: 120px;
+    opacity: 0.300;
+    font-size: 48px;
+}
+.game-music-form__mode-button {
+    position: absolute;
+    right: 82px;
+    top: 254px;
+    left: auto;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 180px;
+    margin-bottom: 0;
+    height: 84px;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+.game-music-form__title {
+    position: absolute;
+    left: 86px;
+    top: 267px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    width: 400px;
+    margin-bottom: 0;
+    height: 59px;
+    -unity-text-align: middle-left;
+    font-size: 42px;
+    color: rgba(135, 135, 145, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-music-form__music-list {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 381px;
+    bottom: 60px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    width: auto;
+    height: auto;
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+}
+.game-music-form__music-list .unity-list-view__item,
+.game-music-form__music-list .unity-collection-view__item {
+    background-color: rgba(0, 0, 0, 0);
+    padding: 0;
+    margin: 0;
+    border-width: 0;
+}
+.game-music-form__music-list .unity-scroll-view {
+    background-color: rgba(0, 0, 0, 0);
+}
+
+/* Boluo V_List Scrollbar Vertical: 20px track (invisible), yy_huadongtiao thumb, right inset ~13. */
+.game-music-form__music-list .unity-scroller--vertical {
+    width: 20px;
+    margin-right: 13px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+}
+.game-music-form__music-list .unity-scroller--vertical .unity-scroller__low-button,
+.game-music-form__music-list .unity-scroller--vertical .unity-scroller__high-button {
+    display: none;
+    width: 0;
+    height: 0;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border-width: 0;
+}
+.game-music-form__music-list .unity-scroller--vertical .unity-scroller__slider {
+    margin: 0;
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+}
+.game-music-form__music-list .unity-scroller--vertical .unity-base-slider__input,
+.game-music-form__music-list .unity-scroller--vertical .unity-base-slider__drag-container,
+.game-music-form__music-list .unity-scroller--vertical .unity-base-slider__tracker {
+    background-color: rgba(0, 0, 0, 0);
+    background-image: none;
+    border-width: 0;
+    border-radius: 0;
+    margin: 0;
+}
+.game-music-form__music-list .unity-scroller--vertical .unity-base-slider__dragger {
+    width: 15px;
+    min-width: 15px;
+    max-width: 15px;
+    margin-left: 2.5px;
+    margin-right: 2.5px;
+    background-color: rgba(0, 0, 0, 0);
+    background-image: url("../Textures/MusicForm/yy_huadongtiao.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-slice-left: 0px;
+    -unity-slice-right: 0px;
+    -unity-slice-top: 15px;
+    -unity-slice-bottom: 12px;
+    border-width: 0;
+    border-radius: 0;
+}

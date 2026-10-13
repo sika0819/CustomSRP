@@ -1,0 +1,30 @@
+/* Design column: Boluo content is authored for 1125×2436.
+   Pad Expand can make the panel taller/wider than the design canvas — keep a fixed
+   1125×2436 stage centered so bottom-anchored sheets and top:px rows stay aligned
+   and sit in the middle of the screen. */
+.game-form-stage {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 1125px;
+    height: 2436px;
+    margin-left: -562.5px;
+    margin-top: -1218px;
+    margin-right: 0;
+    margin-bottom: 0;
+    overflow: visible;
+    picking-mode: Ignore;
+}
+
+/* Full-screen hit target behind sheet chrome; tap dismisses the popup. */
+.game-form-backdrop {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 0;
+    background-color: rgba(0, 0, 0, 0.001);
+    picking-mode: Position;
+}

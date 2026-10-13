@@ -1,0 +1,13 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="GameFormShared.uss" />
+    <Style src="TimerPauseForm.uss" />
+    <ui:Template name="NoticeCard" src="../Components/NoticeCard.uxml" />
+    <ui:VisualElement name="root" class="game-timer-pause-form__root">
+        <ui:VisualElement name="stage" class="game-form-stage">
+            <ui:Instance template="NoticeCard" name="timerDialog" style="position: absolute; left: 50%; margin-left: -540px; top: 100%; margin-top: -1074px; margin-right: 0; width: 1080px; margin-bottom: 0; height: 1023.87px;">
+                <ui:AttributeOverrides element-name="body" text="当前机型暂不支持后台播放,返回前台已自&#10;动恢复播放" />
+                <ui:AttributeOverrides element-name="title" text="温馨提示" />
+            </ui:Instance>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

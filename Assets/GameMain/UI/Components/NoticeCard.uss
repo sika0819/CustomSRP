@@ -1,0 +1,132 @@
+.notice-card {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    overflow: visible;
+    background-image: url("../Textures/NoticeCard/panel.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.notice-card__icon {
+    position: absolute;
+    left: 338.5px;
+    top: 107.5px;
+    width: 256px;
+    height: 256px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/NoticeCard/icon.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.notice-card__title {
+    position: absolute;
+    left: 28.5px;
+    top: 436.26px;
+    width: 876px;
+    height: 76.48px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 66px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+
+.notice-card__body {
+    position: absolute;
+    left: 73px;
+    top: 573.04px;
+    width: 765px;
+    height: 114.92px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: upper-left;
+    font-size: 39px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+
+.notice-card__primary {
+    position: absolute;
+    left: 73px;
+    top: 745.5px;
+    width: 765px;
+    height: 156px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/NoticeCard/primary.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.notice-card__primary-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    picking-mode: Ignore;
+    -unity-text-align: middle-center;
+    font-size: 50px;
+    color: rgba(255, 255, 255, 1.000);
+    white-space: nowrap;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+    overflow: visible;
+    min-width: 0;
+    min-height: 0;
+}
+
+.notice-card__secondary {
+    position: absolute;
+    left: 73px;
+    top: 916.1px;
+    width: 765px;
+    height: 90.8px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-color: rgba(255, 255, 255, 1.000);
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.notice-card__secondary-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    picking-mode: Ignore;
+    -unity-text-align: middle-center;
+    font-size: 45px;
+    color: rgba(0, 0, 0, 0.588);
+    white-space: nowrap;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+    overflow: visible;
+    min-width: 0;
+    min-height: 0;
+}

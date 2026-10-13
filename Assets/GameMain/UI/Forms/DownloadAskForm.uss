@@ -1,0 +1,47 @@
+.game-download-ask-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+#downloadAskCard #icon {
+    background-image: url("../Textures/DownloadAskForm/download-ask-card-icon.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+#downloadAskCard #primary {
+    position: absolute;
+    left: 73px;
+    top: 741px;
+    width: 765px;
+    height: 156px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+}
+#downloadAskCard #secondary {
+    position: absolute;
+    left: 84px;
+    top: 945px;
+    width: 765px;
+    height: 66px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+}
+.game-download-ask-form__ingamerequestdownloadview {
+    position: absolute;
+    left: 0;
+    margin-left: 0;
+    top: 0;
+    margin-top: 0;
+    right: 0;
+    margin-right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    background-color: rgba(0, 0, 0, 0.800);
+}

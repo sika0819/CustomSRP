@@ -1,0 +1,55 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="IslandMainForm.uss" />
+    <ui:Template name="HudIcon" src="../Components/HudIcon.uxml" />
+    <ui:VisualElement name="root" class="game-island-main-form__root">
+        <ui:VisualElement name="joystickRoot" class="game-island-main-form__joystick-root" picking-mode="Position" />
+        <ui:VisualElement name="hudHeader" class="game-island-main-form__hud-layer" picking-mode="Ignore">
+            <ui:VisualElement name="timeDial" class="game-island-main-form__time-dial">
+                <ui:VisualElement name="timeLabel" class="game-island-main-form__time-label" />
+                <ui:VisualElement name="timeIcon2" class="game-island-main-form__time-icon2" />
+                <ui:VisualElement name="timeIcon1" class="game-island-main-form__time-icon1" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="hudIcons" class="game-island-main-form__hud-layer" picking-mode="Ignore">
+            <ui:Instance template="HudIcon" name="profile" style="position: absolute; left: 100%; margin-left: -156px; top: 0; margin-top: 174px; margin-right: 0; width: 108px; margin-bottom: 0; height: 108px;">
+            </ui:Instance>
+            <ui:VisualElement name="activityEntry" class="game-island-main-form__activity-entry">
+                <ui:Button name="closeButton" class="game-island-main-form__close-button" />
+            </ui:VisualElement>
+            <ui:VisualElement name="timeBackground2" class="game-island-main-form__time-background2">
+                <ui:VisualElement name="timeBackground22" class="game-island-main-form__time-background22" />
+                <ui:VisualElement name="timeHand" class="game-island-main-form__time-hand">
+                    <ui:VisualElement name="colorSwatch" class="game-island-main-form__color-swatch" />
+                    <ui:VisualElement name="hand" class="game-island-main-form__hand" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:VisualElement name="presetIcon" class="game-island-main-form__preset-icon">
+                <ui:VisualElement name="presetIcon2" class="game-island-main-form__preset-icon2" />
+                <ui:VisualElement name="background" class="game-island-main-form__background" />
+            </ui:VisualElement>
+            <ui:Instance template="HudIcon" name="timerBackground" style="position: absolute; left: 100%; margin-left: -156px; top: 0; margin-top: 330px; margin-right: 0; width: 108px; margin-bottom: 0; height: 108px;">
+            </ui:Instance>
+            <ui:VisualElement name="pauseHint" class="game-island-main-form__pause-hint">
+                <ui:Label name="labeltmp" class="game-island-main-form__labeltmp" text="音频中断，滑动屏幕继续播放" />
+            </ui:VisualElement>
+            <ui:Instance template="HudIcon" name="volumeBackground" style="position: absolute; left: 0; margin-left: 48px; top: 0; margin-top: 651px; margin-right: 0; width: 108px; margin-bottom: 0; height: 108px;">
+            </ui:Instance>
+            <ui:Instance template="HudIcon" name="weatherBackground" style="position: absolute; left: 0; margin-left: 48px; top: 0; margin-top: 330px; margin-right: 0; width: 108px; margin-bottom: 0; height: 108px;">
+            </ui:Instance>
+            <ui:Instance template="HudIcon" name="musicBackground" style="position: absolute; left: 0; margin-left: 48px; top: 0; margin-top: 486px; margin-right: 0; width: 108px; margin-bottom: 0; height: 108px;">
+            </ui:Instance>
+            <ui:VisualElement name="defaultState2" class="game-island-main-form__default-state2">
+                <ui:VisualElement name="defaultState22" class="game-island-main-form__default-state22" />
+                <ui:VisualElement name="pressureLoading" class="game-island-main-form__pressure-loading" />
+                <ui:VisualElement name="background2" class="game-island-main-form__background2" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="breathHint" class="game-island-main-form__breath-hint" picking-mode="Ignore" />
+        <ui:VisualElement name="joystickVisual" class="game-island-main-form__joystick-visual" picking-mode="Ignore">
+            <ui:VisualElement name="fanwei" class="game-island-main-form__joystick-ring" picking-mode="Ignore" />
+            <ui:VisualElement name="knob" class="game-island-main-form__joystick-knob" picking-mode="Ignore" />
+        </ui:VisualElement>
+        <ui:Label name="presetLabel" class="game-island-main-form__preset-label" picking-mode="Ignore" text="" />
+        <ui:VisualElement name="presetVeil" class="game-island-main-form__preset-veil" picking-mode="Ignore" />
+    </ui:VisualElement>
+</ui:UXML>

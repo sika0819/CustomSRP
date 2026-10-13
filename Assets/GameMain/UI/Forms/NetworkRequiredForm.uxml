@@ -1,0 +1,15 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="GameFormShared.uss" />
+    <Style src="NetworkRequiredForm.uss" />
+    <ui:Template name="NoticeCard" src="../Components/NoticeCard.uxml" />
+    <ui:VisualElement name="root" class="game-network-required-form__root">
+        <ui:VisualElement name="ingameneednetworkview" class="game-network-required-form__ingameneednetworkview" />
+        <ui:VisualElement name="stage" class="game-form-stage">
+            <ui:Instance template="NoticeCard" name="networkRequiredCard" style="position: absolute; left: 50%; margin-left: -466.5px; top: 100%; margin-top: -1089px; margin-right: 0; width: 933px; margin-bottom: 0; height: 969px;">
+                <ui:AttributeOverrides element-name="body" text="当前设备无网络，无法下载资源包，请开启网络后继续" />
+                <ui:AttributeOverrides element-name="title" text="无网络连接" />
+                <ui:AttributeOverrides element-name="primaryLabel" text="我知道了" />
+            </ui:Instance>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

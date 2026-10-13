@@ -1,0 +1,314 @@
+.hud-icon {
+    overflow: visible;
+}
+
+.hud-icon__plate {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 108px;
+    height: 108px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/plate.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__glyph {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 108px;
+    height: 108px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/glyph.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__music-pause {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 108px;
+    height: 108px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/music-pause.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    display: none;
+}
+
+.hud-icon__music-playing {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 108px;
+    height: 108px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    display: none;
+}
+
+.hud-icon__bar-center {
+    position: absolute;
+    left: 49px;
+    top: 29px;
+    width: 10px;
+    height: 45px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/bar-center.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(166, 255, 0, 1.000);
+    -unity-slice-left: 0px;
+    -unity-slice-right: 0px;
+    -unity-slice-top: 4px;
+    -unity-slice-bottom: 4px;
+}
+
+.hud-icon__bar-right {
+    position: absolute;
+    left: 67px;
+    top: 44px;
+    width: 10px;
+    height: 30px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/bar-right.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    -unity-slice-left: 0px;
+    -unity-slice-right: 0px;
+    -unity-slice-top: 4px;
+    -unity-slice-bottom: 4px;
+}
+
+.hud-icon__bar-left {
+    position: absolute;
+    left: 31px;
+    top: 54px;
+    width: 10px;
+    height: 20px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/bar-left.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    -unity-slice-left: 0px;
+    -unity-slice-right: 0px;
+    -unity-slice-top: 4px;
+    -unity-slice-bottom: 4px;
+}
+
+.hud-icon__volume-marks {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 108px;
+    height: 108px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    display: none;
+}
+
+.hud-icon__effectvolumeyuan {
+    position: absolute;
+    left: 24px;
+    top: 58px;
+    width: 22px;
+    height: 22px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/effectvolumeyuan.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__volume-track1 {
+    position: absolute;
+    left: 24px;
+    top: 33px;
+    width: 60px;
+    height: 12px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/volume-track1.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__musicvolumeyuan {
+    position: absolute;
+    left: 62px;
+    top: 28px;
+    width: 22px;
+    height: 22px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/musicvolumeyuan.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__volume-track2 {
+    position: absolute;
+    left: 24px;
+    top: 63px;
+    width: 60px;
+    height: 12px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/volume-track2.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__volume-track {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 108px;
+    height: 108px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/volume-track.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__timer-active {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 108px;
+    height: 108px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    display: none;
+}
+
+.hud-icon__timer-idle {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 108px;
+    height: 108px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/timer-idle.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    display: none;
+}
+
+.hud-icon__timer-fill {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 108px;
+    height: 108px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/timer-fill.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__top-rule {
+    position: absolute;
+    left: 41.85px;
+    top: 20.25px;
+    width: 24.3px;
+    height: 8.1px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/top-rule.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__top-right-decor {
+    position: absolute;
+    left: 74px;
+    top: 33px;
+    width: 12px;
+    height: 13px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/top-right-decor.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__dial-spin {
+    position: absolute;
+    left: 27px;
+    top: 32.4px;
+    width: 54px;
+    height: 54px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    background-image: url("../Textures/HudIcon/dial-spin.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.hud-icon__badge {
+    position: absolute;
+    left: 72px;
+    top: 18px;
+    width: 18px;
+    height: 18px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    -unity-text-align: middle-center;
+    font-size: 42px;
+    color: rgba(243, 44, 44, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+    display: none;
+}

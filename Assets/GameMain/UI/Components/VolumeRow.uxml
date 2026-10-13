@@ -1,0 +1,14 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="VolumeRow.uss" />
+    <ui:VisualElement name="volumeRow" class="volume-row">
+        <ui:Label name="caption" class="volume-row__caption" text="音乐调节" />
+        <ui:Label name="value" class="volume-row__value" text="100" />
+        <ui:VisualElement name="track" class="volume-row__track">
+            <ui:VisualElement name="trackPlate" class="volume-row__track-plate" />
+            <ui:VisualElement name="fill" class="volume-row__fill" />
+        </ui:VisualElement>
+        <ui:VisualElement name="knob" class="volume-row__knob">
+            <ui:VisualElement name="knobFace" class="volume-row__knob-face" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

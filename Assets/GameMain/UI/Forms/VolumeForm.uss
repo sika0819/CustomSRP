@@ -1,0 +1,104 @@
+.game-volume-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+/* Boluo sheet sits 120px above the bottom; raise stage so the 1098px card is vertically centered. */
+.game-volume-form__root .game-form-stage {
+    margin-top: -1767px; /* -1218 (stage half) - 549 (sheet nudge) */
+}
+
+#effectVolume #knob {
+    position: absolute;
+    left: 726px;
+    top: 116px;
+    width: 144px;
+    height: 144px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+}
+#effectVolume #fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 867px;
+    height: 204px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+}
+.game-volume-form__background {
+    position: absolute;
+    left: 50%;
+    margin-left: -517.5px;
+    top: 100%;
+    margin-top: -1218px;
+    margin-right: 0;
+    width: 1035px;
+    margin-bottom: 0;
+    height: 1098px;
+    background-image: url("../Textures/VolumeForm/background.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+.game-volume-form__title {
+    position: absolute;
+    left: 50%;
+    margin-left: -433.5px;
+    top: 100%;
+    margin-top: -1134px;
+    margin-right: 0;
+    width: 867px;
+    margin-bottom: 0;
+    height: 204px;
+    picking-mode: Ignore;
+}
+.game-volume-form__t1 {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 114px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    width: auto;
+    -unity-text-align: middle-center;
+    font-size: 72px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-volume-form__t2 {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100px;
+    height: 90px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    width: auto;
+    -unity-text-align: middle-center;
+    font-size: 39px;
+    color: rgba(186, 200, 195, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+.game-volume-form__yuandian {
+    display: none;
+}
+.game-volume-form__dian {
+    display: none;
+}
+.game-volume-form__value {
+    display: none;
+}
