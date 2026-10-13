@@ -1,0 +1,84 @@
+---
+description: GameMain 程序集（namespace Game）的代码框架硬规则——命名空间、UI 选型、资源加载、Procedure、Service、Entity 接线、Editor 拆分。
+globs: ["Assets/GameMain/**/*.cs"]
+---
+
+# GameMain 代码框架规则
+
+GameMain（`Assets/GameMain/`，`Game.asmdef`）是游戏侧程序集，与 `CustomSRP` 渲染管线解耦。下面所有规则都基于对当前工程 GameMain 实际代码的扫描（`namespace Game`、UIFormLogic 派生、YooAsset 资源、GameEntry partial 三件套等）。
+
+## 命名空间 / 程序集
+
+- 全部脚本必须 `namespace Game`（与 `Game.asmdef` 的 `rootNamespace: "Game"` 一致）。
+- **禁止**放进 `namespace CustomSRP`（那是 SRP 渲染管线的命名空间）。
+- 三个入口文件是 `partial class GameEntry : MonoBehaviour`：
+  - `GameEntry.cs` —— 生命周期（Awake/Start/OnDestroy/EnsureUiGroups）
+  - `GameEntry.Builtin.cs` —— 8 个 GF 内建 Component 静态属性
+  - `GameEntry.Custom.cs` —— 5 个自定义 Service + `EnsureEntityGroups`
+
+  新增 GameEntry 字段时按属性归类继续 partial；**不要**起 `GameEntry2`、`MainEntry` 之类。
+
+- Editor 脚本在 `Assets/GameMain/Editor/`，独立 `Game.Editor.asmdef`，**运行时不可引用**。
+
+## UI 框架
+
+- UI **只**用 UI Toolkit：`UnityEngine.UIElements`、`UIDocument`、`UXML`、`USS`、`VisualElement`、`UIDocument.sortingOrder`。
+- 表单基类 `Game.UI.GameFormLogic : UnityGameFramework.Runtime.UIFormLogic`。
+  - 只通过 `protected VisualElement Root` 拿根节点。
+  - 关闭按钮用 `Root.RegisterCallback<ClickEvent>`，`OnClose` 里解除。
+- **禁止**：
+  - `UnityEngine.UI.*` / `Canvas` / `GraphicRaycaster` / `TextMeshProUGUI`（除非它被包在 UI Toolkit 文本里且无 Canvas 依赖）
+  - `OnGUI` 做游戏界面或调试窗（用 `UIDocument`）
+  - 改 `PanelSettings.sortingOrder` 做深度排序（用 `UIDocument.sortingOrder`）
+- YooAsset 资源释放走 `UI/YooUIFormHelper.cs`（实现 `IUIFormHelper`）。
+
+## 资源加载
+
+- 全部走 `GameEntry.Resource.LoadAsset(...)` 异步（GF `IResourceManager`，桥到 YooAsset）。
+- `Base.EditorResourceMode = true` 仅 `UNITY_EDITOR` 块里设；非 Editor 不允许打开。
+- **禁止**用 `Resources.Load` 同步加载游戏运行时资产（只允许它读 `Settings/Resources/` 下的 YooAsset 自身配置 `YooAssetSettings.asset` / `UpdateSetting.asset`）。
+- YooAsset 采集规则在 `YooAsset/YooAssetCollectorSetup.cs`；运行时地址由 `Procedure/SceneAssets.cs` 常量集中管理。
+- 不主动切到可更新模式 / AssetBundle 模式（编辑器保持 Editor 模式即可）。
+
+## 流程 / 实体 / 事件
+
+- 派生 `UnityGameFramework.Procedure.ProcedureBase`，切换用 `ChangeState<T>(procedureOwner)`。
+  - 当前链：`ProcedureLaunch` → `ProcedureInitYooAsset` → `ProcedureGuestLogin` → `ProcedureIsland`。
+  - 新增流程时**不要**破坏该链顺序；如果你要插一段初始化，请在 `ProcedureInitYooAsset` 之后、`ProcedureGuestLogin` 之前加。
+- 实体派生 `UnityGameFramework.Runtime.EntityLogic`；Group 当前 `Environment` / `FX`，新增 Group 在 `GameEntry.Custom.cs` 的 `EnsureEntityGroups` 注册。
+- 事件 `class *EventArgs : GameEventArgs`：
+  - `ReferencePool.Acquire` → `GameEntry.Event.Fire/FireNow(...)`。
+  - Handler 内 `Release` 当前事件；**不要**在调用方 `Release`。
+  - Handler 返回后不要继续持有 args 字段。
+
+## 移动端 / 编辑器分支
+
+- 非 `UNITY_EDITOR` 必须：
+  - `QualitySettings.SetQualityLevel(2, true)`（Medium）。
+  - `Application.targetFrameRate = 60`；`QualitySettings.vSyncCount = 0`。
+  - `QualitySettings.resolutionScalingFixedDPIFactor = 0.7f`。
+  - `Screen.SetResolution(1280, 720, FullScreenMode.FullScreenWindow)`（Awake 一次，Start 再保险一次）。
+  - `Shader.EnableKeyword("OIL_MOBILE_PERF")`。
+- Editor 专属代码用 `#if UNITY_EDITOR` 包裹（参考 `GameEntry.cs` 的 `Base.EditorResourceMode`）。
+
+## 热重载（Disable Domain Reload）
+
+- `Awake` 顶部必须调：
+  - `BootLoadingService.ResetSession()`
+  - `YooResourceModule.ResetSession()`
+  - `LocomotionInput.ClearAll()`
+  - 因为 `RuntimeInitializeOnLoadMethod` 在 Disable Domain Reload 下不会重跑，只有 `Awake` 每次都跑。
+
+## 与渲染管线的边界
+
+- **禁止**把渲染相关代码写进 GameMain：Pass、Shader、Material、`GraphicsSettings` 改管线资产等。
+- Entity 的视觉驱动走 `IAtmosphereVisualDriver`（`Services/IAtmosphereVisualDriver.cs`）—— SRP 侧的视觉模块实现这个接口，Service 只调不画。
+- 改绘制、Shader、阴影、后处理继续遵循 `.cursor/skills/custom-srp/SKILL.md`，不要把渲染逻辑搬进 Procedure 或 Service。
+
+## Unity 6 EntityId
+
+- 与 `.cursor/rules/unity6-entity-id.mdc` 同效：
+  - **禁止** `GetInstanceID()`（`CS0619`）。
+  - **必须** `GetEntityId()`，键类型 `UnityEngine.EntityId`。
+  - `HashSet<EntityId>` / `Dictionary<EntityId, T>`，不要写 `HashSet<int>` 再塞 InstanceID。
+- 第三方包自带 Compat 例外；游戏代码里**不要**仿造 Compat 调弃用 API。

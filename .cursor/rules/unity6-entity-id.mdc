@@ -1,0 +1,72 @@
+---
+description: Unity 6 对象唯一 ID 必须用 GetEntityId，禁止 GetInstanceID
+globs: Assets/**/*.cs
+alwaysApply: true
+---
+
+# Unity 6：Object 唯一 ID
+
+本工程 Unity `6000.x`。`Object.GetInstanceID()` **已 Obsolete**，编译会报 `CS0619`。
+
+## 硬规则
+
+- **禁止**调用 `GetInstanceID()`（含 `gameObject.GetInstanceID()`、`this.GetInstanceID()`）。
+- **必须**用 `GetEntityId()`，返回类型为 `UnityEngine.EntityId`（不是 `int`）。
+- 集合 / 字典键用 `HashSet<EntityId>` / `Dictionary<EntityId, T>`，不要写成 `HashSet<int>` 再塞 InstanceID。
+- 第三方包（如 `Packages/MCPForUnity`）自带的 `GetInstanceIDCompat` 例外；**不要**在 `Assets/` 游戏或 SRP 代码里仿造 Compat 去调弃用 API。
+
+## 示例
+
+```csharp
+// ❌ BAD — CS0619
+int id = GetInstanceID();
+CampfireWeatherGate.SetVisualIgnited(GetInstanceID(), true);
+
+// ✅ GOOD
+EntityId id = GetEntityId();
+CampfireWeatherGate.SetVisualIgnited(GetEntityId(), true);
+```
+
+```csharp
+// ❌ BAD
+static readonly HashSet<int> Ids = new();
+
+// ✅ GOOD
+static readonly HashSet<EntityId> Ids = new();
+```
+
+Render Graph / 灯光 GI 等同理：`camera.GetEntityId()`、`LightDataGI.InitNoBake(light.GetEntityId())`（见 custom-srp `unity-upgrades`）。
+
+## GameMain Entity 场景
+
+`Assets/GameMain/`（`namespace Game`）的 `EntityLogic` 派生类、Service 注册表、Campfire 视觉门控等一律走 `GetEntityId()`：
+
+```csharp
+// ❌ BAD — CS0619；签名也是 int 而不是 EntityId
+static readonly HashSet<int> VisualIgnited = new();
+public static void SetVisualIgnited(int id, bool on)
+{
+    if (on) VisualIgnited.Add(id); else VisualIgnited.Remove(id);
+    ApplyVisual(id, on);
+}
+
+// ✅ GOOD
+static readonly HashSet<EntityId> VisualIgnited = new();
+public static void SetVisualIgnited(EntityId id, bool on)
+{
+    if (on) VisualIgnited.Add(id); else VisualIgnited.Remove(id);
+    ApplyVisual(id, on);
+}
+```
+
+调用方（`EntityLogic.OnShow` / 事件 handler）：
+
+```csharp
+// ✅ 拿到 EntityId 后传进去
+var eid = gameObject.GetEntityId();
+CampfireWeatherGate.SetVisualIgnited(eid, true);
+```
+
+`gameObject.GetEntityId()` 在 `MonoBehaviour` / `EntityLogic` / Service 单例里都可用；不要在调用点 `GetInstanceID()` 再强转。
+
+写完后若改了 ID 类型，同步改调用方签名，避免 `int` ↔ `EntityId` 混用。

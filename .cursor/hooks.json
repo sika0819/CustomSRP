@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/auto-format.sh",
+        "matcher": "\\.(cs|shader|hlsl|compute|cginc)$"
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/check-entity-id.sh",
+        "matcher": "git commit"
+      }
+    ],
+    "afterShellExecution": [
+      {
+        "command": ".cursor/hooks/post-commit-review.sh",
+        "matcher": "git commit"
+      }
+    ]
+  }
+}
