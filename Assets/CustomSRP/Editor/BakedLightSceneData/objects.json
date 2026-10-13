@@ -1,0 +1,3239 @@
+[
+  {
+    "name": "Sphere (48)",
+    "contributeGI": false,
+    "pos": [
+      -4.6,
+      0.5,
+      -4.35
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.635,
+        0.9717,
+        0.5913,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (30)",
+    "contributeGI": false,
+    "pos": [
+      -7.11,
+      0.5,
+      5.15
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9906,
+        0.7478,
+        0.6869,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (31)",
+    "contributeGI": false,
+    "pos": [
+      6.43,
+      0.5,
+      -2.63
+    ],
+    "euler": [
+      -87.099,
+      -15.474,
+      90.408
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.635,
+        0.9717,
+        0.5913,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 1.0,
+      "smoothness": 0.567,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (26)",
+    "contributeGI": false,
+    "pos": [
+      -3.11,
+      0.5,
+      3.83
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.902,
+        1.0,
+        0.6557,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.66,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (9)",
+    "contributeGI": false,
+    "pos": [
+      3.42,
+      0.5,
+      7.46
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.71,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (10)",
+    "contributeGI": false,
+    "pos": [
+      4.39,
+      0.5,
+      1.5
+    ],
+    "euler": [
+      -111.451,
+      22.526,
+      77.137
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7925,
+        0.7925,
+        0.7925,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.794,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (47)",
+    "contributeGI": false,
+    "pos": [
+      -3.73,
+      0.5,
+      -5.42
+    ],
+    "euler": [
+      65.453,
+      -16.663,
+      20.254
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.902,
+        1.0,
+        0.6557,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Wall",
+    "contributeGI": true,
+    "pos": [
+      3.0,
+      1.0,
+      0.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      0.5,
+      2.0,
+      5.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube (2)",
+    "contributeGI": true,
+    "pos": [
+      -5.53,
+      0.5,
+      1.33
+    ],
+    "euler": [
+      0.0,
+      -4.335,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.6651,
+        1.0,
+        0.773,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.529,
+      "smoothness": 0.721,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (24)",
+    "contributeGI": false,
+    "pos": [
+      4.32,
+      0.5,
+      4.42
+    ],
+    "euler": [
+      81.94,
+      -6.858,
+      -1.697
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9906,
+        0.7478,
+        0.6869,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.916,
+      "smoothness": 0.803,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (51)",
+    "contributeGI": false,
+    "pos": [
+      -5.75,
+      2.5,
+      1.29
+    ],
+    "euler": [
+      27.79,
+      -7.967,
+      -1.594
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7311,
+        0.8605,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (16)",
+    "contributeGI": false,
+    "pos": [
+      8.35,
+      0.5,
+      0.94
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7311,
+        0.8605,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (49)",
+    "contributeGI": false,
+    "pos": [
+      5.75,
+      0.5,
+      0.08
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7248,
+        0.6368,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (41)",
+    "contributeGI": false,
+    "pos": [
+      -4.42,
+      0.5,
+      -3.09
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7311,
+        0.8605,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (29)",
+    "contributeGI": false,
+    "pos": [
+      1.61,
+      0.5,
+      -1.14
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 1.0,
+      "smoothness": 0.282,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (37)",
+    "contributeGI": false,
+    "pos": [
+      3.53,
+      0.5,
+      -3.25
+    ],
+    "euler": [
+      178.619,
+      44.793,
+      -120.736
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9666,
+        0.7055,
+        0.9906,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Emissive Cube (2)",
+    "contributeGI": true,
+    "pos": [
+      5.56,
+      0.25,
+      -2.16
+    ],
+    "euler": [
+      0.0,
+      -62.666,
+      0.0
+    ],
+    "scale": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "mesh": "Cube",
+    "mat": "emis",
+    "scaleLM": 2.0,
+    "props": {
+      "baseColor": [
+        0.1741,
+        0.3085,
+        0.4057,
+        1.0
+      ],
+      "emissionColor": [
+        2.6702,
+        0.592,
+        0.6573,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (55)",
+    "contributeGI": false,
+    "pos": [
+      2.22,
+      3.0,
+      -1.2
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        0.467,
+        0.8209,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.861,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube (10)",
+    "contributeGI": true,
+    "pos": [
+      -1.69,
+      3.0,
+      1.56
+    ],
+    "euler": [
+      -180.0,
+      60.3,
+      -180.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        0.1971,
+        0.1651,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.856,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (19)",
+    "contributeGI": false,
+    "pos": [
+      -6.35,
+      0.5,
+      2.42
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9666,
+        0.7055,
+        0.9906,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube (6)",
+    "contributeGI": true,
+    "pos": [
+      4.66,
+      2.5,
+      0.37
+    ],
+    "euler": [
+      -0.0,
+      11.663,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.6824,
+        0.845,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.76,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube (4)",
+    "contributeGI": true,
+    "pos": [
+      5.9,
+      1.5,
+      -1.14
+    ],
+    "euler": [
+      -0.0,
+      77.636,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7294,
+        1.0,
+        0.8306,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (38)",
+    "contributeGI": false,
+    "pos": [
+      4.73,
+      0.5,
+      -2.89
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7311,
+        0.8605,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.992,
+      "smoothness": 0.298,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube (3)",
+    "contributeGI": true,
+    "pos": [
+      5.99,
+      0.5,
+      -1.23
+    ],
+    "euler": [
+      -0.0,
+      31.713,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7311,
+        0.8141,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (14)",
+    "contributeGI": false,
+    "pos": [
+      -5.95,
+      0.5,
+      -1.61
+    ],
+    "euler": [
+      -72.071,
+      1.154,
+      32.342
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.635,
+        0.9717,
+        0.5913,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.676,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Emissive Cube (4)",
+    "contributeGI": true,
+    "pos": [
+      -3.9,
+      0.25,
+      2.32
+    ],
+    "euler": [
+      -0.0,
+      7.826,
+      -0.0
+    ],
+    "scale": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "mesh": "Cube",
+    "mat": "emis",
+    "scaleLM": 2.0,
+    "props": {
+      "baseColor": [
+        0.0,
+        0.1433,
+        0.451,
+        1.0
+      ],
+      "emissionColor": [
+        0.0795,
+        1.6877,
+        0.3592,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (25)",
+    "contributeGI": false,
+    "pos": [
+      -1.54,
+      0.5,
+      4.5
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7311,
+        0.8605,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.756,
+      "smoothness": 0.517,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (4)",
+    "contributeGI": false,
+    "pos": [
+      -1.63,
+      0.5,
+      0.02
+    ],
+    "euler": [
+      -82.019,
+      -36.287,
+      81.736
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.324,
+      "alphaCutoff": 0.475
+    }
+  },
+  {
+    "name": "Emission Cube (1)",
+    "contributeGI": true,
+    "pos": [
+      0.75,
+      2.75,
+      2.24
+    ],
+    "euler": [
+      -0.0,
+      46.762,
+      -0.0
+    ],
+    "scale": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "mesh": "Cube",
+    "mat": "emis",
+    "scaleLM": 2.0,
+    "props": {
+      "baseColor": [
+        0.4707,
+        0.1156,
+        0.5,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        1.6211,
+        2.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (42)",
+    "contributeGI": false,
+    "pos": [
+      -0.01,
+      0.5,
+      -4.55
+    ],
+    "euler": [
+      98.724,
+      -15.429,
+      5.924
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7311,
+        0.8605,
+        1.0,
+        0.1804
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.651,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (58)",
+    "contributeGI": false,
+    "pos": [
+      -0.58,
+      0.5,
+      -2.72
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9906,
+        0.7478,
+        0.6869,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.555,
+      "smoothness": 0.71,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (7)",
+    "contributeGI": false,
+    "pos": [
+      -0.26,
+      0.5,
+      0.73
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.802,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube (11)",
+    "contributeGI": true,
+    "pos": [
+      1.83,
+      3.0,
+      1.3
+    ],
+    "euler": [
+      -0.0,
+      75.275,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.6682,
+        0.9906,
+        0.7839,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (8)",
+    "contributeGI": false,
+    "pos": [
+      1.27,
+      0.5,
+      1.34
+    ],
+    "euler": [
+      -52.239,
+      45.5,
+      -92.552
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9666,
+        0.7055,
+        0.9906,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (18)",
+    "contributeGI": false,
+    "pos": [
+      -2.401,
+      0.5,
+      5.916
+    ],
+    "euler": [
+      -17.803,
+      50.528,
+      -65.106
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7248,
+        0.6368,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.353,
+      "smoothness": 0.609,
+      "alphaCutoff": 0.357
+    }
+  },
+  {
+    "name": "Sphere (17)",
+    "contributeGI": false,
+    "pos": [
+      4.7,
+      0.5,
+      3.02
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.718,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (15)",
+    "contributeGI": false,
+    "pos": [
+      0.25,
+      0.5,
+      6.95
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.902,
+        1.0,
+        0.6557,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube (7)",
+    "contributeGI": true,
+    "pos": [
+      -5.62,
+      1.5,
+      1.21
+    ],
+    "euler": [
+      -0.0,
+      28.792,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.799,
+        0.6667,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube (5)",
+    "contributeGI": true,
+    "pos": [
+      4.54,
+      1.5,
+      0.32
+    ],
+    "euler": [
+      -0.0,
+      43.314,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7339,
+        0.6824,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (23)",
+    "contributeGI": false,
+    "pos": [
+      2.87,
+      0.5,
+      4.75
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7248,
+        0.6368,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.664,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (11)",
+    "contributeGI": false,
+    "pos": [
+      -1.92,
+      0.5,
+      1.45
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.902,
+        1.0,
+        0.6557,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (13)",
+    "contributeGI": false,
+    "pos": [
+      -4.0,
+      0.5,
+      1.44
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.693,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (59)",
+    "contributeGI": false,
+    "pos": [
+      -2.97,
+      0.5,
+      -3.71
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9906,
+        0.7478,
+        0.6869,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 1.0,
+      "smoothness": 0.71,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Emissive Cube (3)",
+    "contributeGI": true,
+    "pos": [
+      3.29,
+      0.25,
+      -5.68
+    ],
+    "euler": [
+      0.0,
+      -37.463,
+      0.0
+    ],
+    "scale": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "mesh": "Cube",
+    "mat": "emis",
+    "scaleLM": 2.0,
+    "props": {
+      "baseColor": [
+        0.4528,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "emissionColor": [
+        2.6702,
+        2.4781,
+        1.524,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (52)",
+    "contributeGI": false,
+    "pos": [
+      -0.09,
+      1.5,
+      4.13
+    ],
+    "euler": [
+      -49.856,
+      -4.95,
+      12.784
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7248,
+        0.6368,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.735,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (33)",
+    "contributeGI": false,
+    "pos": [
+      -7.37,
+      0.5,
+      -2.43
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7925,
+        0.7925,
+        0.7925,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 1.0,
+      "smoothness": 0.458,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (45)",
+    "contributeGI": false,
+    "pos": [
+      4.51,
+      0.5,
+      -4.39
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9906,
+        0.7478,
+        0.6869,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (27)",
+    "contributeGI": false,
+    "pos": [
+      -4.47,
+      0.5,
+      4.55
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7925,
+        0.7925,
+        0.7925,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.433,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Wall (1)",
+    "contributeGI": true,
+    "pos": [
+      -3.0,
+      1.0,
+      0.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      0.5,
+      2.0,
+      5.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (53)",
+    "contributeGI": false,
+    "pos": [
+      -0.16,
+      3.0,
+      1.34
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.5451,
+        0.567,
+        0.6604,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (40)",
+    "contributeGI": false,
+    "pos": [
+      -6.59,
+      0.5,
+      0.23
+    ],
+    "euler": [
+      -61.351,
+      -6.762,
+      53.788
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.902,
+        1.0,
+        0.6557,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.239
+    }
+  },
+  {
+    "name": "Cube (9)",
+    "contributeGI": true,
+    "pos": [
+      -4.03,
+      0.5,
+      0.16
+    ],
+    "euler": [
+      -0.0,
+      81.012,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        0.8206,
+        0.6651,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (12)",
+    "contributeGI": false,
+    "pos": [
+      -5.57,
+      0.5,
+      7.38
+    ],
+    "euler": [
+      -6.017,
+      -27.691,
+      -29.109
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.635,
+        0.9717,
+        0.5913,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube (1)",
+    "contributeGI": true,
+    "pos": [
+      -0.13,
+      0.5,
+      4.01
+    ],
+    "euler": [
+      -0.0,
+      12.595,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.8447,
+        0.7594,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (32)",
+    "contributeGI": false,
+    "pos": [
+      -1.59,
+      0.5,
+      -1.65
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7311,
+        0.8605,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (3)",
+    "contributeGI": false,
+    "pos": [
+      6.94,
+      0.5,
+      2.63
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9666,
+        0.7055,
+        0.9906,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (46)",
+    "contributeGI": false,
+    "pos": [
+      -1.81,
+      0.5,
+      -4.97
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.861,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (43)",
+    "contributeGI": false,
+    "pos": [
+      1.62,
+      0.5,
+      -5.03
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.902,
+        1.0,
+        0.6557,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (35)",
+    "contributeGI": false,
+    "pos": [
+      0.92,
+      0.5,
+      -3.28
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9666,
+        0.7055,
+        0.9906,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (21)",
+    "contributeGI": false,
+    "pos": [
+      -0.57,
+      0.5,
+      5.82
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (28)",
+    "contributeGI": false,
+    "pos": [
+      0.24,
+      0.5,
+      -1.51
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7248,
+        0.6368,
+        1.0,
+        0.902
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.651,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Ground",
+    "contributeGI": true,
+    "pos": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      2.0,
+      2.0,
+      2.0
+    ],
+    "mesh": "Plane",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.1478,
+        0.7642,
+        0.1518,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (39)",
+    "contributeGI": false,
+    "pos": [
+      -1.69,
+      0.5,
+      -2.96
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9906,
+        0.7478,
+        0.6869,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.71,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere",
+    "contributeGI": false,
+    "pos": [
+      7.65,
+      0.5,
+      5.31
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7925,
+        0.7925,
+        0.7925,
+        0.651
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.769,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (6)",
+    "contributeGI": false,
+    "pos": [
+      -5.35,
+      0.5,
+      -0.42
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7248,
+        0.6368,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (36)",
+    "contributeGI": false,
+    "pos": [
+      -8.15,
+      0.5,
+      -0.41
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7925,
+        0.7925,
+        0.7925,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (34)",
+    "contributeGI": false,
+    "pos": [
+      -3.95,
+      0.5,
+      -1.3
+    ],
+    "euler": [
+      -67.011,
+      -7.306,
+      38.182
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9666,
+        0.7055,
+        0.9906,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.777,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (50)",
+    "contributeGI": false,
+    "pos": [
+      5.75,
+      1.5,
+      0.08
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7311,
+        0.8605,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.727,
+      "alphaCutoff": 0.298
+    }
+  },
+  {
+    "name": "Sphere (1)",
+    "contributeGI": false,
+    "pos": [
+      2.03,
+      0.5,
+      0.04
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7311,
+        0.8605,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (54)",
+    "contributeGI": false,
+    "pos": [
+      -2.34,
+      3.0,
+      -0.6
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9217,
+        1.0,
+        0.3632,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.643,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (22)",
+    "contributeGI": false,
+    "pos": [
+      1.46,
+      0.5,
+      4.4
+    ],
+    "euler": [
+      -48.072,
+      -11.329,
+      36.357
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        0.6078
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.819,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Emissive Cube",
+    "contributeGI": true,
+    "pos": [
+      0.83,
+      0.25,
+      -0.3
+    ],
+    "euler": [
+      0.0,
+      -23.784,
+      0.0
+    ],
+    "scale": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "mesh": "Cube",
+    "mat": "emis",
+    "scaleLM": 2.0,
+    "props": {
+      "baseColor": [
+        0.4528,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "emissionColor": [
+        2.0,
+        1.6549,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Wall (2)",
+    "contributeGI": true,
+    "pos": [
+      0.0,
+      1.0,
+      2.75
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      6.5,
+      2.0,
+      0.5
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (56)",
+    "contributeGI": false,
+    "pos": [
+      -0.66,
+      0.5,
+      -5.39
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7925,
+        0.7925,
+        0.7925,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 1.0,
+      "smoothness": 0.458,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (5)",
+    "contributeGI": false,
+    "pos": [
+      6.71,
+      0.5,
+      6.07
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9906,
+        0.7478,
+        0.6869,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (57)",
+    "contributeGI": false,
+    "pos": [
+      2.15,
+      0.5,
+      -3.38
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 1.0,
+      "smoothness": 0.895,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (44)",
+    "contributeGI": false,
+    "pos": [
+      2.97,
+      0.5,
+      -4.58
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "sphere",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.635,
+        0.9717,
+        0.5913,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube",
+    "contributeGI": true,
+    "pos": [
+      4.54,
+      0.5,
+      0.15
+    ],
+    "euler": [
+      -0.0,
+      5.123,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        0.8255,
+        0.8255,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (2)",
+    "contributeGI": false,
+    "pos": [
+      6.27,
+      0.5,
+      -4.98
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.7248,
+        0.6368,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.08
+    }
+  },
+  {
+    "name": "Sphere (20)",
+    "contributeGI": false,
+    "pos": [
+      -4.75,
+      0.5,
+      3.1
+    ],
+    "euler": [
+      21.333,
+      60.471,
+      -52.659
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9906,
+        0.7478,
+        0.6869,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Sphere (60)",
+    "contributeGI": false,
+    "pos": [
+      -0.8,
+      3.0,
+      -1.47
+    ],
+    "euler": [
+      0.0,
+      -0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Sphere",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        0.9398,
+        0.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 1.0,
+      "smoothness": 0.87,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Cube (8)",
+    "contributeGI": true,
+    "pos": [
+      4.43,
+      0.5,
+      -1.31
+    ],
+    "euler": [
+      -0.0,
+      45.256,
+      -0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        0.9674,
+        1.0,
+        0.2594,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.962,
+      "alphaCutoff": 0.5
+    }
+  },
+  {
+    "name": "Ceiling",
+    "contributeGI": true,
+    "pos": [
+      0.0,
+      2.25,
+      0.25
+    ],
+    "euler": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      6.5,
+      0.5,
+      5.5
+    ],
+    "mesh": "Cube",
+    "mat": "opaque",
+    "scaleLM": 1.0,
+    "props": {
+      "baseColor": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emissionColor": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "metallic": 0.0,
+      "smoothness": 0.5,
+      "alphaCutoff": 0.5
+    }
+  }
+]

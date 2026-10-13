@@ -1,0 +1,782 @@
+[
+  {
+    "name": "LOD Group Sphere",
+    "pos": [
+      3.57,
+      0.5,
+      2.29
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.202,
+    "smoothness": 0.744
+  },
+  {
+    "name": "LOD Group Sphere (1)",
+    "pos": [
+      -2.93,
+      0.75,
+      5.19
+    ],
+    "scale": 1.5,
+    "eulerY": 0.0,
+    "metallic": 1.0,
+    "smoothness": 0.87
+  },
+  {
+    "name": "LOD Group Sphere (2)",
+    "pos": [
+      0.99,
+      0.75,
+      3.21
+    ],
+    "scale": 1.5,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.786
+  },
+  {
+    "name": "LOD Group Sphere (3)",
+    "pos": [
+      4.79,
+      1.0,
+      4.83
+    ],
+    "scale": 2.0,
+    "eulerY": 0.0,
+    "metallic": 0.664,
+    "smoothness": 0.626
+  },
+  {
+    "name": "LOD Group Sphere (4)",
+    "pos": [
+      -7.63,
+      0.5,
+      8.25
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.248
+  },
+  {
+    "name": "LOD Group Sphere (5)",
+    "pos": [
+      -6.66,
+      1.0,
+      1.6
+    ],
+    "scale": 2.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (6)",
+    "pos": [
+      -1.52,
+      0.5,
+      -2.81
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (7)",
+    "pos": [
+      -1.52,
+      0.75,
+      -2.81
+    ],
+    "scale": 1.5,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.954
+  },
+  {
+    "name": "LOD Group Sphere (8)",
+    "pos": [
+      -3.83,
+      0.5,
+      1.07
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.307
+  },
+  {
+    "name": "LOD Group Sphere (9)",
+    "pos": [
+      5.67,
+      0.5,
+      -1.7
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.588,
+    "smoothness": 0.836
+  },
+  {
+    "name": "LOD Group Sphere (10)",
+    "pos": [
+      7.89,
+      0.5,
+      1.9
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (11)",
+    "pos": [
+      1.69,
+      0.5,
+      -1.86
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (12)",
+    "pos": [
+      1.61,
+      0.5,
+      -0.13
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 1.0,
+    "smoothness": 0.937
+  },
+  {
+    "name": "LOD Group Sphere (13)",
+    "pos": [
+      -1.29,
+      0.5,
+      6.06
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.126,
+    "smoothness": 0.458
+  },
+  {
+    "name": "LOD Group Sphere (14)",
+    "pos": [
+      -5.41,
+      0.5,
+      -1.18
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.176,
+    "smoothness": 0.45
+  },
+  {
+    "name": "LOD Group Sphere (15)",
+    "pos": [
+      3.53,
+      1.0,
+      -2.82
+    ],
+    "scale": 2.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.903
+  },
+  {
+    "name": "LOD Group Sphere (16)",
+    "pos": [
+      6.58,
+      0.75,
+      -2.9
+    ],
+    "scale": 1.5,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (17)",
+    "pos": [
+      7.44,
+      0.75,
+      -5.23
+    ],
+    "scale": 1.5,
+    "eulerY": 0.0,
+    "metallic": 1.0,
+    "smoothness": 0.937
+  },
+  {
+    "name": "LOD Group Sphere (18)",
+    "pos": [
+      4.63,
+      0.5,
+      -7.22
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.815,
+    "smoothness": 0.105
+  },
+  {
+    "name": "LOD Group Sphere (19)",
+    "pos": [
+      2.84,
+      0.5,
+      -6.51
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (20)",
+    "pos": [
+      -0.83,
+      0.5,
+      -8.32
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.727
+  },
+  {
+    "name": "LOD Group Sphere (21)",
+    "pos": [
+      0.85,
+      0.75,
+      -8.69
+    ],
+    "scale": 1.5,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.987
+  },
+  {
+    "name": "LOD Group Sphere (22)",
+    "pos": [
+      -2.31,
+      0.5,
+      -4.86
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 1.0,
+    "smoothness": 0.088
+  },
+  {
+    "name": "LOD Group Sphere (23)",
+    "pos": [
+      4.51,
+      0.5,
+      -4.94
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.555,
+    "smoothness": 0.811
+  },
+  {
+    "name": "LOD Group Sphere (24)",
+    "pos": [
+      7.69,
+      0.5,
+      -8.27
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (25)",
+    "pos": [
+      -5.71,
+      0.5,
+      -8.58
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (26)",
+    "pos": [
+      -7.15,
+      0.5,
+      -6.52
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.933,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (27)",
+    "pos": [
+      -4.53,
+      0.5,
+      -4.14
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (28)",
+    "pos": [
+      -3.92,
+      1.0,
+      -7.47
+    ],
+    "scale": 2.0,
+    "eulerY": 0.0,
+    "metallic": 0.253,
+    "smoothness": 0.903
+  },
+  {
+    "name": "LOD Group Sphere (29)",
+    "pos": [
+      -8.27,
+      0.5,
+      -2.85
+    ],
+    "scale": 1.0,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (30)",
+    "pos": [
+      1.45,
+      0.3,
+      -3.37
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (31)",
+    "pos": [
+      7.11,
+      0.3,
+      3.72
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (32)",
+    "pos": [
+      2.51,
+      0.3,
+      6.99
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (33)",
+    "pos": [
+      -2.8,
+      0.3,
+      3.17
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.496,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (34)",
+    "pos": [
+      -3.78,
+      0.3,
+      -1.53
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (35)",
+    "pos": [
+      -1.02,
+      0.3,
+      -4.12
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.937
+  },
+  {
+    "name": "LOD Group Sphere (36)",
+    "pos": [
+      3.32,
+      0.3,
+      -5.15
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (37)",
+    "pos": [
+      0.05,
+      0.3,
+      -6.73
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (38)",
+    "pos": [
+      6.06,
+      0.3,
+      -6.98
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (39)",
+    "pos": [
+      8.68,
+      0.3,
+      -6.05
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (40)",
+    "pos": [
+      6.78,
+      0.3,
+      -8.11
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (41)",
+    "pos": [
+      -6.87,
+      0.3,
+      -7.86
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (42)",
+    "pos": [
+      -8.98,
+      0.3,
+      -5.65
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (43)",
+    "pos": [
+      -6.26,
+      0.3,
+      -5.68
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (44)",
+    "pos": [
+      -7.36,
+      0.3,
+      -2.62
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (45)",
+    "pos": [
+      -8.17,
+      0.3,
+      0.82
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (46)",
+    "pos": [
+      6.93,
+      0.3,
+      6.55
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (47)",
+    "pos": [
+      -4.67,
+      0.3,
+      7.13
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (48)",
+    "pos": [
+      8.68,
+      0.3,
+      0.35
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (49)",
+    "pos": [
+      5.97,
+      0.3,
+      -4.74
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (50)",
+    "pos": [
+      3.18,
+      0.3,
+      -8.09
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (51)",
+    "pos": [
+      -4.12,
+      0.3,
+      -5.2
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (52)",
+    "pos": [
+      -3.06,
+      0.3,
+      -8.58
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (53)",
+    "pos": [
+      -8.66,
+      0.3,
+      -8.27
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (54)",
+    "pos": [
+      -8.26,
+      0.3,
+      7.37
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (55)",
+    "pos": [
+      -5.34,
+      0.3,
+      3.17
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (56)",
+    "pos": [
+      -4.79,
+      0.3,
+      4.46
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (57)",
+    "pos": [
+      3.9,
+      0.3,
+      3.35
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (58)",
+    "pos": [
+      -1.22,
+      0.3,
+      -0.88
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (59)",
+    "pos": [
+      6.83,
+      0.3,
+      0.19
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.857,
+    "smoothness": 0.357
+  },
+  {
+    "name": "LOD Group Sphere (60)",
+    "pos": [
+      -0.76,
+      0.3,
+      7.99
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (61)",
+    "pos": [
+      7.82,
+      0.3,
+      8.89
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (62)",
+    "pos": [
+      8.55,
+      0.3,
+      -2.39
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (63)",
+    "pos": [
+      4.74,
+      0.3,
+      -3.47
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.0,
+    "smoothness": 0.5
+  },
+  {
+    "name": "LOD Group Sphere (64)",
+    "pos": [
+      2.13,
+      0.3,
+      -5.54
+    ],
+    "scale": 0.6,
+    "eulerY": 0.0,
+    "metallic": 0.832,
+    "smoothness": 0.5
+  }
+]

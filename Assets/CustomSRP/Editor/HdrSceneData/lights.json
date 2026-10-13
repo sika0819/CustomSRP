@@ -1,0 +1,39 @@
+[
+  {
+    "name": "Directional Light",
+    "type": 1,
+    "shadows": 2,
+    "intensity": 0.05,
+    "range": 10.0,
+    "spot": 30.0,
+    "innerSpot": 21.802082,
+    "color": [
+      1.0,
+      0.95686275,
+      0.8392157,
+      1.0
+    ],
+    "shadowBias": 0.0,
+    "shadowNormalBias": 1.0,
+    "shadowStrength": 1.0,
+    "shadowNearPlane": 0.2,
+    "shadowResolution": -1,
+    "mapping": 1,
+    "pos": [
+      0.0,
+      30.0,
+      0.0
+    ],
+    "rot": [
+      0.40821788,
+      -0.23456968,
+      0.10938163,
+      0.8754261
+    ],
+    "euler": [
+      -29.999994343391148,
+      -4.92138474469932e-07,
+      49.99999703733809
+    ]
+  }
+]

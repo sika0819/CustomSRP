@@ -1,0 +1,82 @@
+[
+  {
+    "name": "Light A",
+    "active": true,
+    "color": [
+      1,
+      0.95686275,
+      0.8392157,
+      1
+    ],
+    "intensity": 1,
+    "euler": [
+      50,
+      -30,
+      0
+    ],
+    "shadows": 2,
+    "shadowBias": 0,
+    "shadowNormalBias": 1,
+    "mapping": 1
+  },
+  {
+    "name": "Light B",
+    "active": false,
+    "color": [
+      0.3160377,
+      0.44229853,
+      1,
+      1
+    ],
+    "intensity": 0.2,
+    "euler": [
+      53.3,
+      46.4,
+      0
+    ],
+    "shadows": 2,
+    "shadowBias": 0,
+    "shadowNormalBias": 1,
+    "mapping": 1
+  },
+  {
+    "name": "Light C",
+    "active": false,
+    "color": [
+      1,
+      0.5330188,
+      0.5986061,
+      1
+    ],
+    "intensity": 0.2,
+    "euler": [
+      27,
+      138.5,
+      0
+    ],
+    "shadows": 2,
+    "shadowBias": 0,
+    "shadowNormalBias": 1,
+    "mapping": 1
+  },
+  {
+    "name": "Light D",
+    "active": false,
+    "color": [
+      0.1462264,
+      1,
+      0.19360068,
+      1
+    ],
+    "intensity": 0.2,
+    "euler": [
+      28.23,
+      231.6,
+      0
+    ],
+    "shadows": 2,
+    "shadowBias": 0,
+    "shadowNormalBias": 1,
+    "mapping": 1
+  }
+]
