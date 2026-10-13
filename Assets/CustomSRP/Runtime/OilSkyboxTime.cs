@@ -1,0 +1,1233 @@
+using UnityEngine;
+using UnityEngine.Rendering;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
+namespace CustomSRP
+{
+    /// <summary>
+    /// Oil skybox clock. timeOfDay is 0–24 hours.
+    /// Internal period 0 dawn / 1 day / 2 dusk / 3 night maps to 06 / 12 / 18 / 00.
+    /// Sky colors are mixed oil pigments at the same four anchors; the shader blends them from _Period.
+    /// Sun/moon discs use Boluo Cozy celestial orbits (sunDirection=308); optional view placement
+    /// pins dawn sun / sleep moon in front of the camera (Boluo PlaceSunForLook / PlaceMoonForLook).
+    /// Parallel light color/intensity still lerps the LightPresets table; direction follows the disc.
+    /// Edit mode: sky + ambient apply immediately; sun is deferred (same-GO Transform + IMGUI recursion).
+    /// </summary>
+    [DisallowMultipleComponent]
+    public class OilSkyboxTime : MonoBehaviour, ISerializationCallbackReceiver
+    {
+        public struct SkyLookPreset
+        {
+            public Color zenith;
+            public Color mid;
+            public Color horizon;
+            public Color ground;
+
+            public float sunSize;
+            public float sunIntensity;
+            public float sunGlow;
+            public float moonSize;
+            public float moonIntensity;
+            public float moonGlow;
+            public float starIntensity;
+
+            // 基础配色尝试.xlsx · 01：天顶 #80B5E2 · 地平偏 #B1D1F2 · 雾 #C8D3D8 · 云高光 #FBF3E9
+            // Dawn tip: soft warm sand horizon (#D2CA97 family), not ochre blaze.
+            public static SkyLookPreset Dawn => new SkyLookPreset
+            {
+                zenith = new Color(0.42f, 0.58f, 0.78f),
+                mid = new Color(0.62f, 0.70f, 0.82f),
+                horizon = new Color(0.824f, 0.792f, 0.592f), // #D2CA97
+                ground = new Color(0.40f, 0.36f, 0.32f),
+                sunSize = 0.07f,
+                sunIntensity = 0.9f,
+                sunGlow = 0.24f,
+                moonSize = 0.05f,
+                moonIntensity = 0.12f,
+                moonGlow = 0.06f,
+                starIntensity = 0f,
+            };
+
+            public static SkyLookPreset Day => new SkyLookPreset
+            {
+                zenith = new Color(0.502f, 0.710f, 0.886f), // #80B5E2
+                mid = new Color(0.620f, 0.780f, 0.910f),
+                horizon = new Color(0.694f, 0.820f, 0.949f), // #B1D1F2
+                ground = new Color(0.784f, 0.827f, 0.847f),
+                sunSize = 0.055f,
+                sunIntensity = 1f,
+                sunGlow = 0.16f,
+                moonSize = 0.05f,
+                moonIntensity = 0f,
+                moonGlow = 0f,
+                starIntensity = 0f,
+            };
+
+            // Dusk: muted rose-sand (#D1B885), not fire orange.
+            public static SkyLookPreset Dusk => new SkyLookPreset
+            {
+                zenith = new Color(0.12f, 0.14f, 0.28f),
+                mid = new Color(0.42f, 0.32f, 0.36f),
+                horizon = new Color(0.820f, 0.722f, 0.522f), // #D1B885
+                ground = new Color(0.22f, 0.16f, 0.14f),
+                sunSize = 0.08f,
+                sunIntensity = 0.75f,
+                sunGlow = 0.28f,
+                moonSize = 0.055f,
+                moonIntensity = 0.45f,
+                moonGlow = 0.14f,
+                starIntensity = 0.12f,
+            };
+
+            // BoluoLookPalette sky only: NightZenith #031252 · NightHorizon #000D4D
+            public static SkyLookPreset Night => new SkyLookPreset
+            {
+                zenith = new Color(0.0118f, 0.0706f, 0.3216f),
+                mid = new Color(0.0059f, 0.0608f, 0.3118f),
+                horizon = new Color(0.0000f, 0.0510f, 0.3020f),
+                ground = new Color(0.0000f, 0.0306f, 0.1812f),
+                sunSize = 0.05f,
+                sunIntensity = 0.08f,
+                sunGlow = 0.02f,
+                moonSize = 0.07f,
+                moonIntensity = 0.85f,
+                moonGlow = 0.22f,
+                starIntensity = 0.58f,
+            };
+
+            public static SkyLookPreset Lerp(SkyLookPreset a, SkyLookPreset b, float t)
+            {
+                t = Mathf.Clamp01(t);
+                return new SkyLookPreset
+                {
+                    zenith = Color.Lerp(a.zenith, b.zenith, t),
+                    mid = Color.Lerp(a.mid, b.mid, t),
+                    horizon = Color.Lerp(a.horizon, b.horizon, t),
+                    ground = Color.Lerp(a.ground, b.ground, t),
+                    sunSize = Mathf.Lerp(a.sunSize, b.sunSize, t),
+                    sunIntensity = Mathf.Lerp(a.sunIntensity, b.sunIntensity, t),
+                    sunGlow = Mathf.Lerp(a.sunGlow, b.sunGlow, t),
+                    moonSize = Mathf.Lerp(a.moonSize, b.moonSize, t),
+                    moonIntensity = Mathf.Lerp(a.moonIntensity, b.moonIntensity, t),
+                    moonGlow = Mathf.Lerp(a.moonGlow, b.moonGlow, t),
+                    starIntensity = Mathf.Lerp(a.starIntensity, b.starIntensity, t),
+                };
+            }
+        }
+
+        struct LightPreset
+        {
+            public float elevation;
+            public float azimuth;
+            public Color color;
+            public float intensity;
+            public Color fogColor;
+        }
+
+        // Boluo Atmosphere default yaw (Camera_1 / Profile 10). Cozy orbit parent Euler Y.
+        public const float DefaultSunDirectionDeg = 308f;
+        public const float DefaultSunPitchDeg = 0f;
+        public const float DawnSunElevationDeg = 7f;
+        public const float SleepMoonElevationDeg = 12f;
+
+        /// <summary>Boluo NightDistanceFog #36363C — all night TOD / island presets share this fog tint.</summary>
+        public static readonly Color NightFogColor = new Color(0x36 / 255f, 0x36 / 255f, 0x3C / 255f, 1f);
+
+        // Light color/intensity + fog anchors (direction comes from Cozy orbits).
+        // Anchors: 06:00 / 12:00 / 18:00 / 00:00 → period 0 / 1 / 2 / 3.
+        // Day/dawn/dusk fog follows light; night fog is always NightFogColor.
+        static readonly LightPreset[] LightPresets =
+        {
+            new()
+            {
+                elevation = -1.69f, azimuth = 90.60f,
+                // 基础配色尝试：暖光 #D5C07C · 远景雾 #C8D3D8
+                color = new Color(0.835f, 0.753f, 0.486f), intensity = 0.47f,
+                fogColor = new Color(0.784f, 0.827f, 0.847f),
+            },
+            new()
+            {
+                elevation = 72.44f, azimuth = 5.96f,
+                // Noon peak: all island presets share this table; keep ≤ 1.5 so ocean/terrain don't blow out.
+                color = Color.white, intensity = 1.5f,
+                fogColor = new Color(0.784f, 0.827f, 0.847f), // #C8D3D8
+            },
+            new()
+            {
+                elevation = 1.73f, azimuth = 270.48f,
+                // Soft dusk gold #D5C07C · muted sand fog #D1BD94 (not fire orange).
+                color = new Color(0.835f, 0.753f, 0.486f), intensity = 0.57f,
+                fogColor = new Color(0.820f, 0.741f, 0.580f),
+            },
+            new()
+            {
+                elevation = -72.31f, azimuth = 174.09f,
+                color = new Color(0.10f, 0.16f, 0.55f), intensity = 0.18f,
+                fogColor = NightFogColor,
+            },
+        };
+
+        const int TimeOfDayVersionHours = 1;
+
+        [Range(0f, 24f)]
+        [Tooltip("一天中的小时（0–24）。06 黎明，12 白天，18 黄昏，00 夜晚。")]
+        public float timeOfDay = 12f;
+
+        [SerializeField, HideInInspector]
+        int timeOfDayVersion;
+
+        [Tooltip("Play 模式下按 cycleSeconds 走完 24 小时。")]
+        public bool animate;
+
+        [Tooltip("走完 24 小时一圈的秒数。")]
+        public float cycleSeconds = 180f;
+
+        public Material skyboxMaterial;
+        public Light sun;
+        public bool driveSun = true;
+
+        [Header("Brush")]
+        [Range(0.5f, 8f)] public float brushScale = 8f;
+        [Range(0f, 1f)] public float brushStrength = 1f;
+        [Range(0.5f, 4f)] public float brushContrast = 1.8f;
+        [Range(0f, 1f)] public float brushRelief = 1f;
+
+        [Header("Stars")]
+        [Range(0.25f, 3f)]
+        [Tooltip("夜晚星点密度。1 为默认，越大越密。")]
+        public float starDensity = 1f;
+
+        [Range(0.25f, 3f)]
+        [Tooltip("单颗星角半径缩放。1 为默认，越大单颗越大。")]
+        public float starSize = 1f;
+
+        Material _runtime;
+        /// <summary>Optional override that bypasses the 4-anchor LightPresets interpolation. Null = use the time-of-day table.</summary>
+        Color? _lightColorOverride;
+#if UNITY_EDITOR
+        Material _editorPreview;
+        bool _editorSunDriveQueued;
+#endif
+
+        public const string ShaderName = "CustomSRP/OilSkyboxNPR";
+
+        static readonly int BrushScaleId = Shader.PropertyToID("_BrushScale");
+        static readonly int BrushStrengthId = Shader.PropertyToID("_BrushStrength");
+        static readonly int BrushContrastId = Shader.PropertyToID("_BrushContrast");
+        static readonly int BrushReliefId = Shader.PropertyToID("_BrushRelief");
+        static readonly int StarDensityId = Shader.PropertyToID("_StarDensity");
+        static readonly int StarSizeId = Shader.PropertyToID("_StarSize");
+        static readonly int PeriodId = Shader.PropertyToID("_Period");
+        static readonly int OilPeriodAmbientId = Shader.PropertyToID("_OilPeriodAmbient");
+        static readonly int OilSkySunDirId = Shader.PropertyToID("_OilSkySunDir");
+        static readonly int OilSkyMoonDirId = Shader.PropertyToID("_OilSkyMoonDir");
+        static readonly int OilFogCanvasId = Shader.PropertyToID("_OilFogCanvas");
+        static readonly int OilFogCanvasEnableId = Shader.PropertyToID("_OilFogCanvasEnable");
+        static readonly int OilFogCanvasStId = Shader.PropertyToID("_OilFogCanvas_ST");
+        static readonly int CustomFogEnabledId = Shader.PropertyToID("_CustomFogEnabled");
+        static readonly int CustomFogColorId = Shader.PropertyToID("_CustomFogColor");
+        static readonly int CustomFogModeId = Shader.PropertyToID("_CustomFogMode");
+        static readonly int CustomFogParamsId = Shader.PropertyToID("_CustomFogParams");
+        static readonly int CustomFogSkyPowerId = Shader.PropertyToID("_CustomFogSkyPower");
+        static readonly int AtmosphereFogColorId = Shader.PropertyToID("_OilAtmosphereFogColor");
+        static readonly int AtmosphereFogAmountId = Shader.PropertyToID("_OilAtmosphereFogAmount");
+
+        // Boluo ApplyCelestialOrbits moon satellite constants (AbsoluteDay=0).
+        const float MoonOrbitOffsetDeg = -95f;
+        const float MoonSatelliteDirectionDeg = 11.5f;
+        const float MoonSatellitePitchDeg = -30f;
+        const float MoonRotationPeriodDays = 28f;
+        static readonly float SatRotationAtDay0Deg = -0.5f / MoonRotationPeriodDays * 360f;
+
+        bool _hasCelestialOverride;
+        Vector3 _overrideSunDir = Vector3.up;
+        Vector3 _overrideMoonDir = Vector3.up;
+        int _celestialLookId;
+
+        float _lastSyncedPeriod = float.NaN;
+        float _lastBrushScale = float.NaN;
+        float _lastBrushStrength = float.NaN;
+        float _lastBrushContrast = float.NaN;
+        float _lastBrushRelief = float.NaN;
+        float _lastStarDensity = float.NaN;
+        float _lastStarSize = float.NaN;
+
+        /// <summary>Guards Apply against OnValidate re-entry when writing Light / Transform.</summary>
+        static int skyboxApplyDepth;
+
+        /// <summary>
+        /// Clock hours → shader period. Anchors: 06→0 dawn, 12→1 day, 18→2 dusk, 00→3 night.
+        /// </summary>
+        public static float HoursToPeriod(float hours) =>
+            Mathf.Repeat((hours - 6f) / 6f, 4f);
+
+        public static float PeriodToHours(float period) =>
+            Mathf.Repeat(period * 6f + 6f, 24f);
+
+        public float CurrentPeriod() => HoursToPeriod(timeOfDay);
+
+        public static bool IsOilSky(Material material) =>
+            material != null && material.shader != null && material.shader.name == ShaderName;
+
+        public void OnBeforeSerialize() { }
+
+        public void OnAfterDeserialize()
+        {
+            if (timeOfDayVersion >= TimeOfDayVersionHours)
+            {
+                return;
+            }
+
+            // Legacy field was period 0–4 (dawn/day/dusk/night).
+            timeOfDay = PeriodToHours(Mathf.Clamp(timeOfDay, 0f, 4f));
+            timeOfDayVersion = TimeOfDayVersionHours;
+        }
+
+        public void SetTimeOfDay(float hours)
+        {
+            timeOfDay = Mathf.Repeat(hours, 24f);
+            timeOfDayVersion = TimeOfDayVersionHours;
+            Apply(markDirty: Application.isPlaying);
+            if (Application.isPlaying && driveSun)
+            {
+                DisableCompetingDirectionalLights();
+            }
+        }
+
+        /// <summary>
+        /// Bypass the 4-anchor LightPresets interpolation and force a specific directional
+        /// light + fog tint. Pass null to clear and fall back to the time-of-day table.
+        /// </summary>
+        public void SetLightColorOverride(Color? color)
+        {
+            _lightColorOverride = color;
+            if (Application.isPlaying)
+                ApplySun(CurrentPeriod());
+            else
+                ApplyEditorPreview();
+        }
+
+        /// <summary>
+        /// Inspector / editor preview: sky _Period, ambient, and deferred sun drive.
+        /// </summary>
+        public void ApplyEditorHours(float hours)
+        {
+            timeOfDay = Mathf.Repeat(hours, 24f);
+            timeOfDayVersion = TimeOfDayVersionHours;
+            ApplyEditorPreview();
+        }
+
+        /// <summary>Legacy name — hours, not period.</summary>
+        public void ApplyEditorPeriod(float hours) => ApplyEditorHours(hours);
+
+        public void ApplyEditorPreview()
+        {
+            if (skyboxApplyDepth > 0)
+            {
+                return;
+            }
+
+            float period = CurrentPeriod();
+            skyboxApplyDepth++;
+            try
+            {
+                Material mat = ResolveSkyMaterialForEditor();
+                if (mat != null)
+                {
+                    SyncSkyMaterial(mat, period, force: true);
+                }
+
+                ApplyAmbient(period);
+                // Fog is independent of sun Light / driveSun (Sun Source may be None).
+                ApplyFogColor(period);
+            }
+            finally
+            {
+                skyboxApplyDepth--;
+            }
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying && driveSun && sun != null)
+            {
+                QueueEditorSunDrive();
+            }
+            else if (Application.isPlaying && driveSun && sun != null)
+            {
+                ApplySun(period);
+            }
+#else
+            if (driveSun && sun != null)
+            {
+                ApplySun(period);
+            }
+#endif
+        }
+
+        void Reset()
+        {
+            sun = GetComponent<Light>();
+            if (sun == null || sun.type != LightType.Directional)
+            {
+                Light[] lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
+                for (int i = 0; i < lights.Length; i++)
+                {
+                    if (lights[i].type == LightType.Directional)
+                    {
+                        sun = lights[i];
+                        break;
+                    }
+                }
+            }
+        }
+
+        void OnEnable()
+        {
+            // Edit mode: no auto Apply on load (Unity 6 delayCall / same-GO Transform recursion).
+            // Inspector EndChangeCheck / period buttons call ApplyEditorPreview.
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
+            // Island terrain may spawn after scene load; attach the Game→SRP bridge here.
+            OilAtmosphereDriver.EnsureOnSkybox();
+            if (driveSun && sun == null)
+            {
+                ResolveSunLight();
+            }
+
+            // Assign Light color/intensity immediately (Launch scene may keep a second dir light).
+            Apply(markDirty: false);
+            DisableCompetingDirectionalLights();
+        }
+
+        void OnDisable()
+        {
+#if UNITY_EDITOR
+            CancelEditorSunDrive();
+#endif
+            if (_runtime == null)
+            {
+                return;
+            }
+
+            if (RenderSettings.skybox == _runtime && skyboxMaterial != null)
+            {
+                RenderSettings.skybox = skyboxMaterial;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(_runtime);
+            }
+            else
+            {
+                DestroyImmediate(_runtime);
+            }
+
+            _runtime = null;
+        }
+
+        void OnDestroy()
+        {
+#if UNITY_EDITOR
+            CancelEditorSunDrive();
+            if (_editorPreview != null)
+            {
+                if (RenderSettings.skybox == _editorPreview)
+                {
+                    RenderSettings.skybox = skyboxMaterial;
+                }
+
+                DestroyImmediate(_editorPreview);
+                _editorPreview = null;
+            }
+#endif
+        }
+
+        float _lastAppliedTimeOfDay = float.NaN;
+
+        void Update()
+        {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
+            if (!animate || cycleSeconds <= 0.01f)
+            {
+                return;
+            }
+
+            timeOfDay = Mathf.Repeat(timeOfDay + Time.deltaTime / cycleSeconds * 24f, 24f);
+            // Skip redundant sky/light writes when TOD barely moved (keeps oil look).
+            if (!float.IsNaN(_lastAppliedTimeOfDay)
+                && Mathf.Abs(timeOfDay - _lastAppliedTimeOfDay) < 0.02f)
+            {
+                return;
+            }
+
+            _lastAppliedTimeOfDay = timeOfDay;
+            Apply(markDirty: false);
+        }
+
+        Material ResolveSkyMaterialForEditor()
+        {
+            Material mat = RenderSettings.skybox;
+            if (IsOilSky(mat))
+            {
+                return mat;
+            }
+
+            mat = ActiveSkyMaterial();
+            if (mat != null)
+            {
+                BindSkybox();
+            }
+
+            return mat;
+        }
+
+        Material ActiveSkyMaterial()
+        {
+            if (!IsOilSky(skyboxMaterial))
+            {
+                return null;
+            }
+
+            if (Application.isPlaying)
+            {
+                if (_runtime == null)
+                {
+                    _runtime = new Material(skyboxMaterial)
+                    {
+                        name = skyboxMaterial.name + " Runtime"
+                    };
+                }
+
+                return _runtime;
+            }
+
+#if UNITY_EDITOR
+            if (_editorPreview == null || _editorPreview.shader != skyboxMaterial.shader)
+            {
+                if (_editorPreview != null)
+                {
+                    DestroyImmediate(_editorPreview);
+                }
+
+                _editorPreview = new Material(skyboxMaterial)
+                {
+                    name = skyboxMaterial.name + " (Editor Preview)",
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
+
+            return _editorPreview;
+#else
+            return skyboxMaterial;
+#endif
+        }
+
+        void BindSkybox()
+        {
+            Material target = ActiveSkyMaterial();
+            if (target == null || RenderSettings.skybox == target)
+            {
+                return;
+            }
+
+            RenderSettings.skybox = target;
+        }
+
+        void ApplySkyOnly()
+        {
+            if (skyboxApplyDepth > 0)
+            {
+                return;
+            }
+
+            skyboxApplyDepth++;
+            try
+            {
+                BindSkybox();
+                Material mat = ActiveSkyMaterial();
+                if (mat == null)
+                {
+                    return;
+                }
+
+                float period = CurrentPeriod();
+                SyncSkyMaterial(mat, period, force: true);
+                ApplyAmbient(period);
+                ApplyFogColor(period);
+            }
+            finally
+            {
+                skyboxApplyDepth--;
+            }
+        }
+
+        void Apply(bool markDirty)
+        {
+            if (skyboxApplyDepth > 0)
+            {
+                return;
+            }
+
+            skyboxApplyDepth++;
+            try
+            {
+                ApplyInternal(markDirty);
+            }
+            finally
+            {
+                skyboxApplyDepth--;
+            }
+        }
+
+        void ApplyInternal(bool markDirty)
+        {
+            float period = CurrentPeriod();
+
+            BindSkybox();
+            Material mat = ActiveSkyMaterial();
+            if (mat != null)
+            {
+                SyncSkyMaterial(mat, period, force: markDirty || !Application.isPlaying);
+            }
+
+            ApplyAmbient(period);
+            // Fog must not depend on sun Light existing (Lighting Sun Source can be None).
+            ApplyFogColor(period);
+
+            // Always publish disc dirs for the sky shader (even when not driving the Light).
+            ResolveCelestialDirections(period, out Vector3 sunDir, out Vector3 moonDir);
+            PushCelestialGlobals(sunDir, moonDir);
+
+            if (!driveSun)
+            {
+                return;
+            }
+
+            if (sun == null)
+            {
+                ResolveSunLight();
+            }
+
+            if (sun == null)
+            {
+                return;
+            }
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                QueueEditorSunDrive();
+                return;
+            }
+#endif
+
+            ApplySun(period);
+        }
+
+        void ResolveSunLight()
+        {
+            Light self = GetComponent<Light>();
+            if (self != null && self.type == LightType.Directional)
+            {
+                sun = self;
+                return;
+            }
+
+            Light[] lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
+            for (int i = 0; i < lights.Length; i++)
+            {
+                if (lights[i] != null && lights[i].type == LightType.Directional)
+                {
+                    sun = lights[i];
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Launch keeps a bootstrap Directional Light; LightingPass accepts up to 4 dirs.
+        /// Only the Oil-driven sun should remain enabled in play.
+        /// </summary>
+        public void DisableCompetingDirectionalLights()
+        {
+            if (sun == null)
+            {
+                ResolveSunLight();
+            }
+
+            if (sun == null)
+            {
+                return;
+            }
+
+            Light[] lights = FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < lights.Length; i++)
+            {
+                Light other = lights[i];
+                if (other == null || other == sun || other.type != LightType.Directional)
+                {
+                    continue;
+                }
+
+                if (other.enabled)
+                {
+                    other.enabled = false;
+                }
+            }
+        }
+
+        void ApplySun(float period)
+        {
+            if (sun == null)
+            {
+                ResolveSunLight();
+            }
+
+            if (sun == null)
+            {
+                return;
+            }
+
+            ResolveCelestialDirections(period, out Vector3 sunDir, out Vector3 moonDir);
+            PushCelestialGlobals(sunDir, moonDir);
+
+            Vector3 lightDir = CelestialLightDirection(sunDir, moonDir);
+            if (lightDir.sqrMagnitude <= 0.001f)
+            {
+                return;
+            }
+
+            EvaluateLight(period, out Color color, out float intensity);
+            if (_lightColorOverride.HasValue)
+            {
+                color = _lightColorOverride.Value;
+            }
+            if (sun.color != color)
+            {
+                sun.color = color;
+            }
+
+            if (!Mathf.Approximately(sun.intensity, intensity))
+            {
+                sun.intensity = intensity;
+            }
+
+            if (RenderSettings.sun != sun)
+            {
+                RenderSettings.sun = sun;
+            }
+
+            ApplyFogColor(period);
+
+            Vector3 forward = -lightDir;
+            Vector3 up = Mathf.Abs(Vector3.Dot(forward.normalized, Vector3.up)) > 0.98f
+                ? Vector3.forward
+                : Vector3.up;
+            Quaternion rot = Quaternion.LookRotation(forward, up);
+            if (sun.transform.rotation != rot)
+            {
+                sun.transform.rotation = rot;
+            }
+        }
+
+        void ApplyFogColor(float period)
+        {
+            EvaluateFog(period, out Color fog);
+            if (!RenderSettings.fog)
+            {
+                RenderSettings.fog = true;
+            }
+
+            if (RenderSettings.fogMode != FogMode.ExponentialSquared)
+            {
+                RenderSettings.fogMode = FogMode.ExponentialSquared;
+            }
+
+            // Lighting window default / manual density (~0.1+) milks ExpSquared into a white slab.
+            // Authored haze stays near 0.001; clamp only pathological values.
+            if (RenderSettings.fogDensity > 0.05f)
+            {
+                RenderSettings.fogDensity = 0.001f;
+            }
+
+            if (RenderSettings.fogColor != fog)
+            {
+                RenderSettings.fogColor = fog;
+            }
+
+            // Push TOD fog into shader globals here too — skybox must see tint even when
+            // SetupPass Environment evaluate races RenderSettings.fog for a frame.
+            PushFogShaderGlobals(fog);
+        }
+
+        static void PushFogShaderGlobals(Color fogSrgb)
+        {
+            Color linear = fogSrgb.linear;
+            var fogVec = new Vector4(linear.r, linear.g, linear.b, 1f);
+            Shader.SetGlobalFloat(CustomFogEnabledId, 1f);
+            Shader.SetGlobalVector(CustomFogColorId, fogVec);
+            // Skybox + clouds dye from this pair (not _CustomFogEnabled alone).
+            Shader.SetGlobalVector(AtmosphereFogColorId, fogVec);
+            Shader.SetGlobalFloat(AtmosphereFogAmountId, 1f);
+            // Mode 2 = Exponential Squared (FogSettings.ModeToShader).
+            const float invSqrtLn2 = 1.20112240879f;
+            float density = Mathf.Max(0f, RenderSettings.fogDensity);
+            Shader.SetGlobalFloat(CustomFogModeId, 2f);
+            Shader.SetGlobalVector(
+                CustomFogParamsId, new Vector4(density * invSqrtLn2, 0f, 0f, 0f));
+            Shader.SetGlobalFloat(CustomFogSkyPowerId, 4.5f);
+        }
+
+        void PushCelestialGlobals(Vector3 sunDir, Vector3 moonDir)
+        {
+            Shader.SetGlobalVector(OilSkySunDirId, sunDir);
+            Shader.SetGlobalVector(OilSkyMoonDirId, moonDir);
+        }
+
+        /// <summary>Orbit dirs, then optional Boluo view placement override.</summary>
+        public void ResolveCelestialDirections(float period, out Vector3 sunDir, out Vector3 moonDir)
+        {
+            sunDir = SunDirectionAt(period);
+            moonDir = MoonDirectionAt(period);
+            if (_hasCelestialOverride)
+            {
+                sunDir = _overrideSunDir;
+                moonDir = _overrideMoonDir;
+            }
+        }
+
+        public Vector3 ResolvedSunDirection =>
+            _hasCelestialOverride ? _overrideSunDir : SunDirectionAt(CurrentPeriod());
+
+        public Vector3 ResolvedMoonDirection =>
+            _hasCelestialOverride ? _overrideMoonDir : MoonDirectionAt(CurrentPeriod());
+
+        public int CelestialLookId => _celestialLookId;
+
+        /// <summary>
+        /// Boluo PlaceSunForLook / PlaceMoonForLook freeze: dawn sun or sleep moon in view.
+        /// Pass lookId to skip re-place while the same preset stays active.
+        /// </summary>
+        public void SetCelestialLookPlacement(int lookId, Vector3 sunDir, Vector3 moonDir)
+        {
+            if (_hasCelestialOverride && _celestialLookId == lookId)
+            {
+                return;
+            }
+
+            _hasCelestialOverride = true;
+            _celestialLookId = lookId;
+            _overrideSunDir = sunDir.sqrMagnitude > 1e-8f ? sunDir.normalized : Vector3.up;
+            _overrideMoonDir = moonDir.sqrMagnitude > 1e-8f ? moonDir.normalized : Vector3.up;
+            Apply(markDirty: true);
+        }
+
+        public void ClearCelestialLookPlacement()
+        {
+            if (!_hasCelestialOverride)
+            {
+                return;
+            }
+
+            ReleaseCelestialLookForClock();
+            Apply(markDirty: true);
+        }
+
+        /// <summary>
+        /// Drop view freeze without Apply — next SetTimeOfDay / Apply uses Cozy orbits
+        /// (BoluoProject ApplyCheapSunDiscFromDayPercentage; BoluoUnity skips Place* while blending).
+        /// </summary>
+        public void ReleaseCelestialLookForClock()
+        {
+            _hasCelestialOverride = false;
+            _celestialLookId = 0;
+        }
+
+        /// <summary>Boluo PlaceSunForLook: sun on camera azimuth at elevationDeg.</summary>
+        public static void PlaceSunForView(
+            Vector3 camForward, float elevationDeg, out Vector3 sunDir, out Vector3 moonDir)
+        {
+            Vector3 azimuth = new Vector3(camForward.x, 0f, camForward.z);
+            if (azimuth.sqrMagnitude < 1e-6f)
+            {
+                azimuth = Vector3.forward;
+            }
+
+            azimuth.Normalize();
+            float elev = elevationDeg * Mathf.Deg2Rad;
+            sunDir = (azimuth * Mathf.Cos(elev) + Vector3.up * Mathf.Sin(elev)).normalized;
+
+            Vector3 moonDown = -sunDir;
+            moonDown.y = Mathf.Min(moonDown.y, -0.38f);
+            moonDir = moonDown.sqrMagnitude > 1e-8f ? moonDown.normalized : Vector3.down;
+        }
+
+        /// <summary>Boluo PlaceMoonForLook: moon on camera azimuth at elevationDeg; sun forced down.</summary>
+        public static void PlaceMoonForView(
+            Vector3 camForward,
+            float elevationDeg,
+            Vector3 orbitSunDir,
+            Vector3 orbitMoonDir,
+            out Vector3 sunDir,
+            out Vector3 moonDir)
+        {
+            Vector3 sun = orbitSunDir.sqrMagnitude > 1e-8f ? orbitSunDir.normalized : Vector3.down;
+            sun.y = Mathf.Min(sun.y, -0.38f);
+            sunDir = sun.sqrMagnitude > 1e-8f ? sun.normalized : Vector3.down;
+
+            Vector3 moon = orbitMoonDir.sqrMagnitude > 1e-8f ? orbitMoonDir.normalized : Vector3.up;
+            Vector3 azimuth = new Vector3(moon.x, 0f, moon.z);
+            Vector3 fwd = new Vector3(camForward.x, 0f, camForward.z);
+            if (fwd.sqrMagnitude > 1e-6f)
+            {
+                fwd.Normalize();
+                if (azimuth.sqrMagnitude < 1e-6f || Vector3.Dot(azimuth.normalized, fwd) < 0.22f)
+                {
+                    azimuth = fwd;
+                }
+            }
+
+            if (azimuth.sqrMagnitude < 1e-6f)
+            {
+                azimuth = Vector3.forward;
+            }
+
+            azimuth.Normalize();
+            float elev = elevationDeg * Mathf.Deg2Rad;
+            moonDir = (azimuth * Mathf.Cos(elev) + Vector3.up * Mathf.Sin(elev)).normalized;
+        }
+
+#if UNITY_EDITOR
+        void QueueEditorSunDrive()
+        {
+            if (_editorSunDriveQueued)
+            {
+                return;
+            }
+
+            _editorSunDriveQueued = true;
+            EditorApplication.delayCall += DriveSunDeferred;
+        }
+
+        void CancelEditorSunDrive()
+        {
+            if (!_editorSunDriveQueued)
+            {
+                return;
+            }
+
+            _editorSunDriveQueued = false;
+            EditorApplication.delayCall -= DriveSunDeferred;
+        }
+
+        void DriveSunDeferred()
+        {
+            _editorSunDriveQueued = false;
+            if (this == null || !driveSun || sun == null)
+            {
+                return;
+            }
+
+            if (skyboxApplyDepth > 0)
+            {
+                QueueEditorSunDrive();
+                return;
+            }
+
+            skyboxApplyDepth++;
+            try
+            {
+                ApplySun(CurrentPeriod());
+                EditorUtility.SetDirty(sun);
+                if (sun.transform != null)
+                {
+                    EditorUtility.SetDirty(sun.transform);
+                }
+
+                SceneView.RepaintAll();
+            }
+            finally
+            {
+                skyboxApplyDepth--;
+            }
+        }
+#endif
+
+        public static SkyLookPreset EvaluateSkyLook(float period)
+        {
+            float wrapped = Mathf.Repeat(period, 4f);
+            int i0 = Mathf.FloorToInt(wrapped) % 4;
+            int i1 = (i0 + 1) % 4;
+            float t = wrapped - Mathf.Floor(wrapped);
+            SkyLookPreset a = SkyLookAtIndex(i0);
+            SkyLookPreset b = SkyLookAtIndex(i1);
+            return SkyLookPreset.Lerp(a, b, t);
+        }
+
+        static SkyLookPreset SkyLookAtIndex(int index)
+        {
+            return index switch
+            {
+                0 => SkyLookPreset.Dawn,
+                1 => SkyLookPreset.Day,
+                2 => SkyLookPreset.Dusk,
+                _ => SkyLookPreset.Night,
+            };
+        }
+
+        void SyncSkyMaterial(Material mat, float period, bool force)
+        {
+            if (!force && Mathf.Abs(period - _lastSyncedPeriod) < 1e-5f
+                && Mathf.Approximately(brushScale, _lastBrushScale)
+                && Mathf.Approximately(brushStrength, _lastBrushStrength)
+                && Mathf.Approximately(brushContrast, _lastBrushContrast)
+                && Mathf.Approximately(brushRelief, _lastBrushRelief)
+                && Mathf.Approximately(starDensity, _lastStarDensity)
+                && Mathf.Approximately(starSize, _lastStarSize))
+            {
+                return;
+            }
+
+            _lastSyncedPeriod = period;
+            _lastBrushScale = brushScale;
+            _lastBrushStrength = brushStrength;
+            _lastBrushContrast = brushContrast;
+            _lastBrushRelief = brushRelief;
+            _lastStarDensity = starDensity;
+            _lastStarSize = starSize;
+
+            mat.SetFloat(PeriodId, period);
+            mat.SetFloat(BrushScaleId, brushScale);
+            mat.SetFloat(BrushStrengthId, brushStrength);
+            mat.SetFloat(BrushContrastId, brushContrast);
+            mat.SetFloat(BrushReliefId, brushRelief);
+            mat.SetFloat(StarDensityId, starDensity);
+            mat.SetFloat(StarSizeId, starSize);
+            PushFogCanvasGlobal(mat);
+
+            ResolveCelestialDirections(period, out Vector3 sunDir, out Vector3 moonDir);
+            PushCelestialGlobals(sunDir, moonDir);
+        }
+
+        /// <summary>
+        /// Soft OilCanvas weave as the shared fog dry-brush (not OilBrush dabs).
+        /// Large tiles keep the haze scumbled instead of dense trypophobic holes.
+        /// </summary>
+        static void PushFogCanvasGlobal(Material mat)
+        {
+            if (mat == null)
+            {
+                return;
+            }
+
+            Texture canvas = mat.HasProperty("_OilCanvas") ? mat.GetTexture("_OilCanvas") : null;
+            if (canvas == null)
+            {
+                Shader.SetGlobalFloat(OilFogCanvasEnableId, 0f);
+                return;
+            }
+
+            Shader.SetGlobalTexture(OilFogCanvasId, canvas);
+            Shader.SetGlobalFloat(OilFogCanvasEnableId, 1f);
+            Shader.SetGlobalVector(OilFogCanvasStId, new Vector4(0.016f, 0.016f, 0f, 0f));
+        }
+
+        /// <summary>Editor setup: textures + brush/star defaults; sky colors blend in shader from _Period.</summary>
+        public static void SyncSkyMaterialStatic(
+            Material mat,
+            float period,
+            float brushScale,
+            float brushStrength,
+            float brushContrast,
+            float brushRelief,
+            float starDensity = 1f,
+            float starSize = 1f)
+        {
+            mat.SetFloat(PeriodId, period);
+            mat.SetFloat(BrushScaleId, brushScale);
+            mat.SetFloat(BrushStrengthId, brushStrength);
+            mat.SetFloat(BrushContrastId, brushContrast);
+            mat.SetFloat(BrushReliefId, brushRelief);
+            mat.SetFloat(StarDensityId, starDensity);
+            mat.SetFloat(StarSizeId, starSize);
+            PushFogCanvasGlobal(mat);
+            Shader.SetGlobalVector(OilSkySunDirId, SunDirectionAt(period));
+            Shader.SetGlobalVector(OilSkyMoonDirId, MoonDirectionAt(period));
+        }
+
+        static float _lastEnvironmentPeriod = float.NaN;
+        static OilCloudLayer _cachedCloudLayer;
+
+        /// <summary>
+        /// Environment Lighting Source = Skybox; refresh SH when period moves.
+        /// Oil NPR does not sample SH — _OilPeriodAmbient is still the equator-weighted fill.
+        /// </summary>
+        static void ApplyAmbient(float period)
+        {
+            EvaluateAmbient(period, ResolveCumulus(), out _, out _, out _, out Color fill);
+            RenderSettings.ambientMode = AmbientMode.Skybox;
+            RenderSettings.ambientIntensity = 1f;
+            Shader.SetGlobalColor(OilPeriodAmbientId, fill);
+
+            if (float.IsNaN(_lastEnvironmentPeriod) || Mathf.Abs(period - _lastEnvironmentPeriod) > 0.02f)
+            {
+                _lastEnvironmentPeriod = period;
+                DynamicGI.UpdateEnvironment();
+            }
+        }
+
+        /// <summary>
+        /// Period sky/equator/ground + Oil fill (clouds / NPR). Cumulus dims equator/ground.
+        /// </summary>
+        public static void EvaluateAmbient(
+            float period,
+            float cumulus,
+            out Color sky,
+            out Color equator,
+            out Color ground,
+            out Color oilFill)
+        {
+            SkyLookPreset look = EvaluateSkyLook(period);
+            float horizonScale = 1f - Mathf.Clamp01(cumulus) * 0.5f;
+            sky = look.zenith;
+            equator = look.horizon * horizonScale;
+            ground = look.ground * horizonScale;
+            oilFill = new Color(
+                equator.r * 0.62f + sky.r * 0.38f,
+                equator.g * 0.62f + sky.g * 0.38f,
+                equator.b * 0.62f + sky.b * 0.38f,
+                1f);
+        }
+
+        static float ResolveCumulus()
+        {
+            if (_cachedCloudLayer == null)
+            {
+                _cachedCloudLayer = Object.FindAnyObjectByType<OilCloudLayer>();
+            }
+
+            return _cachedCloudLayer != null ? _cachedCloudLayer.coverage : 0f;
+        }
+
+        /// <summary>Main-light tint/intensity at period (same table as <see cref="ApplySun"/>).</summary>
+        public static void EvaluateLight(float period, out Color color, out float intensity)
+        {
+            SampleLightPreset(period, out LightPreset a, out LightPreset b, out float t);
+            color = Color.Lerp(a.color, b.color, t);
+            intensity = Mathf.Lerp(a.intensity, b.intensity, t);
+        }
+
+        /// <summary>
+        /// Distance fog tint. Night clock (21:00–06:00, same as WeatherService) always uses
+        /// <see cref="NightFogColor"/> (#36363C) so every night preset shares one fog.
+        /// </summary>
+        public static void EvaluateFog(float period, out Color fogColor)
+        {
+            float hours = PeriodToHours(period);
+            if (hours >= 21f || hours < 6f)
+            {
+                fogColor = NightFogColor;
+                return;
+            }
+
+            SampleLightPreset(period, out LightPreset a, out LightPreset b, out float t);
+            fogColor = Color.Lerp(a.fogColor, b.fogColor, t);
+        }
+
+        static void SampleLightPreset(float period, out LightPreset a, out LightPreset b, out float t)
+        {
+            float wrapped = Mathf.Repeat(period, 4f);
+            int i0 = Mathf.FloorToInt(wrapped) % 4;
+            int i1 = (i0 + 1) % 4;
+            t = wrapped - Mathf.Floor(wrapped);
+            a = LightPresets[i0];
+            b = LightPresets[i1];
+        }
+
+        /// <summary>
+        /// Boluo SkyWeatherController.ApplyCelestialOrbits — Cozy sun pivot.
+        /// parent(0, sunDirection, sunPitch) + localX = dayT·360 − 90; dir = −child.forward.
+        /// </summary>
+        public static Vector3 SunDirectionFromDayT(
+            float dayT,
+            float sunDirectionDeg = DefaultSunDirectionDeg,
+            float sunPitchDeg = DefaultSunPitchDeg)
+        {
+            float t = Mathf.Clamp01(Mathf.Repeat(dayT, 1f));
+            Quaternion pivot = Quaternion.Euler(0f, sunDirectionDeg, sunPitchDeg);
+            Quaternion child = Quaternion.Euler(t * 360f - 90f, 0f, 0f);
+            Vector3 dir = -(pivot * child * Vector3.forward);
+            return dir.sqrMagnitude > 1e-8f ? dir.normalized : Vector3.up;
+        }
+
+        /// <summary>
+        /// Boluo moon satellite: orbitOffset=-95, satelliteDirection=11.5, satellitePitch=-30,
+        /// rotationPeriod=28 at AbsoluteDay=0 (SatRotationAtDay0 keeps midnight continuous).
+        /// </summary>
+        public static Vector3 MoonDirectionFromDayT(
+            float dayT,
+            float sunDirectionDeg = DefaultSunDirectionDeg,
+            float sunPitchDeg = DefaultSunPitchDeg)
+        {
+            float t = Mathf.Clamp01(Mathf.Repeat(dayT, 1f));
+            float moonLocalX = 360f * t + SatRotationAtDay0Deg + MoonOrbitOffsetDeg - 90f;
+            Quaternion pivot = Quaternion.Euler(
+                0f, sunDirectionDeg + MoonSatelliteDirectionDeg, sunPitchDeg + MoonSatellitePitchDeg);
+            Quaternion child = Quaternion.Euler(moonLocalX, 0f, 0f);
+            Vector3 dir = -(pivot * child * Vector3.forward);
+            return dir.sqrMagnitude > 1e-8f ? dir.normalized : Vector3.up;
+        }
+
+        public static Vector3 SunDirectionAt(float period) =>
+            SunDirectionFromDayT(PeriodToHours(period) / 24f);
+
+        public static Vector3 MoonDirectionAt(float period) =>
+            MoonDirectionFromDayT(PeriodToHours(period) / 24f);
+
+        /// <summary>
+        /// Boluo / Cozy night handoff: sun height −0.03 → −0.23 blends to moon.
+        /// Ambient stays on the clock period; only the main-light direction follows the visible disc.
+        /// </summary>
+        public static float MoonBlendAt(float period)
+        {
+            Vector3 sunDir = SunDirectionAt(period);
+            return Mathf.Clamp01((-0.03f - sunDir.y) * 5f);
+        }
+
+        public static float MoonBlendFromSun(Vector3 sunDir) =>
+            Mathf.Clamp01((-0.03f - sunDir.y) * 5f);
+
+        /// <summary>
+        /// Main light points at the visible celestial body (sun by day, moon after sunset).
+        /// </summary>
+        public static Vector3 CelestialLightDirectionAt(float period)
+        {
+            return CelestialLightDirection(SunDirectionAt(period), MoonDirectionAt(period));
+        }
+
+        public static Vector3 CelestialLightDirection(Vector3 sunDir, Vector3 moonDir)
+        {
+            float moonBlend = MoonBlendFromSun(sunDir);
+            Vector3 lerped = Vector3.Lerp(sunDir, moonDir, moonBlend);
+            float mag = lerped.magnitude;
+            return mag > 1e-6f ? lerped / mag : sunDir;
+        }
+
+        public static Vector3 DirectionFromAngles(float elevationDeg, float azimuthDeg)
+        {
+            float el = elevationDeg * Mathf.Deg2Rad;
+            float az = azimuthDeg * Mathf.Deg2Rad;
+            float c = Mathf.Cos(el);
+            return new Vector3(Mathf.Sin(az) * c, Mathf.Sin(el), Mathf.Cos(az) * c);
+        }
+    }
+}
