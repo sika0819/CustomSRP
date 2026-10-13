@@ -1,0 +1,69 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Stylized Waterfall
+  m_Shader: {fileID: 4800000, guid: 9bbf3096654154d10a81a8f99df39952, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _OIL_NO_VIOLET_UMBRA
+  - _PREMULTIPLY_ALPHA
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 1
+  m_CustomRenderQueue: 3000
+  stringTagMap:
+    RenderType: Transparent
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _FoamMap:
+        m_Texture: {fileID: 2800000, guid: 1ae95f1c0e6024b54a2641d1f3d13ee7, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _PaintMap:
+        m_Texture: {fileID: 2800000, guid: 1e2efbc9ddeb410391549d3310d1fc7d, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AlbedoBoost: 1.05
+    - _CrestFoamStrength: 0.55
+    - _DstBlend: 10
+    - _FoamSpeed: 0.2
+    - _FoamTiling: 0.14
+    - _MistFeather: 0.22
+    - _MistSpeed: 0.35
+    - _MistStrength: 0.28
+    - _PaintContrast: 1.5
+    - _PaintRelief: 0.3
+    - _PaintStretch: 1.4
+    - _PremulAlpha: 1
+    - _ShadeLift: 0.5
+    - _ShadeSteps: 3
+    - _ShadowLift: 1.1
+    - _ShadowWobble: 0.5
+    - _SpecularThreshold: 0.78
+    - _SrcBlend: 1
+    - _ZWrite: 0
+    m_Colors:
+    - _AmbientColor: {r: 0.7, g: 0.78, b: 0.85, a: 1}
+    - _BaseColor: {r: 0.28, g: 0.58, b: 0.82, a: 0.62}
+    - _FoamColor: {r: 0.36356357, g: 0.61942476, b: 0.8113208, a: 1}
+    - _MeshFlowScale: {r: 50.9, g: -3.91, b: 0, a: 0}
+    - _MistColor: {r: 0.8235294, g: 0.8784314, b: 0.91764706, a: 1}
+    - _ShadowTint: {r: 0.45, g: 0.55, b: 0.65, a: 1}
+    - _ShadowWarm: {r: 0.7, g: 0.55, b: 0.4, a: 1}
+    - _ShallowColor: {r: 0.4009434, g: 0.8051262, b: 1, a: 0.45}
+    - _SpecularColor: {r: 1, g: 0.95, b: 0.78, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

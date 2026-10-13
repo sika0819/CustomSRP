@@ -1,0 +1,211 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-3294118000977810144
+MonoBehaviour:
+  m_ObjectHideFlags: 11
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0353a89b1f911e48b9e16bdc9f2e058, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  version: 7
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Cloud_Mat_01
+  m_Shader: {fileID: 4800000, guid: 838d763be9979448597de5412a34904b, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _CANVAS_ON
+  - _INTERNAL_EDGE_ON
+  - _KUWAHARA_ON
+  - _RECEIVE_SHADOWS
+  m_InvalidKeywords:
+  - _OUTLINE_ON
+  - _SHADOWS_ON
+  m_LightmapFlags: 2
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _CanvasMap:
+        m_Texture: {fileID: 2800000, guid: a7c8d9e0f1a20314253647586970b1c2, type: 3}
+        m_Scale: {x: 0.45, y: 0.45}
+        m_Offset: {x: 0, y: 0}
+    - _OutlineBrushMap:
+        m_Texture: {fileID: 2800000, guid: 67b8eeb60de4040da8e86103f5c566b2, type: 3}
+        m_Scale: {x: 2.2, y: 2.2}
+        m_Offset: {x: 0, y: 0}
+    - unity_Lightmaps:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_LightmapsInd:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_ShadowMasks:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AlphaCutoff: 0.5
+    - _BUILTIN_QueueControl: -1
+    - _BUILTIN_QueueOffset: 0
+    - _Big_Wave1: 1
+    - _Big_WindAmount1: 1
+    - _Big_Windspeed1: 0.5
+    - _BumpScale: 1
+    - _Canvas: 1
+    - _CanvasStrength: 0.1
+    - _Clipping: 0
+    - _Cloud_Speed: 0
+    - _Cloud_Strength: 0
+    - _Cutoff: 0.5
+    - _DetailNormalMapScale: 1
+    - _DirectLight: 0.32
+    - _DstBlend: 0
+    - _EdgeStrength: 0.55
+    - _Enable_Fog: 0
+    - _Enable_Fresnel: 0
+    - _Enable_Scattering: 1
+    - _EnvironmentReflections: 1
+    - _Float0: 2.26
+    - _Float2: 0.45
+    - _Float3: 0.0823
+    - _Fog_Density: 0.2
+    - _Fresnel_Power: 0.6
+    - _GlossMapScale: 1
+    - _Glossiness: 0
+    - _GlossyReflections: 1
+    - _InternalEdge: 1
+    - _Kuwahara: 1
+    - _KuwaharaRadius: 0.04
+    - _Light_Intensity: 0
+    - _Metallic: 0
+    - _Mode: 0
+    - _OcclusionStrength: 1
+    - _Outline: 1
+    - _OutlineBreak: 0.12
+    - _OutlineBrushScale: 2.5
+    - _OutlineNoise: 0.55
+    - _OutlineNoiseScale: 3.5
+    - _OutlineWidth: 0.028
+    - _OutlineWobble: 0.85
+    - _PaintThickness: 0.18
+    - _PanningSpeed: 0.015
+    - _PanningSpeed1: 1
+    - _Parallax: 0.02
+    - _QueueControl: 0
+    - _QueueOffset: 0
+    - _ReceiveShadows: 1
+    - _Scattering_Edge_Dist: 0
+    - _Scattering_Multiplier: 0
+    - _ShadeLift: 0.42
+    - _ShadeSteps: 4
+    - _ShadowBrushScale: 1.8
+    - _ShadowLift: 0.95
+    - _ShadowWobble: 0.45
+    - _Shadows: 0
+    - _SmoothnessTextureChannel: 0
+    - _Specular: 0.876
+    - _SpecularHighlights: 1
+    - _SpecularThreshold: 0.86
+    - _SrcBlend: 1
+    - _TransAmbient: 0
+    - _TransDirect: 0.38
+    - _TransNormalDistortion: 0.082
+    - _TransScattering: 1
+    - _TransShadow: 0.398
+    - _Translucency: 12
+    - _UVSec: 0
+    - _Use_Environment_Override: 0
+    - _WindDirection1: 1.24
+    - _WindEffect: 1
+    - _WindNoiseScale: 0.005
+    - _WindNoiseScale1: 0.662
+    - _WindWorldScale: 0.02
+    - _WindWorldScale1: 2.47
+    - _X_Multiplier: 2
+    - _Y_Multi: 0
+    - _Y_Multiplier: 0
+    - _ZWrite: 1
+    - _Z_Multiplier: 0.31
+    - __dirty: 0
+    - _contrast: 18.69
+    - _emissive: 0.25
+    - _emissive1: 0.435
+    - _fresnel: 0.15
+    - _lightDirMulti: 0.36
+    - _lightMax: 1
+    - _lightMin: 0.246
+    - _lightingContrast: 121.99
+    - _maxEmit: 1.301
+    - _minEmit: 0.912
+    - _minEmit1: 0.19
+    - _minEmit_dir: 0.611
+    - _poster: 9.08
+    - _rimLight: 0.75
+    - _rimLight1: 0.5
+    - _stepFloat: 9.56
+    - _stepFloatRim: 1.56
+    m_Colors:
+    - _AmbientColor: {r: 0.54999995, g: 0.5, b: 0.43999997, a: 1}
+    - _BaseColor: {r: 0.75, g: 0.54999995, b: 0.39999998, a: 1}
+    - _Base_Color: {r: 0.7058824, g: 0.8901961, b: 1, a: 1}
+    - _Color: {r: 0.8773585, g: 0.8773585, b: 0.8773585, a: 1}
+    - _Color0: {r: 0.631, g: 0.80809605, b: 1, a: 0}
+    - _Color3: {r: 0.723, g: 0.80609995, b: 1, a: 0}
+    - _Colour: {r: 0.88699996, g: 0.93207437, b: 1, a: 0}
+    - _Colour1: {r: 0.5, g: 0.5, b: 0.5, a: 0}
+    - _Colour2: {r: 0.681, g: 0.8245501, b: 1, a: 0}
+    - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}
+    - _EmissionColor: {r: 0.092, g: 0.092, b: 0.092, a: 1}
+    - _EmissiveColour: {r: 0.36378607, g: 0.5328233, b: 0.7075472, a: 0}
+    - _Fresnel_Color: {r: 0.9339623, g: 0.1982467, b: 0.1982467, a: 0}
+    - _GustSmoothing1: {r: 1, g: 1, b: 1, a: 0}
+    - _Light_Direction_Override: {r: 0, g: 0, b: 0, a: 0}
+    - _OutlineColor: {r: 0.13999996, g: 0.09999997, b: 0.07999996, a: 1}
+    - _Scattering_Color: {r: 0.735849, g: 0.5341338, b: 0.253382, a: 0}
+    - _ShadowTint: {r: 0.41999996, g: 0.47999996, b: 0.72, a: 1}
+    - _ShadowWarm: {r: 0.62, g: 0.45, b: 0.31999996, a: 1}
+    - _SpecularColor: {r: 0.54999995, g: 0.47999996, b: 0.39999998, a: 1}
+    - _Tint: {r: 0.5, g: 0.5, b: 0.5, a: 0}
+    - _Top_Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Translucency: {r: 0.5, g: 0.5, b: 0.5, a: 0}
+    - _emissiveColour: {r: 0.759, g: 0.8125556, b: 1, a: 0}
+    - _emissiveColour1: {r: 0.656535, g: 0.7297195, b: 0.865, a: 0}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
+--- !u!114 &3043017246265412177
+MonoBehaviour:
+  m_ObjectHideFlags: 11
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 639247ca83abc874e893eb93af2b5e44, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  version: 0

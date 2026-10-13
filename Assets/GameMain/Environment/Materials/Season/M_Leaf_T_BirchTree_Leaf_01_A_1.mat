@@ -1,0 +1,116 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: M_Leaf_T_BirchTree_Leaf_01_A_1
+  m_Shader: {fileID: 4800000, guid: 838d763be9979448597de5412a34904b, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _CLIPPING
+  - _RECEIVE_SHADOWS
+  - _SHADOWS_CLIP
+  m_InvalidKeywords:
+  - _ALPHATEST_ON
+  - _OUTLINE
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses:
+  - Outline
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 2800000, guid: 865a1d9acbd8240a4bd51bb00e95df80, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _CanvasMap:
+        m_Texture: {fileID: 2800000, guid: a7c8d9e0f1a20314253647586970b1c2, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MainTex:
+        m_Texture: {fileID: 2800000, guid: 865a1d9acbd8240a4bd51bb00e95df80, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OutlineBrushMap:
+        m_Texture: {fileID: 2800000, guid: 67b8eeb60de4040da8e86103f5c566b2, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Texture:
+        m_Texture: {fileID: 2800000, guid: 865a1d9acbd8240a4bd51bb00e95df80, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _texcoord:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AlphaClip: 0.35
+    - _AlphaCutoff: 0.5
+    - _BoluoConiferSnow: 0
+    - _BoluoFoliageSnowScale: 1
+    - _BoluoNativeSeason: 0
+    - _BoluoSpringRole: 1
+    - _Canvas: 0
+    - _CanvasStrength: 0.1
+    - _Clipping: 1
+    - _Cull: 2
+    - _Cutoff: 0.5
+    - _DstBlend: 0
+    - _EdgeStrength: 0.55
+    - _FlutterAmount: 3
+    - _FlutterScale: 0
+    - _FlutterSpeed: 0
+    - _GradientOffset: 0
+    - _GradientSmoothness: 0.12
+    - _InternalEdge: 0
+    - _Kuwahara: 0
+    - _KuwaharaRadius: 0.04
+    - _LowerLightTransmission: 0
+    - _Outline: 0
+    - _OutlineBreak: 0.12
+    - _OutlineBrushScale: 2.5
+    - _OutlineNoise: 0.55
+    - _OutlineNoiseScale: 3.5
+    - _OutlineWidth: 0.028
+    - _OutlineWobble: 0.85
+    - _PaintThickness: 0.18
+    - _ReceiveShadows: 1
+    - _ShadeLift: 0.42
+    - _ShadeSteps: 4
+    - _ShadowBrushScale: 1.8
+    - _ShadowLift: 0.95
+    - _ShadowWobble: 0.45
+    - _Shadows: 1
+    - _SpecularThreshold: 0.86
+    - _SrcBlend: 1
+    - _UpperLightTransmission: 0
+    - _WindNoiseSize: 0.1
+    - _WindSpeed: 1
+    - _WindStrength: 0.12
+    - _ZWrite: 1
+    m_Colors:
+    - _AmbientColor: {r: 0.5333333, g: 0.6627451, b: 0.4196078, a: 1}
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BottomColor: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
+    - _Color: {r: 1, g: 1, b: 1, a: 1}
+    - _EdgeColor: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
+    - _EmissionColor: {r: 1, g: 1, b: 1, a: 1}
+    - _OutlineColor: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
+    - _ShadowTint: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
+    - _ShadowWarm: {r: 0.6588235, g: 0.7490196, b: 0.4705882, a: 1}
+    - _SpecularColor: {r: 0.6588235, g: 0.7490196, b: 0.4705882, a: 1}
+    - _TopColor: {r: 0.6588235, g: 0.7490196, b: 0.4705882, a: 1}
+    - _WindDirection: {r: 0, g: 0, b: 0, a: 0}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

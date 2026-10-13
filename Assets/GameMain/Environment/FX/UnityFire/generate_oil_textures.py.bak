@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""Soft oil campfire maps for NoiseFire (no mosaic / hard edges).
+
+Strategy: keep UnityFire original soft structure, overlay mild wet-brush grain.
+High-contrast stamp cells caused the mosaic look when used as shape/noise/LUT.
+"""
+
+from __future__ import annotations
+
+import math
+import random
+from pathlib import Path
+
+import numpy as np
+from PIL import Image, ImageFilter
+
+TEX = Path(__file__).resolve().parent / "Textures"
+# Authoritative soft originals (never overwrite these).
+SRC = Path(__file__).resolve().parents[4] / "Fire" / "Textures"
+SEED = 20261012
+
+FIRE_RAMP = np.array(
+    [
+        [0.55, 0.12, 0.04],
+        [0.88, 0.32, 0.05],
+        [0.96, 0.55, 0.08],
+        [0.98, 0.78, 0.28],
+        [0.99, 0.93, 0.62],
+        [1.00, 0.98, 0.88],
+    ],
+    dtype=np.float32,
+)
+
+BLUE_RAMP = np.array(
+    [
+        [0.05, 0.12, 0.55],
+        [0.10, 0.35, 0.92],
+        [0.35, 0.72, 0.98],
+        [0.75, 0.92, 1.00],
+        [1.00, 1.00, 1.00],
+    ],
+    dtype=np.float32,
+)
+
+
+def clamp01(x: np.ndarray | float) -> np.ndarray | float:
+    return np.clip(x, 0.0, 1.0)
+
+
+def ramp_sample(ramp: np.ndarray, t: np.ndarray | float) -> np.ndarray:
+    t = np.asarray(t, dtype=np.float32)
+    stops = np.linspace(0.0, 1.0, len(ramp))
+    flat = t.ravel()
+    out = np.empty((flat.size, 3), dtype=np.float32)
+    for c in range(3):
+        out[:, c] = np.interp(flat, stops, ramp[:, c])
+    return out.reshape(t.shape + (3,)) if t.ndim else out[0]
+
+
+def load_rgb(path: Path, size: tuple[int, int] | None = None) -> np.ndarray:
+    im = Image.open(path).convert("RGB")
+    if size is not None:
+        im = im.resize(size, Image.Resampling.LANCZOS)
+    return np.asarray(im, dtype=np.float32) / 255.0
+
+
+def soft_brush_overlay(
+    rgb: np.ndarray,
+    *,
+    stroke_count: int,
+    length_range: tuple[float, float],
+    width_range: tuple[float, float],
+    angle_bias: float,
+    angle_jitter: float,
+    seed: int,
+    opacity: float = 0.18,
+) -> np.ndarray:
+    """Low-opacity soft stamps — grain without cell mosaic."""
+    h, w, _ = rgb.shape
+    rng = random.Random(seed)
+    canvas = rgb.copy()
+    for _ in range(stroke_count):
+        u, v = rng.random(), rng.random()
+        x = u * (w - 1)
+        y = v * (h - 1)
+        ang = angle_bias + rng.uniform(-angle_jitter, angle_jitter)
+        length = rng.uniform(*length_range)
+        width = rng.uniform(*width_range)
+        # Sample local color (slightly brightened) so stamps don't invent hard tiles.
+        ix, iy = int(x), int(y)
+        col = canvas[iy, ix].copy()
+        col = clamp01(col * rng.uniform(0.92, 1.08) + rng.uniform(-0.03, 0.04))
+        hw = max(1, int(width * 0.5))
+        hh = max(1, int(length * 0.5))
+        ca, sa = math.cos(ang), math.sin(ang)
+        for dy in range(-hh, hh + 1):
+            for dx in range(-hw, hw + 1):
+                # Ellipse in rotated space
+                rx = dx * ca + dy * sa
+                ry = -dx * sa + dy * ca
+                nx = rx / max(hw, 1)
+                ny = ry / max(hh, 1)
+                d = math.sqrt(nx * nx + ny * ny)
+                if d > 1.0:
+                    continue
+                fall = (1.0 - d) ** 2.2
+                px = int(x + dx)
+                py = int(y + dy)
+                if px < 0 or py < 0 or px >= w or py >= h:
+                    continue
+                a = opacity * fall * rng.uniform(0.7, 1.0)
+                canvas[py, px] = canvas[py, px] * (1.0 - a) + col * a
+    return canvas
+
+
+def blur_rgb(rgb: np.ndarray, radius: float) -> np.ndarray:
+    im = Image.fromarray((clamp01(rgb) * 255).astype(np.uint8))
+    im = im.filter(ImageFilter.GaussianBlur(radius=radius))
+    return np.asarray(im, dtype=np.float32) / 255.0
+
+
+def add_fine_grain(rgb: np.ndarray, seed: int, amp: float = 0.02) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    h, w, _ = rgb.shape
+    grain = rng.normal(0.0, amp, size=(h, w, 1)).astype(np.float32)
+    return clamp01(rgb + grain)
+
+
+def save_rgb(path: Path, rgb: np.ndarray) -> None:
+    arr = (clamp01(rgb) * 255).astype(np.uint8)
+    im = Image.fromarray(arr)
+    if path.suffix.lower() in (".jpg", ".jpeg"):
+        im.save(path, quality=95, optimize=True)
+    else:
+        im.save(path, optimize=True)
+    print(f"wrote {path.name} {im.size}")
+
+
+def soft_flame_from_original(src_name: str, dst: Path, seed: int) -> None:
+    src = SRC / src_name
+    rgb = load_rgb(src, (1024, 1024) if src_name.endswith(".png") else None)
+    # Upscale original soft shape then mild oil streak (vertical).
+    if rgb.shape[0] < 900:
+        rgb = np.asarray(
+            Image.fromarray((rgb * 255).astype(np.uint8)).resize(
+                (1024, 1024), Image.Resampling.LANCZOS
+            ),
+            dtype=np.float32,
+        ) / 255.0
+    rgb = soft_brush_overlay(
+        rgb,
+        stroke_count=900,
+        length_range=(40, 140),
+        width_range=(6, 18),
+        angle_bias=-math.pi / 2,
+        angle_jitter=0.35,
+        seed=seed,
+        opacity=0.12,
+    )
+    # Keep silhouette soft — critical vs mosaic edges.
+    rgb = blur_rgb(rgb, 1.6)
+    L = 0.3 * rgb[..., 0] + 0.6 * rgb[..., 1] + 0.1 * rgb[..., 2]
+    # Crush near-black so card edges stay clean.
+    L = np.where(L < 0.02, 0.0, L)
+    L = add_fine_grain(np.stack([L, L, L], -1), seed, amp=0.012)[..., 0]
+    L = np.where(L < 0.02, 0.0, L)
+    save_rgb(dst, np.stack([L, L, L], -1))
+
+
+def soft_noise_from_original(src_name: str, dst: Path, size: int, seed: int) -> None:
+    src = SRC / src_name
+    rgb = load_rgb(src, (size, size))
+    rgb = soft_brush_overlay(
+        rgb,
+        stroke_count=700,
+        length_range=(size * 0.04, size * 0.14),
+        width_range=(size * 0.02, size * 0.06),
+        angle_bias=0.25,
+        angle_jitter=1.0,
+        seed=seed,
+        opacity=0.14,
+    )
+    # Soft mid-contrast cloud — avoids block UV displace.
+    rgb = blur_rgb(rgb, max(1.2, size / 220.0))
+    L = rgb.mean(-1)
+    L = 0.5 + (L - 0.5) * 0.72  # pull toward mid-gray
+    L = add_fine_grain(np.stack([L, L, L], -1), seed, amp=0.018)[..., 0]
+    save_rgb(dst, np.stack([L, L, L], -1))
+
+
+def soft_lut(path: Path, size: int = 512, seed: int = SEED + 20) -> None:
+    ug = np.linspace(0, 1, size, dtype=np.float32)
+    vg = np.linspace(0, 1, size, dtype=np.float32)
+    UU, VV = np.meshgrid(ug, vg)
+    t = 0.55 * UU + 0.45 * (1.0 - VV)
+    rgb = ramp_sample(FIRE_RAMP, t)
+    rgb = soft_brush_overlay(
+        rgb,
+        stroke_count=500,
+        length_range=(18, 56),
+        width_range=(6, 16),
+        angle_bias=math.pi / 4,
+        angle_jitter=0.4,
+        seed=seed,
+        opacity=0.10,
+    )
+    rgb = blur_rgb(rgb, 1.4)
+    # Re-anchor smooth ramp so LUT stays continuous (no cell mosaic).
+    base = ramp_sample(FIRE_RAMP, t)
+    rgb = clamp01(rgb * 0.35 + base * 0.65)
+    rgb = add_fine_grain(rgb, seed, amp=0.015)
+    save_rgb(path, rgb)
+
+
+def soft_bottom_mask(path: Path, size: int = 512, seed: int = SEED + 40) -> None:
+    src = SRC / "r.jpeg"
+    if src.exists():
+        rgb = load_rgb(src, (size, size))
+    else:
+        vg = np.linspace(0, 1, size, dtype=np.float32)[:, None]
+        t = clamp01((vg - 0.32) / 0.48)
+        t = t * t * (3 - 2 * t)
+        rgb = np.broadcast_to(t, (size, size))[..., None].repeat(3, axis=-1)
+    rgb = soft_brush_overlay(
+        rgb,
+        stroke_count=400,
+        length_range=(28, 90),
+        width_range=(10, 24),
+        angle_bias=0.0,
+        angle_jitter=0.3,
+        seed=seed,
+        opacity=0.1,
+    )
+    rgb = blur_rgb(rgb, 1.8)
+    vg = np.linspace(0, 1, size, dtype=np.float32)[:, None]
+    t = clamp01((vg - 0.32) / 0.48)
+    t = t * t * (3 - 2 * t)
+    base = np.broadcast_to(t, (size, size))
+    L = clamp01(rgb.mean(-1) * 0.4 + base * 0.6)
+    save_rgb(path, np.stack([L, L, L], -1))
+
+
+def soft_linelerp(path: Path, size: int = 576, seed: int = SEED + 10) -> None:
+    src = SRC / "linelerp.jpeg"
+    if src.exists():
+        rgb = load_rgb(src, (size, size))
+    else:
+        vg = np.linspace(0, 1, size, dtype=np.float32)[:, None]
+        rgb = ramp_sample(BLUE_RAMP, np.broadcast_to(vg, (size, size)))
+    rgb = soft_brush_overlay(
+        rgb,
+        stroke_count=450,
+        length_range=(24, 80),
+        width_range=(8, 20),
+        angle_bias=0.0,
+        angle_jitter=0.3,
+        seed=seed,
+        opacity=0.1,
+    )
+    rgb = blur_rgb(rgb, 1.5)
+    vg = np.linspace(0, 1, size, dtype=np.float32)[:, None]
+    base = ramp_sample(BLUE_RAMP, np.broadcast_to(vg, (size, size)))
+    rgb = clamp01(rgb * 0.4 + base * 0.6)
+    rgb = add_fine_grain(rgb, seed, amp=0.012)
+    save_rgb(path, rgb)
+
+
+def main() -> None:
+    if not SRC.is_dir():
+        raise SystemExit(f"missing original textures: {SRC}")
+
+    soft_linelerp(TEX / "linelerp.jpeg")
+    soft_lut(TEX / "color_texture.jpeg")
+    soft_lut(TEX / "blue_color_texture.jpeg", seed=SEED + 21)
+    soft_flame_from_original("base.png", TEX / "base.png", SEED + 1)
+    soft_flame_from_original("MineFireBase.png", TEX / "MineFireBase.png", SEED + 2)
+    soft_bottom_mask(TEX / "r.jpeg")
+    soft_noise_from_original("noise2.png", TEX / "noise2.png", 512, SEED + 6)
+    soft_noise_from_original("noise.jpeg", TEX / "noise.jpeg", 560, SEED + 7)
+    print("done — soft oil overlays on original UnityFire structure")
+
+
+if __name__ == "__main__":
+    main()
