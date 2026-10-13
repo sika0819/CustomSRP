@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Packages/*/link.xml is ignored by Unity linker — keep preservations under Assets/. -->
+<linker>
+  <assembly fullname="GameFramework" preserve="all" />
+  <assembly fullname="UnityGameFramework.Runtime" preserve="all" />
+  <assembly fullname="Game" preserve="all" />
+  <assembly fullname="YooAsset" preserve="all" />
+  <assembly fullname="YooAsset.RuntimeExtension" preserve="all" />
+  <!-- UXML from AssetBundles needs UxmlSerializedData retained under IL2CPP. -->
+  <assembly fullname="UnityEngine.UIElementsModule" preserve="all" />
+</linker>
