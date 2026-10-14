@@ -95,6 +95,8 @@ namespace Game.Native
             return !string.IsNullOrEmpty(deviceId);
         }
 
+        static bool _loggedSignKitMissing;
+
         public static void SetSignEnvironment(int env)
         {
 #if UNITY_IOS && !UNITY_EDITOR
@@ -105,6 +107,10 @@ namespace Game.Native
             {
                 NativeSignBridge.SetEnvironment(env);
                 Log.Info($"[NativeSession] SetEnv ok current={NativeSignBridge.GetEnvironment()}");
+            }
+            catch (DllNotFoundException e)
+            {
+                LogSignKitMissingOnce(e.Message);
             }
             catch (Exception e)
             {
@@ -119,6 +125,16 @@ namespace Game.Native
             if (string.IsNullOrEmpty(result))
                 throw new Exception("GenerateSign returned empty");
             return result;
+        }
+
+        static void LogSignKitMissingOnce(string detail)
+        {
+            if (_loggedSignKitMissing)
+                return;
+            _loggedSignKitMissing = true;
+            Log.Warning(
+                "[NativeSession] libSignKit missing — 独立 APK 需 Plugins/libSignKit/Android/*.so。" +
+                $" detail={detail}");
         }
 
         public static bool TryParseExpireToken(string blob, out uint expire, out string token)

@@ -29,14 +29,15 @@ namespace CustomSRP
             Clover = 11,
         }
 
+        // 花：实例缩放约 1.5（Aster/Chamomile/Dandelions/Speedwell）。
         public static readonly float[] HeightScales =
         {
-            1f, 0.96f, 1f, 0.90f, 1.06f, 0.72f, 1.18f, 1.75f, 1.60f, 1.80f, 2.40f, 0.62f,
+            1f, 0.96f, 1f, 0.90f, 1.06f, 0.72f, 1.18f, 1.5f, 1.5f, 1.5f, 1.5f, 0.62f,
         };
 
         public static readonly float[] WidthScales =
         {
-            1f, 1f, 0.88f, 1.12f, 0.92f, 1f, 0.72f, 1.35f, 1.30f, 1.40f, 1.20f, 0.95f,
+            1f, 1f, 0.88f, 1.12f, 0.92f, 1f, 0.72f, 1.5f, 1.5f, 1.5f, 1.5f, 0.95f,
         };
 
         public static bool IsFlower(int variant) =>
@@ -124,10 +125,11 @@ namespace CustomSRP
                 BuildThin(segments),
                 BuildShrub(segments),
                 BuildWheat(segments),
-                BuildFlowerPlant("FlowerAster", 0, 0.48f, 0.50f, 0.28f, segments),
-                BuildFlowerPlant("FlowerChamomile", 1, 0.44f, 0.46f, 0.26f, segments),
-                BuildFlowerPlant("FlowerDandelions", 2, 0.52f, 0.54f, 0.30f, segments),
-                BuildFlowerPlant("FlowerSpeedwell", 3, 0.22f, 0.88f, 0f, segments),
+                // 花冠近水平单片；bloom≈0.34 叠实例缩放，比草醒目且不再十字片。
+                BuildFlowerPlant("FlowerAster", 0, 0.34f, 0.34f, 0.22f, segments),
+                BuildFlowerPlant("FlowerChamomile", 1, 0.32f, 0.32f, 0.20f, segments),
+                BuildFlowerPlant("FlowerDandelions", 2, 0.36f, 0.36f, 0.24f, segments),
+                BuildFlowerPlant("FlowerSpeedwell", 3, 0.14f, 0.58f, 0f, segments, horizontalBloom: false),
                 BuildClover(segments),
             };
         }
@@ -199,20 +201,35 @@ namespace CustomSRP
         static readonly Vector4 StemUvRect = new Vector4(0.018f, 0.008f, 0.155f, 0.175f);
         static readonly Vector4 CloverLeafUv = new Vector4(0.435f, 0.058f, 0.080f, 0.056f);
 
-        static Mesh BuildFlowerPlant(string name, int srcIndex, float bloomW, float bloomH, float stemH, int segments)
+        static Mesh BuildFlowerPlant(
+            string name,
+            int srcIndex,
+            float bloomW,
+            float bloomH,
+            float stemH,
+            int segments,
+            bool horizontalBloom = true)
         {
             Vector4 bloom = OilTerrainGrassAtlas.FlowerSrcRects[srcIndex];
             var b = new Builder(name);
-            int bloomSeg = Mathf.Max(2, segments - 1);
             if (stemH > 0.02f)
             {
-                b.AddCard(0.08f, 0.055f, stemH, Vector3.zero, StemUvRect, 2);
-                b.AddCard(1.65f, 0.048f, stemH * 0.94f, new Vector3(0.01f, 0f, 0.01f), StemUvRect, 2);
+                // 单根细茎，避免再叠成十字。
+                b.AddCard(0.08f, 0.028f, stemH, Vector3.zero, StemUvRect, 2);
             }
 
-            var head = new Vector3(0f, stemH * 0.72f, 0f);
-            b.AddCard(0.12f, bloomW, bloomH, head, bloom, bloomSeg);
-            b.AddCard(1.68f, bloomW * 0.92f, bloomH * 0.90f, head + new Vector3(0.02f, 0f, 0.02f), bloom, bloomSeg);
+            var head = new Vector3(0f, Mathf.Max(stemH * 0.92f, 0.02f), 0f);
+            if (horizontalBloom)
+            {
+                // 近水平花盘：俯视像花，侧看也不再是草那种 90° 十字片。
+                b.AddHorizontalCard(0.15f, bloomW, bloomH, head, bloom, tiltDeg: 18f);
+            }
+            else
+            {
+                // 穗状花（Speedwell）仍用单竖直片。
+                b.AddCard(0.12f, bloomW, bloomH, head, bloom, Mathf.Max(2, segments - 1));
+            }
+
             return b.ToMesh();
         }
 
@@ -291,6 +308,68 @@ namespace CustomSRP
                     _tris.Add(i + 1);
                     _tris.Add(i + 3);
                 }
+            }
+
+            /// <summary>近水平四边形花盘（双面），yaw 微旋 + 轻微抬头便于侧视。</summary>
+            public void AddHorizontalCard(
+                float yaw,
+                float width,
+                float depth,
+                Vector3 offset,
+                Vector4 uvRect,
+                float tiltDeg = 16f)
+            {
+                float s = Mathf.Sin(yaw);
+                float c = Mathf.Cos(yaw);
+                float halfW = width * 0.5f;
+                float halfD = depth * 0.5f;
+                float tilt = tiltDeg * Mathf.Deg2Rad;
+                float ty = Mathf.Sin(tilt);
+                float tz = Mathf.Cos(tilt);
+
+                // 本地：X 右、Z 前略抬头；再绕 Y 旋 yaw。
+                var corners = new[]
+                {
+                    new Vector3(-halfW, 0f, -halfD),
+                    new Vector3(halfW, 0f, -halfD),
+                    new Vector3(-halfW, 0f, halfD),
+                    new Vector3(halfW, 0f, halfD),
+                };
+                var uvs = new[]
+                {
+                    new Vector2(uvRect.x, uvRect.y),
+                    new Vector2(uvRect.x + uvRect.z, uvRect.y),
+                    new Vector2(uvRect.x, uvRect.y + uvRect.w),
+                    new Vector2(uvRect.x + uvRect.z, uvRect.y + uvRect.w),
+                };
+
+                int baseV = _verts.Count;
+                for (int i = 0; i < 4; i++)
+                {
+                    Vector3 p = corners[i];
+                    // 绕 X 抬头少许，再绕 Y。
+                    float y = p.y * tz - p.z * ty;
+                    float z = p.y * ty + p.z * tz;
+                    p.y = y;
+                    p.z = z;
+                    var world = new Vector3(p.x * c + p.z * s, p.y, -p.x * s + p.z * c) + offset;
+                    _verts.Add(world);
+                    _uvs.Add(uvs[i]);
+                }
+
+                // 双面
+                _tris.Add(baseV);
+                _tris.Add(baseV + 2);
+                _tris.Add(baseV + 1);
+                _tris.Add(baseV + 1);
+                _tris.Add(baseV + 2);
+                _tris.Add(baseV + 3);
+                _tris.Add(baseV);
+                _tris.Add(baseV + 1);
+                _tris.Add(baseV + 2);
+                _tris.Add(baseV + 1);
+                _tris.Add(baseV + 3);
+                _tris.Add(baseV + 2);
             }
 
             public Mesh ToMesh()
