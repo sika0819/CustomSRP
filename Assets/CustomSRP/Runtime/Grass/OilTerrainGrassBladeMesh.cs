@@ -125,11 +125,11 @@ namespace CustomSRP
                 BuildThin(segments),
                 BuildShrub(segments),
                 BuildWheat(segments),
-                // 小麦 mesh 高≈1.28×1.18≈1.5；花茎≈1.05~1.12（略矮），花冠近水平单片。
-                BuildFlowerPlant("FlowerAster", 0, 0.40f, 0.40f, 1.08f, segments),
-                BuildFlowerPlant("FlowerChamomile", 1, 0.38f, 0.38f, 1.02f, segments),
-                BuildFlowerPlant("FlowerDandelions", 2, 0.42f, 0.42f, 1.12f, segments),
-                BuildFlowerPlant("FlowerSpeedwell", 3, 0.12f, 1.10f, 0f, segments, horizontalBloom: false),
+                // 小麦≈1.5 高；花茎略矮。花冠 120°×3 片减十字感。
+                BuildFlowerPlant("FlowerAster", 0, 0.38f, 0.38f, 1.08f, segments),
+                BuildFlowerPlant("FlowerChamomile", 1, 0.36f, 0.36f, 1.02f, segments),
+                BuildFlowerPlant("FlowerDandelions", 2, 0.40f, 0.40f, 1.12f, segments),
+                BuildFlowerPlant("FlowerSpeedwell", 3, 0.12f, 1.10f, 0f, segments),
                 BuildClover(segments),
             };
         }
@@ -207,27 +207,26 @@ namespace CustomSRP
             float bloomW,
             float bloomH,
             float stemH,
-            int segments,
-            bool horizontalBloom = true)
+            int segments)
         {
             Vector4 bloom = OilTerrainGrassAtlas.FlowerSrcRects[srcIndex];
             var b = new Builder(name);
+            int bloomSeg = Mathf.Max(2, segments - 1);
+            // 单茎，避免茎也成十字。
             if (stemH > 0.02f)
-            {
-                // 单根细茎，避免再叠成十字。
-                b.AddCard(0.08f, 0.028f, stemH, Vector3.zero, StemUvRect, 2);
-            }
+                b.AddCard(0.08f, 0.034f, stemH, Vector3.zero, StemUvRect, 2);
 
-            var head = new Vector3(0f, Mathf.Max(stemH * 0.92f, 0.02f), 0f);
-            if (horizontalBloom)
+            // 花冠：3 片均分 120° + 尺寸递减，比 90° 双片圆润、十字感弱。
+            var head = new Vector3(0f, stemH > 0.02f ? stemH * 0.88f : 0.02f, 0f);
+            const float step = 2.094395f; // 120°
+            float[] sizeMul = { 1f, 0.88f, 0.78f };
+            for (int i = 0; i < 3; i++)
             {
-                // 近水平花盘：俯视像花，侧看也不再是草那种 90° 十字片。
-                b.AddHorizontalCard(0.15f, bloomW, bloomH, head, bloom, tiltDeg: 18f);
-            }
-            else
-            {
-                // 穗状花（Speedwell）仍用单竖直片。
-                b.AddCard(0.12f, bloomW, bloomH, head, bloom, Mathf.Max(2, segments - 1));
+                float yaw = 0.18f + i * step;
+                float m = sizeMul[i];
+                float r = 0.012f * i;
+                var o = head + new Vector3(Mathf.Cos(yaw) * r, 0.01f * i, Mathf.Sin(yaw) * r);
+                b.AddCard(yaw, bloomW * m, bloomH * m, o, bloom, bloomSeg);
             }
 
             return b.ToMesh();
@@ -308,68 +307,6 @@ namespace CustomSRP
                     _tris.Add(i + 1);
                     _tris.Add(i + 3);
                 }
-            }
-
-            /// <summary>近水平四边形花盘（双面），yaw 微旋 + 轻微抬头便于侧视。</summary>
-            public void AddHorizontalCard(
-                float yaw,
-                float width,
-                float depth,
-                Vector3 offset,
-                Vector4 uvRect,
-                float tiltDeg = 16f)
-            {
-                float s = Mathf.Sin(yaw);
-                float c = Mathf.Cos(yaw);
-                float halfW = width * 0.5f;
-                float halfD = depth * 0.5f;
-                float tilt = tiltDeg * Mathf.Deg2Rad;
-                float ty = Mathf.Sin(tilt);
-                float tz = Mathf.Cos(tilt);
-
-                // 本地：X 右、Z 前略抬头；再绕 Y 旋 yaw。
-                var corners = new[]
-                {
-                    new Vector3(-halfW, 0f, -halfD),
-                    new Vector3(halfW, 0f, -halfD),
-                    new Vector3(-halfW, 0f, halfD),
-                    new Vector3(halfW, 0f, halfD),
-                };
-                var uvs = new[]
-                {
-                    new Vector2(uvRect.x, uvRect.y),
-                    new Vector2(uvRect.x + uvRect.z, uvRect.y),
-                    new Vector2(uvRect.x, uvRect.y + uvRect.w),
-                    new Vector2(uvRect.x + uvRect.z, uvRect.y + uvRect.w),
-                };
-
-                int baseV = _verts.Count;
-                for (int i = 0; i < 4; i++)
-                {
-                    Vector3 p = corners[i];
-                    // 绕 X 抬头少许，再绕 Y。
-                    float y = p.y * tz - p.z * ty;
-                    float z = p.y * ty + p.z * tz;
-                    p.y = y;
-                    p.z = z;
-                    var world = new Vector3(p.x * c + p.z * s, p.y, -p.x * s + p.z * c) + offset;
-                    _verts.Add(world);
-                    _uvs.Add(uvs[i]);
-                }
-
-                // 双面
-                _tris.Add(baseV);
-                _tris.Add(baseV + 2);
-                _tris.Add(baseV + 1);
-                _tris.Add(baseV + 1);
-                _tris.Add(baseV + 2);
-                _tris.Add(baseV + 3);
-                _tris.Add(baseV);
-                _tris.Add(baseV + 1);
-                _tris.Add(baseV + 2);
-                _tris.Add(baseV + 1);
-                _tris.Add(baseV + 3);
-                _tris.Add(baseV + 2);
             }
 
             public Mesh ToMesh()
