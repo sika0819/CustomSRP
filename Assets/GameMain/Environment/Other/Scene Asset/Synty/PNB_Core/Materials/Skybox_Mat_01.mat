@@ -14,7 +14,6 @@ Material:
   m_ValidKeywords:
   - _CANVAS_ON
   - _INTERNAL_EDGE_ON
-  - _KUWAHARA_ON
   - _RECEIVE_SHADOWS
   m_InvalidKeywords:
   - _OUTLINE_ON
@@ -67,8 +66,6 @@ Material:
     - _EnvironmentReflections: 1
     - _Falloff: 1
     - _InternalEdge: 1
-    - _Kuwahara: 1
-    - _KuwaharaRadius: 0.04
     - _Offset: 70
     - _Outline: 1
     - _OutlineBreak: 0.12

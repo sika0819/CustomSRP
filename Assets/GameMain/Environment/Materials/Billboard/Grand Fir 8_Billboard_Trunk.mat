@@ -15,7 +15,6 @@ Material:
   - _CANVAS_ON
   - _CLIPPING
   - _INTERNAL_EDGE_ON
-  - _KUWAHARA_ON
   - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
   m_InvalidKeywords: []
@@ -72,8 +71,6 @@ Material:
     - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
     - _InternalEdge: 1
-    - _Kuwahara: 1
-    - _KuwaharaRadius: 0.04
     - _LeafTexBlend: 0
     - _NormalStrength: 0.85
     - _PaintThickness: 0.18

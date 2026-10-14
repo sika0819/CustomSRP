@@ -27,7 +27,6 @@ Material:
   m_ValidKeywords:
   - _CANVAS_ON
   - _INTERNAL_EDGE_ON
-  - _KUWAHARA_ON
   - _RECEIVE_SHADOWS
   m_InvalidKeywords:
   - _OUTLINE_ON
@@ -140,8 +139,6 @@ Material:
     - _GlossyReflections: 0
     - _GradientAmount: 0.3
     - _InternalEdge: 1
-    - _Kuwahara: 1
-    - _KuwaharaRadius: 0.04
     - _Metallic: 0
     - _OcclusionStrength: 1
     - _Outline: 1

@@ -11,7 +11,6 @@
 | 参数 | 作用 |
 |------|------|
 | `_BaseMap` / `_BaseColor` | 底色；建议用 `OilAlbedo` 大色块贴图 + `_BaseColor` 染色 |
-| `_KuwaharaRadius` | UV 空间色块半径（默认 ~0.04，越大笔触越大） |
 | `_CanvasMap` | 打包：RG 切线法线、B 厚度；缩放宜 **&lt;1**（织纹更大、更稀） |
 | `_CanvasStrength` | 画布法线（宜 0.08–0.12，过大会发脏） |
 | `_PaintThickness` | `(1-N·V) × B` 边缘亮部（宜偏低） |
@@ -30,9 +29,9 @@
 | `_OutlineBreak` | 笔触断裂阈值（越高越碎） |
 | `_ReceiveShadows` / `_Shadows` | 接收/投射阴影 |
 
-Keyword（`shader_feature_local`）：`_KUWAHARA_ON`、`_CANVAS_ON`、`_INTERNAL_EDGE_ON`、`_CLIPPING`、`_RECEIVE_SHADOWS`。描边用 Pass 开关 / LOD，不全编译进 Forward。Outline Pass 同样吃 `_CLIPPING`（与 Forward 同 alpha）。
+Keyword：`_CLIPPING`、`_RECEIVE_SHADOWS`（`multi_compile_local`）。描边用 Pass 开关 / LOD，不全编译进 Forward。Outline Pass 同样吃 `_CLIPPING`（与 Forward 同 alpha）。
 
-**叶片策略（Validate / `GameMain/Boluo/Fix Foliage Oil Ink`）**：`shu_*` / Billboard / Contour / 灌木等叶卡 → `_BaseMap` 从 `_MainTex` 补齐、开 `_CLIPPING`、`Cull Back`（片元再丢背面）、关 Outline / Internal Edge / Kuwahara / ReceiveShadows；Outline Pass 在 `_CLIPPING` 下 **硬 `clip(-1)`**（防 bundle/重导又打开 Pass 时背后外扩碎墨）；阴影用 `_SHADOWS_CLIP`（勿用不透明整卡投影）。关掉 `LOD_Billboard` / `LOD_Contour`，LOD 末档改挂 LOD2/LOD1。实心岩/树干保留描边与 Kuwahara。
+**叶片策略（Validate / `GameMain/Boluo/Fix Foliage Oil Ink`）**：`shu_*` / Billboard / Contour / 灌木等叶卡 → `_BaseMap` 从 `_MainTex` 补齐、开 `_CLIPPING`、`Cull Back`（片元再丢背面）、关 Outline / Internal Edge / ReceiveShadows；Outline Pass 在 `_CLIPPING` 下 **硬 `clip(-1)`**（防 bundle/重导又打开 Pass 时背后外扩碎墨）；阴影用 `_SHADOWS_CLIP`（勿用不透明整卡投影）。关掉 `LOD_Billboard` / `LOD_Contour`，LOD 末档改挂 LOD2/LOD1。实心岩/树干保留描边。
 
 ## LOD
 
@@ -61,7 +60,6 @@ Keyword（`shader_feature_local`）：`_KUWAHARA_ON`、`_CANVAS_ON`、`_INTERNAL
 ## 性能注意
 
 - 片元尽量 `half`；世界位置 / 矩阵仍 `float`。
-- Kuwahara 约 4×(4+1) 次 Albedo 采样；远景关 `_KUWAHARA_ON` 或降材质 LOD。
 - Outline 多一趟不透明 Draw；小物体 / LOD 150 / 关 Outline Pass。
 - Canvas 单贴图打包，少一次采样绑定。
 - 移动端构建：[`OilNPRShaderStripper`](../Assets/CustomSRP/Editor/OilNPRShaderStripper.cs) 剥离 `INSTANCING_ON`（优先 Batcher）。
@@ -73,7 +71,7 @@ Keyword（`shader_feature_local`）：`_KUWAHARA_ON`、`_CANVAS_ON`、`_INTERNAL
 |------|------|
 | `OilOchre` / `OilTeal` / `OilClay` | 主物体，Outline 开 |
 | `OilGround` | 地面，Outline 关 |
-| 贴图 `OilAlbedo.png` | 物体笔触底图（Kuwahara） |
+| 贴图 `OilAlbedo.png` | 物体笔触底图 |
 | 贴图 `OilGround.png` | 地面油画笔触（大地色/橄榄绿） |
 | 贴图 `OilCanvas.png` | **线性**打包：RG 法线、B 厚度（预览紫灰正常） |
 | 贴图 `OilCanvas_Weave.png` | 织纹参考（sRGB） |

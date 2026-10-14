@@ -46,7 +46,7 @@ Unity 6 (`6000.6.4f1`) 自建 Scriptable Render Pipeline 练习工程（Render G
 | `Particles` | Create Particles Scene | Soft / Near Fade / Flipbook / Distortion | Color/Depth copy 已接 | [doc](doc/particles.md) |
 | `RenderScale` | Create Render Scale Scene | Inherit vs Override 0.5 / Bicubic | `renderScale` + Final Rescale 已接 | [doc](doc/render-scale.md) |
 | `FXAA` | Create FXAA Scene | 分屏开/关 FXAA | FXAA Pass + `allowFXAA` 已接 | [doc](doc/fxaa.md) |
-| `Empty` | Create Empty Scene | 油画 NPR / Kuwahara / Outline / 笔触本影 | OilNPR 已接 | [doc](doc/oil-npr.md) |
+| `Empty` | Create Empty Scene | 油画 NPR / Outline / 笔触本影 | OilNPR 已接 | [doc](doc/oil-npr.md) |
 | `MooreaTerrain` | Create Moorea Terrain Scene (1:1) | 真实 16.5 km 全岛 + 四时段油画天空 | TerrainOilNPR + OilSkyboxNPR | [doc](doc/terrain.md) |
 
 ## 目录
@@ -70,7 +70,7 @@ doc/                       # 场景与管线文档
 ## 当前能力（摘要）
 
 - **几何**：Opaque / AlphaTest / Transparent；Unlit + Lit（`CustomLit`）；Unsupported → Error（Editor）
-- **风格**：OilNPR（物体 + Outline）；TerrainOilNPR（splat + control-UV Kuwahara，无 Outline）；OilSkyboxNPR（黎明 / 白天 / 黄昏 / 夜晚）；旧 TerrainLit 保留对照
+- **风格**：OilNPR（物体 + Outline）；TerrainOilNPR（splat，无 Outline）；OilSkyboxNPR（黎明 / 白天 / 黄昏 / 夜晚）；旧 TerrainLit 保留对照
 - **光**：最多 4 盏 Directional；Other（Point/Spot）直接光 + Forward+；环境反射（SpecCube）
 - **影**：Directional CSM + PCF；Other 第二 atlas（透视 / Point 六面）；油画笔触本影（冷/暖 tint）
 - **后处理**：Bloom（LDR/散射）、Color Grading + LUT、Tone Mapping、FXAA、Render Scale / Bicubic

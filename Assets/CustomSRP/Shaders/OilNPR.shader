@@ -7,8 +7,6 @@ Shader "CustomSRP/OilNPR"
         _Cutoff ("Alpha Cutoff", Range(0, 1)) = 0.5
         [Toggle(_CLIPPING)] _Clipping ("Alpha Clipping", Float) = 0
 
-        [Toggle(_KUWAHARA_ON)] _Kuwahara ("Kuwahara Albedo", Float) = 0
-        _KuwaharaRadius ("Kuwahara Radius (UV)", Range(0.005, 0.12)) = 0.04
         _PaintThickness ("Paint Thickness", Range(0, 2)) = 0.18
 
         _ShadeSteps ("Shade Steps", Range(2, 8)) = 4
@@ -58,7 +56,6 @@ Shader "CustomSRP/OilNPR"
             #pragma target 3.5
             // multi_compile：Yoo/AB 叶片材质不进主包场景时，shader_feature 会被剥掉 → 真机无裁剪/无影。
             #pragma multi_compile_local _ _CLIPPING
-            #pragma shader_feature_local _KUWAHARA_ON
             #pragma multi_compile_local _ _RECEIVE_SHADOWS
             #pragma multi_compile _ OIL_MOBILE_PERF
             #pragma multi_compile_instancing

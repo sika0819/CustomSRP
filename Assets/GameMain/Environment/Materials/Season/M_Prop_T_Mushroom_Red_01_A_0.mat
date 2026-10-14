@@ -77,8 +77,6 @@ Material:
     - _DstBlend: 0
     - _EdgeStrength: 0.55
     - _InternalEdge: 0
-    - _Kuwahara: 0
-    - _KuwaharaRadius: 0.04
     - _LayerDetailStrength: 0
     - _LightStrength: 0.22
     - _LightThreshold: 0.72

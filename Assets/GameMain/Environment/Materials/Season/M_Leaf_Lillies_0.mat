@@ -74,8 +74,6 @@ Material:
     - _GradientOffset: 0
     - _GradientSmoothness: 0
     - _InternalEdge: 0
-    - _Kuwahara: 0
-    - _KuwaharaRadius: 0.04
     - _LowerLightTransmission: 0
     - _Outline: 1
     - _OutlineBreak: 0.12

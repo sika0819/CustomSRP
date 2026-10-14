@@ -49,8 +49,6 @@ Material:
     - _DstBlend: 0
     - _EdgeStrength: 0.35
     - _InternalEdge: 0
-    - _Kuwahara: 0
-    - _KuwaharaRadius: 0.085
     - _Outline: 0
     - _OutlineBreak: 0.1
     - _OutlineBrushScale: 2.5

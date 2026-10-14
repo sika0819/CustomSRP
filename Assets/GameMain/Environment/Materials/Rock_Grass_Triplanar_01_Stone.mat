@@ -179,8 +179,6 @@ Material:
     - _Glossiness: 0.5
     - _GlossyReflections: 1
     - _InternalEdge: 1
-    - _Kuwahara: 0
-    - _KuwaharaRadius: 0.04
     - _Metallic: 0
     - _Mode: 0
     - _Normal_Intensity: 1

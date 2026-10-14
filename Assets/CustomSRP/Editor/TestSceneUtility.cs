@@ -372,7 +372,7 @@ namespace CustomSRP.Editor
         public const string OilSunStrokePath = TexturesPath + "/OilSunStroke.png";
 
         /// <summary>
-        /// Soft blotchy albedo for Kuwahara dabs (sRGB). Prefer authored OilAlbedo.png.
+        /// Soft blotchy albedo for oil dabs (sRGB). Prefer authored OilAlbedo.png.
         /// </summary>
         public static Texture2D EnsureOilAlbedoTexture()
         {
@@ -514,7 +514,6 @@ namespace CustomSRP.Editor
             material.SetFloat("_ShadowLift", 0.95f);
             material.SetFloat("_ShadowWobble", 0.45f);
             material.SetFloat("_ShadowBrushScale", 1.8f);
-            material.SetFloat("_KuwaharaRadius", 0.05f);
             material.SetColor("_AmbientColor", new Color(0.55f, 0.5f, 0.44f, 1f));
             material.SetFloat("_PaintThickness", 0.18f);
             Texture2D brush = EnsureOilBrushTexture();
@@ -536,8 +535,6 @@ namespace CustomSRP.Editor
             ApplyShadowMode(material, ShadowMode.On);
             material.SetFloat("_ReceiveShadows", 1f);
             material.EnableKeyword("_RECEIVE_SHADOWS");
-            material.SetFloat("_Kuwahara", 0f);
-            material.DisableKeyword("_KUWAHARA_ON");
             material.DisableKeyword("_CANVAS_ON");
             material.DisableKeyword("_INTERNAL_EDGE_ON");
 
@@ -668,7 +665,6 @@ namespace CustomSRP.Editor
             // Flat sea + cascade culling sphere → camera-sliding 圆影. NPR shade only.
             material.SetFloat("_ReceiveShadows", 0f);
             material.DisableKeyword("_RECEIVE_SHADOWS");
-            material.DisableKeyword("_KUWAHARA_ON");
             material.DisableKeyword("_CANVAS_ON");
             material.DisableKeyword("_SHADOWS_DITHER");
             material.enableInstancing = false;
@@ -844,7 +840,6 @@ namespace CustomSRP.Editor
             }
 
             material.SetColor("_BaseColor", new Color(0.92f, 0.88f, 0.78f, 1f));
-            material.SetFloat("_KuwaharaRadius", 0.085f);
             material.SetFloat("_PaintThickness", 0.12f);
             material.SetFloat("_ShadeSteps", 3f);
             material.SetFloat("_ShadeLift", 0.48f);
@@ -857,7 +852,6 @@ namespace CustomSRP.Editor
 
         /// <summary>
         /// Android Empty package: keep oil look, cut fill-rate / sample cost.
-        /// OIL_MOBILE_PERF forces single-tap albedo; ground also disables Kuwahara keyword.
         /// </summary>
         public static void ApplyOilMobilePerfPreset(params Material[] materials)
         {
@@ -869,18 +863,7 @@ namespace CustomSRP.Editor
                 }
 
                 bool isGround = material.name.Contains("Ground");
-                if (isGround)
-                {
-                    material.SetFloat("_Kuwahara", 0f);
-                    material.DisableKeyword("_KUWAHARA_ON");
-                    material.SetFloat("_PaintThickness", 0.1f);
-                }
-                else
-                {
-                    material.SetFloat("_KuwaharaRadius", 0.04f);
-                    material.SetFloat("_PaintThickness", 0.14f);
-                }
-
+                material.SetFloat("_PaintThickness", isGround ? 0.1f : 0.14f);
                 material.DisableKeyword("_CANVAS_ON");
                 material.DisableKeyword("_INTERNAL_EDGE_ON");
                 EditorUtility.SetDirty(material);

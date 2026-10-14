@@ -71,8 +71,6 @@ Material:
     - _EdgeStrength: 0.55
     - _EnvironmentReflections: 1
     - _InternalEdge: 0
-    - _Kuwahara: 0
-    - _KuwaharaRadius: 0.04
     - _Outline: 0
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5

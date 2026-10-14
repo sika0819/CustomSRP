@@ -130,7 +130,7 @@ ShadowMasks 与 BakedLight **共用**上述材质与布局（仅 Mixed 模式不
 | 材质 | Shader | 用途 |
 |------|--------|------|
 | `TerrainOilNPRMoorea` | TerrainOilNPR | `MooreaTerrain.materialTemplate` |
-| `LitMooreaOcean` | OilOceanNPR Premul | Moorea 海面 Plane（Kuwahara + 涌浪） |
+| `LitMooreaOcean` | OilOceanNPR Premul | Moorea 海面 Plane（涌浪） |
 | `OilSkybox` | OilSkyboxNPR | 油画天空（`OilSkyboxTime` 0–24h → `_Period`） |
 
 生成：`Create Moorea Terrain Scene (1:1)`（见 `moorea_osm_reference.png`）。油画见 [terrain.md](terrain.md) / [oil-npr.md](oil-npr.md)。
@@ -163,7 +163,7 @@ ShadowMasks 与 BakedLight **共用**上述材质与布局（仅 Mixed 模式不
 | `LitTransparent` | Lit | 3000 | 关 | Premul, ShadowsDither | 多场景共用 |
 | `LitMooreaOcean` | OilOceanNPR | 3000 | 关 | Premul | MooreaTerrain |
 | `OilSkybox` | OilSkyboxNPR | 1000 | 关 | Canvas | MooreaTerrain |
-| `TerrainOilNPRMoorea` | TerrainOilNPR | 1900 | 关 | Kuwahara, Canvas, ReceiveShadows | MooreaTerrain |
+| `TerrainOilNPRMoorea` | TerrainOilNPR | 1900 | 关 | ReceiveShadows | MooreaTerrain |
 | `UnlitBlue` / `Green` / `Red` / `Yellow` | Unlit | 2000 | 关 | — | DrawCalls（Green/Yellow 亦 Test） |
 | `UnlitClip` | Unlit | 2450 | 开 | Clipping | DrawCalls |
 | `UnlitInstanced` | Unlit | 2000 | 开 | — | DrawCalls |

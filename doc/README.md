@@ -30,7 +30,7 @@
 | [Particles](particles.md) | `Particles` | Soft / Flipbook / Distortion |
 | [Render Scale](render-scale.md) | `RenderScale` | bufferSize / Final Rescale / Bicubic |
 | [FXAA](fxaa.md) | `FXAA` | FXAA Pass / `allowFXAA` |
-| [Oil NPR](oil-npr.md) | `Empty` | 油画 NPR / Kuwahara / Outline / 硬阴影 |
+| [Oil NPR](oil-npr.md) | `Empty` | 油画 NPR / Outline / 硬阴影 |
 | [Terrain](terrain.md) | `MooreaTerrain` | 真实 1:1 岛 + TerrainOilNPR |
 
 ## 管线

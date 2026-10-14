@@ -12,7 +12,8 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
-  m_InvalidKeywords: []
+  m_InvalidKeywords:
+  - _SHADOWS_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -25,7 +26,11 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 2800000, guid: ae6fc4a901aba2740ad140dcfe598ed1, type: 3}
+        m_Texture: {fileID: 2800000, guid: 1408977d8d8c44059bc63a3af6b22b97, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DistortionMap:
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
@@ -35,12 +40,26 @@ Material:
     m_Ints: []
     m_Floats:
     - _AlphaClip: 0
+    - _Clipping: 0
     - _Cull: 2
     - _Cutoff: 0.5
+    - _Distortion: 0
+    - _DistortionBlend: 1
+    - _DistortionStrength: 0.1
     - _DstBlend: 1
+    - _FlipbookBlending: 0
+    - _NearFade: 0
+    - _NearFadeDistance: 1
+    - _NearFadeRange: 1
+    - _Shadows: 0
+    - _SoftParticles: 0
+    - _SoftParticlesDistance: 0
+    - _SoftParticlesRange: 1
     - _SrcBlend: 5
+    - _VertexColors: 0
     - _ZWrite: 0
     m_Colors:
     - _BaseColor: {r: 2, g: 1.3467337, b: 0.7839196, a: 1}
     - _TintColor: {r: 1, g: 0.56249994, b: 0, a: 1}
   m_BuildTextureStacks: []
+  m_AllowLocking: 1

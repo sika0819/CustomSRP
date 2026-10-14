@@ -88,8 +88,6 @@ Material:
     - _EdgeStrength: 0.4
     - _InternalEdge: 0
     - _OilDetail: 0.2
-    - _Kuwahara: 1
-    - _KuwaharaRadius: 0.00055
     - _Metallic0: 0
     - _Metallic1: 0
     - _Metallic2: 0

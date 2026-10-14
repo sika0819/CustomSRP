@@ -28,7 +28,6 @@ Material:
   - _CANVAS_ON
   - _CLIPPING
   - _INTERNAL_EDGE_ON
-  - _KUWAHARA_ON
   - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
   m_InvalidKeywords:
@@ -75,8 +74,6 @@ Material:
     - _GradientAmount: 0.3
     - _GrassMode: 1
     - _InternalEdge: 1
-    - _Kuwahara: 1
-    - _KuwaharaRadius: 0.04
     - _Outline: 1
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5

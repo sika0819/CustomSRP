@@ -14,7 +14,6 @@ Material:
   m_ValidKeywords:
   - _CANVAS_ON
   - _INTERNAL_EDGE_ON
-  - _KUWAHARA_ON
   - _RECEIVE_SHADOWS
   m_InvalidKeywords:
   - _BASEMAP
@@ -59,8 +58,6 @@ Material:
     - _EdgeStrength: 0.55
     - _EnableWind: 0
     - _InternalEdge: 1
-    - _Kuwahara: 1
-    - _KuwaharaRadius: 0.04
     - _Outline: 1
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5

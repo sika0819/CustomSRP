@@ -27,7 +27,7 @@ crop 覆盖全岛 + 潟湖边（陆地约 60%），OSM 约 **5700+ 道路**、**
 
 ## 验什么
 
-Unity **Terrain** 走本管线 **Opaque GeometryPass**：`CustomSRP/TerrainOilNPR` 的 `LightMode = CustomLit`（与 Lit 相同过滤），**不**另开 Terrain Pass。油画：splat 上 control-UV Kuwahara + Canvas + 量化光照（无 Outline）。
+Unity **Terrain** 走本管线 **Opaque GeometryPass**：`CustomSRP/TerrainOilNPR` 的 `LightMode = CustomLit`（与 Lit 相同过滤），**不**另开 Terrain Pass。油画：splat + 量化光照（无 Outline）。
 
 ## 接线
 
@@ -53,7 +53,6 @@ Unity **Terrain** 走本管线 **Opaque GeometryPass**：`CustomSRP/TerrainOilNP
 
 | 参数 | 建议 |
 |------|------|
-| `_KuwaharaRadius` | ~**0.00055**（16.5 km 尺度） |
 | `_CanvasMap` tiling | ~18 |
 | `_CanvasStrength` | 0.06–0.1 |
 | `_PaintMap` | `Textures/Skybox/OilCanvas.png`，世界空间厚涂 |

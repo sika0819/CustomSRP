@@ -17,7 +17,6 @@ CBUFFER_START(UnityPerMaterial)
     float _Clipping;
     float _ShadeSteps;
     float _PaintThickness;
-    float _KuwaharaRadius;
     float _ShadowLift;
     float _ShadeLift;
     float _ShadowWobble;

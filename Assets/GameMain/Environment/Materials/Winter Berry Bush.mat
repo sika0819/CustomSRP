@@ -15,7 +15,6 @@ Material:
   - _CANVAS_ON
   - _CLIPPING
   - _INTERNAL_EDGE_ON
-  - _KUWAHARA_ON
   - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
   m_InvalidKeywords:
@@ -132,8 +131,6 @@ Material:
     - _GradientOffset: 0.33
     - _GradientSmoothness: 0.48
     - _InternalEdge: 1
-    - _Kuwahara: 1
-    - _KuwaharaRadius: 0.04
     - _LowerLightTransmission: 0
     - _MainWindScale: 0
     - _MainWindSpeed: 0

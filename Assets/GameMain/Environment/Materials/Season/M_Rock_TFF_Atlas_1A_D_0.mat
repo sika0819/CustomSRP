@@ -70,8 +70,6 @@ Material:
     - _EdgeStrength: 0.55
     - _EnableAntiTile: 0
     - _InternalEdge: 0
-    - _Kuwahara: 0
-    - _KuwaharaRadius: 0.04
     - _LayerDetailStrength: 0
     - _Outline: 1
     - _OutlineBreak: 0.12

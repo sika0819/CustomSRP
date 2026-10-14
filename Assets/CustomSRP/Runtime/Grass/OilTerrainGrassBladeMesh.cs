@@ -29,15 +29,15 @@ namespace CustomSRP
             Clover = 11,
         }
 
-        // 花：实例缩放约 1.5（Aster/Chamomile/Dandelions/Speedwell）。
+        // 花/蒲公英实例缩放=1；高度靠 mesh（比小麦略矮）。小麦 HeightScale=1.18。
         public static readonly float[] HeightScales =
         {
-            1f, 0.96f, 1f, 0.90f, 1.06f, 0.72f, 1.18f, 1.5f, 1.5f, 1.5f, 1.5f, 0.62f,
+            1f, 0.96f, 1f, 0.90f, 1.06f, 0.72f, 1.18f, 1f, 1f, 1f, 1f, 0.62f,
         };
 
         public static readonly float[] WidthScales =
         {
-            1f, 1f, 0.88f, 1.12f, 0.92f, 1f, 0.72f, 1.5f, 1.5f, 1.5f, 1.5f, 0.95f,
+            1f, 1f, 0.88f, 1.12f, 0.92f, 1f, 0.72f, 1f, 1f, 1f, 1f, 0.95f,
         };
 
         public static bool IsFlower(int variant) =>
@@ -125,11 +125,11 @@ namespace CustomSRP
                 BuildThin(segments),
                 BuildShrub(segments),
                 BuildWheat(segments),
-                // 花冠近水平单片；bloom≈0.34 叠实例缩放，比草醒目且不再十字片。
-                BuildFlowerPlant("FlowerAster", 0, 0.34f, 0.34f, 0.22f, segments),
-                BuildFlowerPlant("FlowerChamomile", 1, 0.32f, 0.32f, 0.20f, segments),
-                BuildFlowerPlant("FlowerDandelions", 2, 0.36f, 0.36f, 0.24f, segments),
-                BuildFlowerPlant("FlowerSpeedwell", 3, 0.14f, 0.58f, 0f, segments, horizontalBloom: false),
+                // 小麦 mesh 高≈1.28×1.18≈1.5；花茎≈1.05~1.12（略矮），花冠近水平单片。
+                BuildFlowerPlant("FlowerAster", 0, 0.40f, 0.40f, 1.08f, segments),
+                BuildFlowerPlant("FlowerChamomile", 1, 0.38f, 0.38f, 1.02f, segments),
+                BuildFlowerPlant("FlowerDandelions", 2, 0.42f, 0.42f, 1.12f, segments),
+                BuildFlowerPlant("FlowerSpeedwell", 3, 0.12f, 1.10f, 0f, segments, horizontalBloom: false),
                 BuildClover(segments),
             };
         }

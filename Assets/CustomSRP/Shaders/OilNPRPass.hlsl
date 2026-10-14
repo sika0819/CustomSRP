@@ -1,9 +1,6 @@
 #ifndef CUSTOM_OIL_NPR_PASS_INCLUDED
 #define CUSTOM_OIL_NPR_PASS_INCLUDED
 
-#if !defined(OIL_MOBILE_PERF)
-#include "OilNPRKuwahara.hlsl"
-#endif
 #include "OilNPRLighting.hlsl"
 
 struct Attributes
@@ -42,15 +39,9 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
 
     InputConfig config = GetInputConfig(input.positionCS_SS, input.baseUV);
 
-#if defined(_KUWAHARA_ON) && !defined(OIL_MOBILE_PERF)
-    half3 albedo = SampleKuwaharaUV(
-        config.baseUV, (half)_KuwaharaRadius).rgb * (half3)_BaseColor.rgb;
-    half alpha = (half)GetBaseRaw(config.baseUV).a * (half)_BaseColor.a;
-#else
     half4 base = (half4)GetBase(config);
     half3 albedo = base.rgb;
     half alpha = base.a;
-#endif
 
 #if defined(_CLIPPING)
     clip(alpha - (half)GetCutoff(config));

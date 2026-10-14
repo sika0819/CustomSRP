@@ -58,8 +58,6 @@ Material:
     - _IntersectionLength: 0.55
     - _IntersectionSpeed: 4
     - _IntersectionTiling: 0.25
-    - _Kuwahara: 0
-    - _KuwaharaRadius: 0.04
     - _PaintContrast: 3
     - _PaintRelief: 1
     - _PaintSheen: 0.55

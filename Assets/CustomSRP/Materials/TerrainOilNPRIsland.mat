@@ -104,8 +104,6 @@ Material:
     - _EdgeStrength: 0.4
     - _HeightTransition: 0
     - _InternalEdge: 0
-    - _Kuwahara: 1
-    - _KuwaharaRadius: 0.009
     - _LayerHasMask0: 1
     - _LayerHasMask1: 1
     - _LayerHasMask2: 1

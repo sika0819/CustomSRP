@@ -132,8 +132,6 @@ Material:
     - _GradientSmoothness: 0.48
     - _GrassMode: 0
     - _InternalEdge: 0
-    - _Kuwahara: 0
-    - _KuwaharaRadius: 0.04
     - _LowerLightTransmission: 0
     - _MainWindScale: 0
     - _MainWindSpeed: 0
