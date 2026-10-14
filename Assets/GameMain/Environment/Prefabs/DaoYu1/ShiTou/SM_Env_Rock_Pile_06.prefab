@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 7009604588087109670}
   - component: {fileID: 5090168696520940780}
   - component: {fileID: -5904691633091417839}
+  - component: {fileID: 4866542534544527094}
   m_Layer: 0
   m_Name: SM_Env_Rock_Pile_06
   m_TagString: Untagged
@@ -111,3 +112,25 @@ LODGroup:
     - renderer: {fileID: 5090168696520940780}
   m_Enabled: 1
   m_GlobalIlluminationLOD: 0
+--- !u!64 &4866542534544527094
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6747259781647318329}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 22
+  m_Mesh: {fileID: 4300000, guid: efb16235a4e2745c28a0aa3134e79e20, type: 2}

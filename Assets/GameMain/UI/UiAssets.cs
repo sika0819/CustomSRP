@@ -4,18 +4,20 @@ namespace Game
 {
     public static class UiAssets
     {
+        // Loading
         public const string LoadingForm = "Assets/GameMain/UI/Forms/LoadingForm.prefab";
+
+        // Main
         public const string IslandMainForm = "Assets/GameMain/UI/Forms/IslandMainForm.prefab";
+
+        // Panel
         public const string WeatherForm = "Assets/GameMain/UI/Forms/WeatherForm.prefab";
         public const string MusicForm = "Assets/GameMain/UI/Forms/MusicForm.prefab";
         public const string VolumeForm = "Assets/GameMain/UI/Forms/VolumeForm.prefab";
         public const string PresetForm = "Assets/GameMain/UI/Forms/PresetForm.prefab";
+
+        // Dialog
         public const string TimerPauseForm = "Assets/GameMain/UI/Forms/TimerPauseForm.prefab";
-        public const string MobileDataForm = "Assets/GameMain/UI/Forms/MobileDataForm.prefab";
-        public const string DownloadAskForm = "Assets/GameMain/UI/Forms/DownloadAskForm.prefab";
-        public const string NetworkRequiredForm = "Assets/GameMain/UI/Forms/NetworkRequiredForm.prefab";
-        public const string DownloadProgressForm = "Assets/GameMain/UI/Forms/DownloadProgressForm.prefab";
-        public const string StorageFullForm = "Assets/GameMain/UI/Forms/StorageFullForm.prefab";
 
         public static void OpenPanel(string assetPath)
         {

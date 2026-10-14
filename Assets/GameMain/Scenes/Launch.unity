@@ -332,7 +332,7 @@ MonoBehaviour:
     copyColor: 0
     copyDepth: 1
     overridePostFX: 1
-    postFXSettings: {fileID: 0}
+    postFXSettings: {fileID: 11400000, guid: d0751bd5b3e8d4fd68f993c713e13cc1, type: 2}
     finalBlendMode:
       source: 1
       destination: 0
@@ -377,6 +377,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Game::Game.ScreenLayout
   PhonePanelSettings: {fileID: 11400000, guid: 0a2a947f8b9b5424fa361f53de6cbe08, type: 2}
   PadPanelSettings: {fileID: 11400000, guid: f9432c016397247b9b5ed8f2a6f87aa4, type: 2}
+  _width: 0
+  _height: 0
+  _orientation: 0
 --- !u!114 &2089181188
 MonoBehaviour:
   m_ObjectHideFlags: 0

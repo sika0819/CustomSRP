@@ -1,4 +1,7 @@
 using System.Collections;
+using Cysharp.Threading.Tasks;
+using Game.BoluoApi;
+using Game.Native;
 using GameFramework.Procedure;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -7,7 +10,8 @@ using ProcedureOwner = GameFramework.Fsm.IFsm<GameFramework.Procedure.IProcedure
 namespace Game
 {
     /// <summary>
-    /// 编辑器游客登录 → 进岛。对齐 BoluoUnity：Play 后资源/会话就绪再进世界。
+    /// Native 初始化 → device/user 换票 → 后台 bank 下载 → 进岛。
+    /// 换票失败回退本地游客，不挡进岛。
     /// </summary>
     public class ProcedureGuestLogin : ProcedureBase
     {
@@ -22,7 +26,7 @@ namespace Game
             _started = false;
             _finished = false;
             _success = false;
-            BootLoadingService.ReportProgress(0.28f, "游客登录中");
+            BootLoadingService.ReportProgress(0.28f, "登录中");
         }
 
         protected override void OnUpdate(ProcedureOwner procedureOwner, float elapseSeconds, float realElapseSeconds)
@@ -45,9 +49,10 @@ namespace Game
             if (!_finished)
                 return;
 
-            // 仍进岛，避免编辑器卡死；失败则本地游客兜底。
             if (!_success)
                 GuestSession.ApplyLocalEditorGuest();
+
+            BankUpgradeBootstrap.Start(loadIntoEngine: false);
             ChangeState<ProcedureIsland>(procedureOwner);
         }
 
@@ -64,6 +69,9 @@ namespace Game
 
         IEnumerator RunLogin()
         {
+            BootLoadingService.ReportProgress(0.30f, "初始化原生桥");
+            NativeBridgeFacade.Init();
+
             BootLoadingService.ReportProgress(0.32f, "读取 StreamingAssets");
             bool bootOk = false;
             yield return StreamingAssetsUtil.ReadTextCoroutine(
@@ -72,12 +80,47 @@ namespace Game
             if (!bootOk)
                 Log.Warning("[GuestLogin] StreamingAssets Game/boot.json missing — using defaults");
 
-            BootLoadingService.ReportProgress(0.40f, "游客登录中");
-            yield return GuestLoginClient.EnsureGuestThenEnter((ok, mode) =>
+            BootLoadingService.ReportProgress(0.40f, "换取 deviceToken");
+            bool deviceOk = false;
+            bool userOk = false;
+
+#if UNITY_EDITOR
+            if (!GuestLoginClient.ShouldTryRemoteInEditor())
             {
-                _success = ok;
-                Log.Info($"[GuestLogin] done ok={ok} mode={mode} guest={GuestSession.IsGuest}");
-            });
+                GuestSession.ApplyLocalEditorGuest();
+                Log.Info($"[GuestLogin] editor local guest (Try Remote off) userId={GuestSession.UserId}");
+                _success = true;
+                BootLoadingService.ReportProgress(BootLoadingService.VisualPrepareMin, "正在进入世界...");
+                _finished = true;
+                yield break;
+            }
+#endif
+
+            yield return BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true)
+                .ToCoroutine(r => deviceOk = r);
+            if (deviceOk)
+            {
+                BootLoadingService.ReportProgress(0.48f, "换取 userToken");
+                yield return BoluoDeviceLoginClient.EnsureUserTokenAsync(failFast: true)
+                    .ToCoroutine(r => userOk = r);
+            }
+
+            if (userOk || deviceOk)
+            {
+                GuestSession.SyncFromBoluo();
+                if (!GuestSession.IsLoggedIn)
+                    GuestSession.ApplyLocalEditorGuest();
+                _success = true;
+                Log.Info(
+                    $"[GuestLogin] tokens deviceOk={deviceOk} userOk={userOk} " +
+                    $"guest={GuestSession.IsGuest} userId={GuestSession.UserId}");
+            }
+            else
+            {
+                Log.Warning("[GuestLogin] remote login failed — local guest fallback");
+                GuestSession.ApplyLocalEditorGuest();
+                _success = true;
+            }
 
             BootLoadingService.ReportProgress(BootLoadingService.VisualPrepareMin, "正在进入世界...");
             _finished = true;

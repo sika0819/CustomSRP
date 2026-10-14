@@ -229,7 +229,7 @@ namespace Game
                 Log.Error("[YooGF] Invalid location: " + assetName);
                 loadAssetCallbacks.LoadAssetFailureCallback?.Invoke(
                     assetName, LoadResourceStatus.NotExist,
-                    Utility.Text.Format("YooAsset location invalid: '{0}'.", assetName), userData);
+                    GameFramework.Utility.Text.Format("YooAsset location invalid: '{0}'.", assetName), userData);
                 return;
             }
 

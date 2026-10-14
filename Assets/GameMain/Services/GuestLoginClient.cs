@@ -14,24 +14,24 @@ namespace Game
     public static class GuestLoginClient
     {
         public const string EditorTryRemoteKey = "Game.Editor.TryRemoteGuestLogin";
+        /// <summary>Legacy key；环境以 <see cref="Game.BoluoApi.BoluoApiEnvironment"/> 为准。</summary>
         public const string ApiEnvKey = "Game.Editor.ApiEnv";
 
         const string TouristLoginPath = "/api/commonUser/touristLogin";
 
         public static string ResolveUserApiBase()
         {
+            // Prefer BoluoApiEnvironment (EditorPrefs Boluo.EditorTest.ApiEnvOverride).
+            // Sync legacy Game.Editor.ApiEnv into override when set and override empty.
 #if UNITY_EDITOR
-            string env = UnityEditor.EditorPrefs.GetString(ApiEnvKey, "dev").Trim().ToLowerInvariant();
-#else
-            string env = PlayerPrefs.GetString(ApiEnvKey, "dev").Trim().ToLowerInvariant();
-#endif
-            return env switch
+            string legacy = UnityEditor.EditorPrefs.GetString(ApiEnvKey, "");
+            if (!string.IsNullOrEmpty(legacy)
+                && string.IsNullOrEmpty(Game.BoluoApi.BoluoApiEnvironment.GetEditorOverride()))
             {
-                "product" => "https://wanos-common.wavworks.com/wanosuser",
-                "prerelease" => "https://wanos-common-pre.wavworks.com/wanosuser",
-                "test" => "https://wanos-common-test.wavworks.com/wanosuser",
-                _ => "https://wanos-common-dev.wavworks.com/wanosuser",
-            };
+                Game.BoluoApi.BoluoApiEnvironment.SetEditorOverride(legacy);
+            }
+#endif
+            return Game.BoluoApi.BoluoApiEnvironment.ResolveUserApiBase();
         }
 
         public static bool ShouldTryRemoteInEditor()

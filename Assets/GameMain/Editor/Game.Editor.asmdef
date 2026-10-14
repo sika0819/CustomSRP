@@ -5,7 +5,8 @@
         "Game",
         "UnityGameFramework.Runtime",
         "YooAsset",
-        "YooAsset.Editor"
+        "YooAsset.Editor",
+        "UniTask"
     ],
     "includePlatforms": [
         "Editor"

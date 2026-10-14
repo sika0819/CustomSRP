@@ -78,7 +78,7 @@ Keyword（`shader_feature_local`）：`_KUWAHARA_ON`、`_CANVAS_ON`、`_INTERNAL
 | 贴图 `OilCanvas.png` | **线性**打包：RG 法线、B 厚度（预览紫灰正常） |
 | 贴图 `OilCanvas_Weave.png` | 织纹参考（sRGB） |
 | `LitMooreaOcean` / `OilOceanNPR` | 岛周海面。`OilOcean.png` 只提供笔触遮罩，水色是 `_DeepColor` / `_MidColor` 海蓝；近岸用浅蓝，浪花跟亮笔 |
-| `OilRiverNPR` / `Stylized River*.mat` | 岛内平躺河。对齐 Boluo `FlowUvMode=MeshUV`：流向走 `_MeshFlowScale` 网格 UV（勿用世界 XZ）；岸沫 = FoamSea 滚动 + `BankUv` + Depth 交线；`_OIL_NO_VIOLET_UMBRA` |
-| `OilWaterfallNPR` / `Stylized Waterfall.mat` | 瀑布竖帘。对齐 Boluo `_FallSheet`：mesh UV + `sheetFoam = foam×Crest×2.4`；`MeshFlowScale≈(50.9,-3.91)`；Cull Off |
+| `OilRiverNPR` / `Stylized River*.mat` | 岛内平躺河。对齐 Boluo `FlowUvMode=MeshUV`：流向走 `_MeshFlowScale` 网格 UV（勿用世界 XZ）；`OilRiverPaint.png` 莫奈横向笔触、`OilRiverGlint.png` 阳光碎笔；岸缘 = Depth 交线 + `BankUv`（无 FoamMap）；`_OIL_NO_VIOLET_UMBRA` |
+| `OilWaterfallNPR` / `Stylized Waterfall.mat` | 瀑布竖帘。对齐 Boluo `_FallSheet`：mesh UV；`OilWaterfallPaint.png` 竖向油画帘、`OilWaterfallMist.png` 底雾（无 FoamMap）；`MeshFlowScale≈(50.9,-3.91)`；Cull Off |
 | `OilSkybox` / `OilSkyboxNPR` | Boluo 架构（方向笔触 + 日/月/星贴图）；`OilSkyboxTime.timeOfDay` 为 0–24 小时（06 黎明 / 12 白天 / 18 黄昏 / 00 夜晚），换算为 `_Period` 后在 Shader 内连续插值；编辑器拖时间会同步天空、环境光与平行光 |
 | Pipeline | 全局 `copyDepth=1`、`renderScale=1`（笔触不被 0.75 缩放糊掉）。Empty 相机仍关 copyDepth。阴影距离保持近景测试用，不拉到全岛 |

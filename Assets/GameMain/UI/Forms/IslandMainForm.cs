@@ -1,3 +1,4 @@
+using Game.Native;
 using GameFramework.Event;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -75,7 +76,10 @@ namespace Game
             OnClick("musicBackground", () => UiAssets.OpenPanel(UiAssets.MusicForm));
             OnClick("volumeBackground", () => UiAssets.OpenPanel(UiAssets.VolumeForm));
             OnClick("presetIcon", () => UiAssets.OpenPanel(UiAssets.PresetForm));
-            OnClick("timerBackground", () => UiAssets.OpenDialog(UiAssets.TimerPauseForm));
+            // Hybrid HUD：原生个人中心 / 定时 / 健康；Editor 走 NativeEditorHud 模拟。
+            OnClick("profile", () => NativeBridgeFacade.HudProfile());
+            OnClick("timerBackground", () => NativeBridgeFacade.HudTimer());
+            OnClick("defaultState2", () => NativeBridgeFacade.HudHealth());
             OnClick("timeBackground2", CycleTimePeriod);
 
             _timeHand = Root.Q("timeHand");

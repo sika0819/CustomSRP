@@ -17,6 +17,9 @@ namespace Game
             BootLoadingService.ResetSession();
             YooResourceModule.ResetSession();
             LocomotionInput.ClearAll();
+            Game.Native.NativeBridgeFacade.ResetSession();
+            Game.BoluoApi.BankUpgradeBootstrap.ResetSession();
+            Game.BoluoApi.BoluoApiEnvironment.ClearCached();
             ApplyDeviceGraphicsPolicy();
         }
 

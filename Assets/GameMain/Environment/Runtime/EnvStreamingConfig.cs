@@ -75,7 +75,17 @@ namespace Game
         public static float FinalizePerFrameBudgetMs = 3f;
         public static int SpawnPerFrameBudget = 24;
         public static int DespawnPerFrameBudget = 16;
-        public static float MeshColliderEnableRadius = 40f;
+        /// <summary>近距启用 MeshCollider（对齐 Boluo enableDistance≈55）。</summary>
+        public static float MeshColliderEnableRadius = 55f;
+
+        /// <summary>远距关闭 MeshCollider（对齐 Boluo disableDistance≈70）。</summary>
+        public static float MeshColliderDisableRadius = 70f;
+
+        /// <summary>
+        /// 非 Cliff/Cave/Ramp/Spike/Large 的石头：世界空间最长边 ≥ 此值才补 MeshCollider。
+        /// ≈2.5m 可挡住海滩放大的 Rock_Small_01（scale≈7→~2.6m），放过脚边小石。
+        /// </summary>
+        public static float RockColliderMinWorldExtent = 2.5f;
 
         /// <summary>
         /// Prefill 大树最少铺装半径。标准版对齐 TreeBillboardKeepRadius（180），
@@ -170,6 +180,50 @@ namespace Game
                    || prefabName.IndexOf("Ramp", System.StringComparison.OrdinalIgnoreCase) >= 0
                    || prefabName.IndexOf("Spike", System.StringComparison.OrdinalIgnoreCase) >= 0
                    || prefabName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// 走路碰撞：结构大石按名；其余按实例世界尺寸（须在 localScale 设好后测）。
+        /// 远距剔除仍只用 <see cref="IsLargeRockPrefab"/>，不受此门控影响。
+        /// </summary>
+        public static bool ShouldHaveRockCollider(string prefabName, GameObject go)
+        {
+            if (IsLargeRockPrefab(prefabName))
+                return true;
+            if (go == null)
+                return false;
+            return EstimateRockWorldExtent(go) >= RockColliderMinWorldExtent;
+        }
+
+        /// <summary>用 LODGroup.size 或 Mesh.bounds × lossyScale 估最长边（忽略旋转，够做门槛）。</summary>
+        public static float EstimateRockWorldExtent(GameObject go)
+        {
+            float maxExtent = 0f;
+            LODGroup lod = go.GetComponentInChildren<LODGroup>(true);
+            if (lod != null && lod.size > 1e-4f)
+            {
+                Vector3 s = lod.transform.lossyScale;
+                float sc = Mathf.Max(Mathf.Abs(s.x), Mathf.Abs(s.y), Mathf.Abs(s.z));
+                maxExtent = lod.size * sc;
+            }
+
+            MeshFilter[] filters = go.GetComponentsInChildren<MeshFilter>(true);
+            for (int i = 0; i < filters.Length; i++)
+            {
+                MeshFilter mf = filters[i];
+                if (mf == null || mf.sharedMesh == null)
+                    continue;
+                Vector3 size = mf.sharedMesh.bounds.size;
+                Vector3 s = mf.transform.lossyScale;
+                float ex = Mathf.Max(
+                    Mathf.Abs(size.x * s.x),
+                    Mathf.Abs(size.y * s.y),
+                    Mathf.Abs(size.z * s.z));
+                if (ex > maxExtent)
+                    maxExtent = ex;
+            }
+
+            return maxExtent;
         }
 
         public static bool IsSmallRockForFarCull(string prefabName) => !IsLargeRockPrefab(prefabName);
@@ -341,7 +395,9 @@ namespace Game
             ClutterShowDistance = 32f;
             BuildingLodHideDistance = 110f;
             BuildingLodShowDistance = 95f;
-            MeshColliderEnableRadius = 32f;
+            // 略收于编辑器，但仍须盖住大石表面相对 pivot 的偏移。
+            MeshColliderEnableRadius = 48f;
+            MeshColliderDisableRadius = 64f;
 
             // 格子驻留须盖住树环（Boluo：Ring1 >= TreeRing1）
             Ring1EnterRadius = Mathf.Max(Ring1EnterRadius, TreeRing1EnterRadius);

@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 2178671197628060740}
   - component: {fileID: 4168299848496193678}
   - component: {fileID: 7554331392395140757}
+  - component: {fileID: 1311302704417119610}
   m_Layer: 0
   m_Name: SM_Env_Rock_Round_01
   m_TagString: Untagged
@@ -111,3 +112,25 @@ LODGroup:
     - renderer: {fileID: 4168299848496193678}
   m_Enabled: 1
   m_GlobalIlluminationLOD: 0
+--- !u!64 &1311302704417119610
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2510821459908198747}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 22
+  m_Mesh: {fileID: 4300000, guid: dc3c2991786684fe2aae4ac51ef454bb, type: 2}

@@ -14,20 +14,14 @@ SAMPLER(sampler_OutlineBrushMap);
 CBUFFER_START(UnityPerMaterial)
     float4 _MainTex_ST;
     float4 _BaseColor;
-    float4 _CanvasMap_ST;
     float4 _OutlineBrushMap_ST;
     float4 _AmbientColor;
-    float4 _ShadowTint;
-    float4 _ShadowWarm;
-    float4 _SpecularColor;
-    float _CanvasStrength;
     float _PaintThickness;
     float _ShadeSteps;
     float _ShadeLift;
     float _ShadowLift;
     float _ShadowWobble;
     float _ShadowBrushScale;
-    float _SpecularThreshold;
 CBUFFER_END
 
 #include "OilShadowBrush.hlsl"
@@ -76,13 +70,6 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
     half3 normalWS = geometricNormal;
     half thicknessMask = 0.5h;
 
-#if defined(_CANVAS_ON)
-    half s = (half)sin(input.positionWS.x * 0.31 + input.positionWS.z * 0.17);
-    half strength = min((half)_CanvasStrength, 0.5h);
-    normalWS = normalize(geometricNormal + half3(s, 0.0h, s * 0.35h) * strength);
-    thicknessMask = s * 0.5h + 0.5h;
-#endif
-
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
     half ndotV = saturate(dot(normalWS, viewDir));
     half paintRim = (1.0h - ndotV) * (half)_PaintThickness * thicknessMask;
@@ -103,19 +90,16 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
     surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
 
     half brush = SampleOilShadowBrushCheap(input.positionWS, input.uv, 0.25);
-#if defined(_CANVAS_ON)
-    brush = saturate(brush * 0.75h + thicknessMask * 0.35h);
-#endif
 
     Fragment fragment = GetFragmentScreen(input.positionCS_SS);
     half3 color = OilNPRLighting(
         surface,
         albedo,
         OilPeriodAmbient((half3)_AmbientColor.rgb),
-        (half3)_ShadowTint.rgb,
-        (half3)_ShadowWarm.rgb,
-        (half3)_SpecularColor.rgb,
-        (half)_SpecularThreshold,
+        half3(0.36h, 0.46h, 0.62h),
+        half3(0.58h, 0.48h, 0.3h),
+        half3(0.0h, 0.0h, 0.0h),
+        0.0h,
         (half)_ShadeSteps,
         paintRim,
         (half)_ShadowLift,
@@ -128,8 +112,12 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
     half3 shadowFloor = albedo * half3(0.18h, 0.12h, 0.26h) + half3(0.015h, 0.01h, 0.03h);
     color = max(color, shadowFloor);
     color = min(color, albedo * 1.2h + half3(0.06h, 0.05h, 0.04h));
+#if !defined(OIL_MOBILE_PERF)
     color = OilWeaveTint(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);
+#else
+    color = (half3)ApplyOilFog((float3)color, surface.depth, brush);
+#endif
     return half4(saturate(color), 1.0h);
 }
 

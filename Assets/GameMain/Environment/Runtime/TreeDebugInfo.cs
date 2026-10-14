@@ -60,7 +60,7 @@ namespace Game
         {
             _trees.Clear();
             var categories = CategoryFilter.Split(',');
-            var roots = FindObjectsByType<Transform>(FindObjectsSortMode.None);
+            var roots = FindObjectsByType<Transform>();
 
             int count = 0;
             foreach (var t in roots)

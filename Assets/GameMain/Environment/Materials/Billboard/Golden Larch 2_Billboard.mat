@@ -12,7 +12,10 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - _CANVAS_ON
   - _CLIPPING
+  - _INTERNAL_EDGE_ON
+  - _KUWAHARA_ON
   - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
   m_InvalidKeywords: []
@@ -34,6 +37,10 @@ Material:
         m_Texture: {fileID: 2800000, guid: ebaec0b04f7214adea1fbbdd8bbb8758, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _CanvasMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _FoliageMask:
         m_Texture: {fileID: 2800000, guid: 16fddd299dde04548805d0c115f14e8d, type: 3}
         m_Scale: {x: 1, y: 1}
@@ -48,9 +55,6 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _Shadows: 1
-    - _ReceiveShadows: 1
-    - _Clipping: 1
     - _BoluoBillboardBakeRevision: 3
     - _BoluoConiferSnow: 1
     - _BoluoFoliageSnowScale: 1
@@ -59,31 +63,41 @@ Material:
     - _BoluoLeafCard: 1
     - _BoluoNativeSeason: 0
     - _BoluoSpringRole: 0
+    - _Canvas: 1
+    - _CanvasStrength: 0.1
+    - _Clipping: 1
+    - _Cull: 2
     - _Cutoff: 0.5
+    - _DstBlend: 0
     - _EdgeFade: 0.12
+    - _EdgeStrength: 0.55
+    - _InternalEdge: 1
+    - _Kuwahara: 1
+    - _KuwaharaRadius: 0.04
     - _LeafTexBlend: 0
     - _NormalStrength: 0.85
-    - _ShadeLift: 0.42
-    - _ShadeSteps: 4
-    - _ShadowLift: 0.95
-    - _ShadowWobble: 0.45
-    - _ShadowBrushScale: 1.8
-    - _SpecularThreshold: 0.86
     - _PaintThickness: 0.18
-    - _CanvasStrength: 0.1
-    - _KuwaharaRadius: 0.04
-    - _EdgeStrength: 0.55
+    - _ReceiveShadows: 1
+    - _ShadeLift: 0.58
+    - _ShadeSteps: 4
+    - _ShadowBrushScale: 1.8
+    - _ShadowLift: 1.05
+    - _ShadowWobble: 0.45
+    - _Shadows: 1
+    - _SpecularThreshold: 0.86
+    - _SrcBlend: 1
+    - _ZWrite: 1
     m_Colors:
-    - _ShadowTint: {r: 0.31, g: 0.43, b: 0.30, a: 1}
+    - _AmbientColor: {r: 0.6117647, g: 0.6784314, b: 0.40784314, a: 1}
+    - _BarkColor: {r: 0.41568628, g: 0.35686275, b: 0.29411766, a: 1}
+    - _BaseColor: {r: 0.5333, g: 0.6627, b: 0.4196, a: 1}
+    - _BottomColor: {r: 0.53333336, g: 0.6627451, b: 0.41960785, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
-    - _BaseColor: {r: 0.53330000, g: 0.66270000, b: 0.41960000, a: 1.00000000}
-    - _BarkColor: {r: 0.5451, g: 0.4902, b: 0.3922, a: 1}
-    - _BottomColor: {r: 0.38040000, g: 0.47840000, b: 0.34900000, a: 1.00000000}
-    - _TopColor: {r: 0.65880000, g: 0.74900000, b: 0.47060000, a: 1.00000000}
-    - _AmbientColor: {r: 0.35000000, g: 0.40000000, b: 0.32000000, a: 1.00000000}
-    - _ShadowWarm: {r: 1.00, g: 1.00, b: 1.00, a: 1}
-    - _SpecularColor: {r: 0.61, g: 0.68, b: 0.41, a: 1}
-    - _EdgeColor: {r: 0.35000000, g: 0.30000000, b: 0.25000000, a: 1.00000000}
-    - _OutlineColor: {r: 0.14000000, g: 0.10000000, b: 0.08000000, a: 1.00000000}
+    - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}
+    - _OutlineColor: {r: 0.38039216, g: 0.47843137, b: 0.34901962, a: 1}
+    - _ShadowTint: {r: 0.38039216, g: 0.47843137, b: 0.34901962, a: 1}
+    - _ShadowWarm: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
+    - _SpecularColor: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
+    - _TopColor: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

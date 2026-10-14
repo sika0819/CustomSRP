@@ -15,7 +15,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 OUT_FX = ROOT / "FX Mats" / "OilFlameStrokeAtlas.png"
-OUT_RES = ROOT.parent.parent / "Resources" / "OilFlameStrokeAtlas.png"
 COLS = 4
 ROWS = 4
 CELL = 160
@@ -140,9 +139,7 @@ def main() -> None:
         paint_cell(buf, i % COLS, i // COLS, kind, seed=2200 + i * 31)
     data = bytes(buf)
     write_png(OUT_FX, data, SIZE, SIZE)
-    write_png(OUT_RES, data, SIZE, SIZE)
     print(f"Wrote {OUT_FX}")
-    print(f"Wrote {OUT_RES}")
     print(f"  {SIZE}x{SIZE}, {COLS}x{ROWS} cells @ {CELL}px")
 
 

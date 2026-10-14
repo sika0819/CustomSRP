@@ -9,7 +9,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 5872057323279657711}
-  - component: {fileID: 5486755370669563831}
   - component: {fileID: 6650364524405815309}
   m_Layer: 0
   m_Name: Forest Mountain 1
@@ -35,28 +34,6 @@ Transform:
   - {fileID: 4684263100190609320}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!64 &5486755370669563831
-MeshCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2488385404938548908}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 5
-  m_Convex: 1
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 4300000, guid: bafd94c22cfa141c1b2a6d835a41deab, type: 2}
 --- !u!205 &6650364524405815309
 LODGroup:
   m_ObjectHideFlags: 0
@@ -64,7 +41,7 @@ LODGroup:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2488385404938548908}
-  serializedVersion: 2
+  serializedVersion: 3
   m_LocalReferencePoint: {x: -0.1930008, y: 38.104042, z: 0.08509827}
   m_Size: 214.36
   m_FadeMode: 0
@@ -80,6 +57,7 @@ LODGroup:
     renderers:
     - renderer: {fileID: 147093928505258816}
   m_Enabled: 1
+  m_GlobalIlluminationLOD: 0
 --- !u!1 &2886554955838092939
 GameObject:
   m_ObjectHideFlags: 0
@@ -153,7 +131,7 @@ MeshRenderer:
   m_StaticBatchRoot: {fileID: 0}
   m_ProbeAnchor: {fileID: 0}
   m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
+  m_ScaleInLightmap: 0.5
   m_ReceiveGI: 1
   m_PreserveUVs: 0
   m_IgnoreNormalsForChartDetection: 0
@@ -181,6 +159,7 @@ GameObject:
   - component: {fileID: 8038130146682998952}
   - component: {fileID: 2126969666382495396}
   - component: {fileID: 8227953303324930642}
+  - component: {fileID: 7494507533188527739}
   m_Layer: 0
   m_Name: SM_Mountain_01_LOD1
   m_TagString: Untagged
@@ -260,3 +239,25 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!64 &7494507533188527739
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9135003488196020721}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 22
+  m_Mesh: {fileID: 4300000, guid: 6c5cd3b2b040f4a9cb875a4890979f67, type: 2}

@@ -26,44 +26,45 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
-    - _FoamMap:
-        m_Texture: {fileID: 2800000, guid: 1ae95f1c0e6024b54a2641d1f3d13ee7, type: 3}
+    - _MistMap:
+        m_Texture: {fileID: 2800000, guid: bf91054fc3e94586882eb1cac19b3c89, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _PaintMap:
-        m_Texture: {fileID: 2800000, guid: 1e2efbc9ddeb410391549d3310d1fc7d, type: 3}
+        m_Texture: {fileID: 2800000, guid: ccb255afbf184932a01688df497d30d0, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _TeethStrength: 1.05
+    - _MistTile: 3.5
+    - _StrokeBands: 40
+    - _StrokeWarp: 0.85
+    - _PaintTile: 28
     - _AlbedoBoost: 1.05
-    - _CrestFoamStrength: 0.55
     - _DstBlend: 10
-    - _FoamSpeed: 0.2
-    - _FoamTiling: 0.14
-    - _MistFeather: 0.22
-    - _MistSpeed: 0.35
-    - _MistStrength: 0.28
-    - _PaintContrast: 1.5
-    - _PaintRelief: 0.3
-    - _PaintStretch: 1.4
+    - _MistFeather: 0.205
+    - _MistSpeed: 0.4
+    - _MistStrength: 0.75
+    - _PaintContrast: 1.55
+    - _PaintRelief: 0.82
+    - _PaintStretch: 1.65
     - _PremulAlpha: 1
     - _ShadeLift: 0.5
-    - _ShadeSteps: 3
+    - _ShadeSteps: 2
     - _ShadowLift: 1.1
     - _ShadowWobble: 0.5
     - _SpecularThreshold: 0.78
     - _SrcBlend: 1
     - _ZWrite: 0
     m_Colors:
-    - _AmbientColor: {r: 0.7, g: 0.78, b: 0.85, a: 1}
-    - _BaseColor: {r: 0.28, g: 0.58, b: 0.82, a: 0.62}
-    - _FoamColor: {r: 0.36356357, g: 0.61942476, b: 0.8113208, a: 1}
+    - _AmbientColor: {r: 0.68, g: 0.76, b: 0.88, a: 1}
+    - _BaseColor: {r: 0.12, g: 0.22, b: 0.48, a: 0.78}
     - _MeshFlowScale: {r: 50.9, g: -3.91, b: 0, a: 0}
-    - _MistColor: {r: 0.8235294, g: 0.8784314, b: 0.91764706, a: 1}
-    - _ShadowTint: {r: 0.45, g: 0.55, b: 0.65, a: 1}
+    - _MistColor: {r: 0.88, g: 0.90, b: 0.94, a: 0.55}
+    - _ShadowTint: {r: 0.28, g: 0.36, b: 0.55, a: 1}
     - _ShadowWarm: {r: 0.7, g: 0.55, b: 0.4, a: 1}
-    - _ShallowColor: {r: 0.4009434, g: 0.8051262, b: 1, a: 0.45}
-    - _SpecularColor: {r: 1, g: 0.95, b: 0.78, a: 1}
+    - _ShallowColor: {r: 0.55, g: 0.78, b: 0.95, a: 0.55}
+    - _SpecularColor: {r: 0.95, g: 0.97, b: 1, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

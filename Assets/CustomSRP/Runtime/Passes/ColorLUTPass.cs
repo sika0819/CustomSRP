@@ -49,6 +49,13 @@ namespace CustomSRP
         void ConfigureColorAdjustments(ComputeCommandBuffer buffer, PostFXSettings settings)
         {
             ColorAdjustmentsSettings colorAdjustments = settings.ColorAdjustments;
+            if (!colorAdjustments.enabled)
+            {
+                buffer.SetComputeVectorParam(_shader, colorAdjustmentsId, new Vector4(1f, 1f, 0f, 1f));
+                buffer.SetComputeVectorParam(_shader, colorFilterId, Color.white.linear);
+                return;
+            }
+
             buffer.SetComputeVectorParam(_shader, colorAdjustmentsId, new Vector4(
                 Mathf.Pow(2f, colorAdjustments.postExposure),
                 colorAdjustments.contrast * 0.01f + 1f,
@@ -61,15 +68,23 @@ namespace CustomSRP
         void ConfigureWhiteBalance(ComputeCommandBuffer buffer, PostFXSettings settings)
         {
             WhiteBalanceSettings whiteBalance = settings.WhiteBalance;
+            float temperature = whiteBalance.enabled ? whiteBalance.temperature : 0f;
+            float tint = whiteBalance.enabled ? whiteBalance.tint : 0f;
             buffer.SetComputeVectorParam(
                 _shader, whiteBalanceId,
-                ColorUtils.ColorBalanceToLMSCoeffs(
-                    whiteBalance.temperature, whiteBalance.tint));
+                ColorUtils.ColorBalanceToLMSCoeffs(temperature, tint));
         }
 
         void ConfigureSplitToning(ComputeCommandBuffer buffer, PostFXSettings settings)
         {
             SplitToningSettings splitToning = settings.SplitToning;
+            if (!splitToning.enabled)
+            {
+                buffer.SetComputeVectorParam(_shader, splitToningShadowsId, new Vector4(0.5f, 0.5f, 0.5f, 0f));
+                buffer.SetComputeVectorParam(_shader, splitToningHighlightsId, new Vector4(0.5f, 0.5f, 0.5f, 1f));
+                return;
+            }
+
             Color splitColor = splitToning.shadows;
             splitColor.a = splitToning.balance * 0.01f;
             buffer.SetComputeVectorParam(_shader, splitToningShadowsId, splitColor);
@@ -80,6 +95,14 @@ namespace CustomSRP
         void ConfigureChannelMixer(ComputeCommandBuffer buffer, PostFXSettings settings)
         {
             ChannelMixerSettings channelMixer = settings.ChannelMixer;
+            if (!channelMixer.enabled)
+            {
+                buffer.SetComputeVectorParam(_shader, channelMixerRedId, Vector3.right);
+                buffer.SetComputeVectorParam(_shader, channelMixerGreenId, Vector3.up);
+                buffer.SetComputeVectorParam(_shader, channelMixerBlueId, Vector3.forward);
+                return;
+            }
+
             buffer.SetComputeVectorParam(_shader, channelMixerRedId, channelMixer.red);
             buffer.SetComputeVectorParam(_shader, channelMixerGreenId, channelMixer.green);
             buffer.SetComputeVectorParam(_shader, channelMixerBlueId, channelMixer.blue);
@@ -89,6 +112,15 @@ namespace CustomSRP
             ComputeCommandBuffer buffer, PostFXSettings settings)
         {
             ShadowsMidtonesHighlightsSettings smh = settings.ShadowsMidtonesHighlights;
+            if (!smh.enabled)
+            {
+                buffer.SetComputeVectorParam(_shader, smhShadowsId, Color.white.linear);
+                buffer.SetComputeVectorParam(_shader, smhMidtonesId, Color.white.linear);
+                buffer.SetComputeVectorParam(_shader, smhHighlightsId, Color.white.linear);
+                buffer.SetComputeVectorParam(_shader, smhRangeId, new Vector4(0f, 0.3f, 0.55f, 1f));
+                return;
+            }
+
             buffer.SetComputeVectorParam(_shader, smhShadowsId, smh.shadows.linear);
             buffer.SetComputeVectorParam(_shader, smhMidtonesId, smh.midtones.linear);
             buffer.SetComputeVectorParam(_shader, smhHighlightsId, smh.highlights.linear);
@@ -106,7 +138,9 @@ namespace CustomSRP
             ConfigureChannelMixer(buffer, settings);
             ConfigureShadowsMidtonesHighlights(buffer, settings);
 
-            ToneMappingSettings.Mode mode = settings.ToneMapping.mode;
+            ToneMappingSettings.Mode mode = settings.ToneMapping.enabled
+                ? settings.ToneMapping.mode
+                : ToneMappingSettings.Mode.None;
             var lutParameters = new Vector4(
                 // X: Whether LUT is in LogC space.
                 _stack.BufferSettings.allowHDR &&

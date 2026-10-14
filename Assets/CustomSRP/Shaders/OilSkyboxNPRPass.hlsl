@@ -253,7 +253,7 @@ SkyPeriodLook EvaluatePeriodLook(float period)
     }
 
     SkyPeriodLook p = LerpPeriodLook(PeriodLookAt(i0), PeriodLookAt(i1), period - floor(period));
-    // Disc directions: C# globals (orbit + Boluo view placement) or Cozy fallback.
+    // Disc directions: C# globals (Cozy orbit) or shader fallback.
     p.sunDir = ResolveSkySunDir(period);
     p.moonDir = ResolveSkyMoonDir(period);
     p.sunVisibility = SoftVisibility(p.sunDir.y, -0.05, 0.12);
@@ -408,8 +408,8 @@ half3 PaintStars(half3 sky, float3 viewDir, float yaw, float pitch, float starIn
     float2 uv = float2(tileX, tileY) * kTile + uvLocal * kTile;
 
     half4 s = SAMPLE_TEXTURE2D_LOD(_StarsTex, sampler_StarsTex, uv, 0);
-    half cover = s.a * (half)(starIntensity * horizon);
-    if (cover < 0.004h)
+    // Opaque dab only — no alpha lerp, no intensity-as-glass. Soft tex fringe stays out.
+    if (s.a < 0.5h)
     {
         return sky;
     }
@@ -418,7 +418,7 @@ half3 PaintStars(half3 sky, float3 viewDir, float yaw, float pitch, float starIn
     half3 tint = tintPick > 0.5
         ? half3(1.08h, 0.96h, 0.7h)
         : half3(0.74h, 0.86h, 1.14h);
-    return lerp(sky, s.rgb * tint, saturate(cover * 0.72h));
+    return s.rgb * tint;
 }
 
 half3 StampBody(
@@ -435,7 +435,9 @@ half3 StampBody(
     half3 sky,
     half impasto)
 {
-    if (visibility < 0.001 || intensity < 0.001)
+    // On/off only. Dawn sun sits at y≈0 → SoftVisibility≈0.29; a 0.5 gate hid it.
+    // Partial visibility must NOT scale coverage (that was the glass look).
+    if (visibility < 0.001 || intensity < 0.05)
     {
         return sky;
     }
@@ -478,9 +480,10 @@ half3 StampBody(
         c = SAMPLE_TEXTURE2D_GRAD(tex, samp, sampleUv, uvDx, uvDy);
 #endif
     }
-    // Tighter alpha gate — soft pancake coverage was washing the disc into the sky.
-    half coverage = smoothstep(0.18h, 0.62h, c.a) * (half)visibility * saturate((half)intensity);
-    half3 paint = c.rgb / max(c.a, 1e-3h);
+    // Fully opaque disc. SoftVisibility / intensity already gated above — never scale alpha.
+    // Binary cut: Sun_Oil is already 0/255; bilinear fringe stays out of the body.
+    half coverage = step(0.5h, c.a);
+    half3 paint = c.rgb;
     half wobble = saturate(sin(uv.x * 9.0 + uv.y * 7.0) * 0.5h + 0.5h);
     half3 thick = lerp(half3(1.0h, 0.45h, 0.22h), half3(1.0h, 0.88h, 0.35h), wobble);
     thick = lerp(thick, half3(1.0h, 0.58h, 0.72h), saturate(sin(uv.y * 11.0) * 0.5h + 0.5h) * 0.4h);
@@ -489,7 +492,7 @@ half3 StampBody(
     paint = min(paint * 1.08h, half3(1.2h, 1.2h, 1.2h));
     // Rim only. A center-filled glow out to r=1.15 was the soft pancake around the disc.
     half glowBand = smoothstep(0.58h, 0.84h, (half)r) * (1.0h - smoothstep(0.84h, 1.02h, (half)r));
-    half glowMask = glowBand * (half)(glow * visibility) * (1.0h - coverage);
+    half glowMask = glowBand * (half)glow * (1.0h - coverage);
     half3 glowTint = lerp(sky, (half3)glowColor, 0.45h);
     half3 stamp = lerp(sky, paint, coverage);
     return lerp(stamp, glowTint, saturate(glowMask * 0.28h));
@@ -510,10 +513,11 @@ half4 OilSkyboxNPRFragment(Varyings input) : SV_TARGET
     float pitch = asin(clamp(viewDir.y, -1.0, 1.0));
     SkyPeriodLook look = EvaluatePeriodLook(_Period);
     half stroke = CanvasStroke(yaw, pitch);
-    // Paint base + celestial stamps first, then fog glaze on top.
-    // Real fog dims/hides sun, moon, and stars; stamps-after-fog always punched through.
+    // Layered air: paint → sky haze → opaque stamps → light celestial veil.
+    // Same height/color as object fog; stamps never fully erase, never fully lucid.
     half3 sky = PaintAir(PaintSky(viewDir.y, stroke, look), viewDir, look);
     sky = OilWeaveTint(sky, viewDir.xz * 6.0);
+    sky = (half3)ApplyOilSkyFog((float3)sky, viewDir, stroke);
     sky = PaintStars(sky, viewDir, yaw, pitch, look.starIntensity);
     sky = StampBody(
         _SunTex, sampler_SunTex, viewDir, look.sunDir,
@@ -523,7 +527,7 @@ half4 OilSkyboxNPRFragment(Varyings input) : SV_TARGET
         _MoonTex, sampler_MoonTex, viewDir, look.moonDir,
         look.moonSize, look.moonIntensity, look.moonVisibility, look.moonGlow,
         look.moonDisc, look.moonGlowColor, sky, 0.0h);
-    sky = (half3)ApplyOilSkyFog((float3)sky, viewDir, stroke);
+    sky = (half3)ApplyOilCelestialFog((float3)sky, viewDir, stroke);
     return half4(saturate(sky), 1.0h);
 }
 

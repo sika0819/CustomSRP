@@ -44,20 +44,14 @@ Shader "CustomSRP/TerrainOilNPR"
 
         _BaseColor ("Tint", Color) = (1, 1, 1, 1)
 
-        [Toggle(_CANVAS_ON)] _Canvas ("Canvas Normal", Float) = 1
-        _CanvasMap ("Canvas (RG Normal, B Thickness)", 2D) = "bump" {}
-        _CanvasStrength ("Canvas Strength", Range(0, 1)) = 0.08
         _PaintThickness ("Paint Thickness", Range(0, 2)) = 0.14
 
         _ShadeSteps ("Shade Steps", Range(2, 8)) = 4
         _ShadeLift ("Shade Lift", Range(0, 1)) = 0.42
         _ShadowLift ("Shadow Lift", Range(0, 1.5)) = 1.05
-        _ShadowTint ("Shadow Cool Tint", Color) = (0.36, 0.46, 0.62, 1)
-        _ShadowWarm ("Shadow Warm Tint", Color) = (0.58, 0.48, 0.3, 1)
         _ShadowWobble ("Shadow Brush Edge", Range(0, 1)) = 0.55
         _ShadowBrushScale ("Shadow Brush Scale", Range(0.2, 8)) = 1.35
         _SpecularColor ("Specular", Color) = (0.5, 0.45, 0.38, 1)
-        _SpecularThreshold ("Specular Threshold", Range(0, 1)) = 0.88
         _AmbientColor ("Ambient", Color) = (0.52, 0.5, 0.44, 1)
 
         _OutlineBrushMap ("Shadow Brush Mask", 2D) = "white" {}

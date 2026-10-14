@@ -1,0 +1,142 @@
+using System;
+using System.Threading;
+using UnityGameFramework.Runtime;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace Game.Native
+{
+    /// <summary>强类型 U→N Notify Helper（AOT 接口层；传输不变）。</summary>
+    public static class NativeMessages
+    {
+        static int _islandReadySent;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetIslandReady()
+        {
+            _islandReadySent = 0;
+        }
+
+        public static void ResetIslandReadyFlag() => _islandReadySent = 0;
+
+        public static void HudIcon(int iconId)
+        {
+            NativeBridgeTransport.Notify(MsgType.UiHudIcon, iconId);
+#if UNITY_EDITOR
+            NativeEditorHud.HandleHudIcon(iconId);
+#endif
+        }
+
+        public static void HudProfile() => HudIcon(MsgType.HudIconProfile);
+        public static void HudTimer() => HudIcon(MsgType.HudIconTimer);
+        public static void HudHealth() => HudIcon(MsgType.HudIconHealth);
+
+        /// <summary>岛面可看就关原生启动页。HUD 未就绪也可以发；重复调用会被丢掉。</summary>
+        public static void IslandReady()
+        {
+            if (Interlocked.Exchange(ref _islandReadySent, 1) != 0)
+                return;
+            NativeBridgeTransport.Notify(MsgType.EngineIslandReady);
+        }
+
+        /// <summary>同步告诉宿主锁屏 / 负一屏当前曲目。Notify 没有字符串，所以走 Query。inBlob=`song\talbum[\tposMs\tdurMs]`。</summary>
+        public static void NowPlaying(
+            int playing,
+            int album,
+            int track,
+            string title,
+            string albumName,
+            int positionMs = 0,
+            int durationMs = 0)
+        {
+            string blob = Sanitize(title) + "\t" + Sanitize(albumName) + "\t" +
+                          Math.Max(0, positionMs) + "\t" + Math.Max(0, durationMs);
+            NativeBridgeTransport.Query(MsgType.NowPlaying, playing != 0 ? 1 : 0, album, track, blob, out _);
+        }
+
+        static string Sanitize(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return "";
+            return s.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ');
+        }
+    }
+
+    /// <summary>原生 overlay 触摸门控（AOT；热更可读）。</summary>
+    public static class NativeOverlayGate
+    {
+        public static bool OverlayPresent { get; private set; }
+        public static bool TouchEnabled { get; private set; } = true;
+        public static bool BottomIconsHidden { get; private set; }
+
+        public static bool BlocksLocomotion => OverlayPresent && !TouchEnabled;
+
+        /// <summary>原生页盖住岛：挡行走且不让触摸穿透时，把 GPU 让给原生。</summary>
+        public static bool YieldsGpu => OverlayPresent && !TouchEnabled;
+
+        public static event System.Action Changed;
+
+        static int _fpsBeforeYield = int.MinValue;
+        static int _intervalBeforeYield = 1;
+
+        public static void Apply(int present, int touchEnabled, int bottomHidden)
+        {
+            OverlayPresent = present != 0;
+            TouchEnabled = touchEnabled != 0;
+            BottomIconsHidden = bottomHidden != 0;
+            ApplyGpuYield();
+            Changed?.Invoke();
+        }
+
+        static void ApplyGpuYield()
+        {
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
+            if (YieldsGpu)
+            {
+                if (_fpsBeforeYield == int.MinValue)
+                {
+                    _fpsBeforeYield = Application.targetFrameRate;
+                    _intervalBeforeYield = Mathf.Max(1, OnDemandRendering.renderFrameInterval);
+                }
+
+                // 不 UnityPause：pause 清 GL，关页会闪相机蓝。隔帧提交，Surface 留最后一帧。
+                // Android 禁止 1fps / interval=60，Push 消费会被拖死。
+#if UNITY_ANDROID
+                const int overlayFps = 10;
+                const int overlayInterval = 6;
+#else
+                const int overlayFps = 1;
+                const int overlayInterval = 60;
+#endif
+                QualitySettings.vSyncCount = 0;
+                Application.targetFrameRate = overlayFps;
+                OnDemandRendering.renderFrameInterval = overlayInterval;
+                Log.Info($"[IMP] overlay gpu-yield on fps={overlayFps} interval={overlayInterval}");
+                return;
+            }
+#endif
+            if (_fpsBeforeYield == int.MinValue)
+            {
+                if (OnDemandRendering.renderFrameInterval != 1)
+                    OnDemandRendering.renderFrameInterval = 1;
+                return;
+            }
+
+            OnDemandRendering.renderFrameInterval = 1;
+            Application.targetFrameRate = _fpsBeforeYield > 0 ? _fpsBeforeYield : 60;
+            _fpsBeforeYield = int.MinValue;
+            Log.Info("[IMP] overlay gpu-yield off");
+        }
+
+#if UNITY_EDITOR
+        public static void ResetForEditor()
+        {
+            OverlayPresent = false;
+            TouchEnabled = true;
+            BottomIconsHidden = false;
+            ApplyGpuYield();
+            Changed?.Invoke();
+        }
+#endif
+    }
+}

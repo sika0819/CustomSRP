@@ -1,8 +1,8 @@
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
-
 using UnityGameFramework.Runtime;
+
 namespace Game.Editor
 {
     /// <summary>
@@ -10,9 +10,6 @@ namespace Game.Editor
     /// </summary>
     public static class OilCampfireBakeMenu
     {
-        const string FlameMatPath =
-            "Assets/GameMain/Environment/FX/UnityFire/Materials/Campfire_NoiseFire.mat";
-
         [MenuItem("GameMain/Boluo/Bake Oil Campfire Particles")]
         public static void BakeSelected()
         {
@@ -86,21 +83,11 @@ namespace Game.Editor
             if (fire == null)
                 fire = go.AddComponent<FireController>();
 
-            var mat = AssetDatabase.LoadAssetAtPath<Material>(FlameMatPath);
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(Game.SceneAssets.CampfireNoiseFireMatPath);
             if (mat != null)
-            {
-                var so = new SerializedObject(fire);
-                SerializedProperty p = so.FindProperty("flameMaterial");
-                if (p != null)
-                {
-                    p.objectReferenceValue = mat;
-                    so.ApplyModifiedPropertiesWithoutUndo();
-                }
-            }
+                fire.BindFlameMaterial(mat);
             else
-            {
-                Log.Warning("[OilCampfire] Missing material: " + FlameMatPath);
-            }
+                Log.Warning("[OilCampfire] Missing material: " + Game.SceneAssets.CampfireNoiseFireMatPath);
 
             fire.EnsureRuntimeBindings();
             EditorUtility.SetDirty(go);

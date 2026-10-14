@@ -7,6 +7,7 @@ namespace Game
         public static AtmospherePropService AtmosphereProps { get; private set; }
         public static MusicService Music { get; private set; }
         public static IslandWorldService World { get; private set; }
+        public static IslandGrassService Grass { get; private set; }
 
         static void InitCustomComponents()
         {
@@ -16,6 +17,8 @@ namespace Game
             AtmosphereProps = AtmospherePropService.Ensure();
             Music = MusicService.Ensure();
             World = IslandWorldService.Ensure();
+            Grass = IslandGrassService.Ensure();
+            DevicePresetShotHelper.Ensure();
             EnsureEntityGroups();
         }
 
@@ -23,10 +26,13 @@ namespace Game
         public static void InitWorldService()
         {
             World = IslandWorldService.Ensure();
+            Grass = IslandGrassService.Ensure();
         }
 
         static void ClearCustomComponents()
         {
+            Grass?.Release();
+            Grass = null;
             World?.Release();
             World = null;
             Weather = null;

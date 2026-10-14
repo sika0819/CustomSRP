@@ -22,10 +22,16 @@ half3 OilPeriodAmbient(half3 materialAmbient)
     return materialAmbient;
 }
 
+// Soft poster bands: keep oil masses, feather edges so shadow steps aren't chalk lines.
 half QuantizeNdotL(half ndotL, half steps)
 {
     steps = max(steps, 2.0h);
-    return floor(ndotL * steps) / (steps - 1.0h);
+    half n = saturate(ndotL) * (steps - 1.0h);
+    half i = floor(n);
+    half f = frac(n);
+    half feather = 0.58h;
+    f = smoothstep(0.5h - feather * 0.5h, 0.5h + feather * 0.5h, f);
+    return (i + f) / (steps - 1.0h);
 }
 
 // Wide lit falloff. The brush only nicks the edge; the body stays a soft diffuse wash.
@@ -73,7 +79,29 @@ half3 PainterlyUmbra(
 #define OIL_SHADE_BAND 0.28h
 #endif
 
+// Mobile campfire fill: range×spot×1/r², no point-shadow tap.
+Light GetOtherLightNoShadow(int index, Surface surfaceWS)
+{
+    OtherLightData data = _OtherLightData[index];
+    Light light;
+    light.color = data.color.rgb;
+    float3 position = data.position.xyz;
+    float3 ray = position - surfaceWS.position;
+    light.direction = normalize(ray);
+    float distanceSqr = max(dot(ray, ray), 0.00001);
+    float rangeAttenuation = Square(
+        saturate(1.0 - Square(distanceSqr * data.position.w)));
+    float3 spotDirection = data.directionAndMask.xyz;
+    light.renderingLayerMask = asuint(data.directionAndMask.w);
+    float spotAttenuation = Square(
+        saturate(dot(spotDirection, light.direction) *
+            data.spotAngle.x + data.spotAngle.y));
+    light.attenuation = spotAttenuation * rangeAttenuation / distanceSqr;
+    return light;
+}
+
 // Forward+ Point/Spot：油画分带 + 暖色本地填充（篝火等）。
+// 平躺水面定义 OIL_NPR_NO_OTHER_LIGHTS，避免点光衰减读成圆形光斑。
 half3 OilNPROtherLights(
     Surface surfaceWS,
     half3 albedo,
@@ -81,19 +109,33 @@ half3 OilNPROtherLights(
     half shadeSteps,
     float2 screenUV)
 {
+#if defined(OIL_NPR_NO_OTHER_LIGHTS)
+    return 0.0h;
+#else
     if (GetOtherLightCount() <= 0)
     {
         return 0.0h;
     }
 
-    ShadowData shadowData = GetShadowData(surfaceWS);
     ForwardPlusTile tile = GetForwardPlusTile(screenUV);
-    int lastLightIndex = tile.GetLastLightIndexInTile();
+    int first = tile.GetFirstLightIndexInTile();
+    int last = tile.GetLastLightIndexInTile();
+#if defined(OIL_MOBILE_PERF)
+    // Campfire + one spare; skip GetOtherShadowAttenuation.
+    last = min(last, first + 1);
+#endif
     half steps = max(shadeSteps * 0.5h, 2.0h);
     half3 sum = 0.0h;
-    for (int j = tile.GetFirstLightIndexInTile(); j <= lastLightIndex; j++)
+#if !defined(OIL_MOBILE_PERF)
+    ShadowData shadowData = GetShadowData(surfaceWS);
+#endif
+    for (int j = first; j <= last; j++)
     {
+#if defined(OIL_MOBILE_PERF)
+        Light light = GetOtherLightNoShadow(tile.GetLightIndex(j), surfaceWS);
+#else
         Light light = GetOtherLight(tile.GetLightIndex(j), surfaceWS, shadowData);
+#endif
         if ((surfaceWS.renderingLayerMask & light.renderingLayerMask) == 0u)
         {
             continue;
@@ -114,6 +156,7 @@ half3 OilNPROtherLights(
     }
 
     return sum;
+#endif
 }
 
 half3 OilNPRLightingEx(
@@ -135,7 +178,6 @@ half3 OilNPRLightingEx(
     float2 screenUV)
 {
     half3 N = (half3)surfaceWS.normal;
-    half3 V = (half3)surfaceWS.viewDirection;
     half3 other = OilNPROtherLights(surfaceWS, albedo, N, shadeSteps, screenUV);
 
     if (GetDirectionalLightCount() <= 0)
@@ -148,7 +190,11 @@ half3 OilNPRLightingEx(
             unlit = lerp(unlit, max(unlit, warmUmbra * 0.65h + other * 0.35h), 0.55h);
         }
 
+#if defined(OIL_MOBILE_PERF)
+        return unlit;
+#else
         return OilDitherQuantize(unlit, (half)surfaceWS.dither, quantize);
+#endif
     }
 
     DirectionalLightData lightData = _DirectionalLightData[0];
@@ -164,27 +210,29 @@ half3 OilNPRLightingEx(
         attenuation = (half)light.attenuation;
     }
 
-    // Four poster bands. The shadow tap only picks a darker band; it is not a soft penumbra.
+    // Poster bands with soft edges. Hard cascade tap still darkens, but feather the jump.
     half halfLambert = saturate(dot(N, L) * 0.5h + 0.5h);
     half steps = max(shadeSteps, 2.0h);
+    half attSoft = smoothstep(0.05h, 0.55h, attenuation);
 #if defined(TERRAIN_SHADOW_RECEIVER)
-    // Terrain: attenuation must read as clear umbra (object contact), not a soft shadeLift nudge.
-    half lit = halfLambert * lerp(0.12h, 1.0h, attenuation);
+    // Terrain: keep readable contact umbra, slightly lifted so bands don't chalk.
+    half lit = halfLambert * lerp(0.22h, 1.0h, attSoft);
 #else
-    half lit = halfLambert * lerp(max(shadeLift, 0.2h), 1.0h, attenuation);
+    half lit = halfLambert * lerp(max(shadeLift, 0.28h), 1.0h, attSoft);
 #endif
     lit += (brush - 0.5h) * shadowWobble * (0.65h / steps);
+#if !defined(OIL_MOBILE_PERF)
     lit += ((half)surfaceWS.dither - 0.5h) * (quantize > 0.001h ? (1.0h / steps) : 0.0h);
-    lit = QuantizeNdotL(saturate(lit), steps);
+#endif
+    half litCont = saturate(lit);
+    lit = QuantizeNdotL(litCont, steps);
+    // Mix a little continuous shade so oil masses stay, chalk steps don't.
+    lit = lerp(lit, litCont, 0.32h);
 
     // lightColor is VisibleLight.finalColor (OilSkyboxTime LightPresets × intensity).
-    // Do not force a warm RGB multiply — that erases dawn gold / dusk orange / night blue.
     half lightPeak = max(1e-3h, max(lightColor.r, max(lightColor.g, lightColor.b)));
-    half3 lightHue = lightColor / lightPeak;
     half3 litColor = albedo * (ambient * 0.45h + lightColor);
 #if defined(_OIL_NO_VIOLET_UMBRA)
-    // Water planes live in heavy shadow; the hardcoded violet below tinted everything magenta.
-    // Replace with a neutral cool gray that lets shadowTint / shadowWarm carry the chroma.
     half3 umbraColor = albedo * half3(0.18h, 0.20h, 0.24h) + half3(0.02h, 0.022h, 0.025h);
 #else
     half3 umbraColor = albedo * half3(0.2h, 0.14h, 0.36h) + half3(0.02h, 0.012h, 0.035h);
@@ -192,9 +240,18 @@ half3 OilNPRLightingEx(
     umbraColor = lerp(umbraColor, albedo * shadowTint, 0.35h);
     umbraColor = lerp(umbraColor, albedo * shadowWarm, 0.15h);
     umbraColor *= lerp(0.7h, 1.1h, saturate(shadowLift * 0.67h));
-    // Dim / cool keys pull the umbra toward the period light (night blue-black).
+#if defined(OIL_MOBILE_PERF)
+    // One period pull + campfire warm; skip hue/rim/paintRim/ceil.
+    half3 lightHue = lightColor / lightPeak;
     umbraColor = lerp(umbraColor, albedo * lightHue * 0.2h + lightColor * 0.1h, 0.4h);
-    // Campfire / lamps warm the night umbra where other lights reach.
+    if (any(other > 1e-4h))
+    {
+        umbraColor = lerp(umbraColor, albedo * half3(0.48h, 0.24h, 0.1h) + other * 0.25h, 0.5h);
+    }
+    return lerp(umbraColor, litColor, lit) + other;
+#else
+    half3 lightHue = lightColor / lightPeak;
+    umbraColor = lerp(umbraColor, albedo * lightHue * 0.2h + lightColor * 0.1h, 0.4h);
     if (any(other > 1e-4h))
     {
         half warmMix = saturate(length(other) * 1.8h);
@@ -202,15 +259,15 @@ half3 OilNPRLightingEx(
     }
 
     half3 color = lerp(umbraColor, litColor, lit) + other;
-
+    half3 V = (half3)surfaceWS.viewDirection;
     half inv = 1.0h - saturate(dot(N, V));
     half rim = inv * inv;
     color += albedo * lerp(half3(1.0h, 0.78h, 0.48h), lightHue, 0.55h) * rim * 0.08h;
     color += paintRim * ambient * 0.15h;
-    // Ceiling scales with key energy so noon stays brightest and night stays dark.
     half3 ceilC = albedo * (0.85h + saturate(lightPeak) * 0.9h) + lightColor * 0.12h + other;
     color = min(color, ceilC);
     return color;
+#endif
 }
 
 // Wrapper: sample cascade shadows (forcedAttenuation < 0).

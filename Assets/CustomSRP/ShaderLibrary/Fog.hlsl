@@ -227,8 +227,10 @@ float3 AtmosphereFogColor(half stroke, float fogAmt)
     return OilFogPigment(fogCol, SoftFogStroke(stroke), fogAmt);
 }
 
-// Fog glaze ON TOP of the painted sky base. Height from density; opacity from concentration.
-float3 ApplyOilSkyFog(float3 color, float3 viewDirWS, half stroke)
+// Shared sky-dome fog layer. Same height cover as objects' far haze color;
+// opacityLo/Hi keep paint / stamps readable instead of a flat blanket.
+float3 ApplyOilSkyFogLayer(
+    float3 color, float3 viewDirWS, half stroke, float opacityLo, float opacityHi)
 {
     float master = saturate(_OilAtmosphereFogAmount);
     if (master < 1e-4 && _CustomFogEnabled < 0.5)
@@ -241,33 +243,31 @@ float3 ApplyOilSkyFog(float3 color, float3 viewDirWS, half stroke)
     float concentration = AtmosphereConcentration();
     float cover = AtmosphereFogCover(dir, concentration);
     float amount = master > 1e-4 ? master : 1.0;
-    // How solid the glaze is — max density fully blankets the painted base.
-    float opacity = lerp(0.50, 1.0, concentration) * amount;
+    float opacity = lerp(opacityLo, opacityHi, concentration) * amount;
     float fogAmt = saturate(cover * opacity);
+    // Keep a whisper of the underlying sky/stamp chroma so fog reads as air, not a slab.
+    float retain = lerp(0.18, 0.06, concentration) * fogAmt;
     float3 fogCol = AtmosphereFogColor(stroke, fogAmt);
-    // Cover the skybox base (PaintSky), do not replace zenith when cover is 0.
-    return lerp(color, fogCol, fogAmt);
+    float3 glazed = lerp(color, fogCol, fogAmt);
+    return lerp(glazed, color, retain);
+}
+
+// Painted sky base: horizon haze that still leaves oil color through.
+float3 ApplyOilSkyFog(float3 color, float3 viewDirWS, half stroke)
+{
+    return ApplyOilSkyFogLayer(color, viewDirWS, stroke, 0.32, 0.72);
+}
+
+// After sun/moon/stars stamps — lighter veil so discs sit in the same air as the horizon.
+float3 ApplyOilCelestialFog(float3 color, float3 viewDirWS, half stroke)
+{
+    return ApplyOilSkyFogLayer(color, viewDirWS, stroke, 0.12, 0.38);
 }
 
 // Opaque cloud cards: same density-height fog glaze on RGB. Never touch alpha.
 float3 ApplyOilCloudFog(float3 color, float3 viewDirWS, half stroke)
 {
-    float master = saturate(_OilAtmosphereFogAmount);
-    if (master < 1e-4 && _CustomFogEnabled < 0.5)
-    {
-        return color;
-    }
-
-    float lenSq = dot(viewDirWS, viewDirWS);
-    float3 dir = lenSq > 1e-8 ? viewDirWS * rsqrt(lenSq) : float3(0.0, 1.0, 0.0);
-    float concentration = AtmosphereConcentration();
-    float cover = AtmosphereFogCover(dir, concentration);
-    float amount = master > 1e-4 ? master : 1.0;
-    // Light glaze only — heavy fog wash erased oil impasto on the cloud brush.
-    float opacity = lerp(0.10, 0.32, concentration) * amount;
-    float fogAmt = saturate(cover * opacity);
-    float3 fogCol = AtmosphereFogColor(SoftFogStroke(stroke), fogAmt);
-    return lerp(color, fogCol, fogAmt);
+    return ApplyOilSkyFogLayer(color, viewDirWS, SoftFogStroke(stroke), 0.10, 0.32);
 }
 
 #endif

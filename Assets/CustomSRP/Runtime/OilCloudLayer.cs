@@ -367,8 +367,7 @@ namespace CustomSRP
             sunDir = sunDirIn;
             moonDir = moonDirIn;
             moonBlend = OilSkyboxTime.MoonBlendFromSun(sunDir);
-            // Clock night (21–06, same as EvaluateFog) — sleep presets can pin the sun
-            // in view so moonBlend alone still paints chalk-white day clouds.
+            // Clock night (21–06, same as EvaluateFog) — moonBlend alone can lag at dusk.
             float hours = OilSkyboxTime.PeriodToHours(period);
             float clockNight = hours >= 21f || hours < 6f
                 ? 1f

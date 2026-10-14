@@ -12,8 +12,6 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
-  - _CANVAS_ON
-  - _KUWAHARA_ON
   - _RECEIVE_SHADOWS
   m_InvalidKeywords:
   - _OUTLINE_ON
@@ -50,7 +48,7 @@ Material:
     - _DstBlend: 0
     - _EdgeStrength: 0.55
     - _InternalEdge: 0
-    - _Kuwahara: 1
+    - _Kuwahara: 0
     - _KuwaharaRadius: 0.04
     - _Outline: 1
     - _OutlineBreak: 0.1

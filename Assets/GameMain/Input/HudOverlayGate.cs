@@ -1,3 +1,4 @@
+using Game.Native;
 using GameFramework.UI;
 
 namespace Game
@@ -10,7 +11,8 @@ namespace Game
             return GroupHasForms("Panel") || GroupHasForms("Dialog");
         }
 
-        public static bool BlocksLocomotion() => HasPopup();
+        public static bool BlocksLocomotion() =>
+            HasPopup() || NativeOverlayGate.BlocksLocomotion;
 
         static bool GroupHasForms(string groupName)
         {

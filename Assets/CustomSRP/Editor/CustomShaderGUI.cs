@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -14,18 +16,36 @@ namespace CustomSRP.Editor
             Off
         }
 
+        static readonly HashSet<string> BillboardHiddenProps = new HashSet<string>
+        {
+            "_InternalEdge",
+            "_EdgeStrength",
+            "_EdgeColor"
+        };
+
         MaterialEditor editor;
-        Object[] materials;
+        UnityEngine.Object[] materials;
         MaterialProperty[] properties;
         bool showPresets;
 
         public override void OnGUI(MaterialEditor materialEditor, MaterialProperty[] properties)
         {
-            EditorGUI.BeginChangeCheck();
-            base.OnGUI(materialEditor, properties);
             editor = materialEditor;
             materials = materialEditor.targets;
             this.properties = properties;
+
+            EditorGUI.BeginChangeCheck();
+            // Billboard mats don't use internal crease ink; hide those OilNPR props in Inspector.
+            // (Removing them from .mat YAML is not enough — Shader Properties still draw.)
+            if (AllTargetsAreBillboard())
+            {
+                EnsureBillboardEdgeOff();
+                materialEditor.PropertiesDefaultGUI(FilterProperties(properties, BillboardHiddenProps));
+            }
+            else
+            {
+                base.OnGUI(materialEditor, properties);
+            }
 
             EditorGUILayout.Space();
             showPresets = EditorGUILayout.Foldout(showPresets, "Presets", true);
@@ -40,6 +60,47 @@ namespace CustomSRP.Editor
             if (EditorGUI.EndChangeCheck())
             {
                 SetShadowCasterPass();
+            }
+        }
+
+        static MaterialProperty[] FilterProperties(
+            MaterialProperty[] source, HashSet<string> hide)
+        {
+            var list = new List<MaterialProperty>(source.Length);
+            for (int i = 0; i < source.Length; i++)
+            {
+                if (hide.Contains(source[i].name))
+                    continue;
+                list.Add(source[i]);
+            }
+
+            return list.ToArray();
+        }
+
+        bool AllTargetsAreBillboard()
+        {
+            if (materials == null || materials.Length == 0)
+                return false;
+            for (int i = 0; i < materials.Length; i++)
+            {
+                var m = materials[i] as Material;
+                if (m == null
+                    || m.name.IndexOf("Billboard", StringComparison.OrdinalIgnoreCase) < 0)
+                    return false;
+            }
+
+            return true;
+        }
+
+        void EnsureBillboardEdgeOff()
+        {
+            foreach (Material m in materials)
+            {
+                if (m == null)
+                    continue;
+                m.DisableKeyword("_INTERNAL_EDGE_ON");
+                if (m.HasProperty("_InternalEdge"))
+                    m.SetFloat("_InternalEdge", 0f);
             }
         }
 

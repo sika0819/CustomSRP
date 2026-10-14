@@ -13,8 +13,10 @@
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
-    "autoReferenced": true,
-    "defineConstraints": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "YOOASSET_MINIGAME"
+    ],
     "versionDefines": [],
     "noEngineReferences": false
 }

@@ -22,7 +22,7 @@ CBUFFER_START(UnityPerMaterial)
     float _StarSize;
 CBUFFER_END
 
-// Driven by OilSkyboxTime (Boluo Cozy orbit ± view placement). Fallback in pass if unset.
+// Driven by OilSkyboxTime (Boluo Cozy orbit). Fallback in pass if unset.
 float3 _OilSkySunDir;
 float3 _OilSkyMoonDir;
 

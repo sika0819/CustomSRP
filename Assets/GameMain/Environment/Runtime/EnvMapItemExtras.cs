@@ -158,7 +158,7 @@ namespace Game
                 instance.SetActive(d.IsActive);
 
                 if (d.PrefabName == "Huodui")
-                    EnsureFireController(instance);
+                    yield return EnsureFireControllerCoroutine(instance, ownedHandles);
 
                 AtmospherePropRegistry.RegisterByName(instance.transform);
                 placed++;
@@ -185,31 +185,41 @@ namespace Game
             editorPath = SceneAssets.DaoYu1EditorPath(daoYuParent, name);
         }
 
-        const string CampfireNoiseFireMatPath =
-            "Assets/GameMain/Environment/FX/UnityFire/Materials/Campfire_NoiseFire.mat";
-
-        static void EnsureFireController(GameObject huodui)
+        static IEnumerator EnsureFireControllerCoroutine(GameObject huodui, List<AssetHandle> ownedHandles)
         {
             if (huodui == null)
-                return;
+                yield break;
+
             FireController fire = huodui.GetComponent<FireController>()
                                  ?? huodui.GetComponentInChildren<FireController>(true);
             if (fire == null)
                 fire = huodui.AddComponent<FireController>();
 
-#if UNITY_EDITOR
-            var mat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(CampfireNoiseFireMatPath);
-            if (mat != null)
+            Material mat = null;
+            if (YooResourceModule.IsInitialized && YooResourceModule.DefaultPackage != null
+                && YooResourceModule.DefaultPackage.CheckLocationValid(SceneAssets.CampfireNoiseFireLocation))
             {
-                var so = new UnityEditor.SerializedObject(fire);
-                UnityEditor.SerializedProperty p = so.FindProperty("flameMaterial");
-                if (p != null && p.objectReferenceValue == null)
-                {
-                    p.objectReferenceValue = mat;
-                    so.ApplyModifiedPropertiesWithoutUndo();
-                }
+                yield return YooResourceModule.LoadAssetCoroutine<Material>(
+                    SceneAssets.CampfireNoiseFireLocation,
+                    (asset, handle) =>
+                    {
+                        mat = asset;
+                        if (handle != null)
+                            ownedHandles?.Add(handle);
+                    });
             }
+
+#if UNITY_EDITOR
+            if (mat == null)
+                mat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(
+                    SceneAssets.CampfireNoiseFireMatPath);
 #endif
+
+            if (mat != null)
+                fire.BindFlameMaterial(mat);
+            else
+                Log.Warning("[MapItemExtras] Campfire_NoiseFire material missing — Huodui may have no flame.");
+
             fire.EnsureRuntimeBindings();
         }
     }

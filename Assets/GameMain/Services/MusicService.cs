@@ -1,3 +1,4 @@
+using Game.Native;
 using UnityEngine;
 
 namespace Game
@@ -43,6 +44,52 @@ namespace Game
                 PlayIndex(0, restart: true);
         }
 
+        public void Pause()
+        {
+            if (_music != null && _music.isPlaying)
+                _music.Pause();
+            PublishNowPlaying();
+        }
+
+        public void Resume()
+        {
+            if (_music != null && _music.clip != null)
+                _music.UnPause();
+            if (_music != null && !_music.isPlaying && _music.clip != null)
+                _music.Play();
+            PublishNowPlaying();
+        }
+
+        public void Next()
+        {
+            if (TrackNames.Length == 0)
+                return;
+            PlayIndex((CurrentIndex + 1) % TrackNames.Length, restart: true);
+        }
+
+        public void Prev()
+        {
+            if (TrackNames.Length == 0)
+                return;
+            int i = CurrentIndex - 1;
+            if (i < 0)
+                i = TrackNames.Length - 1;
+            PlayIndex(i, restart: true);
+        }
+
+        void PublishNowPlaying()
+        {
+            string title = CurrentIndex >= 0 && CurrentIndex < TrackNames.Length
+                ? TrackNames[CurrentIndex]
+                : "";
+            int posMs = _music != null ? Mathf.RoundToInt(_music.time * 1000f) : 0;
+            int durMs = _music != null && _music.clip != null
+                ? Mathf.RoundToInt(_music.clip.length * 1000f)
+                : 0;
+            NativeBridgeFacade.PublishNowPlaying(
+                IsPlaying, 0, CurrentIndex, title, "Island", posMs, durMs);
+        }
+
         public void ApplySavedVolumes()
         {
             MusicVolume = LoadVolume(VolumeForm.MusicVolumeKey);
@@ -85,6 +132,7 @@ namespace Game
             _music.clip = _clips[index];
             _music.volume = MusicVolume;
             _music.Play();
+            PublishNowPlaying();
         }
 
         void TryLoadClips()

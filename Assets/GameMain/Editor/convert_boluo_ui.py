@@ -34,17 +34,11 @@ FORMS = {
     "InGameTiaoJieView": "VolumeForm",
     "InGameYuSheView": "PresetForm",
     "InGamePauseTipView": "TimerPauseForm",
-    "InGameMobileDataView": "MobileDataForm",
-    "InGameRequestDownloadView": "DownloadAskForm",
-    "InGameNeedNetWorkView": "NetworkRequiredForm",
-    "InGameDownloadView": "DownloadProgressForm",
-    "InGameInsufficientStorageView": "StorageFullForm",
 }
 
 ITEMS = {
     "Musicitem": "MusicTrackItem",
     "YusheItem": "PresetItem",
-    "state_Playing": "PlayingBadge",
 }
 
 # Longest tokens first. Source object names are pinyin; output names say the role.
@@ -1150,10 +1144,6 @@ def emit_notice(node, form_name, used, guid_cache, missing, lines, rules, depth,
     templates.add("NoticeCard")
     card_rect = expected_rect(node, *parent_size)
     notice_ids = {
-        "MobileDataForm": "mobileDataCard",
-        "DownloadAskForm": "downloadAskCard",
-        "NetworkRequiredForm": "networkRequiredCard",
-        "StorageFullForm": "storageFullCard",
         "TimerPauseForm": "timerDialog",
     }
     name = notice_ids.get(form_name) or choose_name(node, form_name, used, parent_name)

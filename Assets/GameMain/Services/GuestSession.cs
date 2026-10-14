@@ -1,36 +1,55 @@
 using System;
+using Game.BoluoApi;
 using UnityEngine;
 
 namespace Game
 {
     /// <summary>
-    /// 游客/用户会话（BoluoUnity BoluoSession 子集）。编辑器游客登录进岛写入此处。
+    /// 游客/用户会话薄包装；SSOT 为 <see cref="BoluoSession"/>。
     /// </summary>
     public static class GuestSession
     {
-        const string UserTokenKey = "Game.UserToken";
-        const string UserIdKey = "Game.UserId";
-        const string IsGuestKey = "Game.IsGuest";
+        const string IsGuestKey = "Boluo.IsGuest";
 
-        public static string UserToken { get; private set; } = "";
-        public static string UserId { get; private set; } = "";
-        public static bool IsGuest { get; private set; }
+        public static string UserToken
+        {
+            get
+            {
+                BoluoSession.LoadFromPrefs();
+                return BoluoSession.UserToken;
+            }
+        }
+
+        public static string UserId
+        {
+            get
+            {
+                BoluoSession.LoadFromPrefs();
+                return BoluoSession.UserId;
+            }
+        }
+
+        public static bool IsGuest
+        {
+            get
+            {
+                BoluoSession.LoadFromPrefs();
+                return BoluoSession.IsGuest || PlayerPrefs.GetInt(IsGuestKey, 0) == 1;
+            }
+        }
+
         public static bool IsLoggedIn => !string.IsNullOrEmpty(UserToken);
 
         public static void LoadFromPrefs()
         {
-            UserToken = PlayerPrefs.GetString(UserTokenKey, "") ?? "";
-            UserId = PlayerPrefs.GetString(UserIdKey, "") ?? "";
-            IsGuest = PlayerPrefs.GetInt(IsGuestKey, 0) == 1;
+            BoluoSession.LoadFromPrefs();
         }
 
         public static void ApplyUserSession(string token, string userId, bool isGuest)
         {
-            UserToken = token ?? "";
-            UserId = userId ?? "";
-            IsGuest = isGuest;
-            PlayerPrefs.SetString(UserTokenKey, UserToken);
-            PlayerPrefs.SetString(UserIdKey, UserId);
+            BoluoSession.ApplyUserSession(
+                new UserSession { token = token ?? "", userId = userId ?? "" },
+                isGuest);
             PlayerPrefs.SetInt(IsGuestKey, isGuest ? 1 : 0);
             PlayerPrefs.Save();
         }
@@ -47,12 +66,22 @@ namespace Game
 
         public static void Clear()
         {
-            UserToken = "";
-            UserId = "";
-            IsGuest = false;
-            PlayerPrefs.DeleteKey(UserTokenKey);
-            PlayerPrefs.DeleteKey(UserIdKey);
+            BoluoSession.ClearUserSession();
             PlayerPrefs.DeleteKey(IsGuestKey);
+            // Legacy keys from pre-port GuestSession
+            PlayerPrefs.DeleteKey("Game.UserToken");
+            PlayerPrefs.DeleteKey("Game.UserId");
+            PlayerPrefs.DeleteKey("Game.IsGuest");
+        }
+
+        public static void SyncFromBoluo()
+        {
+            BoluoSession.LoadFromPrefs();
+            if (!string.IsNullOrEmpty(BoluoSession.UserToken))
+            {
+                PlayerPrefs.SetInt(IsGuestKey, BoluoSession.IsGuest ? 1 : 0);
+                PlayerPrefs.Save();
+            }
         }
     }
 }

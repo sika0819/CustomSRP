@@ -45,7 +45,7 @@ namespace Game
 
         static void EnsureSingleAudioListener()
         {
-            AudioListener[] listeners = Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None);
+            AudioListener[] listeners = Object.FindObjectsByType<AudioListener>();
             Camera main = Camera.main;
             for (int i = 0; i < listeners.Length; i++)
             {

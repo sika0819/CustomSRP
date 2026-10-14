@@ -319,7 +319,7 @@ namespace Game.Editor
             _targetPlatform = BuildTarget.Android;
             ExecuteBuild();
 
-            if (!EditorApplication.isBatchMode)
+            if (!Application.isBatchMode)
             {
                 // Show confirmation to continue with iOS
                 if (EditorUtility.DisplayDialog("Build iOS?",
@@ -409,12 +409,12 @@ namespace Game.Editor
                 buildParameters.BuildinFileRoot = AssetBundleBuilderHelper.GetStreamingAssetsRoot();
                 buildParameters.BuildPipeline = EBuildPipeline.BuiltinBuildPipeline.ToString();
                 buildParameters.BuildTarget = _targetPlatform;
-                buildParameters.BuildBundleType = (int)EBuildBundleType.AssetBundle;
+                buildParameters.BuildBundleType = (int)YooAsset.EBuildBundleType.AssetBundle;
                 buildParameters.PackageName = PackageName;
                 buildParameters.PackageVersion = packageVersion;
                 buildParameters.VerifyBuildingResult = true;
                 buildParameters.EnableSharePackRule = true;
-                buildParameters.FileNameStyle = EFileNameStyle.BundleName_HashName;
+                buildParameters.FileNameStyle = YooAsset.EFileNameStyle.BundleName_HashName;
                 buildParameters.BuildinFileCopyOption = EBuildinFileCopyOption.ClearAndCopyAll;
                 buildParameters.BuildinFileCopyParams = string.Empty;
                 buildParameters.ClearBuildCacheFiles = true; // Force clean for full rebuild
@@ -556,10 +556,10 @@ namespace Game.Editor
             AppendLog($"Building APK: {_androidApkPath}");
             AppendLog($"Scenes: {string.Join(", ", scenes)}");
 
-            BuildReport report = BuildPipeline.BuildPlayer(options);
-            BuildSummary summary = report.summary;
+            UnityEditor.Build.Reporting.BuildReport report = BuildPipeline.BuildPlayer(options);
+            UnityEditor.Build.Reporting.BuildSummary summary = report.summary;
 
-            if (summary.result == BuildResult.Succeeded)
+            if (summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded)
             {
                 float sizeMB = summary.totalSize / (1024f * 1024f);
                 AppendLog($"APK build OK: {_androidApkPath}");
@@ -570,27 +570,27 @@ namespace Game.Editor
                     InstallAPK();
                 }
 
-                if (EditorApplication.isBatchMode)
+                if (Application.isBatchMode)
                     EditorApplication.Exit(0);
             }
             else
             {
                 AppendLog($"APK build failed: {summary.result}");
-                if (EditorApplication.isBatchMode)
+                if (Application.isBatchMode)
                     EditorApplication.Exit(1);
             }
         }
 
         void ApplyAndroidPlayerSettings()
         {
-            var android = NamedBuildTarget.Android;
+            var android = BuildTargetGroup.Android;
 
             PlayerSettings.SetApplicationIdentifier(android, AndroidPackageId);
             PlayerSettings.productName = AndroidProductName;
             PlayerSettings.Android.bundleVersionCode = (int)(DateTimeOffset.Now.ToUnixTimeSeconds() / 86400);
-            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel25;
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-            PlayerSettings.Android.androidIsGame = true;
+            PlayerSettings.Android.appCategory = "game";
             PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
             PlayerSettings.SetIl2CppCompilerConfiguration(android,
                 _developmentBuild ? Il2CppCompilerConfiguration.Debug : Il2CppCompilerConfiguration.Release);
@@ -637,10 +637,10 @@ namespace Game.Editor
             AppendLog($"Building Xcode project: {_iosXcodePath}");
             AppendLog($"Scenes: {string.Join(", ", scenes)}");
 
-            BuildReport report = BuildPipeline.BuildPlayer(options);
-            BuildSummary summary = report.summary;
+            UnityEditor.Build.Reporting.BuildReport report = BuildPipeline.BuildPlayer(options);
+            UnityEditor.Build.Reporting.BuildSummary summary = report.summary;
 
-            if (summary.result == BuildResult.Succeeded)
+            if (summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded)
             {
                 AppendLog($"Xcode build OK: {_iosXcodePath}");
                 AppendLog($"Time: {summary.totalTime}");
@@ -650,24 +650,24 @@ namespace Game.Editor
                 AppendLog("2. Configure signing in Xcode");
                 AppendLog("3. Build and run on device");
 
-                if (EditorApplication.isBatchMode)
+                if (Application.isBatchMode)
                     EditorApplication.Exit(0);
             }
             else
             {
                 AppendLog($"Xcode build failed: {summary.result}");
-                if (EditorApplication.isBatchMode)
+                if (Application.isBatchMode)
                     EditorApplication.Exit(1);
             }
         }
 
         void ApplyIOSPlayerSettings()
         {
-            var ios = NamedBuildTarget.iOS;
+            var ios = BuildTargetGroup.iOS;
 
             PlayerSettings.SetApplicationIdentifier(ios, AndroidPackageId.Replace("com.customsrp.", "com.customsrp.ios."));
             PlayerSettings.productName = AndroidProductName;
-            PlayerSettings.iOS.buildNumber = (int)(DateTimeOffset.Now.ToUnixTimeSeconds() / 86400).ToString();
+            PlayerSettings.iOS.buildNumber = ((int)(DateTimeOffset.Now.ToUnixTimeSeconds() / 86400)).ToString();
             PlayerSettings.SetScriptingBackend(ios, ScriptingImplementation.IL2CPP);
             PlayerSettings.SetManagedStrippingLevel(ios, ManagedStrippingLevel.High);
             PlayerSettings.gcIncremental = true;

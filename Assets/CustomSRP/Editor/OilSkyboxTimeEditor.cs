@@ -60,7 +60,7 @@ namespace CustomSRP.Editor
             EditorGUILayout.HelpBox(
                 $"内部 _Period = {period:0.00}（0 黎明 / 1 白天 / 2 黄昏 / 3 夜晚）\n" +
                 $"雾色 = #{fogHex}（夜晚固定 #36363C）· Lighting Fog Density 勿超过 ~0.01\n" +
-                "日月方向：Boluo Cozy 轨道（sunDirection=308）。预设 1/4/6/10 会钉到镜头前。\n" +
+                "日月方向：Boluo Cozy 轨道（sunDirection=308），不跟随镜头。\n" +
                 "拖动 Time Of Day 会同步天空、环境光、雾色与平行光。",
                 MessageType.None);
         }

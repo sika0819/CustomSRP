@@ -77,9 +77,9 @@ namespace CustomSRP.Editor
             PlayerSettings.productName = "CustomSRP OilEmpty";
             PlayerSettings.bundleVersion = "1.0.0";
             PlayerSettings.Android.bundleVersionCode = 1;
-            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel25;
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-            PlayerSettings.Android.androidIsGame = true;
+            PlayerSettings.Android.appCategory = "game";
             PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
             PlayerSettings.SetIl2CppCompilerConfiguration(
                 android, Il2CppCompilerConfiguration.Release);

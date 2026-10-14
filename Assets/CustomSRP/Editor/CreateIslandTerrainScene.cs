@@ -45,8 +45,11 @@ namespace CustomSRP.Editor
             terrain.materialTemplate = material;
             // Basemap pass is not the oil shader. Keep it farther than the camera.
             terrain.basemapDistance = Mathf.Max(4000f, data.size.x * 2.5f);
+            // Match Boluo Terrain.prefab: MinimumLODSimplification=0 + MaximumLOD=0.
+            // MinimumLOD=1 forces ≥2× coarser heightmesh up close → river-bank stairs.
             terrain.heightmapPixelError = 5f;
-            terrain.heightmapMinimumLODSimplification = 1;
+            terrain.heightmapMinimumLODSimplification = 0;
+            terrain.heightmapMaximumLOD = 0;
             terrain.drawInstanced = true;
             terrain.shadowCastingMode = ShadowCastingMode.On;
             terrain.drawHeightmap = true;
@@ -57,9 +60,18 @@ namespace CustomSRP.Editor
             terrain.Flush();
 
             AttachSkyAndCamera(data);
-            AttachBoluoOceanAndCloud(data, terrain);
+            AttachBoluoOceanAndCloud();
             BakeRuntimePrefabs(terrainGo);
             AssetDatabase.SaveAssets();
+
+            try
+            {
+                OilTerrainGrassBakeTool.Bake();
+            }
+            catch (System.Exception e)
+            {
+                Log.Warning("[CustomSRP] OilTerrainGrass bake skipped: " + e.Message);
+            }
 
             if (File.Exists(LaunchScene))
             {
@@ -321,12 +333,9 @@ namespace CustomSRP.Editor
             material.SetFloat("_ShadeSteps", 4f);
             material.SetFloat("_ShadeLift", 0.42f);
             material.SetFloat("_ShadowLift", 1.05f);
-            material.SetColor("_ShadowTint", new Color(0.36f, 0.46f, 0.62f, 1f));
-            material.SetColor("_ShadowWarm", new Color(0.58f, 0.48f, 0.3f, 1f));
             material.SetFloat("_ShadowWobble", 0.55f);
             material.SetFloat("_ShadowBrushScale", 1.35f);
             material.SetColor("_SpecularColor", new Color(0.5f, 0.45f, 0.38f, 1f));
-            material.SetFloat("_SpecularThreshold", 0.88f);
             material.SetColor("_AmbientColor", new Color(0.510f, 0.786f, 1f, 1f));
             material.SetFloat("_ReceiveShadows", 1f);
             material.EnableKeyword("_RECEIVE_SHADOWS");
@@ -393,10 +402,14 @@ namespace CustomSRP.Editor
             // Oil ocean refraction reads the opaque color, shore foam reads the depth.
             settings.FindPropertyRelative("copyColor").boolValue = true;
             settings.FindPropertyRelative("copyDepth").boolValue = true;
-            settings.FindPropertyRelative("overridePostFX").boolValue = true;
-            settings.FindPropertyRelative("postFXSettings").objectReferenceValue = null;
+            // Inherit pipeline PostFXSettings (oil filter + light bloom).
+            settings.FindPropertyRelative("overridePostFX").boolValue = false;
+            settings.FindPropertyRelative("postFXSettings").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<PostFXSettings>(
+                    "Assets/CustomSRP/Settings/PostFXSettings.asset");
             settings.FindPropertyRelative("renderScaleMode").enumValueIndex = 2;
-            settings.FindPropertyRelative("renderScale").floatValue = 0.75f;
+            // Idle default 1; IslandJoystickCamera drops to 0.75 while walking.
+            settings.FindPropertyRelative("renderScale").floatValue = 1f;
             settings.FindPropertyRelative("allowFXAA").boolValue = false;
             settings.FindPropertyRelative("keepAlpha").boolValue = false;
             settings.FindPropertyRelative("maskLights").boolValue = false;
@@ -413,7 +426,7 @@ namespace CustomSRP.Editor
             }
         }
 
-        static void AttachBoluoOceanAndCloud(TerrainData data, Terrain terrain)
+        static void AttachBoluoOceanAndCloud()
         {
             Material oceanMat = TestSceneUtility.CreateOrUpdateOilOcean(
                 TestSceneUtility.MaterialsPath + "/LitMooreaOcean.mat");
@@ -429,7 +442,6 @@ namespace CustomSRP.Editor
             surface.gridScale = 2500f;
             surface.vertexDistance = 500f;
             surface.followCamera = false;
-            surface.terrain = terrain;
             surface.waveHeight = 0.2f;
             surface.boundsPadding = 4f;
             surface.Rebuild();

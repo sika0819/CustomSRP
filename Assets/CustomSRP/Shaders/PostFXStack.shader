@@ -166,5 +166,16 @@ Shader "Hidden/CustomSRP/Post FX Stack"
             #include "FXAAPass.hlsl"
             ENDHLSL
         }
+
+        Pass
+        {
+            Name "Oil Filter"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilFilterPassFragment
+            ENDHLSL
+        }
     }
 }

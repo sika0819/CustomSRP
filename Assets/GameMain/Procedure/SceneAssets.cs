@@ -20,6 +20,11 @@ namespace Game
         public const string AllMapItemLocation = "AllMapItem";
         public const string AllMapItemAssetPath = "Assets/AssetRaw/Configs/AllMapItem.bytes";
 
+        /// <summary>GPU 草地种点 sidecar（SGB1，与 AllMapItem 同 Configs 采集）。</summary>
+        public const string IslandGrassBakeLocation = "Island_GrassBake";
+        public const string IslandGrassBakeAssetPath =
+            "Assets/AssetRaw/Configs/Island_GrassBake.bytes";
+
         /// <summary>篝火 / FX / inland pieces 位姿（BLM1，与 AllMapItem 同目录）。</summary>
         public const string MapItemExtrasLocation = "MapItemExtras";
         public const string MapItemExtrasAssetPath = "Assets/AssetRaw/Configs/MapItemExtras.bytes";
@@ -32,6 +37,11 @@ namespace Game
 
         /// <summary>Boluo Arts/FX 氛围预制体（AddressByFileName → FX_SunBeam_01）。</summary>
         public const string IslandFxRoot = "Assets/GameMain/Environment/FX/";
+
+        /// <summary>UnityFire 噪声火焰材质（AddressByFileName under Environment/FX/UnityFire）。</summary>
+        public const string CampfireNoiseFireLocation = "Campfire_NoiseFire";
+        public const string CampfireNoiseFireMatPath =
+            "Assets/GameMain/Environment/FX/UnityFire/Materials/Campfire_NoiseFire.mat";
 
         /// <summary>
         /// Yoo address：与 Collector <c>AddressByFolderAndFileName</c> 对齐

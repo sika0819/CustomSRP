@@ -261,7 +261,7 @@ namespace CustomSRP.Editor
         static void EnsureCamera(TransformData cam)
         {
             TestSceneUtility.EnsureMainCamera(ToVec3(cam.pos), Vector3.zero);
-            var main = Object.FindFirstObjectByType<Camera>();
+            var main = Object.FindAnyObjectByType<Camera>();
             if (main != null)
             {
                 main.transform.SetPositionAndRotation(ToVec3(cam.pos), ToRotation(cam.euler, cam.rot));

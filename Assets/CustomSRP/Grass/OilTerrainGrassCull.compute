@@ -1,0 +1,214 @@
+// GPU clip-space 精剔 + 按株型远裁。
+// 株型写在 bake 里，走动不换型；远距只抽稀/丢掉该株，不改成 Billboard。
+// Billboard 最便宜，留到最远；Thick/Shrub 先疏；Patch/Single/Thin 居中。
+// CSMainAdd：InterlockedAdd 写 args，不要 Append+CopyCount。
+#pragma kernel CSMain
+#pragma kernel CSMainAdd
+
+float4x4 _VPMatrix;
+float3 _CamPos;
+float _MaxDrawDistance;
+float _MinDrawDistance;
+float _MinPlantY;
+uint _StartOffset;
+uint _InstanceCount;
+int _VariantKind;
+int _KeepOutEnabled;
+int _KeepOutRes;
+float _KeepOutOriginX;
+float _KeepOutOriginZ;
+float _KeepOutCell;
+
+StructuredBuffer<float4> _AllInstancesPosWSBuffer;
+AppendStructuredBuffer<uint> _VisibleInstancesOnlyPosWSIDBuffer;
+RWStructuredBuffer<uint> _VisibleIdsAdd;
+RWByteAddressBuffer _VisibleArgs;
+StructuredBuffer<uint> _KeepOutGrid;
+
+int _LeafFrustumEnabled;
+int _LeafGrid;
+float _LeafOriginX;
+float _LeafOriginZ;
+float _LeafSize;
+uint _LeafFrustumMaskLo;
+uint _LeafFrustumMaskHi;
+
+[numthreads(64, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint srcId = id.x + _StartOffset;
+    if (srcId >= _InstanceCount)
+        return;
+    float4 inst = _AllInstancesPosWSBuffer[srcId];
+    float3 posWS = inst.xyz;
+    if (posWS.y < _MinPlantY)
+        return;
+
+    float dx = posWS.x - _CamPos.x;
+    float dz = posWS.z - _CamPos.z;
+    float dSq = dx * dx + dz * dz;
+    float d = sqrt(dSq);
+
+    // 0 Billboard 1 Patch 2 Single 3 Thick 4 Thin 5 Shrub 6 Wheat 7-10 Flower 11 Clover
+    float maxD = _MaxDrawDistance;
+    uint stride = 1;
+    if (_VariantKind >= 7 && _VariantKind <= 10)
+    {
+        maxD = min(_MaxDrawDistance, 70.0);
+        if (d >= 48.0) stride = 2;
+        else stride = 1;
+    }
+    else if (_VariantKind == 11)
+    {
+        maxD = min(_MaxDrawDistance, 28.0);
+        if (d >= 16.0) stride = 2;
+        else stride = 1;
+    }
+    else if (_VariantKind == 1 || _VariantKind == 3 || _VariantKind == 5)
+    {
+        maxD = min(_MaxDrawDistance, 70.0);
+        if (d >= 42.0) stride = 16;
+        else if (d >= 24.0) stride = 8;
+    }
+    else
+    {
+        maxD = _MaxDrawDistance;
+        if (d >= 110.0) stride = 8;
+        else if (d >= 70.0) stride = 4;
+        else if (d >= 45.0) stride = 2;
+    }
+
+    if (d > maxD)
+        return;
+    if (d < _MinDrawDistance)
+        return;
+    if ((srcId % stride) != 0)
+        return;
+
+    if (_KeepOutEnabled != 0 && _KeepOutRes > 0)
+    {
+        int gx = (int)floor((posWS.x - _KeepOutOriginX) / _KeepOutCell);
+        int gz = (int)floor((posWS.z - _KeepOutOriginZ) / _KeepOutCell);
+        if ((uint)gx < (uint)_KeepOutRes && (uint)gz < (uint)_KeepOutRes
+            && _KeepOutGrid[gz * _KeepOutRes + gx] != 0)
+            return;
+    }
+
+    if (_LeafFrustumEnabled != 0 && _LeafGrid > 0 && _LeafSize > 1e-4)
+    {
+        int tx = (int)floor((posWS.x - _LeafOriginX) / _LeafSize);
+        int tz = (int)floor((posWS.z - _LeafOriginZ) / _LeafSize);
+        if ((uint)tx >= (uint)_LeafGrid || (uint)tz >= (uint)_LeafGrid)
+            return;
+        int bit = tz * _LeafGrid + tx;
+        uint word = bit < 32 ? _LeafFrustumMaskLo : _LeafFrustumMaskHi;
+        uint shift = (uint)(bit & 31);
+        if (((word >> shift) & 1u) == 0u)
+            return;
+    }
+
+    float4 clipPos = mul(_VPMatrix, float4(posWS, 1.0));
+    float w = clipPos.w;
+    // 近处多留一截：脚底/近裁附近的草还要进 VS 做压伏和近裁淡出，不能在 CS 里先扔掉。
+    float cullR = d < 10.0 ? 5.5 : 2.0;
+    if (w < -cullR)
+        return;
+    float aw = max(abs(w), 0.25);
+    if (abs(clipPos.x) <= aw * 1.15 + cullR
+        && abs(clipPos.y) <= aw * 2.15 + cullR
+        && clipPos.z <= aw + cullR
+        && aw <= maxD + cullR)
+    {
+        _VisibleInstancesOnlyPosWSIDBuffer.Append(srcId);
+    }
+}
+
+[numthreads(64, 1, 1)]
+void CSMainAdd(uint3 id : SV_DispatchThreadID)
+{
+    uint srcId = id.x + _StartOffset;
+    if (srcId >= _InstanceCount)
+        return;
+    float4 inst = _AllInstancesPosWSBuffer[srcId];
+    float3 posWS = inst.xyz;
+    if (posWS.y < _MinPlantY)
+        return;
+
+    float dx = posWS.x - _CamPos.x;
+    float dz = posWS.z - _CamPos.z;
+    float dSq = dx * dx + dz * dz;
+    float d = sqrt(dSq);
+
+    float maxD = _MaxDrawDistance;
+    uint stride = 1;
+    if (_VariantKind >= 7 && _VariantKind <= 10)
+    {
+        maxD = min(_MaxDrawDistance, 70.0);
+        if (d >= 48.0) stride = 2;
+        else stride = 1;
+    }
+    else if (_VariantKind == 11)
+    {
+        maxD = min(_MaxDrawDistance, 28.0);
+        if (d >= 16.0) stride = 2;
+        else stride = 1;
+    }
+    else if (_VariantKind == 1 || _VariantKind == 3 || _VariantKind == 5)
+    {
+        maxD = min(_MaxDrawDistance, 70.0);
+        if (d >= 42.0) stride = 16;
+        else if (d >= 24.0) stride = 8;
+    }
+    else
+    {
+        maxD = _MaxDrawDistance;
+        if (d >= 110.0) stride = 8;
+        else if (d >= 70.0) stride = 4;
+        else if (d >= 45.0) stride = 2;
+    }
+
+    if (d > maxD)
+        return;
+    if (d < _MinDrawDistance)
+        return;
+    if ((srcId % stride) != 0)
+        return;
+
+    if (_KeepOutEnabled != 0 && _KeepOutRes > 0)
+    {
+        int gx = (int)floor((posWS.x - _KeepOutOriginX) / _KeepOutCell);
+        int gz = (int)floor((posWS.z - _KeepOutOriginZ) / _KeepOutCell);
+        if ((uint)gx < (uint)_KeepOutRes && (uint)gz < (uint)_KeepOutRes
+            && _KeepOutGrid[gz * _KeepOutRes + gx] != 0)
+            return;
+    }
+
+    if (_LeafFrustumEnabled != 0 && _LeafGrid > 0 && _LeafSize > 1e-4)
+    {
+        int tx = (int)floor((posWS.x - _LeafOriginX) / _LeafSize);
+        int tz = (int)floor((posWS.z - _LeafOriginZ) / _LeafSize);
+        if ((uint)tx >= (uint)_LeafGrid || (uint)tz >= (uint)_LeafGrid)
+            return;
+        int bit = tz * _LeafGrid + tx;
+        uint word = bit < 32 ? _LeafFrustumMaskLo : _LeafFrustumMaskHi;
+        uint shift = (uint)(bit & 31);
+        if (((word >> shift) & 1u) == 0u)
+            return;
+    }
+
+    float4 clipPos = mul(_VPMatrix, float4(posWS, 1.0));
+    float w = clipPos.w;
+    float cullR = d < 10.0 ? 5.5 : 2.0;
+    if (w < -cullR)
+        return;
+    float aw = max(abs(w), 0.25);
+    if (abs(clipPos.x) <= aw * 1.15 + cullR
+        && abs(clipPos.y) <= aw * 2.15 + cullR
+        && clipPos.z <= aw + cullR
+        && aw <= maxD + cullR)
+    {
+        uint slot;
+        _VisibleArgs.InterlockedAdd(4, 1, slot);
+        _VisibleIdsAdd[slot] = srcId;
+    }
+}

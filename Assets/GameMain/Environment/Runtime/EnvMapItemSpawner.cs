@@ -80,6 +80,13 @@ namespace Game
             yield return EnvMapItemExtras.Spawn(
                 transform, _categoryParents, _ownedHandles, n => _extrasSpawnedCount = n);
 
+            // 首铺结束后立刻按焦点打开近处碰撞（不等 RefreshLoop 首拍）。
+            if (_colliderLod != null && _focus != null)
+            {
+                float colRadius = Mathf.Max(48f, EnvStreamingConfig.MeshColliderEnableRadius);
+                _colliderLod.ForceRefreshNear(_focus.position, colRadius);
+            }
+
             IsReady = true;
             Log.Info(
                 $"[MapItem] ready items={_allMapItems.Count} spawned={SpawnedCount} " +
@@ -240,11 +247,9 @@ namespace Game
                 GameObject instance = Instantiate(prefab, parent, false);
                 instance.name = i + " " + prefab.name;
                 Vector3 pos = d.Pos;
+                EnvGroundFit.TrySnapMapItemY(ref pos, category, d.PrefabName);
                 if (EnvGroundFit.IsFlatGroundCard(d.PrefabName))
-                {
-                    EnvGroundFit.TrySnapY(ref pos);
                     EnvGroundFit.DisableCastShadows(instance);
-                }
 
                 instance.transform.position = pos;
                 instance.transform.localEulerAngles = d.Rotation;
@@ -252,6 +257,10 @@ namespace Game
                 instance.SetActive(d.IsActive);
                 if (EnvStreamingConfig.IsRockCategory(category))
                     EnvRockColliders.Ensure(instance, d.PrefabName);
+                if (EnvStreamingConfig.IsBridgeCategory(category))
+                    EnvBridgePillarFit.Ensure(instance);
+                if (EnvStreamingConfig.IsFarFieldLandmark(d.PrefabName))
+                    EnvLandmarkColliders.Ensure(instance, d.PrefabName);
                 _colliderLod?.Register(instance, pos);
                 _fullSpawnedCount++;
 

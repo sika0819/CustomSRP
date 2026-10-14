@@ -1,7 +1,7 @@
 # GameMain
 
 游戏侧程序集,独立 `namespace Game`、独立 `Game.asmdef`,与 `CustomSRP`(渲染管线)解耦。
-依赖:`UnityGameFramework.Runtime`、`YooAsset`、`UniTask`(见 `Game.asmdef`)。
+依赖:`UnityGameFramework.Runtime`、`YooAsset`、`UniTask`、`Newtonsoft.Json`(见 `Game.asmdef`)。
 
 框架使用约定见 [`.cursor/skills/game-framework/SKILL.md`](../../.cursor/skills/game-framework/SKILL.md);
 本文件只描述本工程 GameMain **目录组织**与**启动接线**。
@@ -21,11 +21,14 @@ GameEntry 挂在 `Launch.unity` 内(由 `Editor/LaunchSceneSetup.cs` 部署),`[D
 | `Entity/` | 实体 + 实体类辅助(`IslandJoystickCamera` 等)。`MonoBehaviour` 派生或 `static` 工具类 |
 | `Environment/Runtime/` | 环境运行时(`EnvMapItemSpawner`/`EnvItemStreamerLite`/`FireController`/`CampfireWeatherGate` …)。美术资产(Models/Materials/Prefabs)与脚本分层 |
 | `Input/` | 玩家输入(`LocomotionInput`/`IslandVirtualJoystick`/`IslandLocomotionInput`/`HudOverlayGate`)。热重载时 `LocomotionInput.ClearAll()` |
-| `UI/` | 界面:`GameFormLogic : UIFormLogic` 基类 + 各 `Island*` 业务 + `ScreenLayout` + `UiAssets` 常量表 + `UiPreview` 调试场景 + `YooUIFormHelper` 桥到 YooAsset |
-| `Services/` | 全局单例服务:`WeatherService` / `PresetService` / `AtmospherePropService` / `MusicService` / `IslandWorldService` / `GuestLoginClient` / `GuestSession`;以及 *EventArgs 事件类、`IAtmosphereVisualDriver` 接口、`StreamingAssetsUtil` |
+| `UI/` | 界面:`GameFormLogic : UIFormLogic` 基类 + `ScreenLayout` + `UiAssets` + `UiPreview` + `YooUIFormHelper`。运行时 Form 仅 7 个:`LoadingForm` / `IslandMainForm` / `WeatherForm` / `MusicForm` / `VolumeForm` / `PresetForm` / `TimerPauseForm`(下载类弹窗已移除) |
+| `Services/` | 全局单例服务:`WeatherService` / `PresetService` / `AtmospherePropService` / `MusicService` / `IslandWorldService` / `GuestLoginClient` / `GuestSession`(薄包装 `BoluoSession`);以及 *EventArgs 事件类、`IAtmosphereVisualDriver` 接口、`StreamingAssetsUtil` |
+| `Native/` | IMP 原生桥:`NativeBridgeTransport` / `NativeBridgeFacade` / `NativeSession` / Push / MsgType / SignKit 桥 / Overlay / Timer |
+| `BoluoApi/` | 环境切换、device/user 换票、`upgrade/bank`、BankDownloader(落盘不灌 Wwise)、SignatureLib |
+| `Utility/` | `Http.Retry` HTTP 重试 |
 | `YooAsset/` | YooAsset 封装:`YooResourceModule`(会话复位)、`YooAssetResourceManager`(实现 GF `IResourceManager`)、`YooRemoteServices`、`YooAssetPlayModePrefs`、`UpdateSetting` |
 | `Runtime/` | 极少:`ForceIncludeEngineTypes` 防止被 IL2CPP 裁掉的反射类型 |
-| `Editor/` | 30 个编辑器工具(`Game.Editor.asmdef`):构建、菜单、YooAsset Collector、UI 转换、PlayMode 守护。**运行时不参与** |
+| `Editor/` | 编辑器工具(`Game.Editor.asmdef`):`BoluoEnvTestWindow`(环境·渠道·版本)、GuestLogin 菜单、构建、YooAsset Collector 等。**运行时不参与** |
 | `Scenes/` | `Launch.unity` / `UiPreview.unity` |
 | `Settings/Resources/` | YooAsset 配置资产(`UpdateSetting.asset` / `YooAssetSettings.asset`)—— YooAsset 在运行时通过 `Resources` 模式读 |
 | `Resources/`, `Scenes/`(除 Launch/UiPreview 外) | **空目录占位,不要塞东西**;运行时资源全部走 YooAsset 异步 |
@@ -37,6 +40,9 @@ Awake()                           // DefaultExecutionOrder=100
   BootLoadingService.ResetSession()
   YooResourceModule.ResetSession()
   LocomotionInput.ClearAll()
+  NativeBridgeFacade.ResetSession()
+  BankUpgradeBootstrap.ResetSession()
+  BoluoApiEnvironment.ClearCached()
   ApplyDeviceGraphicsPolicy()     // 非 Editor:Quality 2, res 0.7×, OIL_MOBILE_PERF
 
 Start()
@@ -51,7 +57,7 @@ OnDestroy()
   → ClearCustomComponents → ClearBuiltinComponents
 ```
 
-**热重载重要**:`Awake` 顶部那三行 Reset **不能少**。项目开了 Disable Domain Reload,`RuntimeInitializeOnLoadMethod` 不会重跑,只有 `Awake` 每次都跑。
+**热重载重要**:`Awake` 顶部 Reset **不能少**。项目开了 Disable Domain Reload,`RuntimeInitializeOnLoadMethod` 不会重跑,只有 `Awake` 每次都跑。
 
 ## 4. 命名 / 接线约束(硬规则,也是 `.cursor/rules/gamemain.mdc`)
 
@@ -74,9 +80,11 @@ OnDestroy()
 ```
 ProcedureLaunch            (Launch.unity 已加载,准备 YooAsset 会话)
   └─→ ProcedureInitYooAsset  (初始化 YooAsset + 读 BootManifest)
-        └─→ ProcedureGuestLogin  (访客登录,写 GuestSession)
-              └─→ ProcedureIsland   (进岛;依赖 World/Weather/Preset 服务已 Ensure)
+        └─→ ProcedureGuestLogin  (NativeBridgeFacade.Init → device/user 换票 → BankUpgradeBootstrap 后台 → 进岛)
+              └─→ ProcedureIsland   (进岛; IslandWorldReady → Notify IslandReady)
 ```
+
+Editor 联调:`GameMain/Boluo/环境·渠道·版本`;换票需开启 `Editor Guest Login/Try Remote TouristLogin`。
 
 新增 Procedure:派生 `ProcedureBase`,在父 `OnUpdate` / 异步回调里 `ChangeState<T>(procedureOwner)`。
 

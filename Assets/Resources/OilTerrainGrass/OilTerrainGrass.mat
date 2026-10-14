@@ -1,0 +1,46 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: OilTerrainGrass
+  m_Shader: {fileID: 4800000, guid: ff843761b961f4b219e08854061f31d3, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: 2450
+  stringTagMap:
+    RenderType: TransparentCutout
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _GrassTexture:
+        m_Texture: {fileID: 2800000, guid: 46126d4719d7245758ac6ea9cd37a87d, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AlphaClip: 0.48
+    - _Billboard: 0
+    - _GrassHeight: 1
+    - _GrassWidth: 1
+    - _RandomNormal: 0.12
+    - _ShadeLift: 0.42
+    - _ShadeSteps: 4
+    - _WindStrength: 0.55
+    m_Colors:
+    - _AmbientColor: {r: 0.55, g: 0.5, b: 0.44, a: 1}
+    - _BaseColor: {r: 0.655, g: 0.722, b: 0.435, a: 1}
+    - _GroundColor: {r: 0.377, g: 0.502, b: 0.31, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

@@ -37,6 +37,8 @@
     "com.unity.modules.video": "1.0.0",
     "com.unity.modules.wind": "1.0.0",
     "com.tuyoogame.yooasset": "file:YooAsset",
-    "com.cysharp.unitask": "file:UniTask"
+    "com.cysharp.unitask": "file:UniTask",
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.unity.ugui": "2.0.0"
   }
 }

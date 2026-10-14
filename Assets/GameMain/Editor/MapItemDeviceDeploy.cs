@@ -162,13 +162,17 @@ namespace Game.Editor
             {
                 if (!apkOnly)
                 {
-                    // 0) Rivers/waterfall aggregate prefab + collector
+                    // 0) Bake readable *_Collision meshes onto ShiTou / large rocks before Yoo pack
+                    //    (avoids device "mesh has been marked as non-accessible" on Rock_01 etc.)
+                    BakeEnvMeshColliders.BakeAll();
+
+                    // 1) Rivers/waterfall aggregate prefab + collector
                     if (AssetDatabase.LoadAssetAtPath<GameObject>(SceneAssets.IslandInlandWaterPrefabPath) == null)
                         IslandInlandWaterBuilder.Build();
                     MapItemEditorMenu.EnsureFoliageClipAndShadows();
                     YooAssetCollectorSetup.SetupAll();
 
-                    // 1) Yoo package (Builtin copies into StreamingAssets) — OilNPR 变体变更须重打
+                    // 2) Yoo package (Builtin copies into StreamingAssets) — OilNPR 变体变更须重打
                     if (!YooAssetBuildMenu.BuildPackageBuiltin())
                     {
                         Log.Error(
@@ -191,7 +195,7 @@ namespace Game.Editor
                     return;
                 }
 
-                // 2) APK
+                // 3) APK
                 BuildAndroidIslandRelease.Build();
 
                 string apk = Path.GetFullPath(
@@ -202,7 +206,7 @@ namespace Game.Editor
                     return;
                 }
 
-                // 3) adb install + launch (Unity 6 uses UnityPlayerGameActivity)
+                // 4) adb install + launch (Unity 6 uses UnityPlayerGameActivity)
                 int code = Run("adb", $"install -r \"{apk}\"");
                 if (code != 0)
                 {

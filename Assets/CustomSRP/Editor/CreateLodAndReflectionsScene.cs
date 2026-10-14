@@ -422,8 +422,7 @@ namespace CustomSRP.Editor
 
         static void ConfigureReflectionProbeUsage()
         {
-            foreach (MeshRenderer renderer in Object.FindObjectsByType<MeshRenderer>(
-                         FindObjectsSortMode.None))
+            foreach (MeshRenderer renderer in Object.FindObjectsByType<MeshRenderer>())
             {
                 // BlendProbes 打断 Batcher；本场用 Simple。
                 renderer.reflectionProbeUsage = ReflectionProbeUsage.Simple;

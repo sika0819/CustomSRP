@@ -82,8 +82,16 @@ namespace Game
             if (document == null || Instance == null)
                 return;
 
-            PanelSettings settings = IsPad ? Instance.PadPanelSettings : Instance.PhonePanelSettings;
-            if (settings != null && document.panelSettings != settings)
+            PanelSettings phone = Instance.PhonePanelSettings;
+            PanelSettings pad = Instance.PadPanelSettings;
+            // Only retarget game forms already on phone/pad (or unset).
+            // Debugger / overlays keep their own PanelSettings (e.g. sortingOrder 32000).
+            PanelSettings current = document.panelSettings;
+            if (current != null && current != phone && current != pad)
+                return;
+
+            PanelSettings settings = IsPad ? pad : phone;
+            if (settings != null && current != settings)
                 document.panelSettings = settings;
         }
 
@@ -91,7 +99,7 @@ namespace Game
         {
             CurrentSize(out _width, out _height);
             _orientation = Screen.orientation;
-            UIDocument[] documents = FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            UIDocument[] documents = FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude);
             for (int i = 0; i < documents.Length; i++)
                 Apply(documents[i]);
             Changed?.Invoke();

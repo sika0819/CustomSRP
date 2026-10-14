@@ -34,7 +34,10 @@ namespace Game
         float _verticalSpeed;
         float _appliedEyeHeight = -1f;
         float _appliedRadius = -1f;
+        float _appliedRenderScale = -1f;
         const float InputSmooth = 10f;
+        /// <summary>Stick magnitude above this counts as walking for render-scale drop.</summary>
+        const float WalkRenderScaleThreshold = 0.05f;
         /// <summary>Small downward speed while grounded so CC keeps contact.</summary>
         const float GroundStickSpeed = 2f;
 
@@ -42,10 +45,12 @@ namespace Game
         {
             Current = this;
             EnsureBody();
+            ApplyRenderScale(false);
         }
 
         void OnDisable()
         {
+            ApplyRenderScale(false);
             if (Current == this)
                 Current = null;
         }
@@ -62,6 +67,10 @@ namespace Game
             EnsureBody();
             Vector3 ground = SampleGround(worldPos);
             SetPose(ground + Vector3.up * EyeHeight, Quaternion.Euler(Pitch, _yaw, 0f));
+            // 对齐 Boluo 切落点：立刻打开落点附近 MeshCollider，避免走路穿大石。
+            float colRadius = Mathf.Max(48f, EnvStreamingConfig.MeshColliderEnableRadius);
+            EnvMeshColliderLod lod = FindAnyObjectByType<EnvMeshColliderLod>();
+            lod?.ForceRefreshNear(transform.position, colRadius);
         }
 
         public void ApplyPreset(IslandPresetAsset preset)
@@ -97,6 +106,9 @@ namespace Game
 
             _smoothedMove = Vector2.MoveTowards(_smoothedMove, want, InputSmooth * dt);
             float moveMag = _smoothedMove.magnitude;
+            // Forward stick = walking; in-place yaw (stick X) keeps full scale.
+            bool walking = Mathf.Abs(_smoothedMove.y) > WalkRenderScaleThreshold;
+            ApplyRenderScale(walking);
 
             Vector3 motion = Vector3.zero;
             if (moveMag > 1e-4f)
@@ -111,6 +123,18 @@ namespace Game
             motion.y = IntegrateVertical(dt);
             MoveBody(motion);
             transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
+        }
+
+        void ApplyRenderScale(bool walking)
+        {
+            float scale = walking
+                ? IslandCameraSrpSetup.WalkingRenderScale
+                : IslandCameraSrpSetup.DefaultRenderScale;
+            if (Mathf.Approximately(scale, _appliedRenderScale))
+                return;
+
+            IslandCameraSrpSetup.SetRenderScale(gameObject, scale);
+            _appliedRenderScale = scale;
         }
 
         float IntegrateVertical(float dt)

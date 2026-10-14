@@ -10,8 +10,7 @@ namespace CustomSRP
     /// Oil skybox clock. timeOfDay is 0–24 hours.
     /// Internal period 0 dawn / 1 day / 2 dusk / 3 night maps to 06 / 12 / 18 / 00.
     /// Sky colors are mixed oil pigments at the same four anchors; the shader blends them from _Period.
-    /// Sun/moon discs use Boluo Cozy celestial orbits (sunDirection=308); optional view placement
-    /// pins dawn sun / sleep moon in front of the camera (Boluo PlaceSunForLook / PlaceMoonForLook).
+    /// Sun/moon discs use Boluo Cozy celestial orbits (sunDirection=308).
     /// Parallel light color/intensity still lerps the LightPresets table; direction follows the disc.
     /// Edit mode: sky + ambient apply immediately; sun is deferred (same-GO Transform + IMGUI recursion).
     /// </summary>
@@ -370,7 +369,7 @@ namespace CustomSRP
             sun = GetComponent<Light>();
             if (sun == null || sun.type != LightType.Directional)
             {
-                Light[] lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
+                Light[] lights = FindObjectsByType<Light>();
                 for (int i = 0; i < lights.Length; i++)
                 {
                     if (lights[i].type == LightType.Directional)
@@ -642,7 +641,7 @@ namespace CustomSRP
                 return;
             }
 
-            Light[] lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
+            Light[] lights = FindObjectsByType<Light>();
             for (int i = 0; i < lights.Length; i++)
             {
                 if (lights[i] != null && lights[i].type == LightType.Directional)
@@ -669,7 +668,7 @@ namespace CustomSRP
                 return;
             }
 
-            Light[] lights = FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            Light[] lights = FindObjectsByType<Light>(FindObjectsInactive.Include);
             for (int i = 0; i < lights.Length; i++)
             {
                 Light other = lights[i];
@@ -793,7 +792,7 @@ namespace CustomSRP
             Shader.SetGlobalVector(OilSkyMoonDirId, moonDir);
         }
 
-        /// <summary>Orbit dirs, then optional Boluo view placement override.</summary>
+        /// <summary>Orbit dirs, then optional debug override if set.</summary>
         public void ResolveCelestialDirections(float period, out Vector3 sunDir, out Vector3 moonDir)
         {
             sunDir = SunDirectionAt(period);
@@ -814,20 +813,24 @@ namespace CustomSRP
         public int CelestialLookId => _celestialLookId;
 
         /// <summary>
-        /// Boluo PlaceSunForLook / PlaceMoonForLook freeze: dawn sun or sleep moon in view.
-        /// Pass lookId to skip re-place while the same preset stays active.
+        /// Optional override of sun/moon dirs (debug / tooling). Gameplay always uses Cozy orbits.
         /// </summary>
         public void SetCelestialLookPlacement(int lookId, Vector3 sunDir, Vector3 moonDir)
         {
-            if (_hasCelestialOverride && _celestialLookId == lookId)
+            Vector3 s = sunDir.sqrMagnitude > 1e-8f ? sunDir.normalized : Vector3.up;
+            Vector3 m = moonDir.sqrMagnitude > 1e-8f ? moonDir.normalized : Vector3.up;
+            if (_hasCelestialOverride
+                && _celestialLookId == lookId
+                && (s - _overrideSunDir).sqrMagnitude < 1e-6f
+                && (m - _overrideMoonDir).sqrMagnitude < 1e-6f)
             {
                 return;
             }
 
             _hasCelestialOverride = true;
             _celestialLookId = lookId;
-            _overrideSunDir = sunDir.sqrMagnitude > 1e-8f ? sunDir.normalized : Vector3.up;
-            _overrideMoonDir = moonDir.sqrMagnitude > 1e-8f ? moonDir.normalized : Vector3.up;
+            _overrideSunDir = s;
+            _overrideMoonDir = m;
             Apply(markDirty: true);
         }
 

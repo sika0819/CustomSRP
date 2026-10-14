@@ -181,6 +181,14 @@ namespace Game
             SyncIgniteToGate();
         }
 
+        /// <summary>真机用：绑定 YooAsset 打进来的 Campfire_NoiseFire（避免仅 Shader.Find 出粉红）。</summary>
+        public void BindFlameMaterial(Material mat)
+        {
+            if (mat == null || mat.shader == null || mat.shader.name != "CustomSRP/NoiseFire")
+                return;
+            flameMaterial = mat;
+        }
+
         void SyncIgniteToGate() =>
             SetInstant(!CampfireWeatherGate.SuppressIgnite);
 
@@ -252,6 +260,15 @@ namespace Game
             }
 
             Material mat = ResolveFlameMaterial();
+            if (!IsValidNoiseFireMaterial(mat))
+            {
+                Log.Warning(
+                    "[FireController] No valid CustomSRP/NoiseFire material — skip flame cards (avoid pink error).");
+                for (int i = _flameRoot.childCount - 1; i >= 0; i--)
+                    DestroyGo(_flameRoot.GetChild(i).gameObject);
+                return;
+            }
+
             EnsureCard(_flameRoot, "FireCard0", Quaternion.identity, mat);
             if (crossedCards)
                 EnsureCard(_flameRoot, "FireCard1", Quaternion.Euler(0f, 90f, 0f), mat);
@@ -366,41 +383,49 @@ namespace Game
 
         Material ResolveFlameMaterial()
         {
-            if (flameMaterial != null
-                && flameMaterial.shader != null
-                && flameMaterial.shader.name == "CustomSRP/NoiseFire")
+            if (IsValidNoiseFireMaterial(flameMaterial))
                 return flameMaterial;
 
             Material baked = TryLoadBakedFlameMaterial();
-            if (baked != null)
+            if (IsValidNoiseFireMaterial(baked))
             {
                 flameMaterial = baked;
                 return baked;
             }
 
-            if (_runtimeMat != null)
+            if (IsValidNoiseFireMaterial(_runtimeMat))
                 return _runtimeMat;
 
+            // 无贴图的 runtime mat 仅作编辑器应急；真机必须走预制体引用或 YooAsset BindFlameMaterial。
             Shader shader = Shader.Find("CustomSRP/NoiseFire");
-            if (shader == null)
+            if (shader == null || !shader.isSupported)
             {
-                Log.Warning("[FireController] Shader CustomSRP/NoiseFire not found.");
-                return flameMaterial;
+                Log.Warning("[FireController] Shader CustomSRP/NoiseFire not found / unsupported.");
+                return null;
             }
 
+#if UNITY_EDITOR
             _runtimeMat = new Material(shader) { name = "Campfire_NoiseFire_Runtime" };
             _runtimeMat.SetFloat(ColorScaleId, 1f);
             _runtimeMat.SetFloat(AlphaScaleId, 1f);
             _runtimeMat.SetFloat(Time0Id, 0f);
             _runtimeMat.SetFloat(DisplaceStrengthId, 0.1f);
             return _runtimeMat;
+#else
+            Log.Warning(
+                "[FireController] flameMaterial missing on device — bake Huodui or load Campfire_NoiseFire.");
+            return null;
+#endif
         }
+
+        static bool IsValidNoiseFireMaterial(Material mat) =>
+            mat != null && mat.shader != null && mat.shader.name == "CustomSRP/NoiseFire";
 
         static Material TryLoadBakedFlameMaterial()
         {
 #if UNITY_EDITOR
             return UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(
-                "Assets/GameMain/Environment/FX/UnityFire/Materials/Campfire_NoiseFire.mat");
+                SceneAssets.CampfireNoiseFireMatPath);
 #else
             return null;
 #endif

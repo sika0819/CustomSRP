@@ -76,10 +76,14 @@ namespace CustomSRP.Editor
 
         public static void EnsureColorLUTComputeOnAllPostFXSettings()
         {
-            AssetDatabase.ImportAsset(
-                ColorLUTComputePath, ImportAssetOptions.ForceUpdate);
             ComputeShader compute =
                 AssetDatabase.LoadAssetAtPath<ComputeShader>(ColorLUTComputePath);
+            if (compute == null)
+            {
+                AssetDatabase.ImportAsset(ColorLUTComputePath);
+                compute = AssetDatabase.LoadAssetAtPath<ComputeShader>(ColorLUTComputePath);
+            }
+
             if (compute == null)
             {
                 Log.Error(
@@ -223,16 +227,7 @@ namespace CustomSRP.Editor
             }
 
             if (created)
-            {
-                // Match Post FX Settings.asset end-of-tutorial defaults.
-                SerializedProperty bloom = so.FindProperty("bloom");
-                bloom.FindPropertyRelative("maxIterations").intValue = 4;
-                bloom.FindPropertyRelative("downscaleLimit").intValue = 2;
-                bloom.FindPropertyRelative("bicubicUpsampling").boolValue = true;
-                bloom.FindPropertyRelative("threshold").floatValue = 0.5f;
-                bloom.FindPropertyRelative("thresholdKnee").floatValue = 0.5f;
-                bloom.FindPropertyRelative("intensity").floatValue = 1f;
-            }
+                ApplyOilIslandPostFxDefaults(so);
 
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(settings);
@@ -257,6 +252,109 @@ namespace CustomSRP.Editor
             AssetDatabase.SaveAssets();
             return settings;
         }
+
+        [MenuItem("CustomSRP/Generate Post FX Settings (Neutral Toggles)")]
+        public static void GenerateNeutralPostFxSettings()
+        {
+            EnsureFolders();
+            var settings = AssetDatabase.LoadAssetAtPath<PostFXSettings>(PostFXSettingsPath);
+            if (settings == null)
+            {
+                settings = ScriptableObject.CreateInstance<PostFXSettings>();
+                AssetDatabase.CreateAsset(settings, PostFXSettingsPath);
+            }
+
+            var so = new SerializedObject(settings);
+            SerializedProperty shaderProp = so.FindProperty("shader");
+            Shader shader = Shader.Find("Hidden/CustomSRP/Post FX Stack");
+            if (shader != null)
+                shaderProp.objectReferenceValue = shader;
+
+            SerializedProperty computeProp = so.FindProperty("colorLUTComputeShader");
+            ComputeShader colorLutCompute =
+                AssetDatabase.LoadAssetAtPath<ComputeShader>(ColorLUTComputePath);
+            if (computeProp != null && colorLutCompute != null)
+                computeProp.objectReferenceValue = colorLutCompute;
+
+            ApplyNeutralToggleDefaults(so);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(settings);
+
+            var pipeline = AssetDatabase.LoadAssetAtPath<CustomRenderPipelineAsset>(AssetPath);
+            if (pipeline != null)
+                EnsurePostFXSettingsAssigned(pipeline);
+
+            AssetDatabase.SaveAssets();
+            Selection.activeObject = settings;
+            EditorGUIUtility.PingObject(settings);
+            Log.Info(
+                $"[CustomSRP] Generated Post FX Settings (all toggles off): {PostFXSettingsPath}");
+        }
+
+        /// <summary>
+        /// All effects off + identity params. Turn on individual Enabled flags in the Inspector.
+        /// </summary>
+        static void ApplyNeutralToggleDefaults(SerializedObject so)
+        {
+            SerializedProperty bloom = so.FindProperty("bloom");
+            bloom.FindPropertyRelative("enabled").boolValue = false;
+            bloom.FindPropertyRelative("ignoreRenderScale").boolValue = false;
+            bloom.FindPropertyRelative("maxIterations").intValue = 4;
+            bloom.FindPropertyRelative("downscaleLimit").intValue = 2;
+            bloom.FindPropertyRelative("bicubicUpsampling").boolValue = false;
+            bloom.FindPropertyRelative("threshold").floatValue = 1.1f;
+            bloom.FindPropertyRelative("thresholdKnee").floatValue = 0.5f;
+            bloom.FindPropertyRelative("intensity").floatValue = 0.12f;
+            bloom.FindPropertyRelative("fadeFireflies").boolValue = true;
+            bloom.FindPropertyRelative("mode").enumValueIndex = 1;
+            bloom.FindPropertyRelative("scatter").floatValue = 0.65f;
+
+            SerializedProperty adj = so.FindProperty("colorAdjustments");
+            adj.FindPropertyRelative("enabled").boolValue = false;
+            adj.FindPropertyRelative("postExposure").floatValue = 0f;
+            adj.FindPropertyRelative("contrast").floatValue = 0f;
+            adj.FindPropertyRelative("colorFilter").colorValue = Color.white;
+            adj.FindPropertyRelative("hueShift").floatValue = 0f;
+            adj.FindPropertyRelative("saturation").floatValue = 0f;
+
+            SerializedProperty wb = so.FindProperty("whiteBalance");
+            wb.FindPropertyRelative("enabled").boolValue = false;
+            wb.FindPropertyRelative("temperature").floatValue = 0f;
+            wb.FindPropertyRelative("tint").floatValue = 0f;
+
+            SerializedProperty split = so.FindProperty("splitToning");
+            split.FindPropertyRelative("enabled").boolValue = false;
+            split.FindPropertyRelative("shadows").colorValue = Color.gray;
+            split.FindPropertyRelative("highlights").colorValue = Color.gray;
+            split.FindPropertyRelative("balance").floatValue = 0f;
+
+            SerializedProperty mixer = so.FindProperty("channelMixer");
+            mixer.FindPropertyRelative("enabled").boolValue = false;
+            mixer.FindPropertyRelative("red").vector3Value = Vector3.right;
+            mixer.FindPropertyRelative("green").vector3Value = Vector3.up;
+            mixer.FindPropertyRelative("blue").vector3Value = Vector3.forward;
+
+            SerializedProperty smh = so.FindProperty("shadowsMidtonesHighlights");
+            smh.FindPropertyRelative("enabled").boolValue = false;
+            smh.FindPropertyRelative("shadows").colorValue = Color.white;
+            smh.FindPropertyRelative("midtones").colorValue = Color.white;
+            smh.FindPropertyRelative("highlights").colorValue = Color.white;
+            smh.FindPropertyRelative("shadowsStart").floatValue = 0f;
+            smh.FindPropertyRelative("shadowsEnd").floatValue = 0.3f;
+            smh.FindPropertyRelative("highlightsStart").floatValue = 0.55f;
+            smh.FindPropertyRelative("highLightsEnd").floatValue = 1f;
+
+            SerializedProperty tone = so.FindProperty("toneMapping");
+            tone.FindPropertyRelative("enabled").boolValue = false;
+            tone.FindPropertyRelative("mode").enumValueIndex = 0;
+
+            SerializedProperty oil = so.FindProperty("oilFilter");
+            if (oil != null)
+                oil.FindPropertyRelative("enabled").boolValue = false;
+        }
+
+        static void ApplyOilIslandPostFxDefaults(SerializedObject so) =>
+            ApplyNeutralToggleDefaults(so);
 
         static void EnsureFolders()
         {

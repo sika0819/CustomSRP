@@ -22,12 +22,7 @@ namespace Game.Editor
             "Music",
             "Volume",
             "Preset",
-            "Timer Pause",
-            "Mobile Data",
-            "Download Ask",
-            "Network Required",
-            "Download Progress",
-            "Storage Full"
+            "Timer Pause"
         };
 
         static readonly string[] FormFiles =
@@ -38,12 +33,7 @@ namespace Game.Editor
             "MusicForm",
             "VolumeForm",
             "PresetForm",
-            "TimerPauseForm",
-            "MobileDataForm",
-            "DownloadAskForm",
-            "NetworkRequiredForm",
-            "DownloadProgressForm",
-            "StorageFullForm"
+            "TimerPauseForm"
         };
 
         [MenuItem("Game/Setup UI Preview Scene")]

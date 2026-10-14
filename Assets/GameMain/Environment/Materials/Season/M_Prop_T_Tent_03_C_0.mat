@@ -16,7 +16,6 @@ Material:
   - _SHADOWS_CLIP
   m_InvalidKeywords:
   - _OUTLINE_ON
-  - _SHADOWS_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -108,7 +107,7 @@ Material:
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 0.35, g: 0.4, b: 0.32, a: 1}
-    - _BaseColor: {r: 0.4157, g: 0.3569, b: 0.2941, a: 1}
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _EdgeColor: {r: 0.35, g: 0.3, b: 0.25, a: 1}
     - _LightTint: {r: 1.06, g: 0.98, b: 0.86, a: 1}
     - _OutlineColor: {r: 0.14, g: 0.1, b: 0.08, a: 1}

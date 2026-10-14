@@ -27,7 +27,7 @@ Transform:
   m_GameObject: {fileID: 122629683801721199}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0.0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -131,7 +131,7 @@ LODGroup:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8489350267923854846}
-  serializedVersion: 2
+  serializedVersion: 3
   m_LocalReferencePoint: {x: -0.020239651, y: 0.7724524, z: -0.008610129}
   m_Size: 1.994731
   m_FadeMode: 0
@@ -143,3 +143,4 @@ LODGroup:
     renderers:
     - renderer: {fileID: 3157288249354836505}
   m_Enabled: 1
+  m_GlobalIlluminationLOD: 0

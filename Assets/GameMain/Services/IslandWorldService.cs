@@ -90,6 +90,10 @@ namespace Game
             reportProgress?.Invoke(0.80f, "正在铺装环境...");
             yield return SpawnMapItems(reportProgress);
 
+            reportProgress?.Invoke(0.86f, "正在铺装草地...");
+            IslandGrassService grass = GameEntry.Grass ?? IslandGrassService.Ensure();
+            yield return grass.Load();
+
             _loaded = true;
             int mapCount = _mapItemSpawner != null ? _mapItemSpawner.MapItemCount : 0;
             int spawned = _mapItemSpawner != null ? _mapItemSpawner.SpawnedCount : 0;
@@ -109,6 +113,8 @@ namespace Game
 
         public void Release()
         {
+            (GameEntry.Grass ?? IslandGrassService.Active)?.Release();
+
             if (_mapItemSpawner != null)
             {
                 _mapItemSpawner.Release();

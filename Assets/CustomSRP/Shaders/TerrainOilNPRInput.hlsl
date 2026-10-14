@@ -41,11 +41,8 @@ float _ShadowBrushScale;
 CBUFFER_START(UnityPerMaterial)
     float4 _BaseColor;
     float4 _AmbientColor;
-    float4 _ShadowTint;
-    float4 _ShadowWarm;
     float4 _SpecularColor;
     float _ShadeSteps;
-    float _SpecularThreshold;
     float _ShadowLift;
     float _ShadeLift;
     float _ShadowWobble;

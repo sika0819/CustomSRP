@@ -385,7 +385,7 @@ namespace CustomSRP.Editor
                 return null;
             }
 
-            var terrains = Object.FindObjectsByType<Terrain>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var terrains = Object.FindObjectsByType<Terrain>(FindObjectsInactive.Exclude);
             for (int i = 0; i < terrains.Length; i++)
             {
                 if (terrains[i].terrainData == data)

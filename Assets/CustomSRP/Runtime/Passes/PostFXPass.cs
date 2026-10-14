@@ -104,6 +104,7 @@ namespace CustomSRP
             using var _ = new RenderGraphProfilingScope(renderGraph, GroupSampler);
 
             TextureHandle colorSource = BloomPass.Record(renderGraph, stack, textures);
+            colorSource = OilFilterPass.Record(renderGraph, stack, colorSource, textures);
             TextureHandle colorLUT = ColorLUTPass.Record(
                 renderGraph, stack, colorLUTResolution);
 

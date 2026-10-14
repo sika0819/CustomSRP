@@ -172,6 +172,13 @@ namespace UnityGameFramework.Runtime
             }
 
             m_Fps.Update(Time.unscaledDeltaTime);
+            if (m_Document != null && m_PanelSettings != null
+                && m_Document.panelSettings != m_PanelSettings)
+            {
+                m_Document.panelSettings = m_PanelSettings;
+                m_Document.sortingOrder = 32000;
+            }
+
             TickRuntimePanel();
             SyncEditorScreenToCamera();
             FitToCamera();
@@ -377,6 +384,9 @@ namespace UnityGameFramework.Runtime
             {
                 m_Document.panelSettings = m_PanelSettings;
             }
+
+            // Stay above game UIDocument.sortingOrder (uiGroupDepth * 100 + depth).
+            m_Document.sortingOrder = 32000;
 
             m_Root = new VisualElement();
             m_Root.AddToClassList("perf-root");

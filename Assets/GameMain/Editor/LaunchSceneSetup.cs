@@ -26,12 +26,7 @@ namespace Game.Editor
             "MusicForm",
             "VolumeForm",
             "PresetForm",
-            "TimerPauseForm",
-            "MobileDataForm",
-            "DownloadAskForm",
-            "NetworkRequiredForm",
-            "DownloadProgressForm",
-            "StorageFullForm"
+            "TimerPauseForm"
         };
 
         [MenuItem("Game/Setup Launch Scene")]

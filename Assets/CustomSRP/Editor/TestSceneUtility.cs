@@ -512,18 +512,11 @@ namespace CustomSRP.Editor
             material.SetFloat("_ShadeSteps", 4f);
             material.SetFloat("_ShadeLift", 0.42f);
             material.SetFloat("_ShadowLift", 0.95f);
-            material.SetColor("_ShadowTint", new Color(0.42f, 0.48f, 0.72f, 1f));
-            material.SetColor("_ShadowWarm", new Color(0.62f, 0.45f, 0.32f, 1f));
             material.SetFloat("_ShadowWobble", 0.45f);
             material.SetFloat("_ShadowBrushScale", 1.8f);
             material.SetFloat("_KuwaharaRadius", 0.05f);
             material.SetColor("_AmbientColor", new Color(0.55f, 0.5f, 0.44f, 1f));
-            material.SetColor("_SpecularColor", new Color(0.55f, 0.48f, 0.4f, 1f));
-            material.SetFloat("_SpecularThreshold", 0.86f);
-            material.SetFloat("_CanvasStrength", 0.1f);
             material.SetFloat("_PaintThickness", 0.18f);
-            material.SetFloat("_EdgeStrength", 0.55f);
-            material.SetColor("_EdgeColor", new Color(0.28f, 0.2f, 0.16f, 1f));
             Texture2D brush = EnsureOilBrushTexture();
             if (brush != null)
             {
@@ -537,22 +530,16 @@ namespace CustomSRP.Editor
                 material.SetTextureScale("_BaseMap", new Vector2(1.1f, 1.1f));
             }
 
-            if (canvasMap != null)
-            {
-                material.SetTexture("_CanvasMap", canvasMap);
-                material.SetTextureScale("_CanvasMap", new Vector2(0.45f, 0.45f));
-            }
+            _ = canvasMap;
 
             ApplySurface(material, SurfaceType.Opaque);
             ApplyShadowMode(material, ShadowMode.On);
             material.SetFloat("_ReceiveShadows", 1f);
             material.EnableKeyword("_RECEIVE_SHADOWS");
-            material.SetFloat("_Kuwahara", 1f);
-            material.EnableKeyword("_KUWAHARA_ON");
-            material.SetFloat("_Canvas", 1f);
-            material.EnableKeyword("_CANVAS_ON");
-            material.SetFloat("_InternalEdge", 1f);
-            material.EnableKeyword("_INTERNAL_EDGE_ON");
+            material.SetFloat("_Kuwahara", 0f);
+            material.DisableKeyword("_KUWAHARA_ON");
+            material.DisableKeyword("_CANVAS_ON");
+            material.DisableKeyword("_INTERNAL_EDGE_ON");
 
             material.enableInstancing = false;
             EditorUtility.SetDirty(material);
@@ -604,12 +591,7 @@ namespace CustomSRP.Editor
         public static Material CreateOrUpdateOilOcean(
             string path,
             Texture2D canvasMap = null,
-            Texture2D brushMap = null,
-            Texture2D shoreHeightMap = null,
-            Vector2 shoreOriginXZ = default,
-            Vector2 shoreSizeXZ = default,
-            float shoreHeightScaleM = 1184.7f,
-            float shoreWaterLevelM = 0.35f)
+            Texture2D brushMap = null)
         {
             Shader ocean = Shader.Find("CustomSRP/OilOceanNPR");
             if (ocean == null)
@@ -629,14 +611,16 @@ namespace CustomSRP.Editor
                 material.shader = ocean;
             }
 
-            // 基础配色尝试.xlsx · 01 水体 / 光照
-            // 浅水 #6BC1CD · 中间 #4AA2B2 · 深水 #167DA4 · 远水 #99D0D2 · 暖光 #D5C07C · 环境阴影 #7D8E8A
-            material.SetColor("_BaseColor", new Color(0.290f, 0.635f, 0.698f, 0.94f)); // #4AA2B2
-            material.SetColor("_FoamColor", new Color(0.984f, 0.953f, 0.914f, 1f)); // 云层高光 #FBF3E9
-            material.SetColor("_GlintColor", new Color(0.835f, 0.753f, 0.486f, 1f)); // 暖光 #D5C07C
-            material.SetFloat("_FoamStrength", 1.7f);
-            material.SetFloat("_ShoreFoamWidth", 18f);
-            material.SetFloat("_SunPathStrength", 1.4f);
+            // 对齐 OilRiverNPR：深/浅水色 + Monet 笔触 + 钛白岸沫；浅滩保留折射。
+            material.SetColor("_BaseColor", new Color(0.32f, 0.48f, 0.68f, 0.88f));
+            material.SetColor("_ShallowColor", new Color(0.55f, 0.62f, 0.48f, 0.72f));
+            material.SetColor("_FoamColor", new Color(0.94f, 0.97f, 1f, 1f));
+            material.SetColor("_GlintColor", new Color(1f, 0.92f, 0.55f, 1f));
+            material.SetFloat("_FoamStrength", 1.55f);
+            material.SetFloat("_ShoreFoamWidth", 16f);
+            material.SetFloat("_RefractionStrength", 0.55f);
+            material.SetFloat("_DepthVertical", 1.35f);
+            material.SetFloat("_SunPathStrength", 2.4f);
             material.SetFloat("_SunPathWidth", 4.5f);
             Texture2D paint = EnsureOilOceanTexture();
             if (paint != null)
@@ -644,44 +628,41 @@ namespace CustomSRP.Editor
                 material.SetTexture("_PaintMap", paint);
             }
 
-            Texture2D sunStroke = AssetDatabase.LoadAssetAtPath<Texture2D>(OilSunStrokePath);
-            if (sunStroke != null)
+            Texture2D foam = EnsureOilOceanFoamTexture();
+            if (foam != null)
             {
-                material.SetTexture("_SparkleBrush", sunStroke);
+                material.SetTexture("_FoamMap", foam);
             }
 
-            material.SetFloat("_PaintTile", 4500f);
-            material.SetFloat("_PaintContrast", 1.2f);
-            material.SetFloat("_PaintRelief", 0.7f);
-            material.SetFloat("_ShadeSteps", 4f);
-            material.SetFloat("_ShadeLift", 0.38f);
-            material.SetFloat("_ShadowLift", 1.05f);
-            material.SetColor("_ShadowTint", new Color(0.490f, 0.557f, 0.541f, 1f)); // #7D8E8A
-            material.SetColor("_ShadowWarm", new Color(0.090f, 0.490f, 0.643f, 1f)); // #167DA4 deep cool
-            material.SetFloat("_ShadowWobble", 0.45f);
-            material.SetColor("_AmbientColor", new Color(0.600f, 0.816f, 0.824f, 1f)); // #99D0D2
-            material.SetColor("_SpecularColor", new Color(0.984f, 0.953f, 0.914f, 1f));
-            material.SetFloat("_SpecularThreshold", 0.8f);
-
-            if (shoreSizeXZ.x > 1f && shoreSizeXZ.y > 1f)
+            Texture2D glint = EnsureOilOceanGlintTexture();
+            if (glint != null)
             {
-                material.SetVector(
-                    "_ShoreOriginSize",
-                    new Vector4(shoreOriginXZ.x, shoreOriginXZ.y, shoreSizeXZ.x, shoreSizeXZ.y));
-                material.SetFloat("_ShoreHeightScale", shoreHeightScaleM);
-                material.SetFloat("_ShoreWaterLevel", shoreWaterLevelM);
-                material.SetFloat("_ShoreFeatherM", 48f);
-                material.SetFloat("_ShoreMapStrength", 1.6f);
+                material.SetTexture("_SparkleBrush", glint);
             }
             else
             {
-                material.SetFloat("_ShoreMapStrength", 0f);
+                Texture2D sunStroke = AssetDatabase.LoadAssetAtPath<Texture2D>(OilSunStrokePath);
+                if (sunStroke != null)
+                {
+                    material.SetTexture("_SparkleBrush", sunStroke);
+                }
             }
 
-            if (shoreHeightMap != null)
-            {
-                material.SetTexture("_ShoreHeightMap", shoreHeightMap);
-            }
+            material.SetFloat("_PaintTile", 280f);
+            material.SetFloat("_PaintContrast", 1.45f);
+            material.SetFloat("_PaintRelief", 0.78f);
+            material.SetFloat("_StrokeSlice", 0.72f);
+            material.SetFloat("_StrokeWarp", 1.05f);
+            material.SetFloat("_StrokeBands", 52f);
+            material.SetFloat("_AlbedoBoost", 1.08f);
+            material.SetFloat("_ShadeSteps", 3f);
+            material.SetFloat("_ShadeLift", 0.52f);
+            material.SetFloat("_ShadowLift", 1.05f);
+            material.SetFloat("_ShadowWobble", 0.48f);
+            material.SetColor("_AmbientColor", new Color(0.72f, 0.76f, 0.82f, 1f));
+
+            _ = canvasMap;
+            _ = brushMap;
 
             ApplySurface(material, SurfaceType.TransparentPremultiply);
             // Flat sea + cascade culling sphere → camera-sliding 圆影. NPR shade only.
@@ -864,25 +845,19 @@ namespace CustomSRP.Editor
 
             material.SetColor("_BaseColor", new Color(0.92f, 0.88f, 0.78f, 1f));
             material.SetFloat("_KuwaharaRadius", 0.085f);
-            material.SetFloat("_CanvasStrength", 0.06f);
-            material.SetTextureScale("_CanvasMap", new Vector2(0.3f, 0.3f));
             material.SetFloat("_PaintThickness", 0.12f);
             material.SetFloat("_ShadeSteps", 3f);
             material.SetFloat("_ShadeLift", 0.48f);
             material.SetFloat("_ShadowLift", 1.05f);
-            material.SetColor("_ShadowTint", new Color(0.36f, 0.46f, 0.62f, 1f));
-            material.SetColor("_ShadowWarm", new Color(0.58f, 0.48f, 0.3f, 1f));
             material.SetFloat("_ShadowWobble", 0.55f);
             material.SetFloat("_ShadowBrushScale", 1.35f);
             material.SetColor("_AmbientColor", new Color(0.5f, 0.52f, 0.44f, 1f));
-            material.SetFloat("_EdgeStrength", 0.35f);
-            material.SetColor("_EdgeColor", new Color(0.32f, 0.28f, 0.18f, 1f));
             EditorUtility.SetDirty(material);
         }
 
         /// <summary>
         /// Android Empty package: keep oil look, cut fill-rate / sample cost.
-        /// Objects keep Kuwahara+canvas; ground uses baked paint (no live Kuwahara).
+        /// OIL_MOBILE_PERF forces single-tap albedo; ground also disables Kuwahara keyword.
         /// </summary>
         public static void ApplyOilMobilePerfPreset(params Material[] materials)
         {
@@ -898,20 +873,16 @@ namespace CustomSRP.Editor
                 {
                     material.SetFloat("_Kuwahara", 0f);
                     material.DisableKeyword("_KUWAHARA_ON");
-                    material.SetFloat("_InternalEdge", 0f);
-                    material.DisableKeyword("_INTERNAL_EDGE_ON");
-                    material.SetFloat("_CanvasStrength", 0.05f);
                     material.SetFloat("_PaintThickness", 0.1f);
                 }
                 else
                 {
                     material.SetFloat("_KuwaharaRadius", 0.04f);
-                    material.SetFloat("_InternalEdge", 0f);
-                    material.DisableKeyword("_INTERNAL_EDGE_ON");
-                    material.SetFloat("_CanvasStrength", 0.08f);
                     material.SetFloat("_PaintThickness", 0.14f);
                 }
 
+                material.DisableKeyword("_CANVAS_ON");
+                material.DisableKeyword("_INTERNAL_EDGE_ON");
                 EditorUtility.SetDirty(material);
             }
         }
@@ -1105,7 +1076,7 @@ namespace CustomSRP.Editor
 
         public static void EnsureMainCamera(Vector3 position, Vector3 eulerAngles)
         {
-            var mainCamera = Object.FindFirstObjectByType<Camera>();
+            var mainCamera = Object.FindAnyObjectByType<Camera>();
             if (mainCamera == null)
             {
                 var camGo = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener));
@@ -1122,7 +1093,7 @@ namespace CustomSRP.Editor
 
         public static void EnsureDirectionalLight()
         {
-            if (Object.FindFirstObjectByType<Light>() != null)
+            if (Object.FindAnyObjectByType<Light>() != null)
             {
                 return;
             }

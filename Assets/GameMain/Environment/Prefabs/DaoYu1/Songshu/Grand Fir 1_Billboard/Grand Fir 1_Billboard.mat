@@ -14,6 +14,7 @@ Material:
   m_ValidKeywords:
   - _CANVAS_ON
   - _CLIPPING
+  - _INTERNAL_EDGE_ON
   - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
   m_InvalidKeywords: []
@@ -58,7 +59,7 @@ Material:
     - _DstBlend: 0
     - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
-    - _InternalEdge: 0
+    - _InternalEdge: 1
     - _Kuwahara: 0
     - _KuwaharaRadius: 0.04
     - _NormalStrength: 0.85
@@ -71,25 +72,25 @@ Material:
     - _OutlineWobble: 0.85
     - _PaintThickness: 0.18
     - _ReceiveShadows: 1
-    - _ShadeLift: 0.42
+    - _ShadeLift: 0.58
     - _ShadeSteps: 4
     - _ShadowBrushScale: 1.8
-    - _ShadowLift: 0.95
+    - _ShadowLift: 1.05
     - _ShadowWobble: 0.45
     - _Shadows: 1
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
     - _ZWrite: 1
     m_Colors:
-    - _BottomColor: {r: 1, g: 1, b: 1, a: 1}
-    - _TopColor: {r: 1, g: 1, b: 1, a: 1}
-    - _Color: {r: 1, g: 1, b: 1, a: 1}
-    - _AmbientColor: {r: 0.54999995, g: 0.5, b: 0.43999997, a: 1}
+    - _AmbientColor: {r: 0.6117647, g: 0.6784314, b: 0.40784314, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BottomColor: {r: 0.53333336, g: 0.6627451, b: 0.41960785, a: 1}
+    - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}
-    - _OutlineColor: {r: 0.13999996, g: 0.09999997, b: 0.07999996, a: 1}
-    - _ShadowTint: {r: 0.42, g: 0.36, b: 0.3, a: 1}
-    - _ShadowWarm: {r: 0.62, g: 0.45, b: 0.31999996, a: 1}
-    - _SpecularColor: {r: 0.54999995, g: 0.47999996, b: 0.39999998, a: 1}
+    - _OutlineColor: {r: 0.38039216, g: 0.47843137, b: 0.34901962, a: 1}
+    - _ShadowTint: {r: 0.38039216, g: 0.47843137, b: 0.34901962, a: 1}
+    - _ShadowWarm: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
+    - _SpecularColor: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
+    - _TopColor: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

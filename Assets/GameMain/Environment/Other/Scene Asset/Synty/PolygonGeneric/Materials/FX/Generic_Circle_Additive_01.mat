@@ -15,7 +15,7 @@ Material:
   - _NEAR_FADE
   - _VERTEX_COLORS
   m_InvalidKeywords:
-  - _SOFT_PARTICLES
+  - _SHADOWS_OFF
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -39,6 +39,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _Clipping: 0
+    - _Cull: 0
     - _Cutoff: 0.5
     - _Distortion: 0
     - _DistortionBlend: 0.5

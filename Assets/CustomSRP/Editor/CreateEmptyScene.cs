@@ -139,7 +139,7 @@ namespace CustomSRP.Editor
 
         static void ConfigurePerfCamera(bool mobilePerf)
         {
-            var main = Object.FindFirstObjectByType<Camera>();
+            var main = Object.FindAnyObjectByType<Camera>();
             if (main == null)
             {
                 return;

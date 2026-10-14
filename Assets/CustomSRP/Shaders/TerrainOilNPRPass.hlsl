@@ -205,10 +205,10 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
         surface,
         albedo,
         OilPeriodAmbient((half3)_AmbientColor.rgb),
-        (half3)_ShadowTint.rgb,
-        (half3)_ShadowWarm.rgb,
+        half3(0.36h, 0.46h, 0.62h),
+        half3(0.58h, 0.48h, 0.3h),
         (half3)_SpecularColor.rgb,
-        (half)_SpecularThreshold,
+        0.0h,
         (half)_ShadeSteps,
         0.0h,
         (half)_ShadowLift,
@@ -226,10 +226,12 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
         half spec = pow(saturate(dot(normalWS, H)), lerp(24.0h, 96.0h, terrain.smoothness));
         color += spec * terrain.smoothness * (half3)_SpecularColor.rgb * 0.28h;
     }
-#endif
 
     color = OilWeaveTint(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);
+#else
+    color = (half3)ApplyOilFog((float3)color, surface.depth, brush);
+#endif
     return half4(saturate(color), 1.0h);
 }
 

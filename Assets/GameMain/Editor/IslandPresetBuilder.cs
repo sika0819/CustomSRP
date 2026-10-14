@@ -35,7 +35,7 @@ namespace Game.Editor
         {
             (new Vector3(610.0767f, 12.80065f, 706.1781f), 130.443f, 6f + 13f / 60f, 3, 1),
             (new Vector3(560.7702f, 23.856f, 582.0682f), -81.77f, 8f + 27f / 60f, 3, 1),
-            (new Vector3(466.472f, 37.88541f, 402.16f), -168.898f, 17f, 2, 1),
+            (new Vector3(466.472f, 37.88541f, 402.16f), -168.898f, 14f, 2, 1),
             (new Vector3(390.6678f, 75.45603f, 480.2867f), -193.155f, 22.5f, 1, 1),
             (new Vector3(325.88f, 81.40367f, 481f), -92.137f, 8.5f, 3, 1),
             (new Vector3(233.5713f, 105.0471f, 663.811f), -12.449f, 23f, 1, 3),
@@ -101,7 +101,7 @@ namespace Game.Editor
                     asset.WeatherLevel = 1;
                 asset.FogDensity = FogDensities[i];
                 // Build the per-preset light color override table (alpha=0 means "no override").
-                // Slot 3 (午后放松) at TimeHours=17 lands on sunset orange; we want white.
+                // Slot 3 (午后放松): keep light white regardless of time-of-day table.
                 asset.LightColorOverride = i == 2
                     ? new Color(1f, 1f, 1f, 1f)
                     : new Color(0f, 0f, 0f, 0f);

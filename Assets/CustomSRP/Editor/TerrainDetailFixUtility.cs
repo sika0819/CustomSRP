@@ -50,7 +50,7 @@ namespace CustomSRP.Editor
             }
 
             foreach (var terrain in Object.FindObjectsByType<Terrain>(
-                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+                         FindObjectsInactive.Include))
             {
                 if (terrain == null)
                     continue;
@@ -73,7 +73,7 @@ namespace CustomSRP.Editor
                 else if (obj is TerrainData data)
                 {
                     foreach (var terrain in Object.FindObjectsByType<Terrain>(
-                                 FindObjectsInactive.Include, FindObjectsSortMode.None))
+                                 FindObjectsInactive.Include))
                     {
                         if (terrain.terrainData == data)
                             list.Add(terrain);
@@ -84,7 +84,7 @@ namespace CustomSRP.Editor
             if (list.Count == 0)
             {
                 foreach (var terrain in Object.FindObjectsByType<Terrain>(
-                             FindObjectsInactive.Include, FindObjectsSortMode.None))
+                             FindObjectsInactive.Include))
                     list.Add(terrain);
             }
 

@@ -15,6 +15,7 @@ namespace CustomSRP
     /// to the camera like StylizedWater2 WaterGrid. Gerstner swell is world-XZ in the
     /// vertex shader (sliding does not swim waves). Paint ripples stay in the fragment,
     /// so ~32 segments across the tile is enough — not a 10 m Boluo mesh.
+    /// Shore foam uses camera depth in OilOceanNPR (no TerrainHeight MPB).
     /// </summary>
     [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
@@ -28,10 +29,6 @@ namespace CustomSRP
         [Tooltip("Boluo DaoYu leaves this off (fixed anchor). When on, recenters XZ on the camera.")]
         public bool followCamera = false;
 
-        [Header("Shore (TerrainData)")]
-        [Tooltip("Coast mask uses this terrain's heightmap, not moorea_heightmap.png.")]
-        public Terrain terrain;
-
         [Header("Swell (vertex shader)")]
         public float waveHeight = 0.2f;
         public float boundsPadding = 4f;
@@ -44,20 +41,15 @@ namespace CustomSRP
         /// </summary>
         public const int MaxSubdivisions = 32;
 
-        static readonly int ShoreMapId = Shader.PropertyToID("_ShoreHeightMap");
-        static readonly int ShoreOriginId = Shader.PropertyToID("_ShoreOriginSize");
-        static readonly int ShoreScaleId = Shader.PropertyToID("_ShoreHeightScale");
-        static readonly int ShoreWaterId = Shader.PropertyToID("_ShoreWaterLevel");
         static readonly int WaveHeightId = Shader.PropertyToID("_OilOceanWaveHeight");
 
         MeshFilter meshFilter;
-        Texture2D shoreHeight;
-        MaterialPropertyBlock shoreBlock;
         Mesh mesh;
         NativeArray<OilOceanVertex> meshVertices;
         NativeArray<int> meshIndices;
         int vertexCount;
         int indexCount;
+        float _lastWaveHeight = float.NaN;
         static int enableDepth;
 
         void OnEnable()
@@ -80,10 +72,6 @@ namespace CustomSRP
                 {
                     Rebuild();
                 }
-                else
-                {
-                    ApplyTerrainShore();
-                }
 
                 ApplyWaveHeight();
             }
@@ -104,7 +92,6 @@ namespace CustomSRP
         void OnDestroy()
         {
             DisposeMeshCpu();
-            DestroyShoreHeight();
             if (mesh == null)
             {
                 return;
@@ -130,57 +117,6 @@ namespace CustomSRP
             }
 
             ApplyWaveHeight();
-            SyncShoreWaterLevel();
-        }
-
-        // The heightmap is built once. The waterline has to follow the ocean
-        // height, or the column stays 0 and both foam and refraction miss the shore.
-        float _lastShoreWater = float.NaN;
-        float _lastWaveHeight = float.NaN;
-        bool _shoreMapReady;
-
-        void SyncShoreWaterLevel()
-        {
-            if (terrain == null)
-            {
-                terrain = FindAnyObjectByType<Terrain>();
-            }
-
-            if (terrain == null)
-            {
-                return;
-            }
-
-            var renderer = GetComponent<MeshRenderer>();
-            if (renderer == null)
-            {
-                return;
-            }
-
-            float water = transform.position.y - terrain.transform.position.y;
-            if (_shoreMapReady
-                && !float.IsNaN(_lastShoreWater)
-                && Mathf.Abs(_lastShoreWater - water) < 0.01f)
-            {
-                return;
-            }
-
-            shoreBlock ??= new MaterialPropertyBlock();
-            if (!_shoreMapReady)
-            {
-                renderer.GetPropertyBlock(shoreBlock);
-                if (shoreBlock.GetTexture(ShoreMapId) == null)
-                {
-                    ApplyTerrainShore();
-                    return;
-                }
-
-                _shoreMapReady = true;
-            }
-
-            _lastShoreWater = water;
-            shoreBlock.SetFloat(ShoreWaterId, water);
-            renderer.SetPropertyBlock(shoreBlock);
         }
 
         void ApplyWaveHeight()
@@ -203,89 +139,9 @@ namespace CustomSRP
 
             var renderer = GetComponent<MeshRenderer>();
             renderer.shadowCastingMode = ShadowCastingMode.Off;
-            ApplyTerrainShore();
             Log.Info(
                 $"[CustomSRP] Oil ocean grid: {vertexCount} verts, {indexCount / 3} tris " +
                 $"({gridScale:0} m tile, {CellStep():0} m spacing).");
-        }
-
-        /// <summary>
-        /// Coast mask reads TerrainData heights (origin at min XZ, 0–1 of size.y).
-        /// Not moorea_heightmap.png, which is north-up and loses the waterline when compressed.
-        /// </summary>
-        void ApplyTerrainShore()
-        {
-            if (terrain == null)
-            {
-                terrain = FindAnyObjectByType<Terrain>();
-            }
-
-            TerrainData data = terrain != null ? terrain.terrainData : null;
-            if (data == null)
-            {
-                Log.Warning("[CustomSRP] Oil ocean shore: no TerrainData.");
-                return;
-            }
-
-            int res = data.heightmapResolution;
-            float[,] heights = data.GetHeights(0, 0, res, res);
-            DestroyShoreHeight();
-            shoreHeight = new Texture2D(res, res, TextureFormat.R16, false, true)
-            {
-                name = "MooreaTerrainShore",
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear,
-                hideFlags = HideFlags.DontSave
-            };
-
-            var pixels = new ushort[res * res];
-            for (int z = 0; z < res; z++)
-            {
-                for (int x = 0; x < res; x++)
-                {
-                    float h = math.saturate(heights[z, x]);
-                    pixels[z * res + x] = (ushort)math.round(h * 65535f);
-                }
-            }
-
-            shoreHeight.SetPixelData(pixels, 0);
-            shoreHeight.Apply(false, true);
-
-            Vector3 origin = terrain.transform.position;
-            Vector3 size = data.size;
-            float water = transform.position.y - origin.y;
-
-            var renderer = GetComponent<MeshRenderer>();
-            shoreBlock ??= new MaterialPropertyBlock();
-            renderer.GetPropertyBlock(shoreBlock);
-            shoreBlock.SetTexture(ShoreMapId, shoreHeight);
-            shoreBlock.SetVector(ShoreOriginId, new Vector4(origin.x, origin.z, size.x, size.z));
-            shoreBlock.SetFloat(ShoreScaleId, size.y);
-            shoreBlock.SetFloat(ShoreWaterId, water);
-            renderer.SetPropertyBlock(shoreBlock);
-            _lastShoreWater = water;
-            _shoreMapReady = true;
-        }
-
-        void DestroyShoreHeight()
-        {
-            if (shoreHeight == null)
-            {
-                return;
-            }
-
-            if (Application.isPlaying)
-            {
-                Destroy(shoreHeight);
-            }
-            else
-            {
-                DestroyImmediate(shoreHeight);
-            }
-
-            shoreHeight = null;
-            _shoreMapReady = false;
-            _lastShoreWater = float.NaN;
         }
 
         int Subdivisions()

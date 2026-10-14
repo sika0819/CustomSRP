@@ -20,7 +20,8 @@ namespace CustomSRP
             ApplyColorGradingWithLuma,
             FinalRescale,
             FXAA,
-            FXAAWithLuma
+            FXAAWithLuma,
+            OilFilter
         }
 
         public static readonly int

@@ -101,7 +101,8 @@ namespace CustomSRP
 
             int downscaleLimit = Mathf.Max(1, bloom.downscaleLimit);
 
-            if (bloom.maxIterations == 0 ||
+            if (!bloom.enabled ||
+                bloom.maxIterations == 0 ||
                 bloom.intensity <= 0f ||
                 size.y < downscaleLimit * 2 ||
                 size.x < downscaleLimit * 2)

@@ -238,4 +238,6 @@ float4 FinalPassFragmentRescale(Varyings input) : SV_TARGET
     return GetSource(input.screenUV);
 }
 
+#include "OilFilterPass.hlsl"
+
 #endif

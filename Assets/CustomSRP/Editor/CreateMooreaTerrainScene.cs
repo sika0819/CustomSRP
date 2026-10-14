@@ -109,7 +109,7 @@ namespace CustomSRP.Editor
 
         /// <summary>
         /// Write edited Unity Terrain heights back to moorea_heightmap.{raw,png}
-        /// (north-up little-endian uint16) so OilOceanSurface / shore foam stay in sync.
+        /// (north-up little-endian uint16).
         /// </summary>
         [MenuItem("CustomSRP/Export Moorea Heightmap From Terrain")]
         public static void ExportHeightmapFromTerrain()
@@ -307,14 +307,7 @@ namespace CustomSRP.Editor
                 Material skyMat = TestSceneUtility.CreateOrUpdateOilSkybox(
                     SkyMatPath, canvas, timeOfDay: 12f);
                 Material oceanMat = TestSceneUtility.CreateOrUpdateOilOcean(
-                    OceanMatPath,
-                    canvas,
-                    brush,
-                    shoreHeightMap: null,
-                    shoreOriginXZ: Vector2.zero,
-                    shoreSizeXZ: new Vector2(scale.SizeX, scale.SizeZ),
-                    shoreHeightScaleM: scale.HeightY,
-                    shoreWaterLevelM: 0.35f);
+                    OceanMatPath, canvas, brush);
 
                 DeleteLegacyMeshAssets();
 
@@ -779,14 +772,13 @@ namespace CustomSRP.Editor
         }
 
         /// <summary>
-        /// Linear height preview used by OilOceanNPR for shoreline foam (拍岸).
+        /// Import settings for moorea_heightmap.png (terrain authoring preview).
         /// </summary>
         static Texture2D EnsureShoreHeightTexture()
         {
             if (!File.Exists(HeightPngPath))
             {
-                Log.Warning(
-                    "[CustomSRP] Missing moorea_heightmap.png — shore foam falls back to depth only.");
+                Log.Warning("[CustomSRP] Missing moorea_heightmap.png.");
                 return null;
             }
 
@@ -1551,26 +1543,17 @@ namespace CustomSRP.Editor
 
             material.SetColor("_BaseColor", Color.white);
             material.DisableKeyword("_KUWAHARA_ON");
+            material.DisableKeyword("_CANVAS_ON");
             material.DisableKeyword("_INTERNAL_EDGE_ON");
-            material.SetFloat("_Canvas", 1f);
-            material.EnableKeyword("_CANVAS_ON");
-            if (canvas != null)
-            {
-                material.SetTexture("_CanvasMap", canvas);
-                material.SetTextureScale("_CanvasMap", new Vector2(18f, 18f));
-            }
+            _ = canvas;
 
-            material.SetFloat("_CanvasStrength", 0.08f);
             material.SetFloat("_PaintThickness", 0.12f);
             material.SetFloat("_ShadeSteps", 4f);
             material.SetFloat("_ShadeLift", 0.42f);
             material.SetFloat("_ShadowLift", 1.05f);
-            material.SetColor("_ShadowTint", new Color(0.36f, 0.46f, 0.62f, 1f));
-            material.SetColor("_ShadowWarm", new Color(0.58f, 0.48f, 0.3f, 1f));
             material.SetFloat("_ShadowWobble", 0.55f);
             material.SetFloat("_ShadowBrushScale", 1.35f);
             material.SetColor("_SpecularColor", new Color(0.5f, 0.45f, 0.38f, 1f));
-            material.SetFloat("_SpecularThreshold", 0.88f);
             material.SetColor("_AmbientColor", new Color(0.510f, 0.786f, 1f, 1f));
             if (brush != null)
             {
@@ -1657,7 +1640,6 @@ namespace CustomSRP.Editor
             // ~90 quads across the island. The fragment shader paints the short crests.
             surface.vertexDistance = Mathf.Max(400f, scale.SizeX / OilOceanSurface.MaxSubdivisions);
             surface.followCamera = true;
-            surface.terrain = terrain;
             surface.waveHeight = 6.5f;
             surface.boundsPadding = 4f;
             surface.Rebuild();
@@ -1732,7 +1714,7 @@ namespace CustomSRP.Editor
 
         static Light FindDirectionalLight()
         {
-            Light[] lights = Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
+            Light[] lights = Object.FindObjectsByType<Light>();
             for (int i = 0; i < lights.Length; i++)
             {
                 if (lights[i].type == LightType.Directional)

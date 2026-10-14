@@ -46,6 +46,8 @@ namespace CustomSRP
         [Serializable]
         public struct BloomSettings
         {
+            public bool enabled;
+
             public bool ignoreRenderScale;
 
             [Range(0f, 16f)] public int maxIterations;
@@ -70,7 +72,14 @@ namespace CustomSRP
         [SerializeField]
         BloomSettings bloom = new BloomSettings
         {
+            enabled = false,
             downscaleLimit = 2,
+            maxIterations = 4,
+            threshold = 1f,
+            thresholdKnee = 0.5f,
+            intensity = 0.2f,
+            fadeFireflies = true,
+            mode = BloomSettings.Mode.Scattering,
             scatter = 0.7f
         };
 
@@ -79,6 +88,8 @@ namespace CustomSRP
         [Serializable]
         public struct ColorAdjustmentsSettings
         {
+            public bool enabled;
+
             public float postExposure;
 
             [Range(-100f, 100f)]
@@ -97,6 +108,7 @@ namespace CustomSRP
         [SerializeField]
         ColorAdjustmentsSettings colorAdjustments = new ColorAdjustmentsSettings
         {
+            enabled = false,
             colorFilter = Color.white
         };
 
@@ -105,18 +117,25 @@ namespace CustomSRP
         [Serializable]
         public struct WhiteBalanceSettings
         {
+            public bool enabled;
+
             [Range(-100f, 100f)]
             public float temperature, tint;
         }
 
         [SerializeField]
-        WhiteBalanceSettings whiteBalance = default;
+        WhiteBalanceSettings whiteBalance = new WhiteBalanceSettings
+        {
+            enabled = false
+        };
 
         public WhiteBalanceSettings WhiteBalance => whiteBalance;
 
         [Serializable]
         public struct SplitToningSettings
         {
+            public bool enabled;
+
             [ColorUsage(false)]
             public Color shadows, highlights;
 
@@ -127,6 +146,7 @@ namespace CustomSRP
         [SerializeField]
         SplitToningSettings splitToning = new SplitToningSettings
         {
+            enabled = false,
             shadows = Color.gray,
             highlights = Color.gray
         };
@@ -136,12 +156,15 @@ namespace CustomSRP
         [Serializable]
         public struct ChannelMixerSettings
         {
+            public bool enabled;
+
             public Vector3 red, green, blue;
         }
 
         [SerializeField]
         ChannelMixerSettings channelMixer = new ChannelMixerSettings
         {
+            enabled = false,
             red = Vector3.right,
             green = Vector3.up,
             blue = Vector3.forward
@@ -152,6 +175,8 @@ namespace CustomSRP
         [Serializable]
         public struct ShadowsMidtonesHighlightsSettings
         {
+            public bool enabled;
+
             [ColorUsage(false, true)]
             public Color shadows, midtones, highlights;
 
@@ -163,6 +188,7 @@ namespace CustomSRP
         ShadowsMidtonesHighlightsSettings shadowsMidtonesHighlights =
             new ShadowsMidtonesHighlightsSettings
             {
+                enabled = false,
                 shadows = Color.white,
                 midtones = Color.white,
                 highlights = Color.white,
@@ -177,6 +203,8 @@ namespace CustomSRP
         [Serializable]
         public struct ToneMappingSettings
         {
+            public bool enabled;
+
             public enum Mode
             {
                 None,
@@ -188,9 +216,29 @@ namespace CustomSRP
             public Mode mode;
         }
 
-        [SerializeField] ToneMappingSettings toneMapping = default;
+        [SerializeField]
+        ToneMappingSettings toneMapping = new ToneMappingSettings
+        {
+            enabled = false,
+            mode = ToneMappingSettings.Mode.None
+        };
 
         public ToneMappingSettings ToneMapping => toneMapping;
+
+        [Serializable]
+        public struct OilFilterSettings
+        {
+            [Tooltip("Edge wet-oil: fwidth edge + 4 diagonal taps (low cost).")]
+            public bool enabled;
+        }
+
+        [SerializeField]
+        OilFilterSettings oilFilter = new OilFilterSettings
+        {
+            enabled = false
+        };
+
+        public OilFilterSettings OilFilter => oilFilter;
 
         [NonSerialized] Material material;
 

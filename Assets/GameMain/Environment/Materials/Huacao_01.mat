@@ -30,6 +30,7 @@ Material:
   - _INTERNAL_EDGE_ON
   - _KUWAHARA_ON
   - _RECEIVE_SHADOWS
+  - _SHADOWS_CLIP
   m_InvalidKeywords:
   - _ALPHATEST_ON
   - _OUTLINE_ON
@@ -90,7 +91,7 @@ Material:
     - _ShadowBrushScale: 1.8
     - _ShadowLift: 0.95
     - _ShadowWobble: 0.45
-    - _Shadows: 0
+    - _Shadows: 1
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
     - _WindScale: 1

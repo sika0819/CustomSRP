@@ -26,8 +26,8 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
-    - _FoamMap:
-        m_Texture: {fileID: 2800000, guid: 1ae95f1c0e6024b54a2641d1f3d13ee7, type: 3}
+    - _GlintMap:
+        m_Texture: {fileID: 2800000, guid: 8a5433bdee7d4235ab6f10c3dcc96526, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _IntersectionNoise:
@@ -35,44 +35,47 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _PaintMap:
-        m_Texture: {fileID: 2800000, guid: 1e2efbc9ddeb410391549d3310d1fc7d, type: 3}
+        m_Texture: {fileID: 2800000, guid: e64396a97cad4145a95cdde3549ae2b9, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _AlbedoBoost: 1.05
-    - _CrestFoamStrength: 0.35
+    - _AlbedoBoost: 1
     - _DstBlend: 10
-    - _FoamSpeed: 0.2
-    - _FoamTiling: 0.14
+    - _GlintStrength: 2
+    - _GlintTile: 10
     - _IntersectionClipping: 0.2
     - _IntersectionDistortion: 0.12
     - _IntersectionFalloff: 1
     - _IntersectionLength: 1.8
     - _IntersectionSpeed: 0.3
     - _IntersectionTiling: 0.2
-    - _PaintContrast: 1.5
-    - _PaintRelief: 0.3
+    - _PaintContrast: 3
+    - _PaintRelief: 0.638
+    - _PaintTile: 20
     - _PremulAlpha: 1
     - _ShadeLift: 0.5
     - _ShadeSteps: 3
     - _ShadowLift: 1.1
     - _ShadowWobble: 0.5
     - _ShoreSteep: 0.92
-    - _SpecularBoost: 0.45
-    - _SpecularThreshold: 0.78
+    - _SpecularBoost: 2
+    - _SpecularThreshold: 1
     - _SrcBlend: 1
+    - _StrokeBands: 20.8
+    - _StrokeSlice: 0
+    - _StrokeWarp: 0.31
     - _ZWrite: 0
     m_Colors:
-    - _AmbientColor: {r: 0.7, g: 0.78, b: 0.85, a: 1}
+    - _AmbientColor: {r: 0.72, g: 0.76, b: 0.82, a: 1}
     - _BankUv: {r: 0, g: 0.134, b: 0.06, a: 0}
-    - _BaseColor: {r: 0.04, g: 0.22, b: 0.52, a: 1}
-    - _FoamColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BaseColor: {r: 0.32, g: 0.48, b: 0.68, a: 0.88}
+    - _GlintColor: {r: 1, g: 0.92, b: 0.55, a: 1}
     - _IntersectionColor: {r: 1, g: 1, b: 1, a: 1}
-    - _MeshFlowScale: {r: 50, g: 100, b: 0, a: 0}
-    - _ShadowTint: {r: 0.45, g: 0.55, b: 0.65, a: 1}
+    - _MeshFlowScale: {r: 50, g: -100, b: 0, a: 0}
+    - _ShadowTint: {r: 0.42, g: 0.48, b: 0.62, a: 1}
     - _ShadowWarm: {r: 0.7, g: 0.55, b: 0.4, a: 1}
-    - _ShallowColor: {r: 0.22, g: 0.52, b: 0.42, a: 0.8}
-    - _SpecularColor: {r: 1, g: 0.95, b: 0.78, a: 1}
+    - _ShallowColor: {r: 0.55, g: 0.62, b: 0.48, a: 0.72}
+    - _SpecularColor: {r: 1, g: 0.93, b: 0.62, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

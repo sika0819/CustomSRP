@@ -102,6 +102,10 @@ namespace CustomSRP
                 postFXSettings.Material != null &&
                 PostFXSettings.AreApplicableTo(camera);
 
+            // Oil filter needs a depth copy for silhouette edges (falls back to luma-only).
+            if (hasActivePostFX && OilFilter.IsEnabled(postFXSettings))
+                useDepthTexture = true;
+
             float renderScale = cameraSettings.GetRenderScale(bufferSettings.renderScale);
             bool useScaledRendering = renderScale < 0.99f || renderScale > 1.01f;
 

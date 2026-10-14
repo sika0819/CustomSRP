@@ -84,8 +84,7 @@ namespace Game
                     parent = cat;
 
                 Vector3 pos = d.Pos;
-                if (EnvGroundFit.IsFlatGroundCard(prefabName))
-                    EnvGroundFit.TrySnapY(ref pos);
+                EnvGroundFit.TrySnapMapItemY(ref pos, category, prefabName);
 
                 _items.Add(new Item
                 {
@@ -325,16 +324,11 @@ namespace Game
             instance.transform.SetParent(item.Parent, false);
 
             Vector3 pos = item.Pos;
-            if (EnvGroundFit.IsFlatGroundCard(item.PrefabName))
-            {
-                EnvGroundFit.TrySnapY(ref pos);
+            if (EnvGroundFit.TrySnapMapItemY(ref pos, item.Category, item.PrefabName))
                 item.Pos = pos;
+
+            if (EnvGroundFit.IsFlatGroundCard(item.PrefabName) || item.FarField)
                 EnvGroundFit.DisableCastShadows(instance);
-            }
-            else if (item.FarField)
-            {
-                EnvGroundFit.DisableCastShadows(instance);
-            }
 
             instance.transform.position = pos;
             instance.transform.localEulerAngles = item.Rotation;
@@ -353,6 +347,10 @@ namespace Game
             instance.SetActive(item.IsActive);
             if (EnvStreamingConfig.IsRockCategory(item.Category))
                 EnvRockColliders.Ensure(instance, item.PrefabName);
+            if (EnvStreamingConfig.IsBridgeCategory(item.Category))
+                EnvBridgePillarFit.Ensure(instance);
+            if (item.FarField)
+                EnvLandmarkColliders.Ensure(instance, item.PrefabName);
             _colliderLod?.Register(instance, pos);
 
             int proto = -1;

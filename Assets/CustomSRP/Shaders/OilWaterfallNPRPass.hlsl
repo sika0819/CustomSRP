@@ -4,8 +4,8 @@
 #include "OilNPRLighting.hlsl"
 #include "OilPaintNoise.hlsl"
 
-TEXTURE2D(_FoamMap);
-SAMPLER(sampler_FoamMap);
+TEXTURE2D(_MistMap);
+SAMPLER(sampler_MistMap);
 
 struct Attributes
 {
@@ -40,6 +40,20 @@ Varyings OilWaterfallNPRPassVertex(Attributes input)
     return output;
 }
 
+half SampleWaterfallMist(float2 meshUv, float t)
+{
+    float2 st = meshUv * max(_MistTile, 0.5);
+    st += float2(t * _MistSpeed * 0.35, t * _MistSpeed * 0.9);
+#if defined(OIL_MOBILE_PERF)
+    half3 m = (half3)SAMPLE_TEXTURE2D(_MistMap, sampler_MistMap, st).rgb;
+#else
+    half3 m0 = (half3)SAMPLE_TEXTURE2D(_MistMap, sampler_MistMap, st).rgb;
+    half3 m1 = (half3)SAMPLE_TEXTURE2D(_MistMap, sampler_MistMap, st * 1.67 + 0.27).rgb;
+    half3 m = max(m0, m1 * 0.8h);
+#endif
+    return saturate((PaintLuma(m) - 0.12h) * 2.2h);
+}
+
 half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
@@ -56,43 +70,35 @@ half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
     half3 normalWS = normalize(lerp(geoN, sheetN, 0.55h));
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
 
-    // 与 OilRiver 同色板：浅→深 0.45，避免白 Base 把帘刷成白蓝条。
-    half3 sheet = lerp(_ShallowColor.rgb, _BaseColor.rgb, 0.45h);
+    // 顶缘偏深蓝，帘身偏浅白蓝（对齐参考油画）。
+    half v = (half)saturate(input.meshUv.y);
+    half3 sheet = lerp(_BaseColor.rgb, _ShallowColor.rgb, v * 0.55h + 0.2h);
     sheet *= (half)_AlbedoBoost;
 
-    float2 paintUv = input.flowUv;
-    paintUv.y *= max(_PaintStretch, 0.2);
-    paintUv += float2(0.0, -t * 1.8);
-    float waterNoise = OilFbm(paintUv * 0.22);
-    half stroke = PaintStroke((half)waterNoise, (half)_PaintContrast);
-    sheet = lerp(sheet, sheet * lerp(0.94h, 1.06h, stroke), saturate((half)_PaintRelief));
+    float2 paintSt = WaterfallMonetPaintUv(
+        input.flowUv, t, _PaintTile, _StrokeBands);
+    half3 paint = SampleWaterfallPaint(paintSt);
+    half stroke = PaintStroke(PaintLuma(paint), (half)_PaintContrast);
+    half relief = saturate((half)_PaintRelief);
+    sheet = lerp(sheet, paint, relief);
+    sheet = ImpastoDeviation(sheet, stroke, relief * 0.5h);
 
-    float2 foamDir = float2(0.12, -1.0);
-    float foamSpeedScale = 5.0;
-    float2 foamUv = input.flowUv * max(_FoamTiling, 0.02)
-        + t * _FoamSpeed * foamSpeedScale * foamDir;
-    half foamTex = (half)SAMPLE_TEXTURE2D(_FoamMap, sampler_FoamMap, foamUv).r;
-    half joinFade = WaterfallJoinFade(input.meshUv);
-    // 竖帘碎沫：保留动感，但不洗成灰白。
-    half sheetFoam = smoothstep(0.55h, 0.92h, foamTex)
-        * (half)_CrestFoamStrength * 1.1h * joinFade;
+    // 白齿：亮笔拉成竖向钛白条（来自 PaintMap，不是 FoamMap）。
+    half teeth = saturate((PaintLuma(paint) - 0.55h) * 2.4h);
+    teeth *= lerp(0.65h, 1.2h, stroke) * (half)_TeethStrength;
+    half3 whiteTeeth = half3(0.94h, 0.97h, 0.99h);
+    sheet = lerp(sheet, whiteTeeth, teeth * 0.55h);
 
-    half topBand = 1.0h - smoothstep(0.0h, 0.16h, (half)input.meshUv.y);
-    half botBand = smoothstep(0.78h, 1.0h, (half)input.meshUv.y);
-    half splash = saturate((topBand + botBand) * smoothstep(0.4h, 0.85h, foamTex));
+    half topBand = 1.0h - smoothstep(0.0h, 0.18h, v);
+    half botBand = smoothstep(0.72h, 1.0h, v);
 
-    float2 mistUv = input.meshUv * float2(4.0, 6.0)
-        + float2(t * _MistSpeed * 0.4, t * _MistSpeed);
-    half mistN = (half)OilFbm(mistUv);
+    half mistTex = SampleWaterfallMist(input.meshUv, t);
     half feather = (half)max(_MistFeather, 0.05);
-    half mistFade = smoothstep(0.0h, feather, (half)input.meshUv.y)
-        * smoothstep(0.0h, feather, 1.0h - (half)input.meshUv.y);
-    half mist = saturate((mistN - 0.35h) * 1.8h) * mistFade * (half)_MistStrength;
-
-    half3 whiteFoam = half3(0.94h, 0.97h, 0.99h);
-    half3 foamPigment = lerp(whiteFoam, _FoamColor.rgb, 0.35h);
-    sheet = lerp(sheet, foamPigment, saturate(sheetFoam * 1.4h));
-    sheet = lerp(sheet, foamPigment, splash * 0.55h);
+    half mistFade = smoothstep(0.0h, feather, v)
+        * smoothstep(0.0h, feather, 1.0h - v);
+    // 底雾更重，顶缘轻薄喷溅。
+    half mistZone = max(botBand * 1.15h, topBand * 0.35h);
+    half mist = saturate(mistTex * mistZone * mistFade * (half)_MistStrength);
 
     Surface s;
     s.position = input.positionWS;
@@ -127,34 +133,37 @@ half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
         0.0h,
         (half)_ShadowLift,
         (half)_ShadeLift,
-        0.6h,
+        stroke,
         (half)_ShadowWobble,
         1.0h,
         0.0h,
         fragment.screenUV);
 
-    color = ImpastoDeviation(color, stroke, saturate((half)_PaintRelief) * 0.4h);
-    color = lerp(color, foamPigment, saturate(sheetFoam * 1.2h + splash * 0.5h));
-    color = lerp(color, _MistColor.rgb, mist * _MistColor.a * 0.45h);
+    color = ImpastoDeviation(color, stroke, relief * 0.4h);
+#if !defined(OIL_MOBILE_PERF)
+    color = OilWeaveTint(color, paintSt * 5.0);
+#endif
+    color = lerp(color, whiteTeeth, teeth * 0.28h);
+    color = lerp(color, _MistColor.rgb, mist * _MistColor.a);
 
     if (GetDirectionalLightCount() > 0)
     {
         half3 L = (half3)_DirectionalLightData[0].directionAndMask.xyz;
         half sunY = saturate((half)L.y + 0.05h);
         half3 H = normalize(L + viewDir);
-        half spec = pow(saturate(dot(normalWS, H)), 96.0h);
+        half spec = pow(saturate(dot(normalWS, H)), 72.0h);
         half specMask = smoothstep(
             (half)_SpecularThreshold - 0.06h,
             (half)_SpecularThreshold,
-            spec) * sunY * topBand;
-        color += (half3)_SpecularColor.rgb * specMask * 0.65h;
+            spec) * sunY * (topBand + teeth * 0.35h);
+        color += (half3)_SpecularColor.rgb * specMask * 0.55h;
     }
 
     color = (half3)ApplyOilFog((float3)color, s.depth, stroke, input.positionWS);
 
-    half alpha = lerp((half)_ShallowColor.a, (half)_BaseColor.a, 0.45h);
-    alpha = saturate(alpha + sheetFoam * 0.35h + splash * 0.25h);
-    alpha = lerp(alpha, max(alpha * 0.85h, (half)_MistColor.a * 0.5h), mist * 0.3h);
+    half alpha = lerp((half)_BaseColor.a, (half)_ShallowColor.a, v * 0.5h);
+    alpha = saturate(alpha + teeth * 0.18h);
+    alpha = lerp(alpha, max(alpha * 0.8h, (half)_MistColor.a * 0.55h), mist * 0.45h);
 
 #if defined(_PREMULTIPLY_ALPHA)
     color *= alpha;

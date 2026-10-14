@@ -7,6 +7,9 @@ namespace Game
     /// <summary>进岛后移动端灯光 / 云 / 地形轻量调参（从 ProcedureIsland 抽出）。</summary>
     public static class IslandMobileTune
     {
+        /// <summary>对齐 Boluo HeavyContentTerrainPixelError：近处河岸仍用细高度网格。</summary>
+        const float HeavyContentTerrainPixelError = 12f;
+
         public static void ApplyAfterTerrainSpawn(GameObject terrainInstance)
         {
             DisableLaunchDirectionalLights();
@@ -18,7 +21,7 @@ namespace Game
 
         public static void DisableLaunchDirectionalLights()
         {
-            Light[] lights = Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
+            Light[] lights = Object.FindObjectsByType<Light>();
             for (int i = 0; i < lights.Length; i++)
             {
                 Light light = lights[i];
@@ -44,7 +47,7 @@ namespace Game
             QualitySettings.shadowDistance = 26f;
             QualitySettings.shadowResolution = ShadowResolution.Low;
 
-            Light[] lights = Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
+            Light[] lights = Object.FindObjectsByType<Light>();
             for (int i = 0; i < lights.Length; i++)
             {
                 Light light = lights[i];
@@ -84,7 +87,7 @@ namespace Game
             if (layerType == null)
                 return;
 
-            Object[] layers = Object.FindObjectsByType(layerType, FindObjectsSortMode.None);
+            Object[] layers = Object.FindObjectsByType(layerType);
             for (int i = 0; i < layers.Length; i++)
             {
                 if (layers[i] is Behaviour behaviour)
@@ -105,9 +108,13 @@ namespace Game
                 if (t == null)
                     continue;
 
-                // Coarser heightmesh → fewer tris; screen clarity is renderScale, not geo density.
-                t.heightmapPixelError = Mathf.Max(t.heightmapPixelError, 14f);
-                t.heightmapMaximumLOD = Mathf.Max(t.heightmapMaximumLOD, 1);
+                // Boluo Heavy budget: keep LOD0 and cap pixelError. Old Max(14)+MaximumLOD=1
+                // skipped fine heightmesh near river banks → big triangular stairs.
+                t.heightmapMinimumLODSimplification = 0;
+                t.heightmapMaximumLOD = 0;
+                t.heightmapPixelError = Mathf.Min(
+                    Mathf.Max(t.heightmapPixelError, 5f),
+                    HeavyContentTerrainPixelError);
                 t.detailObjectDistance = 0f;
                 t.detailObjectDensity = 0f;
                 t.treeDistance = Mathf.Min(t.treeDistance, 60f);
@@ -164,5 +171,6 @@ namespace Game
                 t.materialTemplate = runtime;
             }
         }
+
     }
 }

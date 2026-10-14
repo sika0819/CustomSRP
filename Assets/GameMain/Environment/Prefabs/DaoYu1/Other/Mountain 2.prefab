@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 7102143058406450163}
   - component: {fileID: 1177917872910842231}
   - component: {fileID: 1762759685006614878}
+  - component: {fileID: 6157137262599326416}
   m_Layer: 0
   m_Name: SM_Mountain_03_LOD1
   m_TagString: Untagged
@@ -90,6 +91,28 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!64 &6157137262599326416
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2234472134440881979}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 22
+  m_Mesh: {fileID: 4300000, guid: ffc30d51de8a14c728a501a644ea8dc7, type: 2}
 --- !u!1 &5173656471196710953
 GameObject:
   m_ObjectHideFlags: 0
@@ -189,7 +212,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6463503711861708836}
-  - component: {fileID: 8009944809574795696}
   - component: {fileID: 4285530217772563161}
   m_Layer: 0
   m_Name: Mountain 2
@@ -215,28 +237,6 @@ Transform:
   - {fileID: 1723253128416199205}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!64 &8009944809574795696
-MeshCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7058790123238136496}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 5
-  m_Convex: 1
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 4300000, guid: d2da5a935580c41f2bb35346a761ca3c, type: 2}
 --- !u!205 &4285530217772563161
 LODGroup:
   m_ObjectHideFlags: 0
@@ -244,7 +244,7 @@ LODGroup:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7058790123238136496}
-  serializedVersion: 2
+  serializedVersion: 3
   m_LocalReferencePoint: {x: 0.32471848, y: 20.034283, z: -0.0068511963}
   m_Size: 194.97238
   m_FadeMode: 0
@@ -260,3 +260,4 @@ LODGroup:
     renderers:
     - renderer: {fileID: 7654221104194335682}
   m_Enabled: 1
+  m_GlobalIlluminationLOD: 0
