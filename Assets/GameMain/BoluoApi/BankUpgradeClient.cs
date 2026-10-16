@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Cysharp.Threading.Tasks;
 using Newtonsoft.Json;
@@ -197,20 +198,29 @@ namespace Game.BoluoApi
 
             int bankCount = resp.data.banks?.Count ?? 0;
             int withUrl = 0;
+            var versionCounts = new Dictionary<string, int>();
             if (resp.data.banks != null)
             {
                 foreach (var b in resp.data.banks)
                 {
-                    if (b != null && !string.IsNullOrEmpty(b.url))
+                    if (b == null) continue;
+                    if (!string.IsNullOrEmpty(b.url))
                         withUrl++;
+                    var v = string.IsNullOrEmpty(b.version) ? "(空)" : b.version;
+                    versionCounts.TryGetValue(v, out var c);
+                    versionCounts[v] = c + 1;
                 }
             }
+            string versionSummary = versionCounts.Count == 0
+                ? "(no banks)"
+                : string.Join(",", versionCounts.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key}×{kv.Value}"));
 
             Log.Info(
                 $"[BankUpgrade] ok banks={bankCount} withUrl={withUrl} " +
                 $"appVersion={resp.data.appVersion} bankVersion={resp.data.bankVersion} " +
                 $"runMode={resp.data.runMode} panorama={resp.data.panorama} yishu={resp.data.yishu} " +
-                $"builderAccountId={resp.data.builderAccountId}");
+                $"builderAccountId={resp.data.builderAccountId} " +
+                $"clientVersion={BoluoDeviceInfo.GetVersion()} bankVersions=[{versionSummary}]");
 
             if (bankCount == 0)
             {

@@ -32,7 +32,7 @@ namespace Game.BoluoApi
                 if (b == null || string.IsNullOrEmpty(b.bankName))
                     continue;
                 b.bankName = AudioEnginePaths.StripBankExtension(b.bankName);
-                if (string.IsNullOrEmpty(b.bankName) || AudioEnginePaths.IsPackedWwiseInit(b.bankName))
+                if (string.IsNullOrEmpty(b.bankName))
                     continue;
                 ByName[b.bankName] = b;
             }
@@ -44,7 +44,9 @@ namespace Game.BoluoApi
             try
             {
                 AddLocalFiles(AudioEnginePaths.StreamingBankPath, "*" + AudioEnginePaths.BankExtension);
+                AddLocalFiles(AudioEnginePaths.StreamingBankPath, "*" + AudioEnginePaths.LegacyBankExtension);
                 AddLocalFiles(AudioEnginePaths.PersistentBankPath, "*" + AudioEnginePaths.BankExtension);
+                AddLocalFiles(AudioEnginePaths.PersistentBankPath, "*" + AudioEnginePaths.LegacyBankExtension);
             }
             catch
             {

@@ -64,6 +64,9 @@
     -unity-slice-right: 140px;
     -unity-slice-top: 140px;
     -unity-slice-bottom: 140px;
+    /* chrome layer — let hit-testing fall through to the formBackdrop
+       so an empty tap on the dialog card dismisses the popup. */
+    picking-mode: Ignore;
 }
 .game-music-form__hlist {
     position: absolute;
@@ -93,76 +96,58 @@
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
     picking-mode: Ignore;
 }
+
+/* -----------------------------------------------------------------------
+   Album strip: horizontal infinite loop (triple-copy strip in C#).
+   Selection = font-size + opacity only (Boluo CalcLerp). Fixed 120px width
+   so layout step stays 140 and labels never leave the clip as a blank bar.
+   ----------------------------------------------------------------------- */
+
 .game-music-form__huadong {
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    margin-left: 0;
-    margin-top: 0;
-    margin-right: 0;
-    margin-bottom: 0;
-    width: auto;
-    height: auto;
+    width: 788px;
+    height: 101px;
+    background-color: rgba(0, 0, 0, 0);
+    overflow: hidden;
+}
+
+/* Content row: C# sets left for drag; padding-left centres a 120px label. */
+.game-music-form__huadong > VisualElement {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    padding-left: 334px; /* (788-120)/2 */
     picking-mode: Ignore;
 }
-.game-music-form__u6563u6b65,
-.game-music-form__u65c5u884c,
-.game-music-form__u5de5u4f5c,
-.game-music-form__u9a7eu8f66,
-.game-music-form__u5b66u4e60 {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    margin-top: 0;
-    margin-bottom: 0;
-    margin-right: 0;
-    height: auto;
+
+/* TextElement (not Label) — avoids .unity-label:hover washing text to white. */
+.game-music-form__album-label {
+    flex-shrink: 0;
+    width: 120px;
+    height: 101px;
+    min-height: 0;
+    margin-right: 20px;
     -unity-text-align: middle-center;
     color: rgba(24, 24, 25, 1.000);
     white-space: nowrap;
     -unity-font: url("../Fonts/pingfangsc-medium.ttf");
     overflow: visible;
-    min-width: 0;
-    min-height: 0;
-}
-.game-music-form__u9a7eu8f66 {
-    left: 0;
-    margin-left: 0;
-    width: 120px;
-    opacity: 0.300;
+    picking-mode: Position;
     font-size: 48px;
+    opacity: 0.3;
 }
-.game-music-form__u6563u6b65 {
-    left: 140px;
-    margin-left: 0;
-    width: 120px;
-    opacity: 0.300;
-    font-size: 48px;
-}
-.game-music-form__u65c5u884c {
-    left: 50%;
-    margin-left: -90px;
-    width: 180px;
+
+.game-music-form__album-label--selected {
     font-size: 72px;
+    opacity: 1;
+    color: rgba(24, 24, 25, 1.000);
 }
-.game-music-form__u5b66u4e60 {
-    right: 140px;
-    left: auto;
-    margin-left: 0;
-    width: 120px;
-    opacity: 0.300;
+
+.game-music-form__album-label--unselected {
     font-size: 48px;
+    opacity: 0.3;
+    color: rgba(24, 24, 25, 1.000);
 }
-.game-music-form__u5de5u4f5c {
-    right: 0;
-    left: auto;
-    margin-left: 0;
-    width: 120px;
-    opacity: 0.300;
-    font-size: 48px;
-}
+
 .game-music-form__mode-button {
     position: absolute;
     right: 82px;
@@ -174,11 +159,24 @@
     width: 180px;
     margin-bottom: 0;
     height: 84px;
-    padding: 0;
-    border-width: 0;
-    min-width: 0;
-    min-height: 0;
+    /* Background-transparent clickable container; click events fall through to
+       the icon so the whole 180×84 hit area works. */
     background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    padding: 0;
+}
+
+/* Inner icon: Image backed by yy_danqu / yy_list / yy_suiji sprite. */
+.game-music-form__mode-icon {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: auto;
+    height: auto;
+    -unity-background-scale-mode: scale-to-fit;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
 }
 .game-music-form__title {
     position: absolute;
@@ -196,6 +194,16 @@
     white-space: normal;
     -unity-font: url("../Fonts/pingfangsc-medium.ttf");
 }
+
+/* Unity 6 UI Toolkit applies a default :hover tint to Label which washes the
+   grey title out to white on desktop / Editor hover. Lock the color across
+   every interactive pseudo-state so dragging the pointer across the title
+   while scrolling the strip doesn't flash white. */
+.game-music-form__title:hover,
+.game-music-form__title:focus,
+.game-music-form__title:active {
+    color: rgba(135, 135, 145, 1.000);
+}
 .game-music-form__music-list {
     position: absolute;
     left: 0;
@@ -210,6 +218,8 @@
     height: auto;
     background-color: rgba(0, 0, 0, 0);
     border-width: 0;
+    /* Dialog card is picking-mode: Ignore; list must take hits itself. */
+    picking-mode: Position;
 }
 .game-music-form__music-list .unity-list-view__item,
 .game-music-form__music-list .unity-collection-view__item {

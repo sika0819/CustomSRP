@@ -68,4 +68,3 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8a7558e1eb525420e8c06804e4289730, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Game::Game.MusicForm
-  TrackTemplate: {fileID: 9197481963319205126, guid: 7bf53bb5e0b4f4ac0bc1fcd477de8a7b, type: 3}

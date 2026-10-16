@@ -95,14 +95,18 @@ namespace Game.BoluoApi
 #endif
         }
 
+        /// <summary>App 默认版本号，与 ProjectSettings.bundleVersion 对齐；用于 EditorPrefs 空覆盖时的兜底。</summary>
+        public const string DefaultVersion = "1.1.70";
+
         public static string GetVersion()
         {
 #if UNITY_EDITOR
-            var versionOverride = UnityEditor.EditorPrefs.GetString(EditorVersionOverrideKey, "");
+            var versionOverride = UnityEditor.EditorPrefs.GetString(EditorVersionOverrideKey, DefaultVersion);
             if (!string.IsNullOrEmpty(versionOverride))
                 return versionOverride;
 #endif
-            return Application.version;
+            var v = Application.version;
+            return string.IsNullOrEmpty(v) ? DefaultVersion : v;
         }
 
         /// <summary>系统类型：1 android · 2 ios · 3 harmony。</summary>

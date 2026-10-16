@@ -32,6 +32,7 @@ namespace Game.BoluoApi
         public BankDownloadState State = BankDownloadState.Pending;
         public float Progress;
         public string Error;
+        public string SkipReason;
         public int AttemptCount;
     }
 
@@ -137,13 +138,11 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 本地文件是否对得上 catalog。旧 WIA 占着同名 .bnk 时 File.Exists 仍为 true，不能当就绪。
+        /// 本地文件是否对得上 catalog。同名残缺文件 File.Exists 仍为 true，不能仅凭存在判定就绪。
         /// </summary>
         public static bool LocalSatisfiesCatalog(string bankName)
         {
             if (string.IsNullOrEmpty(bankName))
-                return true;
-            if (AudioEnginePaths.IsPackedWwiseInit(bankName))
                 return true;
 
             if (TryGetActiveItem(bankName, out var item))
@@ -216,10 +215,6 @@ namespace Game.BoluoApi
         {
             if (string.IsNullOrEmpty(path))
                 return false;
-            string wwise = AudioEnginePaths.WwiseGeneratedBankPath;
-            if (!string.IsNullOrEmpty(wwise) &&
-                path.StartsWith(wwise, StringComparison.OrdinalIgnoreCase))
-                return true;
             string root = StreamingBankPath;
             if (string.IsNullOrEmpty(root))
                 return false;
@@ -243,8 +238,6 @@ namespace Game.BoluoApi
             foreach (var b in banks)
             {
                 if (b == null || string.IsNullOrEmpty(b.bankName))
-                    continue;
-                if (AudioEnginePaths.IsPackedWwiseInit(b.bankName))
                     continue;
 
                 var item = new BankDownloadItem
@@ -297,6 +290,10 @@ namespace Game.BoluoApi
 
             var all = BuildQueue(banks);
             await VerifyLocalReadyAsync(all);
+
+            // 是否下载只看本地 MD5 / 是否存在（对齐老工程 WanosAssets.LoadAsync）。
+            // bank.version 是 bank 内容版本（如 1.0.0），不能和 Application.version 比。
+
             for (int i = 0; i < all.Count; i++)
             {
                 var item = all[i];
@@ -347,7 +344,8 @@ namespace Game.BoluoApi
                 }
                 else if (item.State == BankDownloadState.Skipped)
                 {
-                    Log.Warning($"[BankDownloader] skip {item.BankName}: {item.Error}");
+                    string reason = !string.IsNullOrEmpty(item.SkipReason) ? item.SkipReason : item.Error;
+                    Log.Warning($"[BankDownloader] skip {item.BankName}: {reason}");
                     onItemDone?.Invoke(item);
                 }
                 else
@@ -796,7 +794,7 @@ namespace Game.BoluoApi
 
         static void NotifyBankReady(string bankName)
         {
-            // Preset / Wwise hooks deferred — download path only.
+            // Preset hooks deferred — download path only.
         }
 
         static bool TryRequeueFailed()
@@ -973,6 +971,12 @@ namespace Game.BoluoApi
                         cache.Set(item.BankName, job.Size, job.MtimeTicks, item.Md5);
                         cacheDirty = true;
                     }
+                    else
+                    {
+                        Log.Warning(
+                            $"[BankDownloader] local md5 mismatch bank={item.BankName} " +
+                            $"expect={job.ExpectedMd5} actual={job.ActualMd5} path={job.Path} — will re-download");
+                    }
                 }
 
                 if (cacheDirty)
@@ -1107,12 +1111,22 @@ namespace Game.BoluoApi
                 bool httpOk = false;
                 string httpErr = null;
                 string tmpPath = item.LocalPath + ".tmp";
-                PrepareTemp(tmpPath);
+                long resumeFrom = GetExistingLength(tmpPath);
+                bool resume = resumeFrom > 0;
+                if (!resume)
+                    PrepareTemp(tmpPath);
+                else
+                    EnsureParentDir(tmpPath);
 
                 using (var req = new UnityWebRequest(item.Url, UnityWebRequest.kHttpVerbGET))
                 {
-                    req.downloadHandler = new DownloadHandlerFile(tmpPath) { removeFileOnAbort = true };
-                    req.timeout = Retry.RequestTimeoutSeconds;
+                    if (resume)
+                        req.SetRequestHeader("Range", $"bytes={resumeFrom}-");
+                    // append=true 续写 .tmp；Abort 时保留进度，避免百兆 bank 每次 stall/重启都从头下。
+                    req.downloadHandler = new DownloadHandlerFile(tmpPath, resume) { removeFileOnAbort = false };
+                    // 0 = 不设总超时；大 bank 只靠 stall 检测，避免 120s 整请求超时误杀。
+                    if (Retry.RequestTimeoutSeconds > 0)
+                        req.timeout = Retry.RequestTimeoutSeconds;
                     var op = req.SendWebRequest();
 
                     ulong lastBytes = 0;
@@ -1123,12 +1137,12 @@ namespace Game.BoluoApi
                         if (shouldAbort != null && shouldAbort())
                         {
                             req.Abort();
-                            TryDelete(tmpPath);
+                            // 用户插队：保留 .tmp，下次还能 Range 续传
                             onAborted?.Invoke();
                             return false;
                         }
 
-                        item.Progress = ResolveDownloadProgress01(item, req);
+                        item.Progress = ResolveDownloadProgress01(item, req, resumeFrom);
                         onProgress?.Invoke(item);
 
                         ulong bytes = req.downloadedBytes;
@@ -1141,7 +1155,8 @@ namespace Game.BoluoApi
                                  Time.realtimeSinceStartup - lastProgressTime > Retry.StallTimeoutSeconds)
                         {
                             Log.Warning(
-                                $"[BankDownloader] stall >{Retry.StallTimeoutSeconds}s abort {item.BankName}");
+                                $"[BankDownloader] stall >{Retry.StallTimeoutSeconds}s abort {item.BankName} " +
+                                $"sessionBytes={lastBytes} resumeFrom={resumeFrom} sizeKb={item.SizeKb}");
                             req.Abort();
                             stalled = true;
                             break;
@@ -1152,38 +1167,73 @@ namespace Game.BoluoApi
 
                     if (stalled)
                     {
-                        httpErr = "stall timeout";
+                        httpErr = $"stall timeout bytes={lastBytes} resumeFrom={resumeFrom}";
                         anyNetworkFail = true;
                     }
-                    else if (req.result != UnityWebRequest.Result.Success)
+                    else if (req.result == UnityWebRequest.Result.Success
+                             || (resume && req.responseCode == 206))
                     {
-                        httpErr = req.error ?? $"code={req.responseCode}";
-                        anyNetworkFail = anyNetworkFail || Http.IsRetryableNetworkError(req);
+                        // Range 被忽略回 200：append 会把整包接到半截后 → MD5 必炸，删掉重来。
+                        if (resume && req.responseCode == 200)
+                        {
+                            Log.Warning(
+                                $"[BankDownloader] Range ignored (HTTP 200) {item.BankName} — restart full download");
+                            TryDelete(tmpPath);
+                            httpErr = "range ignored";
+                            anyNetworkFail = true;
+                        }
+                        else
+                        {
+                            httpOk = true;
+                            item.Progress = 1f;
+                            onProgress?.Invoke(item);
+                        }
+                    }
+                    else if (resume && req.responseCode == 416)
+                    {
+                        // Range 起点超出远端（.tmp 损坏 / 已写满 / 远端变短）：保留半截会反复 416，删掉重来。
+                        Log.Warning(
+                            $"[BankDownloader] Range not satisfiable (HTTP 416) {item.BankName} " +
+                            $"resumeFrom={resumeFrom} — restart full download");
+                        TryDelete(tmpPath);
+                        httpErr = "range not satisfiable";
+                        anyNetworkFail = true;
                     }
                     else
                     {
-                        httpOk = true;
-                        item.Progress = 1f;
-                        onProgress?.Invoke(item);
+                        httpErr =
+                            $"{req.error ?? $"code={req.responseCode}"} bytes={req.downloadedBytes} resume={resume}";
+                        anyNetworkFail = anyNetworkFail || Http.IsRetryableNetworkError(req);
                     }
                 }
 
                 if (!httpOk)
                 {
-                    TryDelete(tmpPath);
-                    item.Progress = 0f;
+                    // stall / 可重试网络错误：保留 .tmp 做 Range 续传；不可恢复才删。
+                    bool retryable = stalled
+                                     || string.Equals(httpErr, "range ignored", StringComparison.Ordinal)
+                                     || string.Equals(httpErr, "range not satisfiable", StringComparison.Ordinal)
+                                     || Http.IsRetryableNetworkError(httpErr);
+                    if (!retryable)
+                        TryDelete(tmpPath);
+
+                    item.Progress = resumeFrom > 0 && retryable
+                        ? ResolveProgressFromFile(item, tmpPath)
+                        : 0f;
                     item.Error = httpErr;
                     item.State = BankDownloadState.Failed;
 
-                    bool retryable = stalled || Http.IsRetryableNetworkError(httpErr);
                     if (!retryable || attempt >= max)
                     {
                         Log.Error($"[BankDownloader] fail {item.BankName}: {httpErr} attempt={attempt}/{max}");
+                        if (!retryable)
+                            TryDelete(tmpPath);
                         break;
                     }
 
                     Log.Warning(
-                        $"[BankDownloader] {item.BankName} attempt={attempt}/{max} retry in {delay:0.#}s err={httpErr}");
+                        $"[BankDownloader] {item.BankName} attempt={attempt}/{max} retry in {delay:0.#}s " +
+                        $"err={httpErr} keepTmp={retryable} tmpBytes={GetExistingLength(tmpPath)}");
                     await UniTask.Delay(TimeSpan.FromSeconds(delay), DelayType.UnscaledDeltaTime);
                     delay = Mathf.Min(delay * 2f, Retry.RetryMaxSeconds);
                     continue;
@@ -1270,7 +1320,8 @@ namespace Game.BoluoApi
             return true;
         }
 
-        static float ResolveDownloadProgress01(BankDownloadItem item, UnityWebRequest req)
+        static float ResolveDownloadProgress01(
+            BankDownloadItem item, UnityWebRequest req, long resumeFrom = 0)
         {
             float p = req != null ? req.downloadProgress : 0f;
             if (item != null
@@ -1278,7 +1329,9 @@ namespace Game.BoluoApi
                 && int.TryParse(item.SizeKb, out int kb)
                 && kb > 0)
             {
-                float fromBytes = (float)((double)req.downloadedBytes / (kb * 1024.0));
+                double total = kb * 1024.0;
+                double got = resumeFrom + (double)req.downloadedBytes;
+                float fromBytes = (float)(got / total);
                 if (fromBytes > p)
                     p = fromBytes;
             }
@@ -1286,20 +1339,76 @@ namespace Game.BoluoApi
             return Mathf.Clamp01(p);
         }
 
-        static void PrepareTemp(string tmpPath)
+        static float ResolveProgressFromFile(BankDownloadItem item, string path)
         {
-            string dir = Path.GetDirectoryName(tmpPath);
+            if (item == null || string.IsNullOrEmpty(path))
+                return 0f;
+            if (!int.TryParse(item.SizeKb, out int kb) || kb <= 0)
+                return 0f;
+            long len = GetExistingLength(path);
+            if (len <= 0)
+                return 0f;
+            return Mathf.Clamp01((float)(len / (kb * 1024.0)));
+        }
+
+        static long GetExistingLength(string path)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                    return 0;
+                var fi = new FileInfo(path);
+                return fi.Exists ? fi.Length : 0;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        static void EnsureParentDir(string path)
+        {
+            string dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
+        }
+
+        static void PrepareTemp(string tmpPath)
+        {
+            EnsureParentDir(tmpPath);
             TryDelete(tmpPath);
         }
 
         static void TryLoadBank(BankDownloadItem item)
         {
-            // No Wwise in CustomSRP — download-only.
             if (item == null || string.IsNullOrEmpty(item.BankName))
                 return;
-            Log.Debug($"[BankDownloader] TryLoadBank skipped (no engine) bank={item.BankName}");
+            string path = item.LocalPath;
+            if (string.IsNullOrEmpty(path))
+                path = ResolveLocalPath(item.BankName);
+
+            // 诊断：引擎未创建时直接说明原因
+            if (!WanosAudio.WanosNative.Instance.IsCreated)
+            {
+                Log.Warning($"[BankDownloader] TryLoadBank SKIP bank={item.BankName} reason=engine-not-created path={path}");
+                return;
+            }
+
+            bool ok = WanosAudio.WanosBankStore.LoadFromPath(item.BankName, path);
+            if (!ok)
+            {
+                // 探测具体原因
+                string reason = WanosAudio.WanosBankStore.IsLoaded(item.BankName)
+                    ? "already-loaded-but-returned-false"
+                    : (!System.IO.File.Exists(path)
+                        ? "file-missing"
+                        : "header-invalid-or-native-fail");
+                Log.Warning($"[BankDownloader] TryLoadBank FAIL bank={item.BankName} ok=False path={path} reason={reason} size={(System.IO.File.Exists(path) ? new System.IO.FileInfo(path).Length : -1)}");
+            }
+            else
+            {
+                Log.Info($"[BankDownloader] TryLoadBank OK bank={item.BankName} path={path}");
+            }
         }
 
         static void TryDelete(string path)
@@ -1412,7 +1521,8 @@ namespace Game.BoluoApi
                             sb.Append('\n');
                         }
 
-                        File.WriteAllText(tmp, sb.ToString(), Encoding.UTF8);
+                        // UTF8Encoding(false)：禁止 BOM，否则首行 bankName 带 \uFEFF，缓存永远 miss。
+                        File.WriteAllText(tmp, sb.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                         if (File.Exists(path))
                             File.Delete(path);
                         File.Move(tmp, path);
@@ -1444,8 +1554,8 @@ namespace Game.BoluoApi
                             continue;
                         if (!long.TryParse(parts[2], out long mtime))
                             continue;
-                        string name = parts[0];
-                        string md5 = parts[3];
+                        string name = parts[0].Trim().TrimStart('\uFEFF');
+                        string md5 = parts[3].Trim();
                         if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(md5))
                             continue;
                         _map[name] = new Entry { Size = size, MtimeTicks = mtime, Md5 = md5 };

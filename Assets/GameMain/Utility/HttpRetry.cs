@@ -54,13 +54,18 @@ namespace Game.Utility
                     SkipWaitForNetwork = true,
                 };
 
+                /// <summary>
+                /// Bank 下载：总超时关闭（0）。UnityWebRequest.timeout 按整次请求计时，
+                /// 百兆级 bank 在并行/慢网下必踩 120s；卡死只靠 StallTimeout。
+                /// Stall 要宽：慢网下几十秒无进度不代表死链；过短会 Abort 并（旧逻辑）删 .tmp 从头下。
+                /// </summary>
                 public static RetryPolicy DefaultDownload => new RetryPolicy
                 {
-                    MaxAttempts = 3,
+                    MaxAttempts = 5,
                     RetryBaseSeconds = 5f,
                     RetryMaxSeconds = 30f,
-                    StallTimeoutSeconds = 30f,
-                    RequestTimeoutSeconds = 120,
+                    StallTimeoutSeconds = 180f,
+                    RequestTimeoutSeconds = 0,
                 };
             }
 

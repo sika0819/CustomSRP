@@ -41,10 +41,7 @@ namespace Game.Native
             }
 
             if (remainingSeconds <= 0 && totalSeconds < 0)
-            {
-                Game.MusicService music = Game.MusicService.Ensure();
-                music?.Pause();
-            }
+                Game.MusicPlaylist.Instance.Pause();
 
             RefreshFill();
             if (Game.GameEntry.Event != null)

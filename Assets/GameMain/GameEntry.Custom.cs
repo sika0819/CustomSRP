@@ -5,17 +5,19 @@ namespace Game
         public static WeatherService Weather { get; private set; }
         public static PresetService Presets { get; private set; }
         public static AtmospherePropService AtmosphereProps { get; private set; }
-        public static MusicService Music { get; private set; }
+        /// <summary>Playlist facade over <see cref="Sound"/> Music group (replaces AudioSource MusicService).</summary>
+        public static MusicPlaylist Music { get; private set; }
         public static IslandWorldService World { get; private set; }
         public static IslandGrassService Grass { get; private set; }
 
         static void InitCustomComponents()
         {
-            // Prefer scene / previous-session instances; Ensure() creates DontDestroyOnLoad hosts.
             Weather = WeatherService.Ensure();
             Presets = PresetService.Ensure();
             AtmosphereProps = AtmospherePropService.Ensure();
-            Music = MusicService.Ensure();
+            Music = MusicPlaylist.Instance;
+            Music.ApplySavedVolumes();
+            MusicCatalog.LoadAsync();
             World = IslandWorldService.Ensure();
             Grass = IslandGrassService.Ensure();
             DevicePresetShotHelper.Ensure();

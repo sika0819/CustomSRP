@@ -9,16 +9,12 @@
             <ui:VisualElement name="musicDialogkapian" class="game-music-form__music-dialogkapian">
                 <ui:VisualElement name="hlist" class="game-music-form__hlist">
                     <ui:VisualElement name="biao" class="game-music-form__biao" />
-                    <ui:VisualElement name="huadong" class="game-music-form__huadong">
-                        <ui:Label name="u6563u6b65" class="game-music-form__u6563u6b65" text="散步" />
-                        <ui:Label name="u65c5u884c" class="game-music-form__u65c5u884c" text="旅行" />
-                        <ui:Label name="u5de5u4f5c" class="game-music-form__u5de5u4f5c" text="工作" />
-                        <ui:Label name="u9a7eu8f66" class="game-music-form__u9a7eu8f66" text="驾车" />
-                        <ui:Label name="u5b66u4e60" class="game-music-form__u5b66u4e60" text="学习" />
-                    </ui:VisualElement>
+                    <ui:VisualElement name="huadong" class="game-music-form__huadong" />
                 </ui:VisualElement>
-                <ui:Button name="modeButton" class="game-music-form__mode-button" />
-                <ui:Label name="title" class="game-music-form__title" text="全部歌曲27首" />
+                <ui:VisualElement name="modeButton" class="game-music-form__mode-button">
+                    <ui:VisualElement name="modeIcon" class="game-music-form__mode-icon" />
+                </ui:VisualElement>
+                <ui:Label name="title" class="game-music-form__title" text="" />
                 <ui:ListView name="musicList" class="game-music-form__music-list" />
             </ui:VisualElement>
         </ui:VisualElement>

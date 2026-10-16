@@ -95,7 +95,6 @@ namespace Game.Editor
         static void BuildFormPrefabs(PanelSettings phone)
         {
             Directory.CreateDirectory("Assets/GameMain/UI/Forms");
-            VisualTreeAsset musicItem = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/GameMain/UI/Forms/MusicTrackItem.uxml");
             VisualTreeAsset presetItem = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/GameMain/UI/Forms/PresetItem.uxml");
             for (int i = 0; i < FormNames.Length; i++)
             {
@@ -109,12 +108,7 @@ namespace Game.Editor
                 if (formType != null)
                     go.AddComponent(formType);
 
-                if (name == "MusicForm")
-                {
-                    MusicForm form = go.GetComponent<MusicForm>();
-                    form.TrackTemplate = musicItem;
-                }
-                else if (name == "PresetForm")
+                if (name == "PresetForm")
                 {
                     PresetForm form = go.GetComponent<PresetForm>();
                     form.PresetTemplate = presetItem;

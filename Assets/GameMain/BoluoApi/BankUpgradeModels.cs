@@ -77,3 +77,61 @@ namespace Game.BoluoApi
         public string musicName;
     }
 }
+
+/// <summary>
+/// 本地音乐目录数据结构（独立于服务端 JSON 模型）。
+/// </summary>
+namespace Game.BoluoApi.Music
+{
+    using Game.BoluoApi;
+
+    public readonly struct MusicTrack
+    {
+        public readonly string MusicName;
+        public readonly string BankName;
+        public readonly string EventName;
+        public readonly string BankGuid;
+
+        public MusicTrack(string musicName, string bankName, string eventName, string bankGuid = "")
+        {
+            MusicName = musicName ?? "";
+            BankName = bankName ?? "";
+            EventName = eventName ?? "";
+            BankGuid = bankGuid ?? "";
+        }
+
+        /// <summary>从服务端 MusicServerData 构造。</summary>
+        public MusicTrack(MusicServerData src)
+        {
+            MusicName = src.musicName ?? "";
+            BankName = src.bankName ?? "";
+            EventName = src.eventName ?? (string.IsNullOrEmpty(src.bankName) ? "" : "Play_" + src.bankName);
+            BankGuid = src.bankGuid ?? "";
+        }
+    }
+
+    public sealed class MusicAlbum
+    {
+        public readonly string Name;
+        public readonly MusicTrack[] Tracks;
+
+        public MusicAlbum(string name, MusicTrack[] tracks)
+        {
+            Name = name ?? "";
+            Tracks = tracks ?? Array.Empty<MusicTrack>();
+        }
+
+        public int TrackCount => Tracks?.Length ?? 0;
+    }
+
+    /// <summary>UI 显示用曲目下载/播放状态。</summary>
+    public enum MusicItemUiState
+    {
+        Failed = 0,
+        NotDownloaded = 1,
+        Downloading = 2,
+        Succeeded = 3,
+        Ready = 4,
+        Playing = 5,
+    }
+}

@@ -2,7 +2,7 @@ using System;
 using Game.BoluoApi;
 using UnityEngine;
 using UnityGameFramework.Runtime;
-// MusicService / GameEntry / IslandWorldReadyEventArgs live in parent namespace Game.
+// MusicPlaylist / GameEntry / IslandWorldReadyEventArgs live in parent namespace Game.
 
 namespace Game.Native
 {
@@ -40,9 +40,7 @@ namespace Game.Native
             MessageRouter.Register(MsgType.MediaCommand, (cmd, _, __) =>
             {
                 Log.Info($"[IMP] MediaCommand cmd={cmd}");
-                Game.MusicService music = Game.MusicService.Ensure();
-                if (music == null)
-                    return;
+                MusicPlaylist music = GameEntry.Music ?? MusicPlaylist.Instance;
                 switch (cmd)
                 {
                     case MsgType.MediaPause:
