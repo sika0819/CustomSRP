@@ -20,6 +20,11 @@ namespace Game
         public const string AllMapItemLocation = "AllMapItem";
         public const string AllMapItemAssetPath = "Assets/AssetRaw/Configs/AllMapItem.bytes";
 
+        /// <summary>Baked water station database (AddressByFileName under AssetRaw/Configs).</summary>
+        public const string BakedWaterStationsLocation = "BakedWaterStations";
+        public const string BakedWaterStationsAssetPath =
+            "Assets/AssetRaw/Configs/BakedWaterStations.asset";
+
         /// <summary>GPU 草地种点 sidecar（SGB1，与 AllMapItem 同 Configs 采集）。</summary>
         public const string IslandGrassBakeLocation = "Island_GrassBake";
         public const string IslandGrassBakeAssetPath =

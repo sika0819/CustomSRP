@@ -23,6 +23,13 @@ namespace Game
         public float FogDensity { get; private set; } = 0.001f;
         public bool IsTimeTransitioning => _timeLerpActive;
 
+        /// <summary>Panel gesture lock. Preset apply clears it and is never refused.</summary>
+        public const float PanelTransitionSeconds = 2f;
+
+        public bool IsWeatherBusy => Time.unscaledTime < _panelBusyUntil;
+
+        float _panelBusyUntil;
+
         /// <summary>Cloud/L1 haze (default 0.001); weather UI scales absolute <see cref="FogDensity"/> from this.</summary>
         float _hazeFogDensity = 0.001f;
 
@@ -74,10 +81,16 @@ namespace Game
             GameEntry.AtmosphereProps?.Refresh();
         }
 
+        /// <summary>
+        /// Cold-start / HUD open: wall clock → <see cref="IslandTimePeriod"/> → period anchor
+        /// (06 / 12 / 18 / 00). Matches Boluo InitClockHandFromTimeType so sky, main-light
+        /// intensity, and fog tint use that slot's presets rather than mid-slot interpolation.
+        /// </summary>
         public void ApplyLocalClockIfNeeded()
         {
             var now = System.DateTime.Now;
-            SetTimeOfDay(now.Hour + now.Minute / 60f, fireEvent: true);
+            float clockHours = now.Hour + now.Minute / 60f;
+            SetPeriod(ResolvePeriod(clockHours), animate: false);
         }
 
         public void SetTimeOfDay(float hours, bool fireEvent = true)
@@ -130,8 +143,21 @@ namespace Game
                 GameEntry.Event.Fire(this, TimeOfDayChangedEventArgs.Create(Hours, Period));
         }
 
+        /// <summary>Starts the panel lock. Does not change weather; call after a successful panel write.</summary>
+        public void BeginPanelTransitionLock()
+        {
+            _panelBusyUntil = Time.unscaledTime + PanelTransitionSeconds;
+        }
+
+        /// <summary>Preset / health apply must not stay blocked by a panel transition.</summary>
+        public void ClearPanelTransitionLock()
+        {
+            _panelBusyUntil = 0f;
+        }
+
         public void SetWeather(IslandWeatherKind kind, int level, bool fireEvent = true)
         {
+            // Level 0 keeps the requested kind (Wind/Rain/Foggy off). Clear is the only kind forced to 0.
             Kind = kind;
             Level = kind == IslandWeatherKind.Clear ? 0 : Mathf.Clamp(level, 0, 3);
             FogDensity = _hazeFogDensity * WeatherFogScale(Kind, Level);
@@ -159,24 +185,24 @@ namespace Game
         public static float WeatherFogScale(IslandWeatherKind kind, int level)
         {
             int lv = Mathf.Clamp(level, 0, 3);
+            // Closed gear (any kind) and Clear share the clear-sky haze.
+            if (lv <= 0 || kind == IslandWeatherKind.Clear)
+                return 0.85f;
+
             switch (kind)
             {
                 case IslandWeatherKind.Foggy:
-                    if (lv <= 0) return 1f;
                     if (lv == 1) return 1.6f; // 小雾
                     if (lv == 2) return 1.9f; // 中雾
                     return 2.2f;              // 大雾
                 case IslandWeatherKind.Rain:
-                    if (lv <= 0) return 1f;
                     if (lv == 1) return 1.2f;
                     if (lv == 2) return 1.35f;
                     return 1.5f;
                 case IslandWeatherKind.Wind:
                     return 1.05f;
-                case IslandWeatherKind.Clear:
-                    return 0.85f;
                 default:
-                    return lv <= 0 ? 0.92f : 1f;
+                    return 1f;
             }
         }
 

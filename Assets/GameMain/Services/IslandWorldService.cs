@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -20,23 +21,47 @@ namespace Game
         AssetHandle _oceanHandle;
         AssetHandle _inlandWaterHandle;
         AssetHandle _mapItemHandle;
+        AssetHandle _bakedWaterHandle;
         readonly List<AssetHandle> _inlandChildHandles = new List<AssetHandle>(8);
         readonly List<MapItemData> _extrasCache = new List<MapItemData>(64);
         bool _loaded;
 
+        /// <summary>Fires once after inland water is loaded (or confirmed missing). Safe to poll for null.</summary>
+        public static event Action<bool> OnInlandWaterReady;
+
+        /// <summary>
+        /// 共享标记：InlandWaterInstance 是否已完成加载（含两种路径：资源实例化 或 MapItemExtras 拼装）。
+        /// 用于 AmbienceZoneService 在事件错过时也能确认 water 已就绪。
+        /// </summary>
+        public static bool InlandWaterReady { get; private set; }
+
+        /// <summary>单例入口，供 <see cref="InlandWaterSampler"/> 等 static 类访问。</summary>
+        public static IslandWorldService Instance { get; private set; }
+
         public bool IsLoaded => _loaded;
         public EnvMapItemSpawner MapItemSpawner => _mapItemSpawner;
         public GameObject TerrainInstance => _terrainInstance;
+        public GameObject InlandWaterInstance => _inlandWaterInstance;
 
         public static IslandWorldService Ensure()
         {
             IslandWorldService existing = FindAnyObjectByType<IslandWorldService>();
             if (existing != null)
+            {
+                Instance = existing;
                 return existing;
+            }
 
             var go = new GameObject("IslandWorldService");
             DontDestroyOnLoad(go);
             return go.AddComponent<IslandWorldService>();
+        }
+
+        void Awake()
+        {
+            if (Instance != null && Instance != this)
+                Destroy(gameObject);
+            Instance = this;
         }
 
         public IEnumerator Load(System.Action<float, string> reportProgress)
@@ -94,7 +119,29 @@ namespace Game
             IslandGrassService grass = GameEntry.Grass ?? IslandGrassService.Ensure();
             yield return grass.Load();
 
+            // 加载烘焙的静态水域数据（River / Waterfall / Ocean / Lake 代表点）。
+            // 这是音频服务的主数据源：不再每 tick 走 PhysX.ClosestPoint。
+            // 失败时 StaticWaterStationIndex.IsReady = false → 调用方回退到 catalog 硬编码点。
+            if (YooResourceModule.DefaultPackage != null
+                && YooResourceModule.DefaultPackage.CheckLocationValid(SceneAssets.BakedWaterStationsLocation))
+            {
+                yield return YooResourceModule.LoadAssetCoroutine<BakedWaterStationDatabase>(
+                    SceneAssets.BakedWaterStationsLocation,
+                    (asset, handle) =>
+                    {
+                        if (asset != null)
+                            StaticWaterStationIndex.Load(asset);
+                        _bakedWaterHandle = handle;
+                    });
+            }
+            else
+            {
+                Log.Warning("[IslandWorld] BakedWaterStations not packaged — audio will use legacy fallback path");
+            }
+
+            InlandWaterReady = _inlandWaterInstance != null;
             _loaded = true;
+            OnInlandWaterReady?.Invoke(_inlandWaterInstance != null);
             int mapCount = _mapItemSpawner != null ? _mapItemSpawner.MapItemCount : 0;
             int spawned = _mapItemSpawner != null ? _mapItemSpawner.SpawnedCount : 0;
             int extras = _mapItemSpawner != null ? _mapItemSpawner.ExtrasSpawnedCount : 0;
@@ -123,28 +170,35 @@ namespace Game
 
             if (_mapItemRoot != null)
             {
-                Object.Destroy(_mapItemRoot);
+                UnityEngine.Object.Destroy(_mapItemRoot);
                 _mapItemRoot = null;
             }
 
             _mapItemHandle?.Release();
             _mapItemHandle = null;
 
+            if (_bakedWaterHandle != null)
+            {
+                _bakedWaterHandle.Release();
+                _bakedWaterHandle = null;
+            }
+            StaticWaterStationIndex.Unload();
+
             if (_inlandWaterInstance != null)
             {
-                Object.Destroy(_inlandWaterInstance);
+                UnityEngine.Object.Destroy(_inlandWaterInstance);
                 _inlandWaterInstance = null;
             }
 
             if (_oceanInstance != null)
             {
-                Object.Destroy(_oceanInstance);
+                UnityEngine.Object.Destroy(_oceanInstance);
                 _oceanInstance = null;
             }
 
             if (_terrainInstance != null)
             {
-                Object.Destroy(_terrainInstance);
+                UnityEngine.Object.Destroy(_terrainInstance);
                 _terrainInstance = null;
             }
 
@@ -169,7 +223,7 @@ namespace Game
         {
             if (_inlandWaterInstance != null)
             {
-                Object.Destroy(_inlandWaterInstance);
+                UnityEngine.Object.Destroy(_inlandWaterInstance);
                 _inlandWaterInstance = null;
             }
 
@@ -197,7 +251,7 @@ namespace Game
                 var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
                     SceneAssets.IslandInlandWaterPrefabPath);
                 if (prefab != null)
-                    _inlandWaterInstance = Object.Instantiate(prefab);
+                    _inlandWaterInstance = UnityEngine.Object.Instantiate(prefab);
             }
 #endif
 
@@ -249,7 +303,7 @@ namespace Game
                     string path = SceneAssets.DaoYu1EditorPath(d.Parent, d.PrefabName);
                     var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path);
                     if (prefab != null)
-                        instance = Object.Instantiate(prefab);
+                        instance = UnityEngine.Object.Instantiate(prefab);
                 }
 #endif
 
@@ -269,7 +323,7 @@ namespace Game
 
             if (placed == 0)
             {
-                Object.Destroy(root);
+                UnityEngine.Object.Destroy(root);
                 yield break;
             }
 
@@ -280,7 +334,7 @@ namespace Game
         IEnumerator SpawnMapItems(System.Action<float, string> reportProgress)
         {
             if (_mapItemRoot != null)
-                Object.Destroy(_mapItemRoot);
+                UnityEngine.Object.Destroy(_mapItemRoot);
 
             _mapItemRoot = null;
             _mapItemHandle?.Release();
@@ -304,7 +358,7 @@ namespace Game
                 var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
                     SceneAssets.MapItemPrefabPath);
                 if (prefab != null)
-                    _mapItemRoot = Object.Instantiate(prefab);
+                    _mapItemRoot = UnityEngine.Object.Instantiate(prefab);
             }
 #endif
 

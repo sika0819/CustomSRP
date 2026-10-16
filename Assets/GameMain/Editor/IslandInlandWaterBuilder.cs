@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -88,6 +90,25 @@ namespace Game.Editor
             },
         };
 
+        /// <summary>河面预制（不含瀑布特效），供草地禁种遮罩与内河预制共用同一摆放。</summary>
+        public static int CopyRiverPlacements(List<(string path, Vector3 position, Quaternion rotation, Vector3 scale)> dst)
+        {
+            if (dst == null)
+                return 0;
+            int n = 0;
+            for (int i = 0; i < Placements.Length; i++)
+            {
+                Placement p = Placements[i];
+                string path = p.Path ?? string.Empty;
+                if (path.IndexOf("River_", StringComparison.Ordinal) < 0)
+                    continue;
+                dst.Add((path, p.Position, p.Rotation, p.Scale ?? Vector3.one));
+                n++;
+            }
+
+            return n;
+        }
+
         [MenuItem("GameMain/Boluo/Build Island Inland Water Prefab")]
         public static void Build()
         {
@@ -116,13 +137,13 @@ namespace Game.Editor
 
             if (placed == 0)
             {
-                Object.DestroyImmediate(root);
+                UnityEngine.Object.DestroyImmediate(root);
                 Log.Error("[InlandWater] No placements — abort.");
                 return;
             }
 
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-            Object.DestroyImmediate(root);
+            UnityEngine.Object.DestroyImmediate(root);
             AssetDatabase.SaveAssets();
             Log.Info("[InlandWater] Built " + PrefabPath + " children=" + placed);
         }
