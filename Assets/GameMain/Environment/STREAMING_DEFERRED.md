@@ -22,5 +22,5 @@
 - GPU Instancer Pro / BoluoInstancing GPUI 后端
 - Amplify Impostor 运行时启用
 - VIP / 原生宿主账号 UI 完整契约
-- **Wwise 播放**（Bank 仅下载落盘，不灌引擎）
+- **Wanos 播放完整契约**（bank 下载 + WanosBankStore 灌引擎 + MusicPlaylist）
 - GameFramework 可更新资源热更完整契约

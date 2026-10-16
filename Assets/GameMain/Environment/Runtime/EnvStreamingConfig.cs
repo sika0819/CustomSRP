@@ -115,7 +115,7 @@ namespace Game
             "JianZhu", "Qiao", "Other", "Common", "texiao", "FX_Day", "FX_Night",
         };
 
-        static readonly string[] SmallVegCategories = { "Hua", "Zacao", "Xunyicao", "Zhibei" };
+        static readonly string[] SmallVegCategories = { "Hua", "Zacao", "Zhibei" };
 
         public static bool IsTreeCategory(string category)
         {

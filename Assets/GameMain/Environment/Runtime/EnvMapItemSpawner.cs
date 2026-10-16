@@ -15,7 +15,7 @@ namespace Game
         public static readonly string[] DefaultCategories =
         {
             "BanksChecker", "Common", "Guanmu", "Hua", "JianZhu", "Lvshu", "Other",
-            "Qiao", "ShiTou", "Songshu", "Xunyicao", "Yeshu", "ZaWu", "Zacao", "Zhibei", "texiao",
+            "Qiao", "ShiTou", "Songshu", "Yeshu", "ZaWu", "Zacao", "Zhibei", "texiao",
             "FX_Day", "FX_Night",
         };
 
@@ -32,6 +32,9 @@ namespace Game
         int _extrasSpawnedCount;
 
         public int MapItemCount => _allMapItems.Count;
+
+        /// <summary>Loaded AllMapItem rows (for ambience zone catalog / proximity).</summary>
+        public IReadOnlyList<MapItemData> AllMapItems => _allMapItems;
 
         public int SpawnedCount =>
             (_streamer != null ? _streamer.SpawnedCount : _fullSpawnedCount) + _extrasSpawnedCount;

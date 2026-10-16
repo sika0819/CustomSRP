@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &3684401605110940604
+--- !u!1 &1561944583088532319
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,46 +8,48 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 3946579129453365072}
-  - component: {fileID: 5686483630724174201}
-  - component: {fileID: 4665281832968918299}
+  - component: {fileID: 5571816489100413861}
+  - component: {fileID: 472243594541113361}
+  - component: {fileID: 4727078156626066620}
+  - component: {fileID: 2606123522471288885}
   m_Layer: 0
-  m_Name: TAI_Boat_01A_LOD1
+  m_Name: SM_Veh_Outrigger_Canoe_01 (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &3946579129453365072
+--- !u!4 &5571816489100413861
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3684401605110940604}
+  m_GameObject: {fileID: 1561944583088532319}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -0, y: 0, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 4403101033014823889}
   m_Father: {fileID: 4343156314845631034}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &5686483630724174201
+--- !u!33 &472243594541113361
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3684401605110940604}
-  m_Mesh: {fileID: 4300002, guid: 3dff6a1373eb24907b07714a03bacc64, type: 3}
---- !u!23 &4665281832968918299
+  m_GameObject: {fileID: 1561944583088532319}
+  m_Mesh: {fileID: -8189604123387477712, guid: 587451f9917c02640925ab4ae9f5a8bc, type: 3}
+--- !u!23 &4727078156626066620
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3684401605110940604}
+  m_GameObject: {fileID: 1561944583088532319}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -66,7 +68,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: e4f5061728394a5b6c7d8e9f012345ab, type: 2}
+  - {fileID: 2100000, guid: 0927586cfa42e5f4cab08ce7b37c84d8, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -78,7 +80,7 @@ MeshRenderer:
   m_PreserveUVs: 0
   m_IgnoreNormalsForChartDetection: 0
   m_ImportantGI: 0
-  m_StitchLightmapSeams: 0
+  m_StitchLightmapSeams: 1
   m_SelectedEditorRenderState: 3
   m_MinimumChartSize: 4
   m_AutoUVMaxDistance: 0.5
@@ -90,7 +92,28 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!1 &7120437218379604566
+--- !u!95 &2606123522471288885
+Animator:
+  serializedVersion: 5
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1561944583088532319}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: f79d0e7c65b595d4388dd974a1eb6648, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!1 &2522970952589786614
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -98,46 +121,46 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1565547480165950530}
-  - component: {fileID: 2199792195847509196}
-  - component: {fileID: 558471243543727277}
+  - component: {fileID: 4403101033014823889}
+  - component: {fileID: 3431720183095374555}
+  - component: {fileID: 8910388799493164096}
   m_Layer: 0
-  m_Name: TAI_Boat_01A_LOD2
+  m_Name: SM_Veh_Outrigger_Canoe_01_Canopy_01
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &1565547480165950530
+--- !u!4 &4403101033014823889
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7120437218379604566}
+  m_GameObject: {fileID: 2522970952589786614}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: -0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 4343156314845631034}
+  m_Father: {fileID: 5571816489100413861}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &2199792195847509196
+--- !u!33 &3431720183095374555
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7120437218379604566}
-  m_Mesh: {fileID: 4300004, guid: 3dff6a1373eb24907b07714a03bacc64, type: 3}
---- !u!23 &558471243543727277
+  m_GameObject: {fileID: 2522970952589786614}
+  m_Mesh: {fileID: -8783956700865046511, guid: 587451f9917c02640925ab4ae9f5a8bc, type: 3}
+--- !u!23 &8910388799493164096
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7120437218379604566}
+  m_GameObject: {fileID: 2522970952589786614}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -156,7 +179,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: e4f5061728394a5b6c7d8e9f012345ab, type: 2}
+  - {fileID: 2100000, guid: 0927586cfa42e5f4cab08ce7b37c84d8, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -168,7 +191,7 @@ MeshRenderer:
   m_PreserveUVs: 0
   m_IgnoreNormalsForChartDetection: 0
   m_ImportantGI: 0
-  m_StitchLightmapSeams: 0
+  m_StitchLightmapSeams: 1
   m_SelectedEditorRenderState: 3
   m_MinimumChartSize: 4
   m_AutoUVMaxDistance: 0.5
@@ -189,7 +212,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 4343156314845631034}
-  - component: {fileID: 3910732694915109829}
+  - component: {fileID: -8268314011159633977}
   m_Layer: 0
   m_Name: SM_Veh_Canoe_Animated
   m_TagString: Untagged
@@ -210,11 +233,10 @@ Transform:
   m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 1
   m_Children:
-  - {fileID: 3946579129453365072}
-  - {fileID: 1565547480165950530}
+  - {fileID: 5571816489100413861}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: -0.054, y: 33.746, z: 0.195}
---- !u!205 &3910732694915109829
+--- !u!205 &-8268314011159633977
 LODGroup:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -222,18 +244,15 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7181899605373065017}
   serializedVersion: 2
-  m_LocalReferencePoint: {x: 0.00000011920929, y: 0.7286639, z: -0.37214518}
-  m_Size: 6.8053427
+  m_LocalReferencePoint: {x: 0, y: 0.9924853, z: 0.0042512417}
+  m_Size: 5.6001797
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
   m_LODs:
-  - screenRelativeHeight: 0.5
+  - screenRelativeHeight: 0.03
     fadeTransitionWidth: 0
     renderers:
-    - renderer: {fileID: 4665281832968918299}
-  - screenRelativeHeight: 0.05
-    fadeTransitionWidth: 0
-    renderers:
-    - renderer: {fileID: 558471243543727277}
+    - renderer: {fileID: 4727078156626066620}
+    - renderer: {fileID: 8910388799493164096}
   m_Enabled: 1
