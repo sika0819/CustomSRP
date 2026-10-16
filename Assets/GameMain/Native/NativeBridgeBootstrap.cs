@@ -34,11 +34,15 @@ namespace Game.Native
             MessageRouter.Register(MsgType.HealthPressureLevel, (level, _, __) =>
             {
                 Log.Info($"[IMP] HealthPressureLevel level={level}");
+                if (Game.GameEntry.Event != null)
+                    Game.GameEntry.Event.Fire(null, NativeHealthPressureEventArgs.Create(level));
             });
 
             MessageRouter.Register(MsgType.UiProfileBadge, (visible, _, __) =>
             {
                 Log.Info($"[IMP] UiProfileBadge visible={visible}");
+                if (Game.GameEntry.Event != null)
+                    Game.GameEntry.Event.Fire(null, NativeProfileBadgeEventArgs.Create(visible != 0));
             });
 
             Log.Info("[IMP] NativeBridgeBootstrap handlers registered");
