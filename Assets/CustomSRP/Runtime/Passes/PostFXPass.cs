@@ -136,6 +136,9 @@ namespace CustomSRP
             }
 
             bool applyFXAA = stack.BufferSettings.fxaa.enabled;
+            // Mobile: FXAA is expensive on tile GPUs; rely on render-scale + bicubic instead.
+            if (Application.isMobilePlatform)
+                applyFXAA = false;
             if (applyFXAA || pass._scaleMode != ScaleMode.None)
             {
                 var desc = new TextureDesc(stack.BufferSize.x, stack.BufferSize.y)

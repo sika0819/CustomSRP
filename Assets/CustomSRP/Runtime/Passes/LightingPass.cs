@@ -99,8 +99,10 @@ namespace CustomSRP
                 MaxOtherLightCount, Allocator.TempJob,
                 NativeArrayOptions.UninitializedMemory);
 
+            // Mobile: prefer 128 px tiles (1/4 the number of tiles vs 64 px),
+            // which cuts CPU tile-classification work proportionally.
             float tileScreenPixelSize = forwardPlusSettings.tileSize <= 0
-                ? 64f
+                ? (Application.isMobilePlatform ? 128f : 64f)
                 : (float)forwardPlusSettings.tileSize;
             _screenUVToTileCoordinates.x =
                 attachmentSize.x / tileScreenPixelSize;
@@ -218,6 +220,9 @@ namespace CustomSRP
             };
             _forwardPlusJobHandle = tilesJob.ScheduleParallelByRef(
                 TileCount, _tileCount.x, default);
+            // Kick the worker immediately so the job overlaps the GPU pass recording
+            // phase. Render() still calls Complete() before SetBufferData.
+            JobHandle.ScheduleBatchedJobs();
         }
 
         void Render(UnsafeGraphContext context)

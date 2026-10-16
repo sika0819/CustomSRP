@@ -1,3 +1,4 @@
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
@@ -7,6 +8,7 @@ namespace CustomSRP
     public class CopyAttachmentsPass
     {
         static readonly ProfilingSampler Sampler = new ProfilingSampler("Copy Attachments");
+        static readonly ProfilerMarker MarkerRender = new ProfilerMarker("CopyAttachments.Render");
         static readonly int ColorCopyId = Shader.PropertyToID("_CameraColorTexture");
         static readonly int DepthCopyId = Shader.PropertyToID("_CameraDepthTexture");
 
@@ -21,26 +23,29 @@ namespace CustomSRP
 
         void Render(UnsafeGraphContext context)
         {
-            UnsafeCommandBuffer buffer = context.cmd;
-            if (_copyColor)
+            using (MarkerRender.Auto())
             {
-                _copier.Copy(buffer, _colorAttachment, _colorCopy, false, _bufferSize);
-                buffer.SetGlobalTexture(ColorCopyId, _colorCopy);
-            }
+                UnsafeCommandBuffer buffer = context.cmd;
+                if (_copyColor)
+                {
+                    _copier.Copy(buffer, _colorAttachment, _colorCopy, false, _bufferSize);
+                    buffer.SetGlobalTexture(ColorCopyId, _colorCopy);
+                }
 
-            if (_copyDepth)
-            {
-                _copier.Copy(buffer, _depthAttachment, _depthCopy, true, _bufferSize);
-                buffer.SetGlobalTexture(DepthCopyId, _depthCopy);
-            }
+                if (_copyDepth)
+                {
+                    _copier.Copy(buffer, _depthAttachment, _depthCopy, true, _bufferSize);
+                    buffer.SetGlobalTexture(DepthCopyId, _depthCopy);
+                }
 
-            buffer.SetRenderTarget(
-                _colorAttachment,
-                RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
-                _depthAttachment,
-                RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            // 恢复中间 RT 视口，避免后续 Transparent 仍用 pixelRect。
-            buffer.SetViewport(new Rect(0f, 0f, _bufferSize.x, _bufferSize.y));
+                buffer.SetRenderTarget(
+                    _colorAttachment,
+                    RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
+                    _depthAttachment,
+                    RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+                // 恢复中间 RT 视口，避免后续 Transparent 仍用 pixelRect。
+                buffer.SetViewport(new Rect(0f, 0f, _bufferSize.x, _bufferSize.y));
+            }
         }
 
         public static void Record(

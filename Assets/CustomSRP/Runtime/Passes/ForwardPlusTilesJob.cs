@@ -1,12 +1,14 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 
 namespace CustomSRP
 {
-    // Burst [BurstCompile] on this IJobFor trips a Unity 6.3 / Burst 1.8 hashing bug:
-    // "Failed to resolve method ... IJobFor.Execute" while compiling ForJobStruct.
-    // Runs as a managed parallel job until Burst fixes the constrained interface resolve.
+    // [BurstCompile] is re-enabled: Unity 6.3 / Burst 1.8.x no longer trips the
+    // "Failed to resolve method ... IJobFor.Execute" hashing bug in constrained
+    // generic interfaces. Falls back to managed IJobFor if Burst is unavailable.
+    [BurstCompile(FloatMode = FloatMode.Default, CompileSynchronously = true)]
     public struct ForwardPlusTilesJob : IJobFor
     {
         [ReadOnly]

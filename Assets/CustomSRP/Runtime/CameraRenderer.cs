@@ -65,6 +65,13 @@ namespace CustomSRP
             CameraBufferSettings bufferSettings = settings.cameraBuffer;
             PostFXSettings postFXSettings = settings.postFXSettings;
             ShadowSettings shadowSettings = settings.shadows;
+            // Mobile: reduce shadow draw distance, cascades, and atlas size to keep the
+            // shadow rendering affordable on mid-tier tile-based GPUs.
+            if (Application.isMobilePlatform)
+            {
+                shadowSettings = shadowSettings.ClonedForMobile();
+                shadowSettings.maxDistance = Mathf.Min(shadowSettings.maxDistance, 25f);
+            }
 
             ProfilingSampler cameraSampler;
             CameraSettings cameraSettings;
@@ -107,6 +114,14 @@ namespace CustomSRP
                 useDepthTexture = true;
 
             float renderScale = cameraSettings.GetRenderScale(bufferSettings.renderScale);
+            // Mobile mid-tier: nudge render scale down unless the asset explicitly overrode it.
+            // ~28% fewer fragments on a 0.85 scale, with bicubic rescale preserving edges.
+            if (Application.isMobilePlatform &&
+                cameraSettings.renderScaleMode == CameraSettings.RenderScaleMode.Inherit &&
+                renderScale >= 0.99f)
+            {
+                renderScale = 0.85f;
+            }
             bool useScaledRendering = renderScale < 0.99f || renderScale > 1.01f;
 
 #if UNITY_EDITOR
@@ -176,7 +191,8 @@ namespace CustomSRP
                         : -1;
 
                     _shadows.Setup(shadowSettings);
-                    var lightResources = new LightResources(
+
+                    LightResources lightResources = new LightResources(
                         LightingPass.Record(
                             renderGraph,
                             cullingResults,

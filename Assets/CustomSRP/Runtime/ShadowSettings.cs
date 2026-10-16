@@ -74,5 +74,24 @@ namespace CustomSRP
         {
             atlasSize = MapSize._1024
         };
+
+        /// <summary>
+        /// Returns a mobile-friendly copy with reduced cascade count and atlas size.
+        /// The original is left intact; callers must use the returned value.
+        /// </summary>
+        public ShadowSettings ClonedForMobile()
+        {
+            var c = (ShadowSettings)MemberwiseClone();
+            // cascadeCount must be at least 1 or Shadows.SetTileViewport divides by zero.
+            if (c.directional.cascadeCount < 1)
+                c.directional.cascadeCount = 1;
+            else if (c.directional.cascadeCount > 2)
+                c.directional.cascadeCount = 2;
+            if ((int)c.directional.atlasSize > 1024)
+                c.directional.atlasSize = MapSize._1024;
+            if ((int)c.other.atlasSize > 1024)
+                c.other.atlasSize = MapSize._1024;
+            return c;
+        }
     }
 }

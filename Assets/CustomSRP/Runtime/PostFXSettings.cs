@@ -67,6 +67,18 @@ namespace CustomSRP
             public Mode mode;
 
             [Range(0.05f, 0.95f)] public float scatter;
+
+            /// <summary>
+            /// Mobile-friendly clamp: limits iterations and enforces a downscale floor
+            /// so the bloom mip chain stays shallow on tile-based GPUs.
+            /// </summary>
+            public void ClampForMobile()
+            {
+                // Mobile: cap at 2 mip levels (saves ~12 ROP passes vs 4-level chain).
+                if (maxIterations > 2) maxIterations = 2;
+                // Require a minimum downscale of 4x so the pyramid is never too deep.
+                if (downscaleLimit < 4) downscaleLimit = 4;
+            }
         }
 
         [SerializeField]

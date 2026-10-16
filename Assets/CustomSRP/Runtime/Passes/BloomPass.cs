@@ -95,6 +95,11 @@ namespace CustomSRP
             in CameraRendererTextures textures)
         {
             PostFXSettings.BloomSettings bloom = stack.Settings.Bloom;
+            // Mobile: reduce bloom mip chain depth to save ROP passes on tile GPUs.
+            if (Application.isMobilePlatform)
+            {
+                bloom.ClampForMobile();
+            }
             Vector2Int size = (bloom.ignoreRenderScale
                 ? new Vector2Int(stack.Camera.pixelWidth, stack.Camera.pixelHeight)
                 : stack.BufferSize) / 2;

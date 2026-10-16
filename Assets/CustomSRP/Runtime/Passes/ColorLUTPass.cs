@@ -1,3 +1,4 @@
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -10,6 +11,8 @@ namespace CustomSRP
     public class ColorLUTPass
     {
         static readonly ProfilingSampler Sampler = new ProfilingSampler("Color LUT");
+        static readonly ProfilerMarker MarkerRebuild = new ProfilerMarker("ColorLUT.Rebuild");
+        static readonly ProfilerMarker MarkerBindCached = new ProfilerMarker("ColorLUT.BindCached");
 
         static readonly int
             colorGradingLUTId = Shader.PropertyToID("_ColorGradingLUT"),
@@ -26,6 +29,13 @@ namespace CustomSRP
             smhMidtonesId = Shader.PropertyToID("_SMHMidtones"),
             smhHighlightsId = Shader.PropertyToID("_SMHHighlights"),
             smhRangeId = Shader.PropertyToID("_SMHRange");
+
+        static RTHandle s_CachedLut;
+        static int s_CachedHash;
+        static int s_CachedResolution;
+        static GraphicsFormat s_CachedFormat;
+        static Vector4 s_CachedLutParameters;
+        static bool s_CacheValid;
 
         static GraphicsFormat LutColorFormat
         {
@@ -45,6 +55,7 @@ namespace CustomSRP
         ComputeShader _shader;
         int _colorLUTResolution;
         TextureHandle _colorLUT;
+        Vector4 _lutParameters;
 
         void ConfigureColorAdjustments(ComputeCommandBuffer buffer, PostFXSettings settings)
         {
@@ -128,40 +139,154 @@ namespace CustomSRP
                 smh.shadowsStart, smh.shadowsEnd, smh.highlightsStart, smh.highLightsEnd));
         }
 
-        void Render(ComputeGraphContext context)
+        static int HashSettings(PostFXStack stack, int resolution, GraphicsFormat format)
         {
-            PostFXSettings settings = _stack.Settings;
-            ComputeCommandBuffer buffer = context.cmd;
-            ConfigureColorAdjustments(buffer, settings);
-            ConfigureWhiteBalance(buffer, settings);
-            ConfigureSplitToning(buffer, settings);
-            ConfigureChannelMixer(buffer, settings);
-            ConfigureShadowsMidtonesHighlights(buffer, settings);
+            unchecked
+            {
+                PostFXSettings settings = stack.Settings;
+                int hash = resolution * 397;
+                hash = hash * 397 ^ (int)format;
+                hash = hash * 397 ^ (stack.BufferSettings.allowHDR ? 1 : 0);
 
-            ToneMappingSettings.Mode mode = settings.ToneMapping.enabled
-                ? settings.ToneMapping.mode
+                ToneMappingSettings.Mode mode = settings.ToneMapping.enabled
+                    ? settings.ToneMapping.mode
+                    : ToneMappingSettings.Mode.None;
+                hash = hash * 397 ^ (int)mode;
+
+                ColorAdjustmentsSettings ca = settings.ColorAdjustments;
+                hash = hash * 397 ^ (ca.enabled ? 1 : 0);
+                if (ca.enabled)
+                {
+                    hash = hash * 397 ^ ca.postExposure.GetHashCode();
+                    hash = hash * 397 ^ ca.contrast.GetHashCode();
+                    hash = hash * 397 ^ ca.hueShift.GetHashCode();
+                    hash = hash * 397 ^ ca.saturation.GetHashCode();
+                    hash = hash * 397 ^ ca.colorFilter.GetHashCode();
+                }
+
+                WhiteBalanceSettings wb = settings.WhiteBalance;
+                hash = hash * 397 ^ (wb.enabled ? 1 : 0);
+                if (wb.enabled)
+                {
+                    hash = hash * 397 ^ wb.temperature.GetHashCode();
+                    hash = hash * 397 ^ wb.tint.GetHashCode();
+                }
+
+                SplitToningSettings st = settings.SplitToning;
+                hash = hash * 397 ^ (st.enabled ? 1 : 0);
+                if (st.enabled)
+                {
+                    hash = hash * 397 ^ st.shadows.GetHashCode();
+                    hash = hash * 397 ^ st.highlights.GetHashCode();
+                    hash = hash * 397 ^ st.balance.GetHashCode();
+                }
+
+                ChannelMixerSettings cm = settings.ChannelMixer;
+                hash = hash * 397 ^ (cm.enabled ? 1 : 0);
+                if (cm.enabled)
+                {
+                    hash = hash * 397 ^ cm.red.GetHashCode();
+                    hash = hash * 397 ^ cm.green.GetHashCode();
+                    hash = hash * 397 ^ cm.blue.GetHashCode();
+                }
+
+                ShadowsMidtonesHighlightsSettings smh = settings.ShadowsMidtonesHighlights;
+                hash = hash * 397 ^ (smh.enabled ? 1 : 0);
+                if (smh.enabled)
+                {
+                    hash = hash * 397 ^ smh.shadows.GetHashCode();
+                    hash = hash * 397 ^ smh.midtones.GetHashCode();
+                    hash = hash * 397 ^ smh.highlights.GetHashCode();
+                    hash = hash * 397 ^ smh.shadowsStart.GetHashCode();
+                    hash = hash * 397 ^ smh.shadowsEnd.GetHashCode();
+                    hash = hash * 397 ^ smh.highlightsStart.GetHashCode();
+                    hash = hash * 397 ^ smh.highLightsEnd.GetHashCode();
+                }
+
+                return hash;
+            }
+        }
+
+        static void EnsurePersistentLut(int resolution, GraphicsFormat format)
+        {
+            if (s_CachedLut != null
+                && s_CachedResolution == resolution
+                && s_CachedFormat == format
+                && s_CachedLut.rt != null
+                && s_CachedLut.rt.IsCreated())
+                return;
+
+            if (s_CachedLut != null)
+            {
+                RTHandles.Release(s_CachedLut);
+                s_CachedLut = null;
+            }
+
+            s_CachedLut = RTHandles.Alloc(
+                resolution,
+                resolution,
+                slices: resolution,
+                colorFormat: format,
+                filterMode: FilterMode.Bilinear,
+                wrapMode: TextureWrapMode.Clamp,
+                dimension: TextureDimension.Tex3D,
+                enableRandomWrite: true,
+                name: "ColorLUT_Cache");
+            s_CachedResolution = resolution;
+            s_CachedFormat = format;
+            s_CacheValid = false;
+        }
+
+        static Vector4 BuildLutParameters(PostFXStack stack, int resolution)
+        {
+            ToneMappingSettings.Mode mode = stack.Settings.ToneMapping.enabled
+                ? stack.Settings.ToneMapping.mode
                 : ToneMappingSettings.Mode.None;
-            var lutParameters = new Vector4(
-                // X: Whether LUT is in LogC space.
-                _stack.BufferSettings.allowHDR &&
-                mode != ToneMappingSettings.Mode.None
+            return new Vector4(
+                stack.BufferSettings.allowHDR && mode != ToneMappingSettings.Mode.None
                     ? 1f
                     : 0f,
-                // YZ: Arguments for ApplyLut3D, for sampling LUT.
-                1f / _colorLUTResolution,
-                _colorLUTResolution - 1f,
-                // W: Linear ID to color conversion, for filling LUT.
-                1f / (_colorLUTResolution - 1f));
-            buffer.SetGlobalVector(colorGradingLUTParametersId, lutParameters);
-            buffer.SetComputeVectorParam(
-                _shader, colorGradingLUTParametersId, lutParameters);
+                1f / resolution,
+                resolution - 1f,
+                1f / (resolution - 1f));
+        }
 
-            int kernel = (int)mode;
-            buffer.SetComputeTextureParam(
-                _shader, kernel, colorGradingLUTId, _colorLUT);
-            int groups = _colorLUTResolution / 4;
-            buffer.DispatchCompute(_shader, kernel, groups, groups, groups);
-            buffer.SetGlobalTexture(colorGradingLUTId, _colorLUT);
+        void RenderRebuild(ComputeGraphContext context)
+        {
+            using (MarkerRebuild.Auto())
+            {
+                PostFXSettings settings = _stack.Settings;
+                ComputeCommandBuffer buffer = context.cmd;
+                ConfigureColorAdjustments(buffer, settings);
+                ConfigureWhiteBalance(buffer, settings);
+                ConfigureSplitToning(buffer, settings);
+                ConfigureChannelMixer(buffer, settings);
+                ConfigureShadowsMidtonesHighlights(buffer, settings);
+
+                ToneMappingSettings.Mode mode = settings.ToneMapping.enabled
+                    ? settings.ToneMapping.mode
+                    : ToneMappingSettings.Mode.None;
+                buffer.SetGlobalVector(colorGradingLUTParametersId, _lutParameters);
+                buffer.SetComputeVectorParam(
+                    _shader, colorGradingLUTParametersId, _lutParameters);
+
+                int kernel = (int)mode;
+                buffer.SetComputeTextureParam(
+                    _shader, kernel, colorGradingLUTId, _colorLUT);
+                int groups = _colorLUTResolution / 4;
+                buffer.DispatchCompute(_shader, kernel, groups, groups, groups);
+                buffer.SetGlobalTexture(colorGradingLUTId, _colorLUT);
+            }
+        }
+
+        void RenderBindCached(UnsafeGraphContext context)
+        {
+            using (MarkerBindCached.Auto())
+            {
+                UnsafeCommandBuffer buffer = context.cmd;
+                buffer.SetGlobalVector(colorGradingLUTParametersId, _lutParameters);
+                buffer.SetGlobalTexture(colorGradingLUTId, _colorLUT);
+            }
         }
 
         public static TextureHandle Record(
@@ -179,27 +304,52 @@ namespace CustomSRP
                 return TextureHandle.nullHandle;
             }
 
-            using IComputeRenderGraphBuilder builder = renderGraph.AddComputePass(
-                Sampler.name, out ColorLUTPass pass, Sampler);
-            pass._stack = stack;
-            pass._shader = compute;
-            pass._colorLUTResolution = Mathf.Max(16, colorLUTResolution);
-
-            var desc = new TextureDesc(pass._colorLUTResolution, pass._colorLUTResolution)
+            int resolution = Mathf.Max(16, colorLUTResolution);
+            // Mobile: cap LUT resolution to 24 to cut the compute kernel and storage.
+            // Visual difference is imperceptible; saves 8³→6³ = 56% of dispatch threads.
+            if (Application.isMobilePlatform && resolution > 24)
             {
-                dimension = TextureDimension.Tex3D,
-                slices = pass._colorLUTResolution,
-                enableRandomWrite = true,
-                colorFormat = LutColorFormat,
-                name = "Color LUT",
-                filterMode = FilterMode.Bilinear
-            };
-            pass._colorLUT = renderGraph.CreateTexture(desc);
-            builder.UseTexture(pass._colorLUT, AccessFlags.WriteAll);
-            builder.AllowGlobalStateModification(true);
-            builder.SetRenderFunc<ColorLUTPass>(
-                static (pass, context) => pass.Render(context));
-            return pass._colorLUT;
+                resolution = 24;
+            }
+            GraphicsFormat format = LutColorFormat;
+            EnsurePersistentLut(resolution, format);
+            Vector4 lutParameters = BuildLutParameters(stack, resolution);
+            int hash = HashSettings(stack, resolution, format);
+            bool cacheHit = s_CacheValid && s_CachedHash == hash && s_CachedLut != null;
+            TextureHandle lutHandle = renderGraph.ImportTexture(s_CachedLut);
+
+            if (cacheHit)
+            {
+                using IUnsafeRenderGraphBuilder bindBuilder = renderGraph.AddUnsafePass(
+                    Sampler.name, out ColorLUTPass bindPass, Sampler);
+                bindPass._lutParameters = s_CachedLutParameters;
+                bindPass._colorLUT = lutHandle;
+                bindBuilder.UseTexture(lutHandle);
+                bindBuilder.AllowGlobalStateModification(true);
+                bindBuilder.AllowPassCulling(false);
+                bindBuilder.SetRenderFunc<ColorLUTPass>(
+                    static (pass, context) => pass.RenderBindCached(context));
+                return lutHandle;
+            }
+
+            using (IComputeRenderGraphBuilder builder = renderGraph.AddComputePass(
+                       Sampler.name, out ColorLUTPass pass, Sampler))
+            {
+                pass._stack = stack;
+                pass._shader = compute;
+                pass._colorLUTResolution = resolution;
+                pass._lutParameters = lutParameters;
+                pass._colorLUT = lutHandle;
+                builder.UseTexture(lutHandle, AccessFlags.WriteAll);
+                builder.AllowGlobalStateModification(true);
+                builder.SetRenderFunc<ColorLUTPass>(
+                    static (p, context) => p.RenderRebuild(context));
+            }
+
+            s_CachedHash = hash;
+            s_CachedLutParameters = lutParameters;
+            s_CacheValid = true;
+            return lutHandle;
         }
     }
 }

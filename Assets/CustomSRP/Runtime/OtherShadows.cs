@@ -77,10 +77,15 @@ namespace CustomSRP
             int visibleLightIndex,
             CullingResults cullingResults)
         {
+            // Mobile: cap the real-time shadow-casting other-light count at 8 (vs 16 desktop)
+            // to keep the other-shadow atlas affordable on tile-based GPUs.
             if (light.shadows == LightShadows.None || light.shadowStrength <= 0f)
             {
                 return new Vector4(0f, 0f, 0f, -1f);
             }
+            int effectiveMax = Application.isMobilePlatform
+                ? Mathf.Min(8, MaxLightCount)
+                : MaxLightCount;
 
             float maskChannel = -1f;
             LightBakingOutput lightBaking = light.bakingOutput;
@@ -93,7 +98,7 @@ namespace CustomSRP
 
             bool isPoint = light.type == LightType.Point;
             int newLightCount = _lightCount + (isPoint ? 6 : 1);
-            if (newLightCount > MaxLightCount
+            if (newLightCount > effectiveMax
                 || !cullingResults.GetShadowCasterBounds(visibleLightIndex, out _))
             {
                 return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);

@@ -117,6 +117,9 @@ namespace CustomSRP
         public static Vector2 SetTileViewport(
             UnsafeCommandBuffer buffer, int index, int split, float tileSize)
         {
+            // Guard against divide-by-zero: callers occasionally pass split=0
+            // when the directional light count is 0 (e.g., a scene with no main light).
+            if (split < 1) split = 1;
             var offset = new Vector2(index % split, index / split);
             buffer.SetViewport(new Rect(
                 offset.x * tileSize, offset.y * tileSize, tileSize, tileSize));

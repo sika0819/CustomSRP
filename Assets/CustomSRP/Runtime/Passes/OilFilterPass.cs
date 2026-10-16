@@ -1,3 +1,4 @@
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -12,6 +13,7 @@ namespace CustomSRP
     public class OilFilterPass
     {
         static readonly ProfilingSampler Sampler = new ProfilingSampler("Oil Filter");
+        static readonly ProfilerMarker MarkerRender = new ProfilerMarker("OilFilter.Render");
 
         static readonly int
             TexelSizeId = Shader.PropertyToID("_OilFilterTexelSize"),
@@ -27,15 +29,18 @@ namespace CustomSRP
 
         void Render(UnsafeGraphContext context)
         {
-            UnsafeCommandBuffer buffer = context.cmd;
-            int w = Mathf.Max(1, _bufferSize.x);
-            int h = Mathf.Max(1, _bufferSize.y);
-            buffer.SetGlobalVector(TexelSizeId, new Vector4(1f / w, 1f / h, w, h));
-            buffer.SetGlobalFloat(HasDepthId, _hasDepth ? 1f : 0f);
-            if (_hasDepth)
-                buffer.SetGlobalTexture(DepthCopyId, _depth);
+            using (MarkerRender.Auto())
+            {
+                UnsafeCommandBuffer buffer = context.cmd;
+                int w = Mathf.Max(1, _bufferSize.x);
+                int h = Mathf.Max(1, _bufferSize.y);
+                buffer.SetGlobalVector(TexelSizeId, new Vector4(1f / w, 1f / h, w, h));
+                buffer.SetGlobalFloat(HasDepthId, _hasDepth ? 1f : 0f);
+                if (_hasDepth)
+                    buffer.SetGlobalTexture(DepthCopyId, _depth);
 
-            _stack.Draw(buffer, _source, _result, Pass.OilFilter);
+                _stack.Draw(buffer, _source, _result, Pass.OilFilter);
+            }
         }
 
         public static TextureHandle Record(

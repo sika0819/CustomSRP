@@ -160,15 +160,16 @@ namespace CustomSRP
         void ApplyWeatherVisuals()
         {
             float t = _level / 3f;
-            float cloud = _kind switch
-            {
-                IslandWeatherKind.Clear => ClearCloudDensity,
-                IslandWeatherKind.Cloud => Mathf.Lerp(0.4f, 0.7f, t),
-                IslandWeatherKind.Wind => Mathf.Lerp(0.35f, 0.55f, t),
-                IslandWeatherKind.Rain => Mathf.Lerp(0.55f, StormCloudDensity, t),
-                IslandWeatherKind.Foggy => Mathf.Lerp(0.5f, 0.75f, t),
-                _ => ClearCloudDensity,
-            };
+            float cloud = _level <= 0 || _kind == IslandWeatherKind.Clear
+                ? ClearCloudDensity
+                : _kind switch
+                {
+                    IslandWeatherKind.Cloud => Mathf.Lerp(0.4f, 0.7f, t),
+                    IslandWeatherKind.Wind => Mathf.Lerp(0.35f, 0.55f, t),
+                    IslandWeatherKind.Rain => Mathf.Lerp(0.55f, StormCloudDensity, t),
+                    IslandWeatherKind.Foggy => Mathf.Lerp(0.5f, 0.75f, t),
+                    _ => ClearCloudDensity,
+                };
 
             if (CloudLayer != null)
                 CloudLayer.coverage = cloud;

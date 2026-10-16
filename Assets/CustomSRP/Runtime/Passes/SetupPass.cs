@@ -103,6 +103,13 @@ namespace CustomSRP
             desc.depthBufferBits = DepthBits.Depth32;
             desc.name = "Depth Attachment";
             desc.filterMode = FilterMode.Point;
+            // Mobile (tile-based GPU): keep depth on-tile, never write back to system memory.
+            // Saves ~half-screen R32 bandwidth and frees a sizeable transient allocation.
+            // On non-tile platforms Unity silently ignores this flag.
+            if (Application.isMobilePlatform)
+            {
+                desc.memoryless = RenderTextureMemoryless.Depth;
+            }
             TextureHandle depthAttachment = pass._depthAttachment =
                 renderGraph.CreateTexture(desc);
             builder.UseTexture(depthAttachment, AccessFlags.WriteAll);
