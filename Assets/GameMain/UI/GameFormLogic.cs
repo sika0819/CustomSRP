@@ -25,9 +25,21 @@ namespace Game
         const float SlideDistance = 2436f;
 
         readonly List<(VisualElement element, EventCallback<ClickEvent> callback)> _clicks = new();
+        // PointerDown / PointerUp gate callbacks aren't ClickEvents so they
+        // can't share _clicks. Track them separately so ClearClicks still
+        // unregisters everything on close.
+        readonly List<(VisualElement element, Delegate callback)> _trackingCallbacks = new();
         IVisualElementScheduledItem _slide;
         float _slideY;
         bool _closing;
+        // Track whether the pointer-down that *could* trigger backdrop dismiss
+        // started on the backdrop itself. Without this, a press that begins on
+        // panel chrome (a list row, a button, a draggable strip) and ends with
+        // the pointer released on the backdrop would be misread as a backdrop
+        // click and dismiss the popup. We require the down *and* the up to land
+        // on backdrop regions before we close.
+        bool _backdropDownActive;
+        int _backdropDownPointerId = -1;
 
         public override void OnOpen(object userData)
         {
@@ -36,6 +48,8 @@ namespace Game
             _closing = false;
             _slide?.Pause();
             _slide = null;
+            _backdropDownActive = false;
+            _backdropDownPointerId = -1;
 
             UIDocument document = GetComponent<UIDocument>();
             ScreenLayout.Apply(document);
@@ -121,8 +135,19 @@ namespace Game
 
             EventCallback<ClickEvent> dismiss = evt =>
             {
+                if (!_backdropDownActive)
+                {
+                    // Press started on panel chrome (a list row, a button, a
+                    // draggable strip) — even if the up landed on the
+                    // backdrop, this is not a backdrop dismiss.
+                    _backdropDownActive = false;
+                    _backdropDownPointerId = -1;
+                    return;
+                }
                 if (IsBackdropDismissTarget(evt.target as VisualElement, formRoot, backdrop))
                     CloseSelf();
+                _backdropDownActive = false;
+                _backdropDownPointerId = -1;
             };
             formRoot.RegisterCallback(dismiss);
             _clicks.Add((formRoot, dismiss));
@@ -138,6 +163,39 @@ namespace Game
                 child.RegisterCallback(dismiss);
                 _clicks.Add((child, dismiss));
             }
+
+            // We need the *pointer-down* origin to gate the dismiss. The
+            // default ClickEvent handler only sees the *up* target, so a
+            // press that starts inside panel chrome (a list row, a button, a
+            // draggable strip) and ends on the backdrop would otherwise be
+            // misread as a backdrop click. Listening on TrickleDown lets us
+            // record the down target before any child handler can StopPropagation.
+            EventCallback<PointerDownEvent> trackDown = evt =>
+            {
+                if (evt.button != 0)
+                {
+                    _backdropDownActive = false;
+                    _backdropDownPointerId = -1;
+                    return;
+                }
+                _backdropDownActive = IsBackdropDismissTarget(
+                    evt.target as VisualElement, formRoot, backdrop);
+                _backdropDownPointerId = _backdropDownActive ? evt.pointerId : -1;
+            };
+            EventCallback<PointerUpEvent> trackUp = evt =>
+            {
+                if (_backdropDownActive
+                    && evt.pointerId != _backdropDownPointerId)
+                {
+                    // Different pointer finished — invalidate the gate so the
+                    // active ClickEvent cannot dismiss.
+                    _backdropDownActive = false;
+                }
+            };
+            formRoot.RegisterCallback(trackDown, TrickleDown.TrickleDown);
+            formRoot.RegisterCallback(trackUp, TrickleDown.TrickleDown);
+            _trackingCallbacks.Add((formRoot, trackDown));
+            _trackingCallbacks.Add((formRoot, trackUp));
         }
 
         /// <summary>
@@ -180,6 +238,16 @@ namespace Game
             for (int i = 0; i < _clicks.Count; i++)
                 _clicks[i].element.UnregisterCallback(_clicks[i].callback);
             _clicks.Clear();
+
+            for (int i = 0; i < _trackingCallbacks.Count; i++)
+            {
+                var (element, cb) = _trackingCallbacks[i];
+                if (cb is EventCallback<PointerDownEvent> pd)
+                    element.UnregisterCallback(pd, TrickleDown.TrickleDown);
+                else if (cb is EventCallback<PointerUpEvent> pu)
+                    element.UnregisterCallback(pu, TrickleDown.TrickleDown);
+            }
+            _trackingCallbacks.Clear();
         }
 
         protected void CloseSelf()

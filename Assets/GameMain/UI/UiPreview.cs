@@ -18,9 +18,6 @@ namespace Game
         FormSlot[] forms;
 
         [SerializeField]
-        VisualTreeAsset musicTrack;
-
-        [SerializeField]
         VisualTreeAsset presetItem;
 
         [SerializeField]
@@ -140,8 +137,13 @@ namespace Game
             }
             else if (title == "Music")
             {
-                FillList(tree, "musicList", musicTrack, 144f, "label0",
-                    "散步", "旅行", "工作", "驾车", "学习", "清晨", "午后", "夜晚");
+                // MusicForm.cs builds row visuals entirely in code now;
+                // the preview scene feeds fake labels so the layout can be
+                // inspected without runtime MusicCatalog data.
+                FillList(tree, "musicList", 144f, new[]
+                {
+                    "散步", "旅行", "工作", "驾车", "学习", "清晨", "午后", "夜晚"
+                });
             }
             else if (title == "Preset")
             {
@@ -151,22 +153,50 @@ namespace Game
             }
         }
 
-        static void FillList(VisualElement tree, string listName, VisualTreeAsset item, float itemHeight, string labelName, params string[] labels)
+        static void FillList(VisualElement tree, string listName, float itemHeight, System.Collections.IList labels)
         {
             ListView list = tree.Q<ListView>(listName);
-            if (list == null || item == null)
+            if (list == null)
                 return;
 
             list.fixedItemHeight = itemHeight;
             list.virtualizationMethod = CollectionVirtualizationMethod.FixedHeight;
             list.selectionType = SelectionType.None;
-            list.itemsSource = new List<string>(labels);
-            list.makeItem = () => item.Instantiate();
+            list.itemsSource = labels;
+            list.makeItem = () =>
+            {
+                // Mirror MusicForm.MakeItem — single Label per row, no per-item
+                // template asset so the editor preview stays in lock-step with
+                // the runtime layout.
+                var root = new VisualElement();
+                root.style.position = Position.Relative;
+                root.style.width = new Length(100, LengthUnit.Percent);
+                root.style.height = itemHeight;
+                root.style.backgroundColor = new Color(0, 0, 0, 0);
+
+                var label = new Label();
+                label.style.position = Position.Absolute;
+                label.style.left = 85;
+                label.style.top = 0;
+                label.style.bottom = 0;
+                label.style.right = 160;
+                label.style.unityTextAlign = TextAnchor.MiddleLeft;
+                label.style.fontSize = 45;
+                label.style.color = new Color(0.094f, 0.094f, 0.098f, 1f);
+                label.style.whiteSpace = WhiteSpace.NoWrap;
+                label.style.overflow = Overflow.Hidden;
+                root.Add(label);
+                return root;
+            };
             list.bindItem = (element, index) =>
             {
-                Label label = element.Q<Label>(labelName);
-                if (label != null)
-                    label.text = labels[index];
+                Label label = element.Q<Label>();
+                if (label != null && index >= 0 && index < labels.Count)
+                {
+                    object raw = labels[index];
+                    if (raw is string s)
+                        label.text = s;
+                }
             };
             list.Rebuild();
         }

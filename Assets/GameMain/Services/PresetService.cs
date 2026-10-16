@@ -90,8 +90,14 @@ namespace Game
             if (preset == null)
                 return;
 
+            // Switching preset stops BGM (one content stream at a time).
+            GameEntry.Music?.Stop();
+            // Drop every content 3D voice before teleport so old emitters never follow.
+            AudioInteractionBootstrap.ClearContent3D();
+
             CurrentId = id;
             GameEntry.Weather?.SetTimeOfDay(preset.TimeHours);
+            GameEntry.Weather?.ClearPanelTransitionLock();
             GameEntry.Weather?.SetWeather(preset.WeatherKind, preset.WeatherLevel);
             GameEntry.Weather?.SetFogDensity(preset.FogDensity);
             // Per-preset light color override (alpha=0 means "use the time-of-day table").
@@ -102,6 +108,9 @@ namespace Game
 
             if (teleportPlayer)
                 IslandJoystickCamera.Current?.ApplyPreset(preset);
+
+            // Re-enter zones from the new listener position (weather already applied above).
+            AudioInteractionBootstrap.RetriggerContentAtListener();
 
             if (GameEntry.Event != null)
                 GameEntry.Event.Fire(this, PresetChangedEventArgs.Create(preset));

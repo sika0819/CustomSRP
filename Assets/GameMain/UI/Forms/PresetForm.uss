@@ -26,6 +26,9 @@
     -unity-slice-right: 140px;
     -unity-slice-top: 140px;
     -unity-slice-bottom: 140px;
+    /* chrome layer — let hit-testing fall through to the formBackdrop
+       so an empty tap on the dialog card dismisses the popup. */
+    picking-mode: Ignore;
 }
 
 .game-preset-form__title {

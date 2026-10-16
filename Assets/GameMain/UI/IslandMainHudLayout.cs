@@ -4,12 +4,12 @@ using UnityEngine.UIElements;
 namespace Game
 {
     /// <summary>
-    /// Island main HUD: portrait uses UXML design (1125×2436);
-    /// landscape reflows like Boluo HomeMainLayout so icons keep readable size.
+    /// Island main HUD layout in panel space (1125×2436 design, same as Boluo InGameControlView).
+    /// Icon sizes stay at design units; PanelSettings Match Height / Expand handles physical scale.
+    /// Do not scale by Min(panelW, panelH)/1125 — under Match Height landscape short edge is 2436 and would ~2× icons.
     /// </summary>
     public sealed class IslandMainHudLayout
     {
-        const float RefW = 1125f;
         const float RefH = 2436f;
         const float RefIcon = 108f;
         const float RefCorner = 120f;
@@ -20,8 +20,6 @@ namespace Game
         // Corner icons share the same horizontal center as left/right columns.
         const float RefCornerX = 102f;
         const float RefCornerY = 180f;
-        const float LandscapeTopY0 = 96f;
-        const float LandscapeCornerY = 96f;
         const float RefActivityW = 108f;
         const float RefActivityH = 132f;
 
@@ -60,27 +58,18 @@ namespace Game
             if (_root == null)
                 return;
 
-            float w = _root.resolvedStyle.width;
             float h = _root.resolvedStyle.height;
-            if (w < 1f) w = RefW;
             if (h < 1f) h = RefH;
 
-            bool landscape = w >= h;
-            // Keep physical icon size across orientations under Match Height / Expand.
-            float unit = Mathf.Min(w, h) / RefW;
-            unit = Mathf.Clamp(unit, 0.85f, 2.4f);
-
-            float icon = RefIcon * unit;
-            float corner = RefCorner * unit;
-            float gap = RefIconGap * unit;
-            float leftX = RefLeftX * unit;
-            float rightX = RefRightX * unit;
-            // Landscape: Boluo parent top at 96, first icon center = 96 + icon/2.
-            float topY0 = landscape
-                ? LandscapeTopY0 * unit + icon * 0.5f
-                : RefTopY0 * (h / RefH);
-            float cornerX = RefCornerX * unit;
-            float cornerY = landscape ? LandscapeCornerY * unit : RefCornerY * (h / RefH);
+            // Fixed design sizes (Boluo sizeDelta 108/120); only Y tracks panel height ratio.
+            float icon = RefIcon;
+            float corner = RefCorner;
+            float gap = RefIconGap;
+            float leftX = RefLeftX;
+            float rightX = RefRightX;
+            float topY0 = RefTopY0 * (h / RefH);
+            float cornerX = RefCornerX;
+            float cornerY = RefCornerY * (h / RefH);
 
             PlaceLeft(_timeBackground2, leftX, topY0, icon, icon);
             PlaceLeft(_weather, leftX, topY0 + gap, icon, icon);
@@ -89,7 +78,7 @@ namespace Game
 
             PlaceRight(_profile, rightX, topY0, icon, icon);
             PlaceRight(_timer, rightX, topY0 + gap, icon, icon);
-            PlaceRight(_activity, rightX, topY0 + gap * 2f, RefActivityW * unit, RefActivityH * unit);
+            PlaceRight(_activity, rightX, topY0 + gap * 2f, RefActivityW, RefActivityH);
 
             PlaceCorner(_preset, true, cornerX, cornerY, corner);
             PlaceCorner(_health, false, cornerX, cornerY, corner);
@@ -99,7 +88,7 @@ namespace Game
             ScaleHudIconInner(_volume, icon);
             ScaleHudIconInner(_profile, icon);
             ScaleHudIconInner(_timer, icon);
-            ScaleClockHand(icon / RefIcon);
+            ScaleClockHand(1f);
             ScaleCornerInner(_preset, corner);
             ScaleCornerInner(_health, corner);
         }

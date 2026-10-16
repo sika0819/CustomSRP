@@ -1,0 +1,28 @@
+{
+	"list": [
+		{
+			"hour": 0,
+			"week": [1,2,3,4,5],
+			"healthLevel": 4,
+			"weatherHealthSchemeID": 4
+		},
+		{
+			"hour": 1,
+			"week": [6,7],
+			"healthLevel": 3,
+			"weatherHealthSchemeID": 2
+		},
+		{
+			"hour": 2,
+			"week": [1,2,3,4,5],
+			"healthLevel": 4,
+			"weatherHealthSchemeID": 4
+		},
+		{
+			"hour": 3,
+			"week": [6,7],
+			"healthLevel": 2,
+			"weatherHealthSchemeID": 1
+		}
+	]
+}

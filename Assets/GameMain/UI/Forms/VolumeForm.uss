@@ -46,6 +46,9 @@
     background-image: url("../Textures/VolumeForm/background.png");
     -unity-background-scale-mode: stretch-to-fill;
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    /* chrome layer — let hit-testing fall through to the formBackdrop
+       so an empty tap on the dialog card dismisses the popup. */
+    picking-mode: Ignore;
 }
 .game-volume-form__title {
     position: absolute;

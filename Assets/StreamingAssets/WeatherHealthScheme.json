@@ -1,0 +1,84 @@
+{
+	"list": [
+		{
+			"id": 1,
+			"posX": 610.0,
+			"posY": 12.8,
+			"posZ": 706.1,
+			"rotY": 130.4,
+			"cameraRotOffsetX": 346,
+			"cameraRotOffsetY": 0,
+			"cameraRotOffsetZ": 0,
+			"cameraHeight": 6,
+			"HourTime": 6,
+			"MinuteTime": 13,
+			"weathers": [
+				{
+					"weatherName": "Cloud",
+					"weatherCode": 1
+				}
+			],
+			"musicEvent": "play_music1_1"
+		},
+		{
+			"id": 2,
+			"posX": 610.0,
+			"posY": 12.8,
+			"posZ": 706.1,
+			"rotY": 130.4,
+			"cameraRotOffsetX": 346,
+			"cameraRotOffsetY": 0,
+			"cameraRotOffsetZ": 0,
+			"cameraHeight": 6,
+			"HourTime": 17,
+			"MinuteTime": 45,
+			"weathers": [
+				{
+					"weatherName": "Cloud",
+					"weatherCode": 2
+				}
+			],
+			"musicEvent": "play_music1_2"
+		},
+		{
+			"id": 3,
+			"posX": 610.0,
+			"posY": 12.8,
+			"posZ": 706.1,
+			"rotY": 130.4,
+			"cameraRotOffsetX": 346,
+			"cameraRotOffsetY": 0,
+			"cameraRotOffsetZ": 0,
+			"cameraHeight": 6,
+			"HourTime": 9,
+			"MinuteTime": 30,
+			"weathers": [
+				{
+					"weatherName": "Cloud",
+					"weatherCode": 1
+				}
+			],
+			"musicEvent": "play_music1_3"
+		},
+		{
+			"id": 4,
+			"posX": 610.0,
+			"posY": 12.8,
+			"posZ": 706.1,
+			"rotY": 130.4,
+			"cameraRotOffsetX": 346,
+			"cameraRotOffsetY": 0,
+			"cameraRotOffsetZ": 0,
+			"cameraHeight": 6,
+			"HourTime": 20,
+			"MinuteTime": 10,
+			"weathers": [
+				{
+					"weatherName": "Cloud",
+					"weatherCode": 3
+				}
+			],
+			"musicEvent": "play_music1_4"
+		}
+	]
+}

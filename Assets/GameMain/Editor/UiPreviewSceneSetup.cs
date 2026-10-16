@@ -77,8 +77,6 @@ namespace Game.Editor
                     AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/GameMain/UI/Forms/" + FormFiles[i] + ".uxml");
             }
 
-            serialized.FindProperty("musicTrack").objectReferenceValue =
-                AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/GameMain/UI/Forms/MusicTrackItem.uxml");
             serialized.FindProperty("presetItem").objectReferenceValue =
                 AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/GameMain/UI/Forms/PresetItem.uxml");
             serialized.FindProperty("loadingStill").objectReferenceValue =

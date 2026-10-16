@@ -24,7 +24,16 @@ namespace Game
         VisualElement _timeLabel;
         VisualElement _timeIcon1;
         VisualElement _timeIcon2;
+        VisualElement _musicGlyph;
         VisualElement _musicPlaying;
+        VisualElement _eqBarLeft;
+        VisualElement _eqBarCenter;
+        VisualElement _eqBarRight;
+        float _eqTime;
+        VisualElement _volumeMusicDot;
+        VisualElement _volumeEffectDot;
+        VisualElement _volumeMusicFill;
+        VisualElement _volumeEffectFill;
         Label _timeLabelText;
         Texture2D _texLabelMorning;
         Texture2D _texLabelNoon;
@@ -101,7 +110,18 @@ namespace Game
             ResetPresetChrome();
 
             VisualElement musicIcon = Root.Q("musicBackground");
+            _musicGlyph = musicIcon?.Q("glyph");
             _musicPlaying = musicIcon?.Q("musicPlaying");
+            _eqBarLeft = _musicPlaying?.Q("barLeft");
+            _eqBarCenter = _musicPlaying?.Q("barCenter");
+            _eqBarRight = _musicPlaying?.Q("barRight");
+
+            VisualElement volumeIcon = Root.Q("volumeBackground");
+            _volumeMusicDot = volumeIcon?.Q("musicvolumeyuan");
+            _volumeEffectDot = volumeIcon?.Q("effectvolumeyuan");
+            _volumeMusicFill = volumeIcon?.Q("volumeTrack1");
+            _volumeEffectFill = volumeIcon?.Q("volumeTrack2");
+            SyncVolumeIcon();
 
             VisualElement pauseHint = Root.Q("pauseHint");
             if (pauseHint != null)
@@ -167,7 +187,8 @@ namespace Game
         {
             base.OnUpdate(elapseSeconds, realElapseSeconds);
             SyncDial();
-            SyncMusicPlaying();
+            SyncMusicPlaying(realElapseSeconds);
+            SyncVolumeIcon();
             TickTimeToastFade(elapseSeconds);
             TickPresetVeil(elapseSeconds);
             TickPresetLabelFade(elapseSeconds);
@@ -193,13 +214,71 @@ namespace Game
             ShowTimeToast(next);
         }
 
-        void SyncMusicPlaying()
+        void SyncMusicPlaying(float dt)
         {
-            if (_musicPlaying == null)
-                return;
-
             bool playing = GameEntry.Music != null && GameEntry.Music.IsPlaying;
-            _musicPlaying.style.display = playing ? DisplayStyle.Flex : DisplayStyle.None;
+            if (_musicPlaying != null)
+                _musicPlaying.style.display = playing ? DisplayStyle.Flex : DisplayStyle.None;
+            if (_musicGlyph != null)
+                _musicGlyph.style.display = playing ? DisplayStyle.None : DisplayStyle.Flex;
+            if (playing)
+                TickMusicEqualizer(dt);
+        }
+
+        // Design space (108px icon): bars share baseline y=74 and bounce upward.
+        const float EqBaseline = 74f;
+        const float EqBarWidth = 10f;
+
+        void TickMusicEqualizer(float dt)
+        {
+            _eqTime += dt;
+            float s = 1f;
+            if (_musicPlaying != null)
+            {
+                float w = _musicPlaying.resolvedStyle.width;
+                if (w > 1f)
+                    s = w / 108f;
+            }
+
+            PlaceEqBar(_eqBarLeft, 31f, 10f, 32f, _eqTime * 5.2f + 0.4f, s);
+            PlaceEqBar(_eqBarCenter, 49f, 14f, 48f, _eqTime * 6.7f + 1.8f, s);
+            PlaceEqBar(_eqBarRight, 67f, 10f, 40f, _eqTime * 4.4f + 3.1f, s);
+        }
+
+        static void PlaceEqBar(VisualElement bar, float left, float minH, float maxH, float phase, float s)
+        {
+            if (bar == null)
+                return;
+            float t = 0.5f + 0.5f * Mathf.Sin(phase);
+            float h = Mathf.Lerp(minH, maxH, t) * s;
+            bar.style.left = left * s;
+            bar.style.width = EqBarWidth * s;
+            bar.style.height = h;
+            bar.style.top = EqBaseline * s - h;
+        }
+
+        /// <summary>
+        /// Boluo HudVolumeBinder: dots travel x 24→62, horizontal fills are 60px * volume.
+        /// Track 1 / music dot follow music; track 2 / effect dot follow effects.
+        /// </summary>
+        void SyncVolumeIcon()
+        {
+            MusicPlaylist music = GameEntry.Music;
+            float musicVolume = music != null ? Mathf.Clamp01(music.MusicVolume) : 1f;
+            float effectVolume = music != null ? Mathf.Clamp01(music.EffectVolume) : 1f;
+            PlaceVolumeMark(_volumeMusicDot, _volumeMusicFill, musicVolume);
+            PlaceVolumeMark(_volumeEffectDot, _volumeEffectFill, effectVolume);
+        }
+
+        static void PlaceVolumeMark(VisualElement dot, VisualElement fill, float value)
+        {
+            const float minX = 24f;
+            const float maxX = 62f;
+            const float trackWidth = 60f;
+            if (dot != null)
+                dot.style.left = minX + (maxX - minX) * value;
+            if (fill != null)
+                fill.style.width = trackWidth * value;
         }
 
         void OnScreenLayoutChanged()
@@ -211,6 +290,7 @@ namespace Game
         void ApplyInputLayout()
         {
             _hudLayout.Apply();
+            SyncVolumeIcon();
             _locomotion.ApplyLayoutScale();
             _idle.ApplyLayout();
         }
@@ -258,6 +338,9 @@ namespace Game
             _idle.ExitOnReturnFromForeground();
             HidePresetLabelImmediate();
             HideTimeToastImmediate();
+
+            // Veil fade-in still takes a beat — clear 3D immediately so old zones do not linger.
+            AudioInteractionBootstrap.ClearContent3D();
 
             if (_presetVeil != null)
             {

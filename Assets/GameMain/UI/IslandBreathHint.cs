@@ -39,13 +39,11 @@ namespace Game
                 return;
 
             VisualElement parent = _el.parent;
-            float w = parent != null ? parent.resolvedStyle.width : 1125f;
-            float h = parent != null ? parent.resolvedStyle.height : 2436f;
-            if (w < 1f) w = 1125f;
-            if (h < 1f) h = 2436f;
+            float h = parent != null ? parent.resolvedStyle.height : RefH;
+            if (h < 1f) h = RefH;
 
-            float unit = Mathf.Min(w, h) / 1125f;
-            float size = RefSize * unit;
+            // Fixed design size; PanelSettings scales physically (same as IslandMainHudLayout).
+            float size = RefSize;
             float yFromBottom = RefAnchoredY * (h / RefH);
             _el.style.width = size;
             _el.style.height = size;

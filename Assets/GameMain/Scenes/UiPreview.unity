@@ -353,7 +353,6 @@ MonoBehaviour:
     Tree: {fileID: 9197481963319205126, guid: 8e5c0eecd1bb74d9c8d451b0fc478ff4, type: 3}
   - Title: Timer Pause
     Tree: {fileID: 9197481963319205126, guid: dafb160b9585144ca81f74fd9fc34b1a, type: 3}
-  musicTrack: {fileID: 9197481963319205126, guid: 7bf53bb5e0b4f4ac0bc1fcd477de8a7b, type: 3}
   presetItem: {fileID: 9197481963319205126, guid: 05864e1083dbc4d49ae5de1b7e89aa07, type: 3}
   loadingStill: {fileID: 2800000, guid: 0e5772a26953b4588b6d184ad695f055, type: 3}
 --- !u!114 &1707370602
