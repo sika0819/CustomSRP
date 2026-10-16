@@ -80,9 +80,9 @@ namespace Game.Editor
                 _customOriginEnd = originEnd;
             }
 
+            // 跟 channel / originEnd 一样：EditorPrefs 空就让 TextField 显示空（不兜底到 GetVersion / DefaultVersion），
+            // 避免 OnEnable 偷偷写一个"看起来在编辑"的兜底值，混淆"这是用户上次 Apply 的值"的语义。
             _version = EditorPrefs.GetString(BoluoDeviceInfo.EditorVersionOverrideKey, "");
-            if (string.IsNullOrEmpty(_version))
-                _version = Application.version;
         }
 
         void OnInspectorUpdate()

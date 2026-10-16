@@ -37,7 +37,6 @@ FORMS = {
 }
 
 ITEMS = {
-    "Musicitem": "MusicTrackItem",
     "YusheItem": "PresetItem",
 }
 
