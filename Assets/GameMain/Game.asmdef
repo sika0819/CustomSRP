@@ -4,7 +4,8 @@
     "references": [
         "UnityGameFramework.Runtime",
         "YooAsset",
-        "UniTask"
+        "UniTask",
+        "WanosAudio"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

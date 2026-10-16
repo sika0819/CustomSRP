@@ -1,0 +1,1215 @@
+================================================================================
+                           WANOS BANK PARSE RESULTS
+                           Path: /Users/sika/Desktop/code/BoluoProject/UnityProject/Assets/StreamingAssets/WanosBank/Rain.wb
+================================================================================
+
+[BANK BASIC INFORMATION]
+├─ Name: Rain
+├─ Type: 1
+├─ Language: Chinese
+├─ Author Info: Unknown
+├─ Version: 1.0.0
+├─ GUID: 15207607479347412068
+└─ Max Voice Instance: 32
+
+[EVENTS] Count: 2
+├─ 1. Event: Play_Rain
+      ├─ ------------------------------- begin Event -----------------------------
+      │     event name: Play_Rain
+      │     event uuid: 11900187874927945179
+      │     action count: 1
+      ├─ ------------------------------- begin CommonAction -----------------------------
+      │         ├─ ------------------------------- begin IAction -----------------------------
+      │         │     Action name: NewAction188
+      │         │     Action uuid: 4902235038893485563
+      │         │     Action target_id: 13362877799807241174
+      │         │     Action type: 1
+      │         │     Scope type: 2
+      │         │     Initial delay (ms):
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: initial_delay
+      │     EffectValue uuid: 14829735431805717965
+      │     Max value: 0.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 10000
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+      │         └─ ------------------------------- end IAction -------------------------------
+      │     Action fade type: 1
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: fade
+      │     EffectValue uuid: 14829735431805717965
+      │     Max value: 600000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 10
+      │     Random max: 50
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+      └─ ------------------------------- end CommonAction -------------------------------
+      └─ ------------------------------- end Event -------------------------------
+└─ 2. Event: Stop_Rain
+      ├─ ------------------------------- begin Event -----------------------------
+      │     event name: Stop_Rain
+      │     event uuid: 3265444133914721422
+      │     action count: 1
+      ├─ ------------------------------- begin CommonAction -----------------------------
+      │         ├─ ------------------------------- begin IAction -----------------------------
+      │         │     Action name: NewAction189
+      │         │     Action uuid: 8675231252177435107
+      │         │     Action target_id: 13362877799807241174
+      │         │     Action type: 2
+      │         │     Scope type: 2
+      │         │     Initial delay (ms):
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: initial_delay
+      │     EffectValue uuid: 14829735431805717965
+      │     Max value: 0.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 10000
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+      │         └─ ------------------------------- end IAction -------------------------------
+      │     Action fade type: 1
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: fade
+      │     EffectValue uuid: 14829735431805717965
+      │     Max value: 600000.000000
+      │     Min value: 0.000000
+      │     Default value: 10.000000
+      │     Has random value: 0
+      │     Random min: 10
+      │     Random max: 50
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+      └─ ------------------------------- end CommonAction -------------------------------
+      └─ ------------------------------- end Event -------------------------------
+
+[SAMPLES]  Count: 3
+├─ 1. Sample ID: 6050535098257799178
+      ├─ ═══════════════════════════════ SAMPLE INFO ═══════════════════════════════
+      │  ┌─ Basic Information:
+      │  │    Name        : Sample
+      │  │    UUID        : 6050535098257799178
+      │  │    File Path   : [Not Set]
+      │  │    Data Size   : 0
+      │  └─
+      │  ┌─ Audio Format:
+      │  │    Sample Rate : 16000 Hz (2)
+      │  │    Channels    : 2 (Stereo)
+      │  │    Codec       : WANOS
+      │  └─
+      │  ┌─ Playback Settings:
+      │  │    Loop Type   : FORWARD_LOOP
+      │  │    Loop Times  : 0
+      │  └─
+      │  ┌─ Loading Settings:
+      │  │    Stream Load : YES
+      │  │    Prepare Load: NO
+      │  │    Sample count  : 5802048
+      │  └─
+      └─ ═══════════════════════════════════════════════════════════════════════════
+├─ 2. Sample ID: 5374346582071636936
+      ├─ ═══════════════════════════════ SAMPLE INFO ═══════════════════════════════
+      │  ┌─ Basic Information:
+      │  │    Name        : Sample
+      │  │    UUID        : 5374346582071636936
+      │  │    File Path   : [Not Set]
+      │  │    Data Size   : 0
+      │  └─
+      │  ┌─ Audio Format:
+      │  │    Sample Rate : 16000 Hz (2)
+      │  │    Channels    : 2 (Stereo)
+      │  │    Codec       : WANOS
+      │  └─
+      │  ┌─ Playback Settings:
+      │  │    Loop Type   : FORWARD_LOOP
+      │  │    Loop Times  : 0
+      │  └─
+      │  ┌─ Loading Settings:
+      │  │    Stream Load : YES
+      │  │    Prepare Load: NO
+      │  │    Sample count  : 5802048
+      │  └─
+      └─ ═══════════════════════════════════════════════════════════════════════════
+└─ 3. Sample ID: 14990366957566881861
+      ├─ ═══════════════════════════════ SAMPLE INFO ═══════════════════════════════
+      │  ┌─ Basic Information:
+      │  │    Name        : Sample
+      │  │    UUID        : 14990366957566881861
+      │  │    File Path   : [Not Set]
+      │  │    Data Size   : 0
+      │  └─
+      │  ┌─ Audio Format:
+      │  │    Sample Rate : 16000 Hz (2)
+      │  │    Channels    : 2 (Stereo)
+      │  │    Codec       : WANOS
+      │  └─
+      │  ┌─ Playback Settings:
+      │  │    Loop Type   : FORWARD_LOOP
+      │  │    Loop Times  : 0
+      │  └─
+      │  ┌─ Loading Settings:
+      │  │    Stream Load : YES
+      │  │    Prepare Load: NO
+      │  │    Sample count  : 5770048
+      │  └─
+      └─ ═══════════════════════════════════════════════════════════════════════════
+
+[AUDIO COMPONENTS]  Count: 8
+├─ 1. Component ID: 13362877799807241174
+      ├─ ------------------------------- begin AudioBlendContainer -----------------------------
+      ├─ ------------------------------- begin AudioContainer -----------------------------
+      ├─ ------------------------------- begin AudioComponent -----------------------------
+      │     AudioBase name: Rain
+      │     AudioBase uuid: 13362877799807241174
+      │     Parameter effects count: 0
+      │         m_init_delay_ms uuid: 580318157370976295
+      │         m_volume uuid: 16296642343054744403
+      │         m_pitch uuid: 1934885692099690849
+      │         m_hpFrequency uuid: 6429728027593814418
+      │         m_lpFrequency uuid: 5943093891184821257
+      │     HP Slope: 12
+      │     LP Slope: 12
+      │     High Pass Switch: 0
+      │     Low Pass Switch: 0
+      │     Is 2D: 1
+      │     Sound Restriction Num: 50
+      │     Restriction Scope: 1
+      │     Priority: 50
+      │     Audio Component Type: 6
+      │     Parent: 16677645476701927335
+      └─ ------------------------------- end AudioComponent -------------------------------
+      │     Sub components count: 3
+      │         sub component: 1380213930332201224
+      │         sub component: 11065263186485401091
+      │         sub component: 3029036089239054194
+      └─ ------------------------------- end AudioContainer -------------------------------
+      │     Clips count: 3
+      │         ├─ ------------------------------- begin BlendClip -----------------------------
+      │         │     BlendClip name: NewClip0
+      │         │     BlendClip uuid: 8766821693155161616
+      │         │     Audio component_id: 1380213930332201224
+      │         │     Start time: 63
+      │         │     End time: 100
+      │         │     Parameter min value: 63
+      │         │     Parameter max value: 100
+      │         │     Fade in type: 1
+      │         │     Fade out type: 2
+      │         │     Fade in effectValue_id: 7190502988579661721
+      │         │     Fade out effectValue_id: 5823467178563586560
+      │         └─ ------------------------------- end BlendClip -------------------------------
+      │         ├─ ------------------------------- begin BlendClip -----------------------------
+      │         │     BlendClip name: NewClip1
+      │         │     BlendClip uuid: 13900160877825770099
+      │         │     Audio component_id: 11065263186485401091
+      │         │     Start time: 32
+      │         │     End time: 79
+      │         │     Parameter min value: 32
+      │         │     Parameter max value: 79
+      │         │     Fade in type: 2
+      │         │     Fade out type: 2
+      │         │     Fade in effectValue_id: 17725896321230113678
+      │         │     Fade out effectValue_id: 1774297194531818266
+      │         └─ ------------------------------- end BlendClip -------------------------------
+      │         ├─ ------------------------------- begin BlendClip -----------------------------
+      │         │     BlendClip name: NewClip2
+      │         │     BlendClip uuid: 16401277674728673493
+      │         │     Audio component_id: 3029036089239054194
+      │         │     Start time: 0
+      │         │     End time: 55
+      │         │     Parameter min value: 0
+      │         │     Parameter max value: 55
+      │         │     Fade in type: 1
+      │         │     Fade out type: 2
+      │         │     Fade in effectValue_id: 10713507883409897830
+      │         │     Fade out effectValue_id: 2954984707419612958
+      │         └─ ------------------------------- end BlendClip -------------------------------
+      │     Tracks count: 3
+      ├─ ------------------------------- begin BlendTrack -----------------------------
+      │     BlendTrack name: NewBlendTrack2
+      │     BlendTrack uuid: 7426245132125125838
+      │     Track X type: 2
+      │     Is mute: false
+      │     RT Parameter ID: 17164076287660795326
+      │     Clip count: 1
+      │         Clip ID: 16401277674728673493
+      │     Parameter tracks count: 0
+      └─ ------------------------------- end BlendTrack -------------------------------
+      ├─ ------------------------------- begin BlendTrack -----------------------------
+      │     BlendTrack name: NewBlendTrack1
+      │     BlendTrack uuid: 6621779142476879183
+      │     Track X type: 2
+      │     Is mute: false
+      │     RT Parameter ID: 17164076287660795326
+      │     Clip count: 1
+      │         Clip ID: 13900160877825770099
+      │     Parameter tracks count: 0
+      └─ ------------------------------- end BlendTrack -------------------------------
+      ├─ ------------------------------- begin BlendTrack -----------------------------
+      │     BlendTrack name: NewBlendTrack0
+      │     BlendTrack uuid: 8060890476537134018
+      │     Track X type: 2
+      │     Is mute: false
+      │     RT Parameter ID: 17164076287660795326
+      │     Clip count: 1
+      │         Clip ID: 8766821693155161616
+      │     Parameter tracks count: 0
+      └─ ------------------------------- end BlendTrack -------------------------------
+      └─ ------------------------------- end AudioBlendContainer -------------------------------
+├─ 2. Component ID: 1380213930332201224
+      ├─ ------------------------------- begin AudioSequenceContainer -----------------------------
+      ├─ ------------------------------- begin AudioRandomSequenceBaseContainer -----------------------------
+      ├─ ------------------------------- begin AudioContainer -----------------------------
+      ├─ ------------------------------- begin AudioComponent -----------------------------
+      │     AudioBase name: Rain_Heavy
+      │     AudioBase uuid: 1380213930332201224
+      │     Parameter effects count: 0
+      │         m_init_delay_ms uuid: 1401430027608598085
+      │         m_volume uuid: 581462386571671948
+      │         m_pitch uuid: 1853878202591408628
+      │         m_hpFrequency uuid: 1747544346500326023
+      │         m_lpFrequency uuid: 16212255809412676927
+      │     HP Slope: 12
+      │     LP Slope: 12
+      │     High Pass Switch: 0
+      │     Low Pass Switch: 0
+      │     Is 2D: 1
+      │     Sound Restriction Num: 50
+      │     Restriction Scope: 1
+      │     Priority: 50
+      │     Audio Component Type: 4
+      │     Parent: 13362877799807241174
+      └─ ------------------------------- end AudioComponent -------------------------------
+      │     Sub components count: 1
+      │         sub component: 17721416234336602021
+      └─ ------------------------------- end AudioContainer -------------------------------
+      │     Scope: 2
+      │     Loop type: 2
+      │     Loop times: 0
+      │     Fade type: 3
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: transitionDuration
+      │     EffectValue uuid: 784461254612563970
+      │     Max value: 180000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+      └─ ------------------------------- end AudioRandomSequenceBaseContainer -------------------------------
+      │     Sequence count: 1
+      │         sequence ID: 17721416234336602021
+      └─ ------------------------------- end AudioSequenceContainer -------------------------------
+├─ 3. Component ID: 13500806813656223463
+      ├─ ------------------------------- begin Audio -----------------------------
+      ├─ ------------------------------- begin AudioComponent -----------------------------
+      │     AudioBase name: Weather_Rain_Medium_Common_Downmix
+      │     AudioBase uuid: 13500806813656223463
+      │     Parameter effects count: 0
+      │         m_init_delay_ms uuid: 9641677770544096474
+      │         m_volume uuid: 16923390918394939628
+      │         m_pitch uuid: 14432173034891813736
+      │         m_hpFrequency uuid: 17934934923374383839
+      │         m_lpFrequency uuid: 16719907359893582502
+      │     HP Slope: 12
+      │     LP Slope: 12
+      │     High Pass Switch: 0
+      │     Low Pass Switch: 0
+      │     Is 2D: 1
+      │     Sound Restriction Num: 50
+      │     Restriction Scope: 1
+      │     Priority: 50
+      │     Audio Component Type: 1
+      │     Parent: 11065263186485401091
+      └─ ------------------------------- end AudioComponent -------------------------------
+      │     Sources IDs count: 1
+      │       [0] 6050535098257799178
+      │     Loop times: 1
+      └─ ------------------------------- end Audio -------------------------------
+├─ 4. Component ID: 17721416234336602021
+      ├─ ------------------------------- begin Audio -----------------------------
+      ├─ ------------------------------- begin AudioComponent -----------------------------
+      │     AudioBase name: Weather_Rain_Heavy_Common_Downmix
+      │     AudioBase uuid: 17721416234336602021
+      │     Parameter effects count: 0
+      │         m_init_delay_ms uuid: 2057506157077269122
+      │         m_volume uuid: 15326030914608492122
+      │         m_pitch uuid: 18216606474201540575
+      │         m_hpFrequency uuid: 6552918918568313584
+      │         m_lpFrequency uuid: 1935137724268677084
+      │     HP Slope: 12
+      │     LP Slope: 12
+      │     High Pass Switch: 0
+      │     Low Pass Switch: 0
+      │     Is 2D: 1
+      │     Sound Restriction Num: 50
+      │     Restriction Scope: 1
+      │     Priority: 50
+      │     Audio Component Type: 1
+      │     Parent: 1380213930332201224
+      └─ ------------------------------- end AudioComponent -------------------------------
+      │     Sources IDs count: 1
+      │       [0] 5374346582071636936
+      │     Loop times: 1
+      └─ ------------------------------- end Audio -------------------------------
+├─ 5. Component ID: 3029036089239054194
+      ├─ ------------------------------- begin AudioSequenceContainer -----------------------------
+      ├─ ------------------------------- begin AudioRandomSequenceBaseContainer -----------------------------
+      ├─ ------------------------------- begin AudioContainer -----------------------------
+      ├─ ------------------------------- begin AudioComponent -----------------------------
+      │     AudioBase name: Rain_Small
+      │     AudioBase uuid: 3029036089239054194
+      │     Parameter effects count: 0
+      │         m_init_delay_ms uuid: 1780233093478156590
+      │         m_volume uuid: 12228907200354367285
+      │         m_pitch uuid: 12284818542255615419
+      │         m_hpFrequency uuid: 17445608972528792123
+      │         m_lpFrequency uuid: 13432733343914944233
+      │     HP Slope: 12
+      │     LP Slope: 12
+      │     High Pass Switch: 0
+      │     Low Pass Switch: 0
+      │     Is 2D: 1
+      │     Sound Restriction Num: 50
+      │     Restriction Scope: 1
+      │     Priority: 50
+      │     Audio Component Type: 4
+      │     Parent: 13362877799807241174
+      └─ ------------------------------- end AudioComponent -------------------------------
+      │     Sub components count: 1
+      │         sub component: 4974830989425025096
+      └─ ------------------------------- end AudioContainer -------------------------------
+      │     Scope: 2
+      │     Loop type: 2
+      │     Loop times: 1
+      │     Fade type: 3
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: transitionDuration
+      │     EffectValue uuid: 2623771160398952022
+      │     Max value: 180000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+      └─ ------------------------------- end AudioRandomSequenceBaseContainer -------------------------------
+      │     Sequence count: 1
+      │         sequence ID: 4974830989425025096
+      └─ ------------------------------- end AudioSequenceContainer -------------------------------
+├─ 6. Component ID: 16677645476701927335
+      ├─ ------------------------------- begin AudioContainer -----------------------------
+      ├─ ------------------------------- begin AudioComponent -----------------------------
+      │     AudioBase name: Weather
+      │     AudioBase uuid: 16677645476701927335
+      │     Parameter effects count: 1
+      │         parameter_effect uuid: 15637774052439160543
+      │         m_init_delay_ms uuid: 7828773194703082611
+      │         m_volume uuid: 4176887248614572134
+      │         m_pitch uuid: 16336055395538004518
+      │         m_hpFrequency uuid: 5836167067042836524
+      │         m_lpFrequency uuid: 8982915808534292241
+      │     HP Slope: 12
+      │     LP Slope: 12
+      │     High Pass Switch: 0
+      │     Low Pass Switch: 0
+      │     Is 2D: 1
+      │     Sound Restriction Num: 50
+      │     Restriction Scope: 1
+      │     Priority: 50
+      │     Audio Component Type: 2
+      │     Parent: 0
+      └─ ------------------------------- end AudioComponent -------------------------------
+      │     Sub components count: 1
+      │         sub component: 13362877799807241174
+      └─ ------------------------------- end AudioContainer -------------------------------
+├─ 7. Component ID: 11065263186485401091
+      ├─ ------------------------------- begin AudioSequenceContainer -----------------------------
+      ├─ ------------------------------- begin AudioRandomSequenceBaseContainer -----------------------------
+      ├─ ------------------------------- begin AudioContainer -----------------------------
+      ├─ ------------------------------- begin AudioComponent -----------------------------
+      │     AudioBase name: Rain_Medium
+      │     AudioBase uuid: 11065263186485401091
+      │     Parameter effects count: 0
+      │         m_init_delay_ms uuid: 3681220649001472758
+      │         m_volume uuid: 3719642593098207283
+      │         m_pitch uuid: 13057435734828766299
+      │         m_hpFrequency uuid: 5956101120871854318
+      │         m_lpFrequency uuid: 18210009751868450145
+      │     HP Slope: 12
+      │     LP Slope: 12
+      │     High Pass Switch: 0
+      │     Low Pass Switch: 0
+      │     Is 2D: 1
+      │     Sound Restriction Num: 50
+      │     Restriction Scope: 1
+      │     Priority: 50
+      │     Audio Component Type: 4
+      │     Parent: 13362877799807241174
+      └─ ------------------------------- end AudioComponent -------------------------------
+      │     Sub components count: 1
+      │         sub component: 13500806813656223463
+      └─ ------------------------------- end AudioContainer -------------------------------
+      │     Scope: 2
+      │     Loop type: 2
+      │     Loop times: 0
+      │     Fade type: 3
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: transitionDuration
+      │     EffectValue uuid: 8565678738694317695
+      │     Max value: 180000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+      └─ ------------------------------- end AudioRandomSequenceBaseContainer -------------------------------
+      │     Sequence count: 1
+      │         sequence ID: 13500806813656223463
+      └─ ------------------------------- end AudioSequenceContainer -------------------------------
+└─ 8. Component ID: 4974830989425025096
+      ├─ ------------------------------- begin Audio -----------------------------
+      ├─ ------------------------------- begin AudioComponent -----------------------------
+      │     AudioBase name: Weather_Rain_Small_Common_Downmix
+      │     AudioBase uuid: 4974830989425025096
+      │     Parameter effects count: 0
+      │         m_init_delay_ms uuid: 3250792253029859026
+      │         m_volume uuid: 17929541942124356105
+      │         m_pitch uuid: 269184771602852114
+      │         m_hpFrequency uuid: 10257669941263670714
+      │         m_lpFrequency uuid: 15171704086461935852
+      │     HP Slope: 12
+      │     LP Slope: 12
+      │     High Pass Switch: 0
+      │     Low Pass Switch: 0
+      │     Is 2D: 1
+      │     Sound Restriction Num: 50
+      │     Restriction Scope: 1
+      │     Priority: 50
+      │     Audio Component Type: 1
+      │     Parent: 3029036089239054194
+      └─ ------------------------------- end AudioComponent -------------------------------
+      │     Sources IDs count: 1
+      │       [0] 14990366957566881861
+      │     Loop times: 1
+      └─ ------------------------------- end Audio -------------------------------
+
+[PARAMETERS]  Count: 8
+├─ 1. Parameter ID: 9887802644691416720
+      ├─ ------------------------------- begin WanosFloatParameter -----------------------------
+      ├─ ------------------------------- begin Parameter -----------------------------
+      │     Parameter name: Music_Volume
+      │     Parameter guid: 9887802644691416720
+      │     Parameter type: 2
+      └─ ------------------------------- end Parameter -------------------------------
+      │     Range min: 0.000000
+      │     Range max: 100.000000
+      │     Default value: 80.000000
+      └─ ------------------------------- end WanosFloatParameter -------------------------------
+├─ 2. Parameter ID: 6169890361930213550
+      ├─ ------------------------------- begin WanosFloatParameter -----------------------------
+      ├─ ------------------------------- begin Parameter -----------------------------
+      │     Parameter name: Distance
+      │     Parameter guid: 6169890361930213550
+      │     Parameter type: 2
+      └─ ------------------------------- end Parameter -------------------------------
+      │     Range min: 0.000000
+      │     Range max: 100.000000
+      │     Default value: 50.000000
+      └─ ------------------------------- end WanosFloatParameter -------------------------------
+├─ 3. Parameter ID: 15161407698080848619
+      ├─ ------------------------------- begin WanosFloatParameter -----------------------------
+      ├─ ------------------------------- begin Parameter -----------------------------
+      │     Parameter name: Fx_Volume
+      │     Parameter guid: 15161407698080848619
+      │     Parameter type: 2
+      └─ ------------------------------- end Parameter -------------------------------
+      │     Range min: 0.000000
+      │     Range max: 100.000000
+      │     Default value: 80.000000
+      └─ ------------------------------- end WanosFloatParameter -------------------------------
+├─ 4. Parameter ID: 1496110057542379783
+      ├─ ------------------------------- begin WanosFloatParameter -----------------------------
+      ├─ ------------------------------- begin Parameter -----------------------------
+      │     Parameter name: Time of A Day
+      │     Parameter guid: 1496110057542379783
+      │     Parameter type: 2
+      └─ ------------------------------- end Parameter -------------------------------
+      │     Range min: 0.000000
+      │     Range max: 24.000000
+      │     Default value: 4.000000
+      └─ ------------------------------- end WanosFloatParameter -------------------------------
+├─ 5. Parameter ID: 1314232500647155153
+      ├─ ------------------------------- begin WanosFloatParameter -----------------------------
+      ├─ ------------------------------- begin Parameter -----------------------------
+      │     Parameter name: Season
+      │     Parameter guid: 1314232500647155153
+      │     Parameter type: 2
+      └─ ------------------------------- end Parameter -------------------------------
+      │     Range min: 0.000000
+      │     Range max: 12.000000
+      │     Default value: 4.000000
+      └─ ------------------------------- end WanosFloatParameter -------------------------------
+├─ 6. Parameter ID: 17164076287660795326
+      ├─ ------------------------------- begin WanosFloatParameter -----------------------------
+      ├─ ------------------------------- begin Parameter -----------------------------
+      │     Parameter name: Rain
+      │     Parameter guid: 17164076287660795326
+      │     Parameter type: 2
+      └─ ------------------------------- end Parameter -------------------------------
+      │     Range min: 0.000000
+      │     Range max: 100.000000
+      │     Default value: 0.000000
+      └─ ------------------------------- end WanosFloatParameter -------------------------------
+├─ 7. Parameter ID: 13828187512903679997
+      ├─ ------------------------------- begin WanosFloatParameter -----------------------------
+      ├─ ------------------------------- begin Parameter -----------------------------
+      │     Parameter name: Foggy
+      │     Parameter guid: 13828187512903679997
+      │     Parameter type: 2
+      └─ ------------------------------- end Parameter -------------------------------
+      │     Range min: 0.000000
+      │     Range max: 100.000000
+      │     Default value: 0.000000
+      └─ ------------------------------- end WanosFloatParameter -------------------------------
+└─ 8. Parameter ID: 7161465953946046021
+      ├─ ------------------------------- begin WanosFloatParameter -----------------------------
+      ├─ ------------------------------- begin Parameter -----------------------------
+      │     Parameter name: Wind
+      │     Parameter guid: 7161465953946046021
+      │     Parameter type: 2
+      └─ ------------------------------- end Parameter -------------------------------
+      │     Range min: 0.000000
+      │     Range max: 100.000000
+      │     Default value: 0.000000
+      └─ ------------------------------- end WanosFloatParameter -------------------------------
+
+[VALUE APC CURVES]  Count: 1
+└─ 1. Curve ID: 11292012507479133282
+      ├─ ------------------------------- begin ValueApcCurve -----------------------------
+      │     ValueApcCurve name: ApcCurve
+      │     ValueApcCurve guid: 11292012507479133282
+      │     Curve segments count: 4
+      │         Segment[0]:
+      │             ├─ ------------------------------- begin CurveSegment -----------------------------
+      │             │     Type: 1
+      │             │     Start: (0.000000, -96.000000)
+      │             │     End: (20.899471, -15.812117)
+      │             │     Control: (9.920635, -59.256901)
+      │             └─ ------------------------------- end CurveSegment -------------------------------
+      │         Segment[1]:
+      │             ├─ ------------------------------- begin CurveSegment -----------------------------
+      │             │     Type: 1
+      │             │     Start: (20.899471, -15.812117)
+      │             │     End: (49.206348, -6.032208)
+      │             │     Control: (34.523811, -14.273006)
+      │             └─ ------------------------------- end CurveSegment -------------------------------
+      │         Segment[2]:
+      │             ├─ ------------------------------- begin CurveSegment -----------------------------
+      │             │     Type: 1
+      │             │     Start: (49.206348, -6.032208)
+      │             │     End: (79.894180, -2.804448)
+      │             │     Control: (64.682541, -5.529525)
+      │             └─ ------------------------------- end CurveSegment -------------------------------
+      │         Segment[3]:
+      │             ├─ ------------------------------- begin CurveSegment -----------------------------
+      │             │     Type: 1
+      │             │     Start: (79.894180, -2.804448)
+      │             │     End: (100.000000, 0.000000)
+      │             │     Control: (90.343918, -1.666794)
+      │             └─ ------------------------------- end CurveSegment -------------------------------
+      └─ ------------------------------- end ValueApcCurve -------------------------------
+
+[EFFECT VALUES] Count: 47
+├─ 1. Effect ID: 16923390918394939628
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: audioLevel
+      │     EffectValue uuid: 16923390918394939628
+      │     Max value: 12.000000
+      │     Min value: -96.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 2. Effect ID: 16336055395538004518
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: pitch
+      │     EffectValue uuid: 16336055395538004518
+      │     Max value: 2400.000000
+      │     Min value: -2400.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 3. Effect ID: 15171704086461935852
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: lpFrequency
+      │     EffectValue uuid: 15171704086461935852
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20000.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 4. Effect ID: 5823467178563586560
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: fadeOutTime
+      │     EffectValue uuid: 5823467178563586560
+      │     Max value: 0.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 5. Effect ID: 16212255809412676927
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: lpFrequency
+      │     EffectValue uuid: 16212255809412676927
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20000.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 6. Effect ID: 16719907359893582502
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: lpFrequency
+      │     EffectValue uuid: 16719907359893582502
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20000.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 7. Effect ID: 3719642593098207283
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: audioLevel
+      │     EffectValue uuid: 3719642593098207283
+      │     Max value: 12.000000
+      │     Min value: -96.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 8. Effect ID: 6552918918568313584
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: hpFrequency
+      │     EffectValue uuid: 6552918918568313584
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 9. Effect ID: 14432173034891813736
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: pitch
+      │     EffectValue uuid: 14432173034891813736
+      │     Max value: 2400.000000
+      │     Min value: -2400.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 10. Effect ID: 16296642343054744403
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: audioLevel
+      │     EffectValue uuid: 16296642343054744403
+      │     Max value: 12.000000
+      │     Min value: -96.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 11. Effect ID: 12228907200354367285
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: audioLevel
+      │     EffectValue uuid: 12228907200354367285
+      │     Max value: 12.000000
+      │     Min value: -96.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 12. Effect ID: 580318157370976295
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: delay
+      │     EffectValue uuid: 580318157370976295
+      │     Max value: 600000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 13. Effect ID: 4176887248614572134
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: audioLevel
+      │     EffectValue uuid: 4176887248614572134
+      │     Max value: 12.000000
+      │     Min value: -96.000000
+      │     Default value: 3.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 14. Effect ID: 2954984707419612958
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: fadeOutTime
+      │     EffectValue uuid: 2954984707419612958
+      │     Max value: 0.000000
+      │     Min value: 0.000000
+      │     Default value: 21.250000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 15. Effect ID: 1747544346500326023
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: hpFrequency
+      │     EffectValue uuid: 1747544346500326023
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 16. Effect ID: 7828773194703082611
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: delay
+      │     EffectValue uuid: 7828773194703082611
+      │     Max value: 600000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 17. Effect ID: 5836167067042836524
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: hpFrequency
+      │     EffectValue uuid: 5836167067042836524
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 18. Effect ID: 17934934923374383839
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: hpFrequency
+      │     EffectValue uuid: 17934934923374383839
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 19. Effect ID: 17445608972528792123
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: hpFrequency
+      │     EffectValue uuid: 17445608972528792123
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 20. Effect ID: 7190502988579661721
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: fadeInTime
+      │     EffectValue uuid: 7190502988579661721
+      │     Max value: 0.000000
+      │     Min value: 0.000000
+      │     Default value: 17.816456
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 21. Effect ID: 10257669941263670714
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: hpFrequency
+      │     EffectValue uuid: 10257669941263670714
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 22. Effect ID: 18210009751868450145
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: lpFrequency
+      │     EffectValue uuid: 18210009751868450145
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20000.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 23. Effect ID: 12284818542255615419
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: pitch
+      │     EffectValue uuid: 12284818542255615419
+      │     Max value: 2400.000000
+      │     Min value: -2400.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 24. Effect ID: 8982915808534292241
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: lpFrequency
+      │     EffectValue uuid: 8982915808534292241
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20000.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 25. Effect ID: 5956101120871854318
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: hpFrequency
+      │     EffectValue uuid: 5956101120871854318
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 26. Effect ID: 2057506157077269122
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: delay
+      │     EffectValue uuid: 2057506157077269122
+      │     Max value: 600000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 27. Effect ID: 1935137724268677084
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: lpFrequency
+      │     EffectValue uuid: 1935137724268677084
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20000.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 28. Effect ID: 10713507883409897830
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: fadeInTime
+      │     EffectValue uuid: 10713507883409897830
+      │     Max value: 0.000000
+      │     Min value: 0.000000
+      │     Default value: 25.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 29. Effect ID: 13057435734828766299
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: pitch
+      │     EffectValue uuid: 13057435734828766299
+      │     Max value: 2400.000000
+      │     Min value: -2400.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 30. Effect ID: 9641677770544096474
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: delay
+      │     EffectValue uuid: 9641677770544096474
+      │     Max value: 600000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 31. Effect ID: 1934885692099690849
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: pitch
+      │     EffectValue uuid: 1934885692099690849
+      │     Max value: 2400.000000
+      │     Min value: -2400.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 32. Effect ID: 1774297194531818266
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: fadeOutTime
+      │     EffectValue uuid: 1774297194531818266
+      │     Max value: 0.000000
+      │     Min value: 0.000000
+      │     Default value: 15.500000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 33. Effect ID: 5943093891184821257
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: lpFrequency
+      │     EffectValue uuid: 5943093891184821257
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20000.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 34. Effect ID: 17725896321230113678
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: fadeInTime
+      │     EffectValue uuid: 17725896321230113678
+      │     Max value: 0.000000
+      │     Min value: 0.000000
+      │     Default value: 24.500000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 35. Effect ID: 18216606474201540575
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: pitch
+      │     EffectValue uuid: 18216606474201540575
+      │     Max value: 2400.000000
+      │     Min value: -2400.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 36. Effect ID: 11292012507479133282
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: effect_default_value
+      │     EffectValue uuid: 11292012507479133282
+      │     Max value: 12.000000
+      │     Min value: -96.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 1
+      │         curve ID: 11292012507479133282
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 37. Effect ID: 269184771602852114
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: pitch
+      │     EffectValue uuid: 269184771602852114
+      │     Max value: 2400.000000
+      │     Min value: -2400.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 38. Effect ID: 1401430027608598085
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: delay
+      │     EffectValue uuid: 1401430027608598085
+      │     Max value: 600000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 39. Effect ID: 581462386571671948
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: audioLevel
+      │     EffectValue uuid: 581462386571671948
+      │     Max value: 12.000000
+      │     Min value: -96.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 40. Effect ID: 6429728027593814418
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: hpFrequency
+      │     EffectValue uuid: 6429728027593814418
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 41. Effect ID: 3250792253029859026
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: delay
+      │     EffectValue uuid: 3250792253029859026
+      │     Max value: 600000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 42. Effect ID: 3681220649001472758
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: delay
+      │     EffectValue uuid: 3681220649001472758
+      │     Max value: 600000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 43. Effect ID: 17929541942124356105
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: audioLevel
+      │     EffectValue uuid: 17929541942124356105
+      │     Max value: 12.000000
+      │     Min value: -96.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 44. Effect ID: 15326030914608492122
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: audioLevel
+      │     EffectValue uuid: 15326030914608492122
+      │     Max value: 12.000000
+      │     Min value: -96.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 45. Effect ID: 13432733343914944233
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: lpFrequency
+      │     EffectValue uuid: 13432733343914944233
+      │     Max value: 20000.000000
+      │     Min value: 20.000000
+      │     Default value: 20000.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+├─ 46. Effect ID: 1780233093478156590
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: delay
+      │     EffectValue uuid: 1780233093478156590
+      │     Max value: 600000.000000
+      │     Min value: 0.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+└─ 47. Effect ID: 1853878202591408628
+      ├─ ------------------------------- begin EffectValue -----------------------------
+      │     EffectValue name: pitch
+      │     EffectValue uuid: 1853878202591408628
+      │     Max value: 2400.000000
+      │     Min value: -2400.000000
+      │     Default value: 0.000000
+      │     Has random value: 0
+      │     Random min: 0
+      │     Random max: 0
+      │     APC curve count: 0
+      └─ ------------------------------- end EffectValue -------------------------------
+
+[PARAMETER EFFECTS] Count: 1
+└─ 1. Parameter Effect ID: 15637774052439160543
+      ├─ ------------------------------- begin ParameterEffect -----------------------------
+      │     ParameterEffect name: ParameterEffect_1_15637774052439160543
+      │     ParameterEffect uuid: 15637774052439160543
+      │     Parameter uuid: 15161407698080848619
+      │     Effect value uuid: 11292012507479133282
+      │     Effect type: 1 (Gain)
+      └─ ------------------------------- end ParameterEffect -------------------------------
+
+================================================================================
+                              PARSE COMPLETED
+================================================================================

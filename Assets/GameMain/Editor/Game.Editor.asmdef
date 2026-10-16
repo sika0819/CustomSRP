@@ -6,7 +6,8 @@
         "UnityGameFramework.Runtime",
         "YooAsset",
         "YooAsset.Editor",
-        "UniTask"
+        "UniTask",
+        "WanosAudio"
     ],
     "includePlatforms": [
         "Editor"

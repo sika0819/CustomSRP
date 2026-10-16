@@ -1,0 +1,331 @@
+{
+    "mode": 1,
+    "musicLists": [
+        {
+            "musics": [
+                {
+                    "bankName": "Music1_1",
+                    "bankGuid": "9558213516718892405",
+                    "eventName": "Play_Music1_1",
+                    "musicName": "寂静回波"
+                },
+                {
+                    "bankName": "Music1_2",
+                    "bankGuid": "11332806345771797193",
+                    "eventName": "Play_Music1_2",
+                    "musicName": "深空呢喃"
+                },
+                {
+                    "bankName": "Music1_3",
+                    "bankGuid": "7075941010367513477",
+                    "eventName": "Play_Music1_3",
+                    "musicName": "星河漫行"
+                },
+                {
+                    "bankName": "Music1_4",
+                    "bankGuid": "2193681648952686563",
+                    "eventName": "Play_Music1_4",
+                    "musicName": "虚空之寂"
+                },
+                {
+                    "bankName": "Music1_5",
+                    "bankGuid": "12208667668980525412",
+                    "eventName": "Play_Music1_5",
+                    "musicName": "烟波载月"
+                },
+                {
+                    "bankName": "Music1_6",
+                    "bankGuid": "375638295464725245",
+                    "eventName": "Play_Music1_6",
+                    "musicName": "月光之岸"
+                },
+                {
+                    "bankName": "Music1_7",
+                    "bankGuid": "8152068146675868348",
+                    "eventName": "Play_Music1_7",
+                    "musicName": "云间回响"
+                }
+            ],
+            "musicsName": "归息"
+        },
+        {
+            "musics": [
+                {
+                    "bankName": "Music2_1",
+                    "bankGuid": "8548341904812259606",
+                    "eventName": "Play_Music2_1",
+                    "musicName": "橙色傍晚"
+                },
+                {
+                    "bankName": "Music2_2",
+                    "bankGuid": "11163301581692728726",
+                    "eventName": "Play_Music2_2",
+                    "musicName": "浮生慢行"
+                },
+                {
+                    "bankName": "Music2_3",
+                    "bankGuid": "9408925228479707617",
+                    "eventName": "Play_Music2_3",
+                    "musicName": "轻轻走过的小路"
+                },
+                {
+                    "bankName": "Music2_4",
+                    "bankGuid": "10383277089014743455",
+                    "eventName": "Play_Music2_4",
+                    "musicName": "森林的轻吟"
+                },
+                {
+                    "bankName": "Music2_5",
+                    "bankGuid": "4323735046372564438",
+                    "eventName": "Play_Music2_5",
+                    "musicName": "森林鸟语"
+                },
+                {
+                    "bankName": "Music2_6",
+                    "bankGuid": "4239850016085561260",
+                    "eventName": "Play_Music2_6",
+                    "musicName": "柔缓流动"
+                },
+                {
+                    "bankName": "Music2_7",
+                    "bankGuid": "15716040779383999163",
+                    "eventName": "Play_Music2_7",
+                    "musicName": "慵懒的阳光"
+                }
+            ],
+            "musicsName": "隙光"
+        },
+        {
+            "musics": [
+                {
+                    "bankName": "Music3_1",
+                    "bankGuid": "11278341828468772876",
+                    "eventName": "Play_Music3_1",
+                    "musicName": "浮光掠影"
+                },
+                {
+                    "bankName": "Music3_2",
+                    "bankGuid": "13320969978163857273",
+                    "eventName": "Play_Music3_2",
+                    "musicName": "红尘寄月"
+                },
+                {
+                    "bankName": "Music3_3",
+                    "bankGuid": "4058923812680729503",
+                    "eventName": "Play_Music3_3",
+                    "musicName": "静谧时光"
+                },
+                {
+                    "bankName": "Music3_4",
+                    "bankGuid": "6371535162812371939",
+                    "eventName": "Play_Music3_4",
+                    "musicName": "慢水流年"
+                },
+                {
+                    "bankName": "Music3_5",
+                    "bankGuid": "9723694891020476350",
+                    "eventName": "Play_Music3_5",
+                    "musicName": "听风入梦"
+                },
+                {
+                    "bankName": "Music3_6",
+                    "bankGuid": "7095888381395631168",
+                    "eventName": "Play_Music3_6",
+                    "musicName": "夏夜漫游"
+                },
+                {
+                    "bankName": "Music3_7",
+                    "bankGuid": "14884098497884866041",
+                    "eventName": "Play_Music3_7",
+                    "musicName": "星空"
+                },
+                {
+                    "bankName": "Music3_8",
+                    "bankGuid": "16960479785389620128",
+                    "eventName": "Play_Music3_8",
+                    "musicName": "一念之间"
+                },
+                {
+                    "bankName": "Music3_9",
+                    "bankGuid": "3135163105418105935",
+                    "eventName": "Play_Music3_9",
+                    "musicName": "云上小憩"
+                },
+                {
+                    "bankName": "Music3_10",
+                    "bankGuid": "14796014099005628269",
+                    "eventName": "Play_Music3_10",
+                    "musicName": "闲庭信步"
+                }
+            ],
+            "musicsName": "枕畔"
+        },
+        {
+            "musics": [
+                {
+                    "bankName": "Music4_1",
+                    "bankGuid": "4128975780179829915",
+                    "eventName": "Play_Music4_1",
+                    "musicName": "灯火渐息"
+                },
+                {
+                    "bankName": "Music4_2",
+                    "bankGuid": "13106933601551035156",
+                    "eventName": "Play_Music4_2",
+                    "musicName": "微光洛影"
+                },
+                {
+                    "bankName": "Music4_3",
+                    "bankGuid": "12586701867990988161",
+                    "eventName": "Play_Music4_3",
+                    "musicName": "孤舟寒江"
+                },
+                {
+                    "bankName": "Music4_4",
+                    "bankGuid": "16616663247231846535",
+                    "eventName": "Play_Music4_4",
+                    "musicName": "灰蓝清晨"
+                },
+                {
+                    "bankName": "Music4_5",
+                    "bankGuid": "2228594008435456555",
+                    "eventName": "Play_Music4_5",
+                    "musicName": "落尘之夜"
+                },
+                {
+                    "bankName": "Music4_6",
+                    "bankGuid": "7632647582125579319",
+                    "eventName": "Play_Music4_6",
+                    "musicName": "无人回应的信"
+                },
+                {
+                    "bankName": "Music4_7",
+                    "bankGuid": "13253841330183236983",
+                    "eventName": "Play_Music4_7",
+                    "musicName": "月下独白"
+                }
+            ],
+            "musicsName": "共凝"
+        },
+        {
+            "musics": [
+                {
+                    "bankName": "Music5_1",
+                    "bankGuid": "8670786735212154262",
+                    "eventName": "Play_Music5_1",
+                    "musicName": "风起云涌"
+                },
+                {
+                    "bankName": "Music5_2",
+                    "bankGuid": "6409662974865549752",
+                    "eventName": "Play_Music5_2",
+                    "musicName": "锦色年华"
+                },
+                {
+                    "bankName": "Music5_3",
+                    "bankGuid": "10804944323669651414",
+                    "eventName": "Play_Music5_3",
+                    "musicName": "洛水之畔"
+                },
+                {
+                    "bankName": "Music5_4",
+                    "bankGuid": "13682410980731291180",
+                    "eventName": "Play_Music5_4",
+                    "musicName": "千里暮归"
+                },
+                {
+                    "bankName": "Music5_5",
+                    "bankGuid": "15966069453661239938",
+                    "eventName": "Play_Music5_5",
+                    "musicName": "青石之间"
+                },
+                {
+                    "bankName": "Music5_6",
+                    "bankGuid": "15668213739383672521",
+                    "eventName": "Play_Music5_6",
+                    "musicName": "笙歌旧梦"
+                },
+                {
+                    "bankName": "Music5_7",
+                    "bankGuid": "10989755202784520008",
+                    "eventName": "Play_Music5_7",
+                    "musicName": "水墨天涯"
+                },
+                {
+                    "bankName": "Music5_8",
+                    "bankGuid": "8663836344028411950",
+                    "eventName": "Play_Music5_8",
+                    "musicName": "微风拂面"
+                }
+            ],
+            "musicsName": "归云"
+        },
+        {
+            "musics": [
+                {
+                    "bankName": "Music6_1",
+                    "bankGuid": "6820890963035466315",
+                    "eventName": "Play_Music6_1",
+                    "musicName": "春日序曲"
+                },
+                {
+                    "bankName": "Music6_2",
+                    "bankGuid": "2604042112990758575",
+                    "eventName": "Play_Music6_2",
+                    "musicName": "海面上的光"
+                },
+                {
+                    "bankName": "Music6_3",
+                    "bankGuid": "4851498287011933363",
+                    "eventName": "Play_Music6_3",
+                    "musicName": "极光雪憩"
+                },
+                {
+                    "bankName": "Music6_4",
+                    "bankGuid": "16744618599898053616",
+                    "eventName": "Play_Music6_4",
+                    "musicName": "蓝色沙漠"
+                },
+                {
+                    "bankName": "Music6_5",
+                    "bankGuid": "4654329470574274375",
+                    "eventName": "Play_Music6_5",
+                    "musicName": "林息仙迹"
+                },
+                {
+                    "bankName": "Music6_6",
+                    "bankGuid": "4577493550630387592",
+                    "eventName": "Play_Music6_6",
+                    "musicName": "无际之海"
+                },
+                {
+                    "bankName": "Music6_7",
+                    "bankGuid": "10378933818354998465",
+                    "eventName": "Play_Music6_7",
+                    "musicName": "真空圣境"
+                }
+            ],
+            "musicsName": "破茧"
+        }
+    ],
+    "indexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+    ],
+    "indexesForNativeJson": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+    ],
+    "currentListIndex": 0,
+    "currentMusicIndex": 0
+}

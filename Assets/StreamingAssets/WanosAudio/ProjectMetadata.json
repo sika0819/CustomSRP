@@ -1,0 +1,2195 @@
+{
+  "ProjectName": "project",
+  "ProjectGuid": "6350130030156360368",
+  "ProjectDirectory": "C:/Users/83765/AppData/Roaming/WanosIAStudio/autosave",
+  "Version": "1.0.2",
+  "NativeVersion": "1.0.20251230-BETAd-WIA_V1-f78596ac",
+  "StudioVersion": "1.1.20260121-BETAd-WIA_V1-c8b944c",
+  "RunMode": "Editor",
+  "LastModifiedTimestamp": 1785850968028,
+  "BuildTimestamp": 1785850968028,
+  "BuildGuid": "12776069787364896766",
+  "BuilderAccountId": "wanos@wanos.com",
+  "Banks": [
+    {
+      "Guid": "9558213516718892405",
+      "BankName": "Music1_1",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001206,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "1f5fce73d38082eebb613ec8a968f8dc",
+      "Size": "3930.68"
+    },
+    {
+      "Guid": "11332806345771797193",
+      "BankName": "Music1_2",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001216,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "7873e7ab12e9d0fdfe5e861f6e314d28",
+      "Size": "3411"
+    },
+    {
+      "Guid": "7075941010367513477",
+      "BankName": "Music1_3",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001225,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "e0ebe4d6a885c8209f6b9ca6e7a23128",
+      "Size": "3645"
+    },
+    {
+      "Guid": "2193681648952686563",
+      "BankName": "Music1_4",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001233,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "d2346ebf133394e23882b89f903c6be8",
+      "Size": "4331"
+    },
+    {
+      "Guid": "12208667668980525412",
+      "BankName": "Music1_5",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001243,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "ef97dbeb8dc5a8216cbc85ecdac79599",
+      "Size": "3721"
+    },
+    {
+      "Guid": "375638295464725245",
+      "BankName": "Music1_6",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001251,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "2d4eee353c977c45c327f31fbcb5b92f",
+      "Size": "6009"
+    },
+    {
+      "Guid": "8152068146675868348",
+      "BankName": "Music1_7",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001264,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "f897636a7e36ad16de342a59ca9777a7",
+      "Size": "2986"
+    },
+    {
+      "Guid": "8548341904812259606",
+      "BankName": "Music2_1",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001271,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "e17030890e2505c92ebc309fc2ca5a88",
+      "Size": "3732"
+    },
+    {
+      "Guid": "11163301581692728726",
+      "BankName": "Music2_2",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001280,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "7eb21f25b41ad3b63495a18c97d8d2b4",
+      "Size": "5923"
+    },
+    {
+      "Guid": "9408925228479707617",
+      "BankName": "Music2_3",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001294,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "31445a0eccf9ba99b202c260d5a142c9",
+      "Size": "3628"
+    },
+    {
+      "Guid": "10383277089014743455",
+      "BankName": "Music2_4",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001303,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "f49917cfb7a8e593f1ca7fdd40fb6beb",
+      "Size": "4176"
+    },
+    {
+      "Guid": "4323735046372564438",
+      "BankName": "Music2_5",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001314,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "e8a69df87b11f16380e9b51ca01a1028",
+      "Size": "3738"
+    },
+    {
+      "Guid": "4239850016085561260",
+      "BankName": "Music2_6",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001322,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "4834d5ecf966b1051f9872350f9bfde9",
+      "Size": "3793"
+    },
+    {
+      "Guid": "15716040779383999163",
+      "BankName": "Music2_7",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001331,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "e4bc76736e28d9c11b27dad987c1a2f6",
+      "Size": "3349"
+    },
+    {
+      "Guid": "11278341828468772876",
+      "BankName": "Music3_1",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001339,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "d50d60393f8f7190ba5f636786eb6b0b",
+      "Size": "4898"
+    },
+    {
+      "Guid": "13320969978163857273",
+      "BankName": "Music3_2",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001349,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "9feb0ba36b15d7eb76ba3cad08e02e36",
+      "Size": "5160"
+    },
+    {
+      "Guid": "4058923812680729503",
+      "BankName": "Music3_3",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001362,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "769f57a432d242996e6bb71113f9b131",
+      "Size": "6820"
+    },
+    {
+      "Guid": "6371535162812371939",
+      "BankName": "Music3_4",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001378,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "3843d9ab680babb7006431652dcb6167",
+      "Size": "3795"
+    },
+    {
+      "Guid": "9723694891020476350",
+      "BankName": "Music3_5",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001386,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "26225c2aee80b28b88faff65a2d9c435",
+      "Size": "3723"
+    },
+    {
+      "Guid": "7095888381395631168",
+      "BankName": "Music3_6",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001395,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "988e9e0ee860da53063dedbf86fdaf7a",
+      "Size": "4149"
+    },
+    {
+      "Guid": "14884098497884866041",
+      "BankName": "Music3_7",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001405,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "599184848385f11147c5327e8010d475",
+      "Size": "3118"
+    },
+    {
+      "Guid": "16960479785389620128",
+      "BankName": "Music3_8",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001413,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "df9a24be4dd1a3105da0055c9e7e71c3",
+      "Size": "6389"
+    },
+    {
+      "Guid": "3135163105418105935",
+      "BankName": "Music3_9",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001427,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "f8dc4eebe37e42a9caa8660ab54ca196",
+      "Size": "3195"
+    },
+    {
+      "Guid": "14796014099005628269",
+      "BankName": "Music3_10",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001434,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "ee2c8c549f896c05f9382af3a0ea53ae",
+      "Size": "6674"
+    },
+    {
+      "Guid": "4128975780179829915",
+      "BankName": "Music4_1",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001450,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "8292faddbaa5a812016d0b342ae268c9",
+      "Size": "6889"
+    },
+    {
+      "Guid": "13106933601551035156",
+      "BankName": "Music4_2",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001465,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "0368d07179104c72b7323c8d185ce5a5",
+      "Size": "4731"
+    },
+    {
+      "Guid": "12586701867990988161",
+      "BankName": "Music4_3",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001475,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "100cccaf518aacacfd226c704359c41b",
+      "Size": "3750"
+    },
+    {
+      "Guid": "16616663247231846535",
+      "BankName": "Music4_4",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001484,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "07245ce2738b977b22e6abec58103de1",
+      "Size": "3221"
+    },
+    {
+      "Guid": "2228594008435456555",
+      "BankName": "Music4_5",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001491,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "235a8690aba4b08d3c0bf0e5bafa1f50",
+      "Size": "6851"
+    },
+    {
+      "Guid": "7632647582125579319",
+      "BankName": "Music4_6",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001506,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "64b555ba34a87ba70db611356b5feccc",
+      "Size": "3470"
+    },
+    {
+      "Guid": "13253841330183236983",
+      "BankName": "Music4_7",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001514,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "b590ec53faae563ecfccd57a0e15daa4",
+      "Size": "4630"
+    },
+    {
+      "Guid": "8670786735212154262",
+      "BankName": "Music5_1",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001526,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "3420387431fee7d57006a2abd96bbfd9",
+      "Size": "3698"
+    },
+    {
+      "Guid": "6409662974865549752",
+      "BankName": "Music5_2",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001534,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "ecafa3fa898a376a1a8d46653077c21a",
+      "Size": "4458"
+    },
+    {
+      "Guid": "10804944323669651414",
+      "BankName": "Music5_3",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001545,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "74794a74139610a0ec31fc4a22185766",
+      "Size": "4543"
+    },
+    {
+      "Guid": "13682410980731291180",
+      "BankName": "Music5_4",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001555,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "ae4439ab9fab1249f344a97595a9e680",
+      "Size": "6878"
+    },
+    {
+      "Guid": "15966069453661239938",
+      "BankName": "Music5_5",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001571,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "469b328d4606df27fa76b564ece2d51e",
+      "Size": "4703"
+    },
+    {
+      "Guid": "15668213739383672521",
+      "BankName": "Music5_6",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001581,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "568c2ccd7fcf2958d58f8c87189d8b79",
+      "Size": "3490"
+    },
+    {
+      "Guid": "10989755202784520008",
+      "BankName": "Music5_7",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001589,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "b7f06fd8d650cd1837fafb7f5c23b05a",
+      "Size": "5187"
+    },
+    {
+      "Guid": "8663836344028411950",
+      "BankName": "Music5_8",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001602,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "7fdf1221fb0d505e90de0144c87a6df2",
+      "Size": "4325"
+    },
+    {
+      "Guid": "6820890963035466315",
+      "BankName": "Music6_1",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001611,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "2c97ddf7587db362cf8f377b19e5ef3a",
+      "Size": "2111"
+    },
+    {
+      "Guid": "2604042112990758575",
+      "BankName": "Music6_2",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001617,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "be261358bc2c3edc2340617763ad7dca",
+      "Size": "2822"
+    },
+    {
+      "Guid": "4851498287011933363",
+      "BankName": "Music6_3",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001624,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "6e5afaaa2e22a08de8a77aa5df861de4",
+      "Size": "2576"
+    },
+    {
+      "Guid": "16744618599898053616",
+      "BankName": "Music6_4",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001629,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "58cf99469836b2e326b368a06f303ed3",
+      "Size": "2493"
+    },
+    {
+      "Guid": "4654329470574274375",
+      "BankName": "Music6_5",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001637,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "de47ddaab195f24b08376c9613405409",
+      "Size": "2499"
+    },
+    {
+      "Guid": "4577493550630387592",
+      "BankName": "Music6_6",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001644,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "61456c42bf908ee7b5bcabcc27c07721",
+      "Size": "2451"
+    },
+    {
+      "Guid": "10378933818354998465",
+      "BankName": "Music6_7",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001649,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "18982f624ef2631f67a277159025c86f",
+      "Size": "2513.74"
+    },
+    {
+      "Guid": "11329293679594640179",
+      "BankName": "Common_Music",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001651,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "780d275635b18a4bf0127b5f99052ca4",
+      "Size": "5.87"
+    },
+    {
+      "Guid": "14365356142622445952",
+      "BankName": "Common_Init",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001653,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "1adc4dc070fee37b7b486445b7d1e3ad",
+      "Size": "10.53"
+    },
+    {
+      "Guid": "1293171610401774560",
+      "BankName": "Boluodao_Forest",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001658,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "60e4b2f156505dd4b6551d8e85cd847d",
+      "Size": "142329"
+    },
+    {
+      "Guid": "3965202486616596632",
+      "BankName": "Boluodao_Plateau",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154001960,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "7870013ebfddfccb82b4f357841ef49a",
+      "Size": "72291"
+    },
+    {
+      "Guid": "12710052031241452786",
+      "BankName": "Boluodao_Grassland",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002113,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "159357fcce686a212deee400770b6cd5",
+      "Size": "79415"
+    },
+    {
+      "Guid": "14080842642379528520",
+      "BankName": "Ocean_Calm_Quad",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002281,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "5709dab8a6b458a937e22e93e9d2db15",
+      "Size": "7563.64"
+    },
+    {
+      "Guid": "740551670336596374",
+      "BankName": "Ocean_Ebb_tide_LR",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002299,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "29834a8c9944f8a2a5876ffe318c9b1a",
+      "Size": "3788.24"
+    },
+    {
+      "Guid": "14624507786367793668",
+      "BankName": "Ocean_Rising_tide_LR",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002308,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "d786e76c2fd49df96ded78cd23840a48",
+      "Size": "3788.27"
+    },
+    {
+      "Guid": "13581135120126923390",
+      "BankName": "Ocean_RD",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002318,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "4c3825541575c87b117cfa5b57981c06",
+      "Size": "4788.78"
+    },
+    {
+      "Guid": "15207607479347412068",
+      "BankName": "Rain",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002329,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "78a7b8f87f7c35d39208748c41397a1c",
+      "Size": "11331.85"
+    },
+    {
+      "Guid": "4029333671366767351",
+      "BankName": "Wind",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002354,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "b3ecde2abcdecce68504234edd87a4e5",
+      "Size": "11287.90"
+    },
+    {
+      "Guid": "11259206695582480573",
+      "BankName": "Lake_Quad",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002381,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "97df5925173c66bb225e5ea127fa71d5",
+      "Size": "7562"
+    },
+    {
+      "Guid": "935986489561213350",
+      "BankName": "Lake_RD",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002399,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "6be3134b2c2f40629854684346e3bea3",
+      "Size": "1184"
+    },
+    {
+      "Guid": "14281700043006587992",
+      "BankName": "River_ADD",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002403,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "8056ca143becd85a35aa4d8dd3196bc7",
+      "Size": "3775.24"
+    },
+    {
+      "Guid": "16779886909906065546",
+      "BankName": "River_Quad",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002412,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "a78ccbc579bb6462cd09debbec626108",
+      "Size": "7572.24"
+    },
+    {
+      "Guid": "11665415703281925554",
+      "BankName": "Waterfall_Big_Quad",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002431,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "28e6bfff06a5b762709380d7206c2dfe",
+      "Size": "7542"
+    },
+    {
+      "Guid": "7044255878285402676",
+      "BankName": "Waterfall_Small_Quad",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002448,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "f24368116f01692dd1e9863140b2b4d7",
+      "Size": "7540"
+    },
+    {
+      "Guid": "17121196773059403171",
+      "BankName": "Campfire",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002466,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "0fddb7b9666d8d432b90cf0b6128afbc",
+      "Size": "836"
+    },
+    {
+      "Guid": "12328643400743369132",
+      "BankName": "Rain_Water",
+      "Type": 0,
+      "LastModifiedTimestamp": 1769154002469,
+      "Version": "1.0.0",
+      "Author": "YanTianYu",
+      "Url": "",
+      "Md5": "7a6dfbc8eac4f025a01ee2a7f05e17fe",
+      "Size": "3776.93"
+    }
+  ],
+  "Events": [
+    {
+      "EventName": "Break_Music",
+      "Guid": "18048931864706279745",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11329293679594640179",
+          "TargetBankName": "Common_Music"
+        }
+      ]
+    },
+    {
+      "EventName": "Pause_ALL",
+      "Guid": "11191440685263429963",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Pause_Music",
+      "Guid": "4702688643593791960",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11329293679594640179",
+          "TargetBankName": "Common_Music"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Boluodao_Forest",
+      "Guid": "4431626229274717082",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "1293171610401774560",
+          "TargetBankName": "Boluodao_Forest"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Boluodao_Grassland",
+      "Guid": "5057681108775756614",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "12710052031241452786",
+          "TargetBankName": "Boluodao_Grassland"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Boluodao_Plateau",
+      "Guid": "8947441126519861149",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "3965202486616596632",
+          "TargetBankName": "Boluodao_Plateau"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Campfire_Start_Loop",
+      "Guid": "2532505910923585987",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "17121196773059403171",
+          "TargetBankName": "Campfire"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Lake_LR",
+      "Guid": "9775311138811030326",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11259206695582480573",
+          "TargetBankName": "Lake_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Lake_LsRs",
+      "Guid": "17126612623398020475",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11259206695582480573",
+          "TargetBankName": "Lake_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Lake_RD",
+      "Guid": "5915958154106116189",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "935986489561213350",
+          "TargetBankName": "Lake_RD"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music1_1",
+      "Guid": "16091308800324493321",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "9558213516718892405",
+          "TargetBankName": "Music1_1"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music1_2",
+      "Guid": "4730687172566114330",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11332806345771797193",
+          "TargetBankName": "Music1_2"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music1_3",
+      "Guid": "12656361792337641348",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "7075941010367513477",
+          "TargetBankName": "Music1_3"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music1_4",
+      "Guid": "11806646393967403894",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "2193681648952686563",
+          "TargetBankName": "Music1_4"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music1_5",
+      "Guid": "13533747827712104774",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "12208667668980525412",
+          "TargetBankName": "Music1_5"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music1_6",
+      "Guid": "18005662077681204005",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "375638295464725245",
+          "TargetBankName": "Music1_6"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music1_7",
+      "Guid": "7116834551860374902",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "8152068146675868348",
+          "TargetBankName": "Music1_7"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music2_1",
+      "Guid": "12838695208442277999",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "8548341904812259606",
+          "TargetBankName": "Music2_1"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music2_2",
+      "Guid": "10293265164803266105",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11163301581692728726",
+          "TargetBankName": "Music2_2"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music2_3",
+      "Guid": "612113294991317653",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "9408925228479707617",
+          "TargetBankName": "Music2_3"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music2_4",
+      "Guid": "3141535900421448738",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "10383277089014743455",
+          "TargetBankName": "Music2_4"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music2_5",
+      "Guid": "17856930677504661150",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "4323735046372564438",
+          "TargetBankName": "Music2_5"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music2_6",
+      "Guid": "13092725311929175202",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "4239850016085561260",
+          "TargetBankName": "Music2_6"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music2_7",
+      "Guid": "8280748771412979189",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "15716040779383999163",
+          "TargetBankName": "Music2_7"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music3_1",
+      "Guid": "15853649921427722616",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11278341828468772876",
+          "TargetBankName": "Music3_1"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music3_10",
+      "Guid": "12393067069166182098",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14796014099005628269",
+          "TargetBankName": "Music3_10"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music3_2",
+      "Guid": "14560989078465157476",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "13320969978163857273",
+          "TargetBankName": "Music3_2"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music3_3",
+      "Guid": "17642303750779613084",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "4058923812680729503",
+          "TargetBankName": "Music3_3"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music3_4",
+      "Guid": "7556590445405682228",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "6371535162812371939",
+          "TargetBankName": "Music3_4"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music3_5",
+      "Guid": "9920946934835184585",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "9723694891020476350",
+          "TargetBankName": "Music3_5"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music3_6",
+      "Guid": "10865950629789664443",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "7095888381395631168",
+          "TargetBankName": "Music3_6"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music3_7",
+      "Guid": "9678251473822035341",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14884098497884866041",
+          "TargetBankName": "Music3_7"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music3_8",
+      "Guid": "14638356401790388484",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "16960479785389620128",
+          "TargetBankName": "Music3_8"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music3_9",
+      "Guid": "16281540114333007202",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "3135163105418105935",
+          "TargetBankName": "Music3_9"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music4_1",
+      "Guid": "8046257620623089837",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "4128975780179829915",
+          "TargetBankName": "Music4_1"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music4_2",
+      "Guid": "1290158413726855696",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "13106933601551035156",
+          "TargetBankName": "Music4_2"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music4_3",
+      "Guid": "360902052589607112",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "12586701867990988161",
+          "TargetBankName": "Music4_3"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music4_4",
+      "Guid": "15378232143959239215",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "16616663247231846535",
+          "TargetBankName": "Music4_4"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music4_5",
+      "Guid": "12240090828064003254",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "2228594008435456555",
+          "TargetBankName": "Music4_5"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music4_6",
+      "Guid": "5507008249327886760",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "7632647582125579319",
+          "TargetBankName": "Music4_6"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music4_7",
+      "Guid": "4475967884145968572",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "13253841330183236983",
+          "TargetBankName": "Music4_7"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music5_1",
+      "Guid": "1631273477858527346",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "8670786735212154262",
+          "TargetBankName": "Music5_1"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music5_2",
+      "Guid": "9757907285295168744",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "6409662974865549752",
+          "TargetBankName": "Music5_2"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music5_3",
+      "Guid": "12897642656742683498",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "10804944323669651414",
+          "TargetBankName": "Music5_3"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music5_4",
+      "Guid": "16932717724659467385",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "13682410980731291180",
+          "TargetBankName": "Music5_4"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music5_5",
+      "Guid": "11704048175780830797",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "15966069453661239938",
+          "TargetBankName": "Music5_5"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music5_6",
+      "Guid": "7921528359443093652",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "15668213739383672521",
+          "TargetBankName": "Music5_6"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music5_7",
+      "Guid": "8126665120052849974",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "10989755202784520008",
+          "TargetBankName": "Music5_7"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music5_8",
+      "Guid": "6897961821089009308",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "8663836344028411950",
+          "TargetBankName": "Music5_8"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music6_1",
+      "Guid": "16336936933802481970",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "6820890963035466315",
+          "TargetBankName": "Music6_1"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music6_2",
+      "Guid": "11727606194156595817",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "2604042112990758575",
+          "TargetBankName": "Music6_2"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music6_3",
+      "Guid": "9642429445518711970",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "4851498287011933363",
+          "TargetBankName": "Music6_3"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music6_4",
+      "Guid": "13310806177537926177",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "16744618599898053616",
+          "TargetBankName": "Music6_4"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music6_5",
+      "Guid": "409692168166455932",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "4654329470574274375",
+          "TargetBankName": "Music6_5"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music6_6",
+      "Guid": "9712464788682388726",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "4577493550630387592",
+          "TargetBankName": "Music6_6"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Music6_7",
+      "Guid": "15260452102578557483",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "10378933818354998465",
+          "TargetBankName": "Music6_7"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Ocean_Calm_L",
+      "Guid": "17961113379464156902",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14080842642379528520",
+          "TargetBankName": "Ocean_Calm_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Ocean_Calm_Ls",
+      "Guid": "2336235394468639944",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14080842642379528520",
+          "TargetBankName": "Ocean_Calm_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Ocean_Clam_R",
+      "Guid": "12860351574295448511",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14080842642379528520",
+          "TargetBankName": "Ocean_Calm_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Ocean_Clam_Rs",
+      "Guid": "7153268432091799872",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14080842642379528520",
+          "TargetBankName": "Ocean_Calm_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Ocean_Ebb_tide_L",
+      "Guid": "1316944893808169904",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "740551670336596374",
+          "TargetBankName": "Ocean_Ebb_tide_LR"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Ocean_Ebb_tide_R",
+      "Guid": "17429928802838187094",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "740551670336596374",
+          "TargetBankName": "Ocean_Ebb_tide_LR"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Ocean_RD",
+      "Guid": "3344499590811355682",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "13581135120126923390",
+          "TargetBankName": "Ocean_RD"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Ocean_Rising_tide_L",
+      "Guid": "10409917140615956790",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14624507786367793668",
+          "TargetBankName": "Ocean_Rising_tide_LR"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Ocean_Rising_tide_R",
+      "Guid": "9963341891139380745",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14624507786367793668",
+          "TargetBankName": "Ocean_Rising_tide_LR"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Rain",
+      "Guid": "11900187874927945179",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "15207607479347412068",
+          "TargetBankName": "Rain"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Rain_Water",
+      "Guid": "14601954180177928960",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "12328643400743369132",
+          "TargetBankName": "Rain_Water"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_River_ADD",
+      "Guid": "8697210633986613631",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14281700043006587992",
+          "TargetBankName": "River_ADD"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_River_L",
+      "Guid": "6173915214732343469",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "16779886909906065546",
+          "TargetBankName": "River_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_River_Ls",
+      "Guid": "17424230132800887094",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "16779886909906065546",
+          "TargetBankName": "River_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_River_R",
+      "Guid": "5858535117954350668",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "16779886909906065546",
+          "TargetBankName": "River_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_River_Rs",
+      "Guid": "13697703875131827690",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "16779886909906065546",
+          "TargetBankName": "River_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Waterfall_Big_LR",
+      "Guid": "7126428067352009798",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11665415703281925554",
+          "TargetBankName": "Waterfall_Big_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Waterfall_Big_LsRs",
+      "Guid": "15423944071014909604",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11665415703281925554",
+          "TargetBankName": "Waterfall_Big_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Waterfall_Small_LR",
+      "Guid": "10866201258084091261",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "7044255878285402676",
+          "TargetBankName": "Waterfall_Small_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Waterfall_Small_LsRs",
+      "Guid": "8949728418800395367",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "7044255878285402676",
+          "TargetBankName": "Waterfall_Small_Quad"
+        }
+      ]
+    },
+    {
+      "EventName": "Play_Wind",
+      "Guid": "5010347568803977050",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "4029333671366767351",
+          "TargetBankName": "Wind"
+        }
+      ]
+    },
+    {
+      "EventName": "Resume_ALL",
+      "Guid": "12662707650947576922",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Resume_Music",
+      "Guid": "16253915340793525312",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11329293679594640179",
+          "TargetBankName": "Common_Music"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_ALL",
+      "Guid": "17941860577335086835",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Boluodao",
+      "Guid": "8696848390494410328",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Boluodao_Forest",
+      "Guid": "6004939608131851965",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "1293171610401774560",
+          "TargetBankName": "Boluodao_Forest"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Boluodao_Grassland",
+      "Guid": "2526138165166950134",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "12710052031241452786",
+          "TargetBankName": "Boluodao_Grassland"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Boluodao_Ocean",
+      "Guid": "12223730104666516608",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Boluodao_Plateau",
+      "Guid": "15549980909251542373",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "3965202486616596632",
+          "TargetBankName": "Boluodao_Plateau"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Campfire",
+      "Guid": "7982787691771012359",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Campfire_End",
+      "Guid": "13122845369196564652",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "17121196773059403171",
+          "TargetBankName": "Campfire"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Lake",
+      "Guid": "6564432375702287373",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Music",
+      "Guid": "5101308056450237571",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "11329293679594640179",
+          "TargetBankName": "Common_Music"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Rain",
+      "Guid": "3265444133914721422",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "15207607479347412068",
+          "TargetBankName": "Rain"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Rain_Water",
+      "Guid": "17887253256721306254",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "12328643400743369132",
+          "TargetBankName": "Rain_Water"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_River",
+      "Guid": "1310423362429762118",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Waterfall_Big",
+      "Guid": "12712756862942360749",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Waterfall_Small",
+      "Guid": "513766682664567345",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Weather",
+      "Guid": "13171221408404256951",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "14365356142622445952",
+          "TargetBankName": "Common_Init"
+        }
+      ]
+    },
+    {
+      "EventName": "Stop_Wind ",
+      "Guid": "17401784809556078635",
+      "LastModifiedTimestamp": 1785850968028,
+      "MetadataNames": [],
+      "TargetBanks": [
+        {
+          "TargetBankGuid": "4029333671366767351",
+          "TargetBankName": "Wind"
+        }
+      ]
+    }
+  ],
+  "Switchs": [],
+  "Parameters": [],
+  "LanguagePacks": [],
+  "MusicLists": [
+    {
+      "musics": [
+        {
+          "bankName": "Music1_1",
+          "bankGuid": "9558213516718892405",
+          "eventName": "Play_Music1_1",
+          "musicName": "寂静回波"
+        },
+        {
+          "bankName": "Music1_2",
+          "bankGuid": "11332806345771797193",
+          "eventName": "Play_Music1_2",
+          "musicName": "深空呢喃"
+        },
+        {
+          "bankName": "Music1_3",
+          "bankGuid": "7075941010367513477",
+          "eventName": "Play_Music1_3",
+          "musicName": "星河漫行"
+        },
+        {
+          "bankName": "Music1_4",
+          "bankGuid": "2193681648952686563",
+          "eventName": "Play_Music1_4",
+          "musicName": "虚空之寂"
+        },
+        {
+          "bankName": "Music1_5",
+          "bankGuid": "12208667668980525412",
+          "eventName": "Play_Music1_5",
+          "musicName": "烟波载月"
+        },
+        {
+          "bankName": "Music1_6",
+          "bankGuid": "375638295464725245",
+          "eventName": "Play_Music1_6",
+          "musicName": "月光之岸"
+        },
+        {
+          "bankName": "Music1_7",
+          "bankGuid": "8152068146675868348",
+          "eventName": "Play_Music1_7",
+          "musicName": "云间回响"
+        }
+      ],
+      "musicsName": "归息"
+    },
+    {
+      "musics": [
+        {
+          "bankName": "Music2_1",
+          "bankGuid": "8548341904812259606",
+          "eventName": "Play_Music2_1",
+          "musicName": "橙色傍晚"
+        },
+        {
+          "bankName": "Music2_2",
+          "bankGuid": "11163301581692728726",
+          "eventName": "Play_Music2_2",
+          "musicName": "浮生慢行"
+        },
+        {
+          "bankName": "Music2_3",
+          "bankGuid": "9408925228479707617",
+          "eventName": "Play_Music2_3",
+          "musicName": "轻轻走过的小路"
+        },
+        {
+          "bankName": "Music2_4",
+          "bankGuid": "10383277089014743455",
+          "eventName": "Play_Music2_4",
+          "musicName": "森林的轻吟"
+        },
+        {
+          "bankName": "Music2_5",
+          "bankGuid": "4323735046372564438",
+          "eventName": "Play_Music2_5",
+          "musicName": "森林鸟语"
+        },
+        {
+          "bankName": "Music2_6",
+          "bankGuid": "4239850016085561260",
+          "eventName": "Play_Music2_6",
+          "musicName": "柔缓流动"
+        },
+        {
+          "bankName": "Music2_7",
+          "bankGuid": "15716040779383999163",
+          "eventName": "Play_Music2_7",
+          "musicName": "慵懒的阳光"
+        }
+      ],
+      "musicsName": "隙光"
+    },
+    {
+      "musics": [
+        {
+          "bankName": "Music3_1",
+          "bankGuid": "11278341828468772876",
+          "eventName": "Play_Music3_1",
+          "musicName": "浮光掠影"
+        },
+        {
+          "bankName": "Music3_2",
+          "bankGuid": "13320969978163857273",
+          "eventName": "Play_Music3_2",
+          "musicName": "红尘寄月"
+        },
+        {
+          "bankName": "Music3_3",
+          "bankGuid": "4058923812680729503",
+          "eventName": "Play_Music3_3",
+          "musicName": "静谧时光"
+        },
+        {
+          "bankName": "Music3_4",
+          "bankGuid": "6371535162812371939",
+          "eventName": "Play_Music3_4",
+          "musicName": "慢水流年"
+        },
+        {
+          "bankName": "Music3_5",
+          "bankGuid": "9723694891020476350",
+          "eventName": "Play_Music3_5",
+          "musicName": "听风入梦"
+        },
+        {
+          "bankName": "Music3_6",
+          "bankGuid": "7095888381395631168",
+          "eventName": "Play_Music3_6",
+          "musicName": "夏夜漫游"
+        },
+        {
+          "bankName": "Music3_7",
+          "bankGuid": "14884098497884866041",
+          "eventName": "Play_Music3_7",
+          "musicName": "星空"
+        },
+        {
+          "bankName": "Music3_8",
+          "bankGuid": "16960479785389620128",
+          "eventName": "Play_Music3_8",
+          "musicName": "一念之间"
+        },
+        {
+          "bankName": "Music3_9",
+          "bankGuid": "3135163105418105935",
+          "eventName": "Play_Music3_9",
+          "musicName": "云上小憩"
+        },
+        {
+          "bankName": "Music3_10",
+          "bankGuid": "14796014099005628269",
+          "eventName": "Play_Music3_10",
+          "musicName": "闲庭信步"
+        }
+      ],
+      "musicsName": "枕畔"
+    },
+    {
+      "musics": [
+        {
+          "bankName": "Music4_1",
+          "bankGuid": "4128975780179829915",
+          "eventName": "Play_Music4_1",
+          "musicName": "灯火渐息"
+        },
+        {
+          "bankName": "Music4_2",
+          "bankGuid": "13106933601551035156",
+          "eventName": "Play_Music4_2",
+          "musicName": "微光洛影"
+        },
+        {
+          "bankName": "Music4_3",
+          "bankGuid": "12586701867990988161",
+          "eventName": "Play_Music4_3",
+          "musicName": "孤舟寒江"
+        },
+        {
+          "bankName": "Music4_4",
+          "bankGuid": "16616663247231846535",
+          "eventName": "Play_Music4_4",
+          "musicName": "灰蓝清晨"
+        },
+        {
+          "bankName": "Music4_5",
+          "bankGuid": "2228594008435456555",
+          "eventName": "Play_Music4_5",
+          "musicName": "落尘之夜"
+        },
+        {
+          "bankName": "Music4_6",
+          "bankGuid": "7632647582125579319",
+          "eventName": "Play_Music4_6",
+          "musicName": "无人回应的信"
+        },
+        {
+          "bankName": "Music4_7",
+          "bankGuid": "13253841330183236983",
+          "eventName": "Play_Music4_7",
+          "musicName": "月下独白"
+        }
+      ],
+      "musicsName": "共凝"
+    },
+    {
+      "musics": [
+        {
+          "bankName": "Music5_1",
+          "bankGuid": "8670786735212154262",
+          "eventName": "Play_Music5_1",
+          "musicName": "风起云涌"
+        },
+        {
+          "bankName": "Music5_2",
+          "bankGuid": "6409662974865549752",
+          "eventName": "Play_Music5_2",
+          "musicName": "锦色年华"
+        },
+        {
+          "bankName": "Music5_3",
+          "bankGuid": "10804944323669651414",
+          "eventName": "Play_Music5_3",
+          "musicName": "洛水之畔"
+        },
+        {
+          "bankName": "Music5_4",
+          "bankGuid": "13682410980731291180",
+          "eventName": "Play_Music5_4",
+          "musicName": "千里暮归"
+        },
+        {
+          "bankName": "Music5_5",
+          "bankGuid": "15966069453661239938",
+          "eventName": "Play_Music5_5",
+          "musicName": "青石之间"
+        },
+        {
+          "bankName": "Music5_6",
+          "bankGuid": "15668213739383672521",
+          "eventName": "Play_Music5_6",
+          "musicName": "笙歌旧梦"
+        },
+        {
+          "bankName": "Music5_7",
+          "bankGuid": "10989755202784520008",
+          "eventName": "Play_Music5_7",
+          "musicName": "水墨天涯"
+        },
+        {
+          "bankName": "Music5_8",
+          "bankGuid": "8663836344028411950",
+          "eventName": "Play_Music5_8",
+          "musicName": "微风拂面"
+        }
+      ],
+      "musicsName": "归云"
+    },
+    {
+      "musics": [
+        {
+          "bankName": "Music6_1",
+          "bankGuid": "6820890963035466315",
+          "eventName": "Play_Music6_1",
+          "musicName": "春日序曲"
+        },
+        {
+          "bankName": "Music6_2",
+          "bankGuid": "2604042112990758575",
+          "eventName": "Play_Music6_2",
+          "musicName": "海面上的光"
+        },
+        {
+          "bankName": "Music6_3",
+          "bankGuid": "4851498287011933363",
+          "eventName": "Play_Music6_3",
+          "musicName": "极光雪憩"
+        },
+        {
+          "bankName": "Music6_4",
+          "bankGuid": "16744618599898053616",
+          "eventName": "Play_Music6_4",
+          "musicName": "蓝色沙漠"
+        },
+        {
+          "bankName": "Music6_5",
+          "bankGuid": "4654329470574274375",
+          "eventName": "Play_Music6_5",
+          "musicName": "林息仙迹"
+        },
+        {
+          "bankName": "Music6_6",
+          "bankGuid": "4577493550630387592",
+          "eventName": "Play_Music6_6",
+          "musicName": "无际之海"
+        },
+        {
+          "bankName": "Music6_7",
+          "bankGuid": "10378933818354998465",
+          "eventName": "Play_Music6_7",
+          "musicName": "真空圣境"
+        }
+      ],
+      "musicsName": "破茧"
+    }
+  ]
+}
