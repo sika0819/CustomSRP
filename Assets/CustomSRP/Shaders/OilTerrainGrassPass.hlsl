@@ -16,9 +16,6 @@ SAMPLER(sampler_GrassTexture);
 
 CBUFFER_START(UnityPerMaterial)
     float4 _GrassTexture_ST;
-    half4 _BaseColor;
-    half4 _GroundColor;
-    half4 _AmbientColor;
     float _GrassWidth;
     float _GrassHeight;
     float _WindStrength;
@@ -39,7 +36,7 @@ half QuantizeGrassNdotL(half ndotL, half steps)
 
 half3 OilTerrainGrassVertexLit(half3 albedo, half3 normalWS, float3 positionWS)
 {
-    half3 ambient = _AmbientColor.rgb;
+    half3 ambient = half3(0.55h, 0.50h, 0.44h);
     if (_OilPeriodAmbient.a > 0.5h)
         ambient = (half3)_OilPeriodAmbient.rgb;
 
@@ -84,14 +81,6 @@ half3 OilTerrainGrassVertexLit(half3 albedo, half3 normalWS, float3 positionWS)
     return lerp(umbraColor, litColor, lit);
 }
 
-half3 OilWheatAlbedo(half tip, float3 positionWS)
-{
-    half3 top = half3(0.96h, 0.78h, 0.18h);
-    half3 bottom = half3(0.58h, 0.46h, 0.14h);
-    half wobble = (half)(sin(positionWS.x * 0.7 + positionWS.z * 1.1) * 0.5 + 0.5);
-    return lerp(bottom, top, saturate(tip * 1.15h + wobble * 0.08h));
-}
-
 struct Attributes
 {
     float4 positionOS : POSITION;
@@ -119,10 +108,8 @@ Varyings OilTerrainGrassPassVertex(Attributes input)
     uint bits = asuint(inst.w);
     uint tileId = bits & 0xFFu;
     float dry = ((bits >> 8) & 0xFFu) * (1.0 / 255.0);
-    float tint01 = ((bits >> 16) & 0xFFu) * (1.0 / 255.0);
     uint flags = bits >> 24;
     bool flower = (flags & 1u) != 0u;
-    bool wheat = (flags & 2u) != 0u;
 
     float hash = sin(pivotWS.x * 23.4643 + pivotWS.z);
     float hashW = sin(pivotWS.x * 95.4643 + pivotWS.z);
@@ -167,48 +154,19 @@ Varyings OilTerrainGrassPassVertex(Attributes input)
 
     float4 rect = _GrassAtlasRects[tileId];
     float2 uv = input.uv;
-    // Flower mesh UVs already baked into FlowerAtlas space — do not re-crop.
-    if (!(flower || _UseTexColor > 0.5))
+    // 花 mesh 自带 FlowerAtlas UV；草 / 小麦按图集格裁 UV。
+    if (!flower)
         uv = rect.xy + uv * rect.zw;
 
     output.positionCS_SS = TransformWorldToHClip(positionWS);
     output.positionWS = positionWS;
     output.uv = TRANSFORM_TEX(uv, _GrassTexture);
     output.fade = fade;
-    output.useTex = flower ? 1.0h : (half)_UseTexColor;
+    output.useTex = 1.0h;
 
     half3 n = normalize(half3(0, 1, 0) + (_RandomNormal * hash) * (half3)windDir);
     output.normalWS = n;
-
-    if (flower)
-    {
-        output.color = 1;
-        return output;
-    }
-
-    half3 albedo;
-    if (wheat)
-    {
-        albedo = OilWheatAlbedo((half)saturate(input.uv.y), positionWS);
-    }
-    else
-    {
-        half tintShift = (half)(tint01 * 2.0 - 1.0);
-        half3 bladeSrc = _BaseColor.rgb;
-        half3 young = bladeSrc * half3(1.18h, 1.22h, 1.05h);
-        half3 old = bladeSrc * half3(0.72h, 0.78h, 0.62h);
-        half3 blade = lerp(old, young, saturate((half)tint01));
-        blade *= lerp(half3(1.0h, 1.0h, 1.0h), half3(1.08h, 1.02h, 0.86h), saturate(tintShift));
-        half dryh = (half)dry;
-        half3 straw = half3(0.62h, 0.54h, 0.32h);
-        half3 strawRoot = half3(0.42h, 0.34h, 0.20h);
-        half3 ground = lerp(_GroundColor.rgb, strawRoot, dryh);
-        blade = lerp(blade, straw, dryh);
-        half tipAmt = (half)saturate(input.uv.y);
-        albedo = lerp(ground, blade, tipAmt);
-    }
-
-    output.color = OilTerrainGrassVertexLit(albedo, n, positionWS);
+    output.color = 1;
     return output;
 }
 
@@ -219,16 +177,7 @@ half4 OilTerrainGrassPassFragment(Varyings input) : SV_TARGET
     half clipT = input.useTex > 0.5h ? min((half)_AlphaClip, 0.34h) : (half)_AlphaClip;
     clip(alpha - clipT);
 
-    half3 rgb;
-    if (input.useTex > 0.5h)
-    {
-        half3 lit = OilTerrainGrassVertexLit(tex.rgb, input.normalWS, input.positionWS);
-        rgb = lit;
-    }
-    else
-    {
-        rgb = input.color * lerp(half3(0.92h, 0.95h, 0.88h), tex.rgb, 0.35h);
-    }
+    half3 rgb = OilTerrainGrassVertexLit(tex.rgb, input.normalWS, input.positionWS);
 
     float viewZ = -TransformWorldToView(input.positionWS).z;
 #if defined(OIL_MOBILE_PERF)

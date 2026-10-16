@@ -25,22 +25,20 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _GrassTexture:
-        m_Texture: {fileID: 2800000, guid: 46126d4719d7245758ac6ea9cd37a87d, type: 3}
+        m_Texture: {fileID: 2800000, guid: 6a7ec381c6ab4b6196fec174c5b99ae9, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _AlphaClip: 0.48
+    - _AlphaClip: 0.34
     - _Billboard: 0
     - _GrassHeight: 1
     - _GrassWidth: 1
     - _RandomNormal: 0.12
     - _ShadeLift: 0.42
     - _ShadeSteps: 4
+    - _UseTexColor: 1
     - _WindStrength: 0.55
-    m_Colors:
-    - _AmbientColor: {r: 0.55, g: 0.5, b: 0.44, a: 1}
-    - _BaseColor: {r: 0.655, g: 0.722, b: 0.435, a: 1}
-    - _GroundColor: {r: 0.377, g: 0.502, b: 0.31, a: 1}
+    m_Colors: []
   m_BuildTextureStacks: []
   m_AllowLocking: 1

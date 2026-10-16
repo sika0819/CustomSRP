@@ -17,6 +17,14 @@ namespace CustomSRP.Editor
         const int GrassLayerIndex = 1;
         const float GrassThreshold = 0.18f;
         const float PlantSpacing = 0.36f;
+        /// <summary>原 Xunyicao 田种点间距（比普通草略疏）。</summary>
+        const float LavenderSpacing = 0.48f;
+        const float LavenderFieldPadMeters = 1.2f;
+        // 原 AllMapItem Xunyicao 包围盒（已从 MapItem 删除，bake 用常量）。
+        const float LavenderMinX = 170.2f;
+        const float LavenderMaxX = 206.5f;
+        const float LavenderMinZ = 728.9f;
+        const float LavenderMaxZ = 765.9f;
         const float MaxSlopeDeg = 42f;
         /// <summary>海面约 5.7m；再低一点留给滩涂草。</summary>
         const float MinPlantWorldY = 6.2f;
@@ -27,6 +35,31 @@ namespace CustomSRP.Editor
         const string StreamingBakePath = "Assets/StreamingAssets/Island_GrassBake.bytes";
         const string LegacyResourcesBakePath =
             "Assets/Resources/OilTerrainGrass/Island_GrassBake.bytes";
+        const string BakeFlagRelPath = "Temp/bake_island_grass.flag";
+
+        [InitializeOnLoadMethod]
+        static void WatchBakeFlag()
+        {
+            EditorApplication.delayCall += TryConsumeBakeFlag;
+        }
+
+        static void TryConsumeBakeFlag()
+        {
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                EditorApplication.delayCall += TryConsumeBakeFlag;
+                return;
+            }
+
+            string flag = Path.GetFullPath(Path.Combine(Application.dataPath, "..", BakeFlagRelPath));
+            if (!File.Exists(flag))
+                return;
+            try { File.Delete(flag); } catch { /* ignore */ }
+            if (EditorApplication.isPlaying)
+                return;
+            Log.Info("[OilTerrainGrass] Flag detected — baking island grass");
+            Bake();
+        }
 
         [MenuItem("CustomSRP/Grass/Bake Island Sidecar")]
         public static void Bake()
@@ -120,6 +153,11 @@ namespace CustomSRP.Editor
             int stripped = StripKeepOut(positions, variants, dryness, keepOut);
             if (stripped > 0)
                 Log.Info($"[OilTerrainGrass] KeepOut stripped={stripped} remain={positions.Count}");
+
+            int lavenderAdded = PlantLavenderField(
+                positions, variants, dryness, data, origin, keepOut);
+            if (lavenderAdded > 0)
+                Log.Info($"[OilTerrainGrass] lavender field planted={lavenderAdded}");
 
             if (positions.Count == 0)
             {
@@ -247,15 +285,124 @@ namespace CustomSRP.Editor
         {
             const string resDir = "Assets/Resources/OilTerrainGrass";
             Directory.CreateDirectory(resDir);
-            CopyIfExists("Assets/CustomSRP/Grass/GrassAtlas.png", resDir + "/GrassAtlas.png");
-            CopyIfExists("Assets/CustomSRP/Grass/FlowerAtlas.png", resDir + "/FlowerAtlas.png");
-            CopyIfExists("Assets/CustomSRP/Grass/Wheat.png", resDir + "/Wheat.png");
+
+            CopyIfExists(OilTerrainGrassAtlas.EditorPath, resDir + "/GrassAtlas.png");
+            CopyIfExists(OilTerrainGrassAtlas.FlowerEditorPath, resDir + "/FlowerAtlas.png");
+
+            // 源单张仍同步，方便单独预览 / 重打图集。
+            string[] sources = OilTerrainGrassAtlas.VariantSourceEditorPaths;
+            for (int i = 0; i < sources.Length; i++)
+            {
+                string path = sources[i];
+                if (string.IsNullOrEmpty(path)
+                    || path == OilTerrainGrassAtlas.EditorPath
+                    || path == OilTerrainGrassAtlas.FlowerEditorPath)
+                    continue;
+                string file = Path.GetFileName(path);
+                if (string.IsNullOrEmpty(file))
+                    continue;
+                CopyIfExists(path, resDir + "/" + file);
+            }
+
+            CopyIfExists(
+                OilTerrainGrassBladeMesh.LavenderMeshEditorPath,
+                resDir + "/Flower_Speedwell.obj");
+            CopyIfExists(OilTerrainGrassBladeMesh.AsterMeshEditorPath, resDir + "/Flower_Aster.obj");
+            CopyIfExists(OilTerrainGrassBladeMesh.ChamomileMeshEditorPath, resDir + "/Flower_Chamomile.obj");
+            CopyIfExists(OilTerrainGrassBladeMesh.DandelionsMeshEditorPath, resDir + "/Flower_Dandelions.obj");
             CopyIfExists(
                 "Assets/CustomSRP/Grass/OilTerrainGrassCull.compute",
                 resDir + "/OilTerrainGrassCull.compute");
             CopyIfExists(
                 "Assets/CustomSRP/Grass/OilTerrainGrass.mat",
                 resDir + "/OilTerrainGrass.mat");
+        }
+
+        /// <summary>
+        /// 原 Xunyicao 田区域种薰衣草；清掉田内普通草，改走草系统 Lavender 株型。
+        /// </summary>
+        static int PlantLavenderField(
+            List<Vector3> positions,
+            List<byte> variants,
+            List<byte> dryness,
+            TerrainData terrain,
+            Vector3 origin,
+            OilTerrainGrassKeepOutBake.Data keepOut)
+        {
+            float minX = LavenderMinX - LavenderFieldPadMeters;
+            float maxX = LavenderMaxX + LavenderFieldPadMeters;
+            float minZ = LavenderMinZ - LavenderFieldPadMeters;
+            float maxZ = LavenderMaxZ + LavenderFieldPadMeters;
+
+            // 田内普通草清掉，避免和薰衣草叠种。
+            int write = 0;
+            for (int i = 0; i < positions.Count; i++)
+            {
+                Vector3 p = positions[i];
+                if (p.x >= minX && p.x <= maxX && p.z >= minZ && p.z <= maxZ)
+                    continue;
+                positions[write] = p;
+                variants[write] = variants[i];
+                dryness[write] = dryness[i];
+                write++;
+            }
+
+            if (write < positions.Count)
+            {
+                positions.RemoveRange(write, positions.Count - write);
+                variants.RemoveRange(write, variants.Count - write);
+                dryness.RemoveRange(write, dryness.Count - write);
+            }
+
+            Vector3 size = terrain.size;
+            float spacing = Mathf.Max(0.28f, LavenderSpacing);
+            int stepsX = Mathf.Max(1, Mathf.CeilToInt((maxX - minX) / spacing));
+            int stepsZ = Mathf.Max(1, Mathf.CeilToInt((maxZ - minZ) / spacing));
+            float maxSlopeRad = MaxSlopeDeg * Mathf.Deg2Rad;
+            byte lavender = (byte)OilTerrainGrassBladeMesh.Variant.Lavender;
+            int added = 0;
+
+            for (int iz = 0; iz < stepsZ; iz++)
+            {
+                for (int ix = 0; ix < stepsX; ix++)
+                {
+                    float jx = (Hash01(ix, iz, 131f) - 0.5f) * spacing * 0.65f;
+                    float jz = (Hash01(ix, iz, 149f) - 0.5f) * spacing * 0.65f;
+                    float wx = minX + (ix + 0.5f) * spacing + jx;
+                    float wz = minZ + (iz + 0.5f) * spacing + jz;
+                    if (wx < minX || wx > maxX || wz < minZ || wz > maxZ)
+                        continue;
+
+                    float u = Mathf.Clamp01((wx - origin.x) / size.x);
+                    float v = Mathf.Clamp01((wz - origin.z) / size.z);
+                    float wy = origin.y + terrain.GetInterpolatedHeight(u, v);
+                    if (wy < MinPlantWorldY)
+                        continue;
+
+                    Vector3 normal = terrain.GetInterpolatedNormal(u, v);
+                    float slope = Mathf.Acos(Mathf.Clamp(normal.y, -1f, 1f));
+                    if (slope > maxSlopeRad)
+                        continue;
+
+                    // 边沿略疏，田心更密。
+                    float nx = (wx - minX) / Mathf.Max(0.01f, maxX - minX);
+                    float nz = (wz - minZ) / Mathf.Max(0.01f, maxZ - minZ);
+                    float edge = Mathf.Min(Mathf.Min(nx, 1f - nx), Mathf.Min(nz, 1f - nz));
+                    float keep = Mathf.Lerp(0.55f, 1f, Mathf.Clamp01(edge * 3.5f));
+                    if (Hash01(ix, iz, 167f) > keep)
+                        continue;
+
+                    if (keepOut != null && OilTerrainGrassKeepOutBake.Contains(keepOut, wx, wz))
+                        continue;
+
+                    positions.Add(new Vector3(wx, wy, wz));
+                    variants.Add(lavender);
+                    dryness.Add(20);
+                    added++;
+                }
+            }
+
+            return added;
         }
 
         static int StripKeepOut(

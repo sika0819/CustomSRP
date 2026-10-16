@@ -4,14 +4,13 @@ using UnityGameFramework.Runtime;
 namespace CustomSRP
 {
     /// <summary>
-    /// CustomSRP 侧草地接线：材质 / compute / atlas + 可选 bake bytes。
+    /// CustomSRP 侧草地接线：材质 / compute / 每株型单张纹理 + 可选 bake bytes。
     /// 进岛由 Game.IslandGrassService 调用（反射），勿在编辑器菜单里误用 DontDestroyOnLoad。
     /// </summary>
     public static class OilTerrainGrassBootstrap
     {
         const string ComputeEditorPath = "Assets/CustomSRP/Grass/OilTerrainGrassCull.compute";
         const string MaterialEditorPath = "Assets/CustomSRP/Grass/OilTerrainGrass.mat";
-        const string AtlasEditorPath = OilTerrainGrassAtlas.EditorPath;
 
         public static OilTerrainGrassBinder EnsureConfigured() =>
             EnsureConfigured(null);
@@ -52,19 +51,32 @@ namespace CustomSRP
             if (mat != null)
                 binder.SetMaterialOverride(mat);
 
-            Texture atlas = LoadTexture(AtlasEditorPath, "OilTerrainGrass/GrassAtlas");
-            if (atlas != null)
-                binder.SetAtlasTexture(atlas);
+            int vc = OilTerrainGrassBladeMesh.VariantCount;
+            var variantTex = new Texture[vc];
+            string[] editorPaths = OilTerrainGrassAtlas.VariantEditorPaths;
+            string[] resPaths = OilTerrainGrassAtlas.VariantResourcesPaths;
+            for (int v = 0; v < vc; v++)
+            {
+                string editor = (uint)v < (uint)editorPaths.Length ? editorPaths[v] : null;
+                string res = (uint)v < (uint)resPaths.Length ? resPaths[v] : null;
+                variantTex[v] = LoadTexture(editor, res);
+            }
 
-            Texture flower = LoadTexture(
-                OilTerrainGrassAtlas.FlowerEditorPath, "OilTerrainGrass/FlowerAtlas");
-            if (flower != null)
-                binder.SetFlowerAtlas(flower);
+            // 兜底字段先写，再 SetVariantTextures（后者优先）。
+            Texture grassAtlas = LoadTexture(
+                OilTerrainGrassAtlas.EditorPath,
+                OilTerrainGrassAtlas.ResourcesPath);
+            if (grassAtlas != null)
+                binder.SetAtlasTexture(grassAtlas);
+            else if (variantTex[(int)OilTerrainGrassBladeMesh.Variant.Patch] != null)
+                binder.SetAtlasTexture(variantTex[(int)OilTerrainGrassBladeMesh.Variant.Patch]);
 
-            Texture wheat = LoadTexture(
-                OilTerrainGrassAtlas.WheatEditorPath, "OilTerrainGrass/Wheat");
-            if (wheat != null)
-                binder.SetWheatTexture(wheat);
+            if (variantTex[(int)OilTerrainGrassBladeMesh.Variant.Aster] != null)
+                binder.SetFlowerAtlas(variantTex[(int)OilTerrainGrassBladeMesh.Variant.Aster]);
+            if (variantTex[(int)OilTerrainGrassBladeMesh.Variant.Lavender] != null)
+                binder.SetLavenderTexture(variantTex[(int)OilTerrainGrassBladeMesh.Variant.Lavender]);
+
+            binder.SetVariantTextures(variantTex);
         }
 
         public static void ApplyDeviceBudget(OilTerrainGrassBinder binder)
@@ -102,10 +114,15 @@ namespace CustomSRP
         static Texture LoadTexture(string editorPath, string resourcesPath)
         {
 #if UNITY_EDITOR
-            var tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture>(editorPath);
-            if (tex != null)
-                return tex;
+            if (!string.IsNullOrEmpty(editorPath))
+            {
+                var tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture>(editorPath);
+                if (tex != null)
+                    return tex;
+            }
 #endif
+            if (string.IsNullOrEmpty(resourcesPath))
+                return null;
             return Resources.Load<Texture>(resourcesPath);
         }
     }

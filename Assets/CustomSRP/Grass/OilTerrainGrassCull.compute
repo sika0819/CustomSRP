@@ -49,7 +49,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float dSq = dx * dx + dz * dz;
     float d = sqrt(dSq);
 
-    // 0 Billboard 1 Patch 2 Single 3 Thick 4 Thin 5 Shrub 6 Wheat 7-10 Flower 11 Clover
+    // 0 Billboard 1 Patch 2 Single 3 Thick 4 Thin 5 Shrub 6 Wheat 7-10 Flower 11 Clover 12 Lavender
     float maxD = _MaxDrawDistance;
     uint stride = 1;
     if (_VariantKind >= 7 && _VariantKind <= 10)
@@ -62,6 +62,14 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     {
         maxD = min(_MaxDrawDistance, 28.0);
         if (d >= 16.0) stride = 2;
+        else stride = 1;
+    }
+    else if (_VariantKind == 12)
+    {
+        // 薰衣草田：稍远可见，密度高时远距抽稀。
+        maxD = min(_MaxDrawDistance, 95.0);
+        if (d >= 55.0) stride = 3;
+        else if (d >= 32.0) stride = 2;
         else stride = 1;
     }
     else if (_VariantKind == 1 || _VariantKind == 3 || _VariantKind == 5)
@@ -151,6 +159,13 @@ void CSMainAdd(uint3 id : SV_DispatchThreadID)
     {
         maxD = min(_MaxDrawDistance, 28.0);
         if (d >= 16.0) stride = 2;
+        else stride = 1;
+    }
+    else if (_VariantKind == 12)
+    {
+        maxD = min(_MaxDrawDistance, 95.0);
+        if (d >= 55.0) stride = 3;
+        else if (d >= 32.0) stride = 2;
         else stride = 1;
     }
     else if (_VariantKind == 1 || _VariantKind == 3 || _VariantKind == 5)

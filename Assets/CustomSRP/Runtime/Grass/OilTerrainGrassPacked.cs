@@ -44,22 +44,10 @@ namespace CustomSRP
 
         public static byte TileOf(int variant)
         {
-            switch (variant)
-            {
-                case (int)OilTerrainGrassBladeMesh.Variant.Billboard: return 0;
-                case (int)OilTerrainGrassBladeMesh.Variant.Patch: return 1;
-                case (int)OilTerrainGrassBladeMesh.Variant.Single: return 1;
-                case (int)OilTerrainGrassBladeMesh.Variant.Thick: return 2;
-                case (int)OilTerrainGrassBladeMesh.Variant.Thin: return 3;
-                case (int)OilTerrainGrassBladeMesh.Variant.Shrub: return 2;
-                case (int)OilTerrainGrassBladeMesh.Variant.Wheat: return 4;
-                case (int)OilTerrainGrassBladeMesh.Variant.Aster: return 5;
-                case (int)OilTerrainGrassBladeMesh.Variant.Chamomile: return 6;
-                case (int)OilTerrainGrassBladeMesh.Variant.Dandelions: return 7;
-                case (int)OilTerrainGrassBladeMesh.Variant.Speedwell: return 8;
-                case (int)OilTerrainGrassBladeMesh.Variant.Clover: return 9;
-                default: return 1;
-            }
+            // 草 + 小麦：GrassAtlas 格号 = variant；花仍用 mesh / FlowerAtlas 整图 UV。
+            if (OilTerrainGrassAtlas.UsesGrassAtlas(variant))
+                return (byte)variant;
+            return 0;
         }
 
         public static int TopologyOf(int variant)

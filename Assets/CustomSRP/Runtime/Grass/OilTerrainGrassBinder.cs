@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityGameFramework.Runtime;
@@ -20,9 +21,6 @@ namespace CustomSRP
         static readonly int WindDirId = Shader.PropertyToID("_OilGrassWindDir");
         static readonly int WindStrengthId = Shader.PropertyToID("_OilGrassWindStrength");
         static readonly int MaxDrawId = Shader.PropertyToID("_OilGrassMaxDraw");
-        static readonly Color DefaultBladeColor = new Color(0.655f, 0.722f, 0.435f, 1f);
-        static readonly Color DefaultRootColor = new Color(0.377f, 0.502f, 0.310f, 1f);
-
         [SerializeField] float minPlantWorldY = 6.2f;
         [SerializeField] int maxPerLeaf = 48000;
         [SerializeField] int maxTotalVisible = 48000;
@@ -32,6 +30,8 @@ namespace CustomSRP
         [SerializeField] Texture atlasTexture;
         [SerializeField] Texture flowerAtlasTexture;
         [SerializeField] Texture wheatTexture;
+        [SerializeField] Texture lavenderTexture;
+        [SerializeField] Texture[] variantTextures;
         [SerializeField] TextAsset bakeAsset;
         [SerializeField] Vector3 windDirection = new Vector3(1f, 0f, 0.35f);
         [SerializeField] float windStrength = 0.55f;
@@ -42,6 +42,7 @@ namespace CustomSRP
         readonly List<int> _visibleCellIds = new List<int>(256);
         readonly uint[] _argsCache = new uint[5];
         readonly List<uint> _cpuVisibleScratch = new List<uint>(4096);
+        MaterialPropertyBlock _grassMpb;
 
         int[] _cellOffsets = System.Array.Empty<int>();
         int[] _cellCounts = System.Array.Empty<int>();
@@ -58,9 +59,14 @@ namespace CustomSRP
         float _minX, _minY, _minZ, _maxX, _maxY, _maxZ;
         int _packedCount;
 
+        static readonly ProfilerMarker MarkerLateUpdate = new ProfilerMarker("OilTerrainGrass.LateUpdate");
+        static readonly ProfilerMarker MarkerCullAndDraw = new ProfilerMarker("OilTerrainGrass.CullAndDraw");
+
         ComputeBuffer[] _allPosV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
         ComputeBuffer[] _visibleIdV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
+        ComputeBuffer[] _visibleIdFarV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
         ComputeBuffer[] _argsV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
+        ComputeBuffer[] _argsFarV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
         int[] _packedV = new int[OilTerrainGrassBladeMesh.TopologyCount];
         Mesh[] _variantMeshes;
         Mesh[] _farVariantMeshes;
@@ -99,6 +105,10 @@ namespace CustomSRP
         bool _hasGrassView;
         Vector3 _lastGrassCamPos;
         Quaternion _lastGrassCamRot;
+        bool _windGlobalsValid;
+        Vector3 _lastWindDir;
+        float _lastWindStrength;
+        float _lastMaxDrawGlobal;
 
         public static OilTerrainGrassBinder Active { get; private set; }
         public static bool DebugDrawEnabled { get; set; } = true;
@@ -173,6 +183,7 @@ namespace CustomSRP
         public void SetAtlasTexture(Texture atlas)
         {
             atlasTexture = atlas;
+            RebuildVariantTextures();
             ApplyAtlasToMaterials();
         }
 
@@ -190,18 +201,42 @@ namespace CustomSRP
             ApplyAtlasToMaterials();
         }
 
+        public void SetLavenderTexture(Texture lavender)
+        {
+            lavenderTexture = lavender;
+            RebuildVariantTextures();
+            ApplyAtlasToMaterials();
+        }
+
+        /// <summary>按株型设置单张纹理（长度应对齐 VariantCount）。</summary>
+        public void SetVariantTextures(Texture[] textures)
+        {
+            variantTextures = textures;
+            RebuildVariantTextures();
+            ApplyAtlasToMaterials();
+        }
+
         void RebuildVariantTextures()
         {
             const int vc = OilTerrainGrassBladeMesh.TopologyCount;
             _variantTex = new Texture[vc];
             for (int v = 0; v < vc; v++)
             {
-                if (OilTerrainGrassBladeMesh.UsesAtlasColor(v))
-                    _variantTex[v] = flowerAtlasTexture != null ? flowerAtlasTexture : atlasTexture;
-                else if (v == (int)OilTerrainGrassBladeMesh.Variant.Wheat)
-                    _variantTex[v] = wheatTexture != null ? wheatTexture : atlasTexture;
+                Texture assigned = null;
+                if (variantTextures != null
+                    && (uint)v < (uint)variantTextures.Length
+                    && variantTextures[v] != null)
+                    assigned = variantTextures[v];
+                else if (OilTerrainGrassBladeMesh.IsLavender(v))
+                    assigned = lavenderTexture != null ? lavenderTexture : flowerAtlasTexture;
+                else if (OilTerrainGrassBladeMesh.UsesAtlasColor(v))
+                    assigned = flowerAtlasTexture;
+                else if (OilTerrainGrassAtlas.UsesGrassAtlas(v))
+                    assigned = atlasTexture != null ? atlasTexture : wheatTexture;
                 else
-                    _variantTex[v] = atlasTexture;
+                    assigned = atlasTexture;
+
+                _variantTex[v] = assigned != null ? assigned : atlasTexture;
             }
         }
 
@@ -294,34 +329,37 @@ namespace CustomSRP
 
         void LateUpdate()
         {
-            if (!DebugDrawEnabled || !_bakeLoaded)
+            using (MarkerLateUpdate.Auto())
             {
+                if (!DebugDrawEnabled || !_bakeLoaded)
+                {
+                    LastVisibleCount = 0;
+                    return;
+                }
+
+                var cam = Camera.main;
+                if (cam == null)
+                {
+                    LastVisibleCount = 0;
+                    return;
+                }
+
+                MaybeRebuildBakeWindow(ResolveGrassFocus());
                 LastVisibleCount = 0;
-                return;
+                EnsureGpu();
+                PushWindGlobals();
+                if (!_gpuReady || _packedCount <= 0)
+                    return;
+
+                var camTf = cam.transform;
+                bool settled = _hasGrassView
+                    && (camTf.position - _lastGrassCamPos).sqrMagnitude <= 0.04f
+                    && Quaternion.Angle(camTf.rotation, _lastGrassCamRot) <= 0.75f;
+                if (_hasLastGrassSubmit && settled)
+                    ReplayLastGrassDraw();
+                else
+                    CullAndDraw(cam);
             }
-
-            var cam = Camera.main;
-            if (cam == null)
-            {
-                LastVisibleCount = 0;
-                return;
-            }
-
-            MaybeRebuildBakeWindow(ResolveGrassFocus());
-            LastVisibleCount = 0;
-            EnsureGpu();
-            PushWindGlobals();
-            if (!_gpuReady || _packedCount <= 0)
-                return;
-
-            var camTf = cam.transform;
-            bool settled = _hasGrassView
-                && (camTf.position - _lastGrassCamPos).sqrMagnitude <= 0.04f
-                && Quaternion.Angle(camTf.rotation, _lastGrassCamRot) <= 0.75f;
-            if (_hasLastGrassSubmit && settled)
-                ReplayLastGrassDraw();
-            else
-                CullAndDraw(cam);
         }
 
         void OnDestroy()
@@ -352,9 +390,19 @@ namespace CustomSRP
         void PushWindGlobals()
         {
             Vector3 dir = windDirection.sqrMagnitude > 1e-6f ? windDirection.normalized : Vector3.right;
+            if (_windGlobalsValid
+                && (dir - _lastWindDir).sqrMagnitude < 1e-8f
+                && Mathf.Abs(windStrength - _lastWindStrength) < 1e-5f
+                && Mathf.Abs(maxDrawDistance - _lastMaxDrawGlobal) < 1e-4f)
+                return;
+
             Shader.SetGlobalVector(WindDirId, dir);
             Shader.SetGlobalFloat(WindStrengthId, windStrength);
             Shader.SetGlobalFloat(MaxDrawId, maxDrawDistance);
+            _lastWindDir = dir;
+            _lastWindStrength = windStrength;
+            _lastMaxDrawGlobal = maxDrawDistance;
+            _windGlobalsValid = true;
         }
 
         static float HorizontalDistXZ(Vector3 a, Vector3 b)
@@ -712,181 +760,184 @@ namespace CustomSRP
 
         void CullAndDraw(Camera cam)
         {
-            CollectVisiblePackedCells(cam);
-            if (_visibleCellIds.Count == 0)
+            using (MarkerCullAndDraw.Auto())
             {
-                _hasLastGrassSubmit = false;
-                return;
-            }
+                CollectVisiblePackedCells(cam);
+                if (_visibleCellIds.Count == 0)
+                {
+                    _hasLastGrassSubmit = false;
+                    return;
+                }
 
-            Matrix4x4 vp = cam.projectionMatrix * cam.worldToCameraMatrix;
-            var renderBound = BuildGrassRenderBound();
-            bool useGpu = cullCompute != null && ResolveCullKernel() >= 0;
+                Matrix4x4 vp = cam.projectionMatrix * cam.worldToCameraMatrix;
+                var renderBound = BuildGrassRenderBound();
+                bool useGpu = cullCompute != null && ResolveCullKernel() >= 0;
+                float nearMax = FarGrassFullDensityMeters;
 
-            if (useGpu)
-            {
-                EnsureKeepOutBuffer();
-                cullCompute.SetInt("_LeafFrustumEnabled", 0);
-                cullCompute.SetMatrix("_VPMatrix", vp);
-                cullCompute.SetVector("_CamPos", cam.transform.position);
-                cullCompute.SetFloat("_MinPlantY", minPlantWorldY);
-                cullCompute.SetFloat("_MinDrawDistance", 0f);
-                cullCompute.SetFloat("_MaxDrawDistance", maxDrawDistance);
-            }
-
-            const int vc = OilTerrainGrassBladeMesh.TopologyCount;
-            int visibleSum = 0;
-            for (int v = 0; v < vc; v++)
-            {
-                Mesh nearMesh = ResolveVariantMesh(v, far: false);
-                if (_packedV[v] <= 0 || nearMesh == null)
-                    continue;
-                if (_variantMats == null || _variantMats[v] == null || _allPosV[v] == null)
-                    continue;
-                if (_visibleIdV[v] == null || _argsV[v] == null)
-                    continue;
-
-                BindGrassGlobals(_variantMats[v], v);
                 if (useGpu)
                 {
-                    int kernel = ResolveCullKernel();
-                    BindKeepOutForKernel(kernel);
-                    cullCompute.SetBuffer(kernel, "_AllInstancesPosWSBuffer", _allPosV[v]);
-                    cullCompute.SetInt("_VariantKind", v);
-                    visibleSum += DispatchVisibleCells(v, nearMesh, renderBound, _visibleIdV[v], _argsV[v]);
+                    EnsureKeepOutBuffer();
+                    // Shared frustum/matrix globals: set ONCE per frame instead of per-variant.
+                    cullCompute.SetMatrix("_VPMatrix", vp);
+                    cullCompute.SetVector("_CamPos", cam.transform.position);
+                    cullCompute.SetFloat("_MinPlantY", minPlantWorldY);
+                    BindKeepOutForKernel(ResolveCullKernel());
                 }
-                else
+
+                const int vc = OilTerrainGrassBladeMesh.TopologyCount;
+                int visibleSum = 0;
+                for (int v = 0; v < vc; v++)
                 {
-                    visibleSum += CpuCullAndDraw(v, nearMesh, renderBound, cam, vp);
+                    Mesh nearMesh = ResolveVariantMesh(v, far: false);
+                    Mesh farMesh = ResolveVariantMesh(v, far: true);
+                    if (_packedV[v] <= 0 || nearMesh == null)
+                        continue;
+                    if (_variantMats == null || _variantMats[v] == null || _allPosV[v] == null)
+                        continue;
+
+                    EnsureGrassArgs(ref _argsV[v]);
+                    EnsureGrassArgs(ref _argsFarV[v]);
+                    EnsureGrassVisible(ref _visibleIdV[v], _packedV[v]);
+                    EnsureGrassVisible(ref _visibleIdFarV[v], _packedV[v]);
+                    if (_visibleIdV[v] == null || _argsV[v] == null)
+                        continue;
+
+                    BindGrassGlobals(_variantMats[v], v);
+                    if (useGpu)
+                    {
+                        int kernel = ResolveCullKernel();
+                        BindKeepOutForKernel(kernel);
+                        cullCompute.SetBuffer(kernel, "_AllInstancesPosWSBuffer", _allPosV[v]);
+                        cullCompute.SetInt("_VariantKind", v);
+                        // One dispatch per band over the full packed window; CS does frustum + distance.
+                        visibleSum += DispatchPackedBand(
+                            v, nearMesh, renderBound, _visibleIdV[v], _argsV[v],
+                            0f, nearMax);
+                        if (farMesh != null && _visibleIdFarV[v] != null && _argsFarV[v] != null)
+                        {
+                            visibleSum += DispatchPackedBand(
+                                v, farMesh, renderBound, _visibleIdFarV[v], _argsFarV[v],
+                                nearMax, maxDrawDistance);
+                        }
+                    }
+                    else
+                    {
+                        visibleSum += CpuCullAndDrawBand(
+                            v, nearMesh, renderBound, cam, vp, far: false, 0f, nearMax);
+                        if (farMesh != null)
+                        {
+                            visibleSum += CpuCullAndDrawBand(
+                                v, farMesh, renderBound, cam, vp, far: true,
+                                nearMax, maxDrawDistance);
+                        }
+                    }
                 }
-            }
 
-            _hasLastGrassSubmit = visibleSum > 0;
-            if (cam != null)
-            {
-                _lastGrassCamPos = cam.transform.position;
-                _lastGrassCamRot = cam.transform.rotation;
-                _hasGrassView = true;
-            }
+                _hasLastGrassSubmit = visibleSum > 0;
+                if (cam != null)
+                {
+                    _lastGrassCamPos = cam.transform.position;
+                    _lastGrassCamRot = cam.transform.rotation;
+                    _hasGrassView = true;
+                }
 
-            LastVisibleCount += visibleSum;
-            if (!_loggedDraw)
-            {
-                _loggedDraw = true;
-                Log.Info(
-                    $"[OilTerrainGrass] draw packed={_packedCount} visJobs={visibleSum} " +
-                    $"cells={_visibleCellIds.Count} gpu={useGpu} dist={maxDrawDistance:F0}");
+                LastVisibleCount += visibleSum;
+                if (!_loggedDraw)
+                {
+                    _loggedDraw = true;
+                    Log.Info(
+                        $"[OilTerrainGrass] draw packed={_packedCount} visJobs={visibleSum} " +
+                        $"cells={_visibleCellIds.Count} gpu={useGpu} dist={maxDrawDistance:F0}");
+                }
             }
         }
 
-        int DispatchVisibleCells(
+        int DispatchPackedBand(
             int variant,
             Mesh mesh,
             Bounds renderBound,
             ComputeBuffer visibleIds,
-            ComputeBuffer args)
+            ComputeBuffer args,
+            float minDraw,
+            float maxDraw)
         {
-            if (_cellOffsetsV == null || _cellCountsV == null
-                || _cellOffsetsV[variant] == null || _cellCountsV[variant] == null)
+            int count = _packedV[variant];
+            if (count <= 0 || mesh == null || visibleIds == null || args == null)
                 return 0;
 
             int kernel = ResolveCullKernel();
             BindGrassCullOutputs(kernel, _useAdd, visibleIds, args, mesh);
-            int dispatched = 0;
-            for (int i = 0; i < _visibleCellIds.Count; i++)
-            {
-                int packed = _visibleCellIds[i];
-                if ((uint)packed >= (uint)_cellCountsV[variant].Length)
-                    continue;
-                int start = _cellOffsetsV[variant][packed];
-                int jobLength = _cellCountsV[variant][packed];
-                while (i < _visibleCellIds.Count - 1
-                       && _visibleCellIds[i + 1] == _visibleCellIds[i] + 1
-                       && _visibleCellIds[i + 1] < _cellCountsV[variant].Length)
-                {
-                    i++;
-                    jobLength += _cellCountsV[variant][_visibleCellIds[i]];
-                }
-
-                if (jobLength <= 0)
-                    continue;
-                cullCompute.SetInt("_StartOffset", start);
-                cullCompute.SetInt("_InstanceCount", start + jobLength);
-                cullCompute.Dispatch(kernel, Mathf.CeilToInt(jobLength / 64f), 1, 1);
-                dispatched += jobLength;
-            }
-
-            if (dispatched <= 0)
-                return 0;
+            cullCompute.SetFloat("_MinDrawDistance", minDraw);
+            cullCompute.SetFloat("_MaxDrawDistance", maxDraw);
+            cullCompute.SetInt("_StartOffset", 0);
+            cullCompute.SetInt("_InstanceCount", count);
+            cullCompute.Dispatch(kernel, Mathf.CeilToInt(count / 64f), 1, 1);
             SubmitIndirectDraw(variant, mesh, renderBound, visibleIds, args, _useAdd);
-            return dispatched;
+            return count;
         }
 
-        int CpuCullAndDraw(int variant, Mesh mesh, Bounds renderBound, Camera cam, Matrix4x4 vp)
+        int CpuCullAndDrawBand(
+            int variant,
+            Mesh mesh,
+            Bounds renderBound,
+            Camera cam,
+            Matrix4x4 vp,
+            bool far,
+            float minDraw,
+            float maxDraw)
         {
-            if (_cellOffsetsV == null || _cellCountsV == null
-                || _cellOffsetsV[variant] == null || _windowPackUpload == null)
+            if (_windowPackUpload == null || mesh == null || _windowPackUpload[variant] == null)
+                return 0;
+
+            ComputeBuffer visibleIds = far ? _visibleIdFarV[variant] : _visibleIdV[variant];
+            ComputeBuffer args = far ? _argsFarV[variant] : _argsV[variant];
+            if (visibleIds == null || args == null)
                 return 0;
 
             _cpuVisibleScratch.Clear();
             Vector3 camPos = cam.transform.position;
-            float maxD = maxDrawDistance;
-            for (int i = 0; i < _visibleCellIds.Count; i++)
+            int count = _packedV[variant];
+            for (int j = 0; j < count; j++)
             {
-                int packed = _visibleCellIds[i];
-                if ((uint)packed >= (uint)_cellCountsV[variant].Length)
+                Vector4 inst = _windowPackUpload[variant][j];
+                Vector3 pos = new Vector3(inst.x, inst.y, inst.z);
+                if (pos.y < minPlantWorldY)
                     continue;
-                int start = _cellOffsetsV[variant][packed];
-                int count = _cellCountsV[variant][packed];
-                for (int j = 0; j < count; j++)
-                {
-                    uint srcId = (uint)(start + j);
-                    if (srcId >= (uint)_packedV[variant])
-                        break;
-                    Vector4 inst = _windowPackUpload[variant][srcId];
-                    Vector3 pos = new Vector3(inst.x, inst.y, inst.z);
-                    if (pos.y < minPlantWorldY)
-                        continue;
-                    float dx = pos.x - camPos.x;
-                    float dz = pos.z - camPos.z;
-                    float d = Mathf.Sqrt(dx * dx + dz * dz);
-                    if (d > maxD)
-                        continue;
-                    Vector4 clip = vp * new Vector4(pos.x, pos.y, pos.z, 1f);
-                    float w = clip.w;
-                    float cullR = d < 10f ? 5.5f : 2f;
-                    if (w < -cullR)
-                        continue;
-                    float aw = Mathf.Max(Mathf.Abs(w), 0.25f);
-                    if (Mathf.Abs(clip.x) <= aw * 1.15f + cullR
-                        && Mathf.Abs(clip.y) <= aw * 2.15f + cullR
-                        && clip.z <= aw + cullR)
-                        _cpuVisibleScratch.Add(srcId);
-                }
+                float dx = pos.x - camPos.x;
+                float dz = pos.z - camPos.z;
+                float d = Mathf.Sqrt(dx * dx + dz * dz);
+                if (d < minDraw || d > maxDraw)
+                    continue;
+                Vector4 clip = vp * new Vector4(pos.x, pos.y, pos.z, 1f);
+                float w = clip.w;
+                float cullR = d < 10f ? 5.5f : 2f;
+                if (w < -cullR)
+                    continue;
+                float aw = Mathf.Max(Mathf.Abs(w), 0.25f);
+                if (Mathf.Abs(clip.x) <= aw * 1.15f + cullR
+                    && Mathf.Abs(clip.y) <= aw * 2.15f + cullR
+                    && clip.z <= aw + cullR)
+                    _cpuVisibleScratch.Add((uint)j);
             }
 
             if (_cpuVisibleScratch.Count == 0)
                 return 0;
 
-            EnsureGrassVisible(ref _visibleIdV[variant], Mathf.Max(_cpuVisibleScratch.Count, 1));
-            _visibleIdV[variant].SetData(_cpuVisibleScratch);
-            ResetGrassArgs(_argsV[variant], mesh);
+            if (far)
+                EnsureGrassVisible(ref _visibleIdFarV[variant], Mathf.Max(_cpuVisibleScratch.Count, 1));
+            else
+                EnsureGrassVisible(ref _visibleIdV[variant], Mathf.Max(_cpuVisibleScratch.Count, 1));
+            visibleIds = far ? _visibleIdFarV[variant] : _visibleIdV[variant];
+
+            visibleIds.SetData(_cpuVisibleScratch);
+            ResetGrassArgs(args, mesh);
             _argsCache[0] = mesh.GetIndexCount(0);
             _argsCache[1] = (uint)_cpuVisibleScratch.Count;
             _argsCache[2] = mesh.GetIndexStart(0);
             _argsCache[3] = mesh.GetBaseVertex(0);
             _argsCache[4] = 0;
-            _argsV[variant].SetData(_argsCache);
-            if (_variantMats[variant] != null)
-            {
-                _variantMats[variant].SetBuffer("_AllInstancesPosWSBuffer", _allPosV[variant]);
-                _variantMats[variant].SetBuffer(
-                    "_VisibleInstanceOnlyTransformIDBuffer", _visibleIdV[variant]);
-            }
-
-            Graphics.DrawMeshInstancedIndirect(
-                mesh, 0, _variantMats[variant], renderBound, _argsV[variant],
-                0, null, ShadowCastingMode.Off, false, 0, _bindDrawCamera);
+            args.SetData(_argsCache);
+            DrawIndirect(variant, mesh, renderBound, visibleIds, args);
             return _cpuVisibleScratch.Count;
         }
 
@@ -921,9 +972,24 @@ namespace CustomSRP
                 ComputeBuffer.CopyCount(visibleIds, args, sizeof(uint));
             }
 
+            DrawIndirect(variant, mesh, renderBound, visibleIds, args);
+        }
+
+        void DrawIndirect(
+            int variant, Mesh mesh, Bounds renderBound,
+            ComputeBuffer visibleIds, ComputeBuffer args)
+        {
+            Material mat = _variantMats[variant];
+            if (mat == null || mesh == null || args == null || visibleIds == null)
+                return;
+            if (_grassMpb == null)
+                _grassMpb = new MaterialPropertyBlock();
+            _grassMpb.Clear();
+            _grassMpb.SetBuffer("_AllInstancesPosWSBuffer", _allPosV[variant]);
+            _grassMpb.SetBuffer("_VisibleInstanceOnlyTransformIDBuffer", visibleIds);
             Graphics.DrawMeshInstancedIndirect(
-                mesh, 0, _variantMats[variant], renderBound, args,
-                0, null, ShadowCastingMode.Off, false, 0, _bindDrawCamera);
+                mesh, 0, mat, renderBound, args,
+                0, _grassMpb, ShadowCastingMode.Off, false, 0, _bindDrawCamera);
         }
 
         void ReplayLastGrassDraw()
@@ -932,14 +998,15 @@ namespace CustomSRP
             const int vc = OilTerrainGrassBladeMesh.TopologyCount;
             for (int v = 0; v < vc; v++)
             {
-                Mesh mesh = ResolveVariantMesh(v, far: false);
-                if (_packedV[v] <= 0 || mesh == null || _variantMats == null || _variantMats[v] == null)
+                if (_packedV[v] <= 0 || _variantMats == null || _variantMats[v] == null)
                     continue;
-                if (_argsV[v] == null)
-                    continue;
-                Graphics.DrawMeshInstancedIndirect(
-                    mesh, 0, _variantMats[v], renderBound, _argsV[v],
-                    0, null, ShadowCastingMode.Off, false, 0, _bindDrawCamera);
+                Mesh nearMesh = ResolveVariantMesh(v, far: false);
+                if (nearMesh != null && _argsV[v] != null && _visibleIdV[v] != null)
+                    DrawIndirect(v, nearMesh, renderBound, _visibleIdV[v], _argsV[v]);
+
+                Mesh farMesh = ResolveVariantMesh(v, far: true);
+                if (farMesh != null && _argsFarV[v] != null && _visibleIdFarV[v] != null)
+                    DrawIndirect(v, farMesh, renderBound, _visibleIdFarV[v], _argsFarV[v]);
             }
         }
 
@@ -1018,8 +1085,16 @@ namespace CustomSRP
 
             SyncGrassIndirectMode();
             const int n = OilTerrainGrassBladeMesh.TopologyCount;
+            if (_argsFarV == null)
+                _argsFarV = new ComputeBuffer[n];
+            if (_visibleIdFarV == null)
+                _visibleIdFarV = new ComputeBuffer[n];
             for (int v = 0; v < n; v++)
+            {
                 EnsureGrassArgs(ref _argsV[v]);
+                EnsureGrassArgs(ref _argsFarV[v]);
+            }
+
             _gpuReady = true;
         }
 
@@ -1043,14 +1118,19 @@ namespace CustomSRP
             _ownsBladeMesh = true;
         }
 
-        static void DestroyOwnedMeshes(Mesh[] meshes)
+        void DestroyOwnedMeshes(Mesh[] meshes)
         {
             if (meshes == null)
                 return;
             for (int i = 0; i < meshes.Length; i++)
             {
-                if (meshes[i] != null)
-                    Destroy(meshes[i]);
+                Mesh m = meshes[i];
+                if (m == null)
+                    continue;
+                // OBJ/FBX 共享 Mesh 不能 Destroy。
+                if (OilTerrainGrassBladeMesh.IsImportedMesh(m))
+                    continue;
+                Destroy(m);
             }
         }
 
@@ -1071,20 +1151,6 @@ namespace CustomSRP
         {
             if (mat == null)
                 return;
-            if (mat.HasProperty("_BaseColor"))
-            {
-                Color c = mat.GetColor("_BaseColor");
-                if (c.r > 0.85f && c.g > 0.85f && c.b > 0.85f)
-                    mat.SetColor("_BaseColor", DefaultBladeColor);
-            }
-
-            if (mat.HasProperty("_GroundColor"))
-            {
-                Color g = mat.GetColor("_GroundColor");
-                if (g.maxColorComponent < 0.08f || (g.r > 0.85f && g.g > 0.85f && g.b > 0.85f))
-                    mat.SetColor("_GroundColor", DefaultRootColor);
-            }
-
             if (mat.HasProperty("_GrassWidth") && mat.GetFloat("_GrassWidth") < 0.08f)
                 mat.SetFloat("_GrassWidth", 1f);
             if (mat.HasProperty("_GrassHeight") && mat.GetFloat("_GrassHeight") < 0.08f)
@@ -1092,7 +1158,7 @@ namespace CustomSRP
             if (mat.HasProperty("_WindStrength") && mat.GetFloat("_WindStrength") < 0.2f)
                 mat.SetFloat("_WindStrength", 0.55f);
             if (mat.HasProperty("_AlphaClip") && mat.GetFloat("_AlphaClip") < 0.05f)
-                mat.SetFloat("_AlphaClip", 0.48f);
+                mat.SetFloat("_AlphaClip", 0.34f);
             mat.enableInstancing = true;
         }
 
@@ -1103,24 +1169,19 @@ namespace CustomSRP
                 mat.SetFloat(
                     "_Billboard",
                     topology == (int)OilTerrainGrassBladeMesh.Variant.Billboard ? 1f : 0f);
-            bool useTex = OilTerrainGrassBladeMesh.UsesAtlasColor(topology);
             if (mat.HasProperty("_UseTexColor"))
-                mat.SetFloat("_UseTexColor", useTex ? 1f : 0f);
+                mat.SetFloat("_UseTexColor", 1f);
             if (mat.HasProperty("_AlphaClip"))
-                mat.SetFloat("_AlphaClip", useTex ? 0.34f : 0.48f);
-            if (useTex && mat.HasProperty("_WindStrength"))
-            {
-                mat.SetFloat(
-                    "_WindStrength",
-                    OilTerrainGrassBladeMesh.IsClover(topology) ? 0.22f : 0.42f);
-            }
+                mat.SetFloat("_AlphaClip", OilTerrainGrassBladeMesh.IsLavender(topology) ? 0.28f : 0.34f);
 
-            if (topology == (int)OilTerrainGrassBladeMesh.Variant.Wheat)
+            if (mat.HasProperty("_WindStrength"))
             {
-                if (mat.HasProperty("_BaseColor"))
-                    mat.SetColor("_BaseColor", new Color(0.96f, 0.78f, 0.18f, 1f));
-                if (mat.HasProperty("_GroundColor"))
-                    mat.SetColor("_GroundColor", new Color(0.58f, 0.46f, 0.14f, 1f));
+                if (OilTerrainGrassBladeMesh.IsClover(topology))
+                    mat.SetFloat("_WindStrength", 0.22f);
+                else if (OilTerrainGrassBladeMesh.IsLavender(topology))
+                    mat.SetFloat("_WindStrength", 0.38f);
+                else if (OilTerrainGrassBladeMesh.UsesAtlasColor(topology))
+                    mat.SetFloat("_WindStrength", 0.42f);
             }
 
             if ((uint)topology < (uint)OilTerrainGrassBladeMesh.HeightScales.Length)
@@ -1131,16 +1192,8 @@ namespace CustomSRP
                     mat.SetFloat("_GrassWidth", OilTerrainGrassBladeMesh.WidthScales[topology]);
             }
 
-            mat.SetVectorArray("_GrassAtlasRects", RectsForVariant(topology));
+            mat.SetVectorArray("_GrassAtlasRects", OilTerrainGrassAtlas.RectsForTopology(topology));
             mat.enableInstancing = true;
-        }
-
-        Vector4[] RectsForVariant(int topology)
-        {
-            if (OilTerrainGrassBladeMesh.UsesAtlasColor(topology)
-                || topology == (int)OilTerrainGrassBladeMesh.Variant.Wheat)
-                return OilTerrainGrassAtlas.FullRects;
-            return OilTerrainGrassAtlas.DefaultRects;
         }
 
         Texture TextureForVariant(int topology)
@@ -1159,7 +1212,7 @@ namespace CustomSRP
             Texture tex = TextureForVariant(topology);
             if (tex != null && mat.HasProperty("_GrassTexture"))
                 mat.SetTexture("_GrassTexture", tex);
-            mat.SetVectorArray("_GrassAtlasRects", RectsForVariant(topology));
+            mat.SetVectorArray("_GrassAtlasRects", OilTerrainGrassAtlas.RectsForTopology(topology));
             if (_allPosV != null && (uint)topology < (uint)_allPosV.Length && _allPosV[topology] != null)
                 mat.SetBuffer("_AllInstancesPosWSBuffer", _allPosV[topology]);
             if (_visibleIdV != null && (uint)topology < (uint)_visibleIdV.Length && _visibleIdV[topology] != null)
@@ -1221,12 +1274,35 @@ namespace CustomSRP
             const int vc = OilTerrainGrassBladeMesh.TopologyCount;
             for (int v = 0; v < vc; v++)
             {
-                _allPosV[v]?.Release();
-                _allPosV[v] = null;
-                _visibleIdV[v]?.Release();
-                _visibleIdV[v] = null;
-                _argsV[v]?.Release();
-                _argsV[v] = null;
+                if (_allPosV != null)
+                {
+                    _allPosV[v]?.Release();
+                    _allPosV[v] = null;
+                }
+
+                if (_visibleIdV != null)
+                {
+                    _visibleIdV[v]?.Release();
+                    _visibleIdV[v] = null;
+                }
+
+                if (_visibleIdFarV != null)
+                {
+                    _visibleIdFarV[v]?.Release();
+                    _visibleIdFarV[v] = null;
+                }
+
+                if (_argsV != null)
+                {
+                    _argsV[v]?.Release();
+                    _argsV[v] = null;
+                }
+
+                if (_argsFarV != null)
+                {
+                    _argsFarV[v]?.Release();
+                    _argsFarV[v] = null;
+                }
             }
 
             _keepOutGrid?.Release();
@@ -1234,6 +1310,7 @@ namespace CustomSRP
             _keepOutEnabled = false;
             _keepOutLoadTried = false;
             _gpuReady = false;
+            _windGlobalsValid = false;
         }
 
         /// <summary>

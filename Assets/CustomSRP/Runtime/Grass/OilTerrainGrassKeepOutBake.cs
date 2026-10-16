@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using UnityEngine;
 
@@ -126,6 +127,38 @@ namespace CustomSRP
             }
 
             data.Mask = dst;
+        }
+
+        /// <summary>把值为 1 的格子按切比雪夫距离膨胀，写入调用方提供的缓冲。</summary>
+        public static void DilateBuffer(byte[] mask, int res, int radius)
+        {
+            if (mask == null || res <= 0 || radius <= 0 || mask.Length != res * res)
+                return;
+            var dst = new byte[mask.Length];
+            Array.Copy(mask, dst, mask.Length);
+            for (int z = 0; z < res; z++)
+            {
+                for (int x = 0; x < res; x++)
+                {
+                    if (mask[z * res + x] == 0)
+                        continue;
+                    for (int dz = -radius; dz <= radius; dz++)
+                    {
+                        int zz = z + dz;
+                        if ((uint)zz >= (uint)res)
+                            continue;
+                        for (int dx = -radius; dx <= radius; dx++)
+                        {
+                            int xx = x + dx;
+                            if ((uint)xx >= (uint)res)
+                                continue;
+                            dst[zz * res + xx] = 1;
+                        }
+                    }
+                }
+            }
+
+            Array.Copy(dst, mask, mask.Length);
         }
     }
 }

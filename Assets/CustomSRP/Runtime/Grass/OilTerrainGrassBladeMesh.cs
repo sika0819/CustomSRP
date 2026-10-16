@@ -4,14 +4,23 @@ using UnityEngine;
 namespace CustomSRP
 {
     /// <summary>
-    /// 12 株型：草卡片 + 小麦 + 花/三叶草（对齐 Boluo TerrainSplatGrass）。
+    /// 13 株型：草卡片 + 小麦 + 花/三叶草 + 薰衣草田（PureNature Lavender mesh）。
     /// </summary>
     public static class OilTerrainGrassBladeMesh
     {
-        public const int VariantCount = 12;
+        public const int VariantCount = 13;
         public const int TopologyCount = VariantCount;
         public const int FirstFlower = 7;
         public const int DefaultSegments = 4;
+        public const string LavenderMeshEditorPath =
+            "Assets/CustomSRP/Grass/Flower_Speedwell.obj";
+        public const string LavenderMeshResourcesPath = "OilTerrainGrass/Flower_Speedwell";
+        public const string AsterMeshEditorPath = "Assets/CustomSRP/Grass/Flower_Aster.obj";
+        public const string ChamomileMeshEditorPath = "Assets/CustomSRP/Grass/Flower_Chamomile.obj";
+        public const string DandelionsMeshEditorPath = "Assets/CustomSRP/Grass/Flower_Dandelions.obj";
+        public const string AsterMeshResourcesPath = "OilTerrainGrass/Flower_Aster";
+        public const string ChamomileMeshResourcesPath = "OilTerrainGrass/Flower_Chamomile";
+        public const string DandelionsMeshResourcesPath = "OilTerrainGrass/Flower_Dandelions";
 
         public enum Variant : byte
         {
@@ -27,25 +36,30 @@ namespace CustomSRP
             Dandelions = 9,
             Speedwell = 10,
             Clover = 11,
+            Lavender = 12,
         }
 
         // 花/蒲公英实例缩放=1；高度靠 mesh（比小麦略矮）。小麦 HeightScale=1.18。
         public static readonly float[] HeightScales =
         {
-            1f, 0.96f, 1f, 0.90f, 1.06f, 0.72f, 1.18f, 1f, 1f, 1f, 1f, 0.62f,
+            1f, 0.96f, 1f, 0.90f, 1.06f, 0.72f, 1.18f, 1f, 1f, 1f, 1f, 0.62f, 1f,
         };
 
         public static readonly float[] WidthScales =
         {
-            1f, 1f, 0.88f, 1.12f, 0.92f, 1f, 0.72f, 1f, 1f, 1f, 1f, 0.95f,
+            1f, 1f, 0.88f, 1.12f, 0.92f, 1f, 0.72f, 1f, 1f, 1f, 1f, 0.95f, 1f,
         };
 
         public static bool IsFlower(int variant) =>
-            variant >= FirstFlower && variant <= (int)Variant.Speedwell;
+            (variant >= FirstFlower && variant <= (int)Variant.Speedwell)
+            || variant == (int)Variant.Lavender;
 
         public static bool IsClover(int variant) => variant == (int)Variant.Clover;
 
-        public static bool UsesAtlasColor(int variant) => variant >= FirstFlower;
+        public static bool IsLavender(int variant) => variant == (int)Variant.Lavender;
+
+        public static bool UsesAtlasColor(int variant) =>
+            variant >= FirstFlower;
 
         public static int PickVariant(Vector3 pos)
         {
@@ -125,13 +139,77 @@ namespace CustomSRP
                 BuildThin(segments),
                 BuildShrub(segments),
                 BuildWheat(segments),
-                // 小麦≈1.5 高；花茎略矮。花冠 120°×3 片减十字感。
-                BuildFlowerPlant("FlowerAster", 0, 0.38f, 0.38f, 1.08f, segments),
-                BuildFlowerPlant("FlowerChamomile", 1, 0.36f, 0.36f, 1.02f, segments),
-                BuildFlowerPlant("FlowerDandelions", 2, 0.40f, 0.40f, 1.12f, segments),
+                LoadOrFallback(
+                    AsterMeshEditorPath, AsterMeshResourcesPath,
+                    () => BuildFlowerPlant("FlowerAster", 0, 0.38f, 0.38f, 1.08f, segments)),
+                LoadOrFallback(
+                    ChamomileMeshEditorPath, ChamomileMeshResourcesPath,
+                    () => BuildFlowerPlant("FlowerChamomile", 1, 0.36f, 0.36f, 1.02f, segments)),
+                LoadOrFallback(
+                    DandelionsMeshEditorPath, DandelionsMeshResourcesPath,
+                    () => BuildFlowerPlant("FlowerDandelions", 2, 0.40f, 0.40f, 1.12f, segments)),
                 BuildFlowerPlant("FlowerSpeedwell", 3, 0.12f, 1.10f, 0f, segments),
                 BuildClover(segments),
+                LoadOrFallback(LavenderMeshEditorPath, LavenderMeshResourcesPath, () => BuildLavenderFallback(segments)),
             };
+        }
+
+        public static bool IsImportedMesh(Mesh mesh)
+        {
+            if (mesh == null)
+                return false;
+            return mesh == LoadImportedMesh(AsterMeshEditorPath, AsterMeshResourcesPath)
+                || mesh == LoadImportedMesh(ChamomileMeshEditorPath, ChamomileMeshResourcesPath)
+                || mesh == LoadImportedMesh(DandelionsMeshEditorPath, DandelionsMeshResourcesPath)
+                || mesh == LoadImportedMesh(LavenderMeshEditorPath, LavenderMeshResourcesPath);
+        }
+
+        /// <summary>导入网格（OBJ/FBX）；失败返回 null。共享资源，调用方不要 Destroy。</summary>
+        public static Mesh LoadLavenderMesh() =>
+            LoadImportedMesh(LavenderMeshEditorPath, LavenderMeshResourcesPath);
+
+        static Mesh LoadOrFallback(string editorPath, string resourcesPath, System.Func<Mesh> fallback)
+        {
+            Mesh imported = LoadImportedMesh(editorPath, resourcesPath);
+            return imported != null ? imported : fallback();
+        }
+
+        static Mesh LoadImportedMesh(string editorPath, string resourcesPath)
+        {
+#if UNITY_EDITOR
+            if (!string.IsNullOrEmpty(editorPath))
+            {
+                var assets = UnityEditor.AssetDatabase.LoadAllAssetsAtPath(editorPath);
+                if (assets != null)
+                {
+                    for (int i = 0; i < assets.Length; i++)
+                    {
+                        if (assets[i] is Mesh mesh && mesh.vertexCount > 0)
+                            return mesh;
+                    }
+                }
+            }
+#endif
+            if (string.IsNullOrEmpty(resourcesPath))
+                return null;
+            var go = Resources.Load<GameObject>(resourcesPath);
+            if (go != null)
+            {
+                var filter = go.GetComponentInChildren<MeshFilter>();
+                if (filter != null && filter.sharedMesh != null)
+                    return filter.sharedMesh;
+            }
+
+            var direct = Resources.Load<Mesh>(resourcesPath);
+            return direct != null && direct.vertexCount > 0 ? direct : null;
+        }
+
+        static Mesh BuildLavenderFallback(int segments)
+        {
+            var b = new Builder("OilGrassLavenderFallback");
+            b.AddCard(0.12f, 0.55f, 1.05f, Vector3.zero, segments);
+            b.AddCard(1.68f, 0.48f, 0.92f, new Vector3(0.05f, 0f, 0.03f), segments);
+            return b.ToMesh();
         }
 
         static Mesh BuildBillboard(int segments)
@@ -291,6 +369,7 @@ namespace CustomSRP
                     _uvs.Add(new Vector2(uvRect.x + uvRect.z, uvRect.y + t * uvRect.w));
                 }
 
+                // Cull Off in OilTerrainGrass — one winding is enough; dual winding doubled overdraw.
                 for (int r = 0; r < segments; r++)
                 {
                     int i = baseV + r * 2;
@@ -299,12 +378,6 @@ namespace CustomSRP
                     _tris.Add(i + 1);
                     _tris.Add(i + 1);
                     _tris.Add(i + 2);
-                    _tris.Add(i + 3);
-                    _tris.Add(i);
-                    _tris.Add(i + 3);
-                    _tris.Add(i + 2);
-                    _tris.Add(i);
-                    _tris.Add(i + 1);
                     _tris.Add(i + 3);
                 }
             }

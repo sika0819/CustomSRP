@@ -19,7 +19,7 @@ namespace CustomSRP.Editor
 
         static readonly HashSet<string> SkipParents = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Zacao", "Hua", "Xunyicao", "Zhibei", "texiao", "FX",
+            "Zacao", "Hua", "Zhibei", "texiao", "FX",
         };
 
         struct Lod0Mesh
@@ -130,6 +130,7 @@ namespace CustomSRP.Editor
                 Mask = grid,
             };
             OilTerrainGrassKeepOutBake.Dilate(data, 1);
+            int rivers = StampRiverBanks(data.Mask, Res, originX, originZ, cell);
 
             byte[] bytes = OilTerrainGrassKeepOutBake.Write(data);
             if (bytes == null || bytes.Length == 0)
@@ -152,8 +153,63 @@ namespace CustomSRP.Editor
             Log.Info(
                 $"[OilTerrainGrass] KeepOut wrote {OilTerrainGrassKeepOutBake.EditorPath} " +
                 $"items={used} skip={skipped} noMesh={noMesh} missing={missingPrefab} " +
-                $"cells={marked}/{grid.Length} cell={cell:F2}");
+                $"rivers={rivers} cells={marked}/{grid.Length} cell={cell:F2}");
             return true;
+        }
+
+        /// <summary>河面外再留一圈岸，避免草种进浅水和泥岸。</summary>
+        const float RiverBankKeepOutMeters = 4f;
+
+        static int StampRiverBanks(byte[] grid, int res, float originX, float originZ, float cell)
+        {
+            var placements = new List<(string path, Vector3 position, Quaternion rotation, Vector3 scale)>(4);
+            if (Game.Editor.IslandInlandWaterBuilder.CopyRiverPlacements(placements) == 0)
+            {
+                Log.Warning("[OilTerrainGrass] no river placements for keep-out");
+                return 0;
+            }
+
+            var water = new byte[grid.Length];
+            var worldScratch = Array.Empty<Vector3>();
+            int stamped = 0;
+            for (int i = 0; i < placements.Count; i++)
+            {
+                var placement = placements[i];
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(placement.path);
+                if (prefab == null)
+                {
+                    Log.Warning("[OilTerrainGrass] river prefab missing " + placement.path);
+                    continue;
+                }
+
+                Lod0Mesh[] meshes = ExtractLod0(prefab);
+                if (meshes == null || meshes.Length == 0)
+                {
+                    Log.Warning("[OilTerrainGrass] river mesh missing " + placement.path);
+                    continue;
+                }
+
+                var trs = Matrix4x4.TRS(placement.position, placement.rotation, placement.scale);
+                for (int m = 0; m < meshes.Length; m++)
+                    RasterizeMesh(water, res, originX, originZ, cell, meshes[m], trs, ref worldScratch);
+                stamped++;
+            }
+
+            if (stamped == 0)
+                return 0;
+
+            int radius = Mathf.Max(1, Mathf.CeilToInt(RiverBankKeepOutMeters / Mathf.Max(cell, 1e-4f)));
+            OilTerrainGrassKeepOutBake.DilateBuffer(water, res, radius);
+            for (int i = 0; i < grid.Length; i++)
+            {
+                if (water[i] != 0)
+                    grid[i] = 1;
+            }
+
+            Log.Info(
+                $"[OilTerrainGrass] river keep-out meshes={stamped} bank={RiverBankKeepOutMeters:F1}m " +
+                $"radius={radius} cells");
+            return stamped;
         }
 
         static bool TryResolveTerrainBounds(out float originX, out float originZ, out float worldSize)
