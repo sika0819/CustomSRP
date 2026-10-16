@@ -22,9 +22,10 @@ GameEntry 挂在 `Launch.unity` 内(由 `Editor/LaunchSceneSetup.cs` 部署),`[D
 | `Environment/Runtime/` | 环境运行时(`EnvMapItemSpawner`/`EnvItemStreamerLite`/`FireController`/`CampfireWeatherGate` …)。美术资产(Models/Materials/Prefabs)与脚本分层 |
 | `Input/` | 玩家输入(`LocomotionInput`/`IslandVirtualJoystick`/`IslandLocomotionInput`/`HudOverlayGate`)。热重载时 `LocomotionInput.ClearAll()` |
 | `UI/` | 界面:`GameFormLogic : UIFormLogic` 基类 + `ScreenLayout` + `UiAssets` + `UiPreview` + `YooUIFormHelper`。运行时 Form 仅 7 个:`LoadingForm` / `IslandMainForm` / `WeatherForm` / `MusicForm` / `VolumeForm` / `PresetForm` / `TimerPauseForm`(下载类弹窗已移除) |
-| `Services/` | 全局单例服务:`WeatherService` / `PresetService` / `AtmospherePropService` / `MusicService` / `IslandWorldService` / `GuestLoginClient` / `GuestSession`(薄包装 `BoluoSession`);以及 *EventArgs 事件类、`IAtmosphereVisualDriver` 接口、`StreamingAssetsUtil` |
+| `Services/` | 全局单例服务:`WeatherService` / `PresetService` / `AtmospherePropService` / `MusicPlaylist` / `IslandWorldService` / `GuestLoginClient` / `GuestSession`(薄包装 `BoluoSession`);以及 *EventArgs 事件类、`IAtmosphereVisualDriver` 接口、`StreamingAssetsUtil` |
+| `Services/Audio/` | Wanos 音频交互:`AudioInteractionBootstrap` / `AmbienceZoneService` / `WeatherAudioBridge` / `RainWaterProximityService` + Catalogs（Uncover 后启动） |
 | `Native/` | IMP 原生桥:`NativeBridgeTransport` / `NativeBridgeFacade` / `NativeSession` / Push / MsgType / SignKit 桥 / Overlay / Timer |
-| `BoluoApi/` | 环境切换、device/user 换票、`upgrade/bank`、BankDownloader(落盘不灌 Wwise)、SignatureLib |
+| `BoluoApi/` | 环境切换、device/user 换票、`upgrade/bank`、BankDownloader(落盘 → WanosBankStore)、SignatureLib |
 | `Utility/` | `Http.Retry` HTTP 重试 |
 | `YooAsset/` | YooAsset 封装:`YooResourceModule`(会话复位)、`YooAssetResourceManager`(实现 GF `IResourceManager`)、`YooRemoteServices`、`YooAssetPlayModePrefs`、`UpdateSetting` |
 | `Runtime/` | 极少:`ForceIncludeEngineTypes` 防止被 IL2CPP 裁掉的反射类型 |
@@ -95,7 +96,8 @@ Editor 联调:`GameMain/Boluo/环境·渠道·版本`;换票需开启 `Editor Gu
 | 加 UIForm | 派生 `Game.UI.GameFormLogic`,在 `UI/UiAssets.cs` 加常量;参考 `IslandBreathHint` |
 | 加实体(树木/篝火/FX) | 派生 `EntityLogic`,在 `Entity/IslandSpawnPose` 注册,Group `Environment` 或 `FX` |
 | 加环境运行时(地形 / 海面 / 河流) | `Environment/Runtime/`,参考 `EnvMapItemSpawner` |
-| 加 Service | 参照 `MusicService`:`MonoBehaviour` + `Ensure()` 单例 + 在 `GameEntry.Custom.cs` 注册 + 事件用 `*EventArgs` |
+| 加 Service | 参照 `WeatherService`:`MonoBehaviour` + `Ensure()` 单例 + 在 `GameEntry.Custom.cs` 注册 + 事件用 `*EventArgs` |
+| 音频交互（环境区 / 天气 / 雨水面） | `Services/Audio/`，入口 `AudioInteractionBootstrap`；引擎侧 `WanosAudio.WanosInteraction`；Music 仍走 `MusicPlaylist` + GF Sound |
 | 加 YooAsset 资源 | `YooAsset/YooAssetCollectorSetup.cs` 走 `AddressByFolderAndFileName`,运行时 `ResourceComponent.LoadAsset` |
 | Editor 工具 | `Editor/`(独立 `Game.Editor.asmdef`),菜单加进现有 `GameBuildWindow` |
 | 改框架用法 | [`.cursor/skills/game-framework/SKILL.md`](../../.cursor/skills/game-framework/SKILL.md) + `references/` |

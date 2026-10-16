@@ -1,4 +1,6 @@
 using System.Collections;
+using Cysharp.Threading.Tasks;
+using Game.BoluoApi;
 using GameFramework.Procedure;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -115,6 +117,9 @@ namespace Game
 
             if (!isShutdown)
             {
+                AudioInteractionBootstrap.Shutdown();
+                WanosAudio.WanosEngine.StopEngine("ProcedureIsland.OnLeave");
+                WanosAudio.WanosEngine.Unload("ProcedureIsland.OnLeave");
                 GameEntry.World?.Release();
                 _worldLoadStarted = false;
             }
@@ -129,6 +134,7 @@ namespace Game
                 case Phase.Services:
                     GameEntry.EnsureUiGroups();
                     GameEntry.EnsureEntityGroups();
+                    WanosSoundSetup.EnsureSoundGroups();
                     if (GameEntry.World == null)
                         GameEntry.InitWorldService();
                     GameEntry.Weather?.ApplyLocalClockIfNeeded();
@@ -194,6 +200,13 @@ namespace Game
                     {
                         _fadeStarted = true;
                         Log.Info("[ProcedureIsland] FadeHide loading cover");
+                        // Business owns engine lifecycle: start DSP thread, then attach device, then unmute.
+                        WanosAudio.WanosEngine.StartEngine("ProcedureIsland.Uncover");
+                        WanosAudio.WanosEngine.EnablePlayback("ProcedureIsland.Uncover");
+                        WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover");
+                        AudioInteractionBootstrap.StartAfterUncover();
+                        // Wait Critical banks then cue Music1_1 (no race with download).
+                        BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();
                         BootLoadingService.FadeHide(1f);
                     }
 

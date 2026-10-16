@@ -12,6 +12,7 @@ namespace Game
         public static SceneComponent Scene { get; private set; }
         public static EntityComponent Entity { get; private set; }
         public static SettingComponent Setting { get; private set; }
+        public static SoundComponent Sound { get; private set; }
 
         static void InitBuiltinComponents()
         {
@@ -23,6 +24,8 @@ namespace Game
             Scene = UnityGameFramework.Runtime.GameEntry.GetComponent<SceneComponent>();
             Entity = UnityGameFramework.Runtime.GameEntry.GetComponent<EntityComponent>();
             Setting = UnityGameFramework.Runtime.GameEntry.GetComponent<SettingComponent>();
+            Sound = UnityGameFramework.Runtime.GameEntry.GetComponent<SoundComponent>();
+            WanosSoundSetup.BindAfterBuiltinInit();
         }
 
         static void ClearBuiltinComponents()
@@ -35,6 +38,7 @@ namespace Game
             Scene = null;
             Entity = null;
             Setting = null;
+            Sound = null;
         }
     }
 }

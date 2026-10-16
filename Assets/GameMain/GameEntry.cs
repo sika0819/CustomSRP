@@ -20,6 +20,11 @@ namespace Game
             Game.Native.NativeBridgeFacade.ResetSession();
             Game.BoluoApi.BankUpgradeBootstrap.ResetSession();
             Game.BoluoApi.BoluoApiEnvironment.ClearCached();
+            WanosSoundSetup.ResetSession();
+            MusicPlaylist.ResetSession();
+            AudioInteractionBootstrap.ResetSession();
+            // Before SoundComponent.Start: swap helper type names to Wanos implementations.
+            WanosSoundSetup.ConfigureHelpersBeforeSoundStart();
             ApplyDeviceGraphicsPolicy();
         }
 
@@ -72,6 +77,8 @@ namespace Game
         void OnDestroy()
         {
             BootLoadingService.ResetSession();
+            AudioInteractionBootstrap.Shutdown();
+            WanosAudio.WanosEngine.Unload("GameEntry.OnDestroy");
             ClearCustomComponents();
             ClearBuiltinComponents();
         }

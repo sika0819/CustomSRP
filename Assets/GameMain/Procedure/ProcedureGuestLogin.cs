@@ -52,7 +52,15 @@ namespace Game
             if (!_success)
                 GuestSession.ApplyLocalEditorGuest();
 
-            BankUpgradeBootstrap.Start(loadIntoEngine: false);
+            WanosAudio.WanosBankStore.SetPaths(WanosBankPaths.Instance);
+            bool engineOk = WanosAudio.WanosEngine.Load("ProcedureGuestLogin");
+            if (engineOk)
+                BankUpgradeBootstrap.EnsureEssentialBanksLoaded();
+            Log.Info(
+                $"[ProcedureGuestLogin] Wanos engine load result={engineOk} " +
+                $"isCreated={WanosAudio.WanosNative.Instance.IsCreated} " +
+                $"loadIntoEngine={engineOk} platform={Application.platform}");
+            BankUpgradeBootstrap.Start(loadIntoEngine: engineOk);
             ChangeState<ProcedureIsland>(procedureOwner);
         }
 
@@ -85,10 +93,22 @@ namespace Game
             bool userOk = false;
 
 #if UNITY_EDITOR
+            // Local guest session for UI, but still exchange tokens so upgrade/bank is non-empty.
             if (!GuestLoginClient.ShouldTryRemoteInEditor())
             {
                 GuestSession.ApplyLocalEditorGuest();
                 Log.Info($"[GuestLogin] editor local guest (Try Remote off) userId={GuestSession.UserId}");
+                BootLoadingService.ReportProgress(0.40f, "换取 bank 所需 token");
+                yield return BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true)
+                    .ToCoroutine(r => deviceOk = r);
+                if (deviceOk)
+                {
+                    yield return BoluoDeviceLoginClient.EnsureUserTokenAsync(failFast: true)
+                        .ToCoroutine(r => userOk = r);
+                }
+
+                Log.Info(
+                    $"[GuestLogin] editor bank tokens deviceOk={deviceOk} userOk={userOk}");
                 _success = true;
                 BootLoadingService.ReportProgress(BootLoadingService.VisualPrepareMin, "正在进入世界...");
                 _finished = true;
