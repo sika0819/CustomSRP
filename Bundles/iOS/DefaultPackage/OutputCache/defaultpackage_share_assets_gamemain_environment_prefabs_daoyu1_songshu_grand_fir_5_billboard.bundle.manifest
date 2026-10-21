@@ -1,0 +1,32 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 316085710
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: cd50a2b56bca60ac8b35dae4bfa528ad
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: f0374ecc39ba544ef3199a798fb47d87
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 4b052bef2f21347edf13d06974348749
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Songshu/Grand Fir 5_Billboard/Grand Fir 5_Billboard_Albedo.png
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Songshu/Grand Fir 5_Billboard/Grand Fir 5_BillboardMesh.asset
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Songshu/Grand Fir 5_Billboard/Grand Fir 5_Billboard_Normal.png
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Songshu/Grand Fir 5_Billboard/Grand Fir 5_Billboard.mat
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

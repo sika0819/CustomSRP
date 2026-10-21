@@ -1,0 +1,32 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1553457754
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: f28158da6b3eda92d27d6c82a955acad
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: f0374ecc39ba544ef3199a798fb47d87
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 8be95dad54e433b126620d09a58e0cb6
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Lvshu/SM_Env_Tree_Forest_01_Billboard/SM_Env_Tree_Forest_01_BillboardMesh.asset
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Lvshu/SM_Env_Tree_Forest_01_Billboard/SM_Env_Tree_Forest_01_Billboard_Albedo.png
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Lvshu/SM_Env_Tree_Forest_01_Billboard/SM_Env_Tree_Forest_01_Billboard_Normal.png
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Lvshu/SM_Env_Tree_Forest_01_Billboard/SM_Env_Tree_Forest_01_Billboard.mat
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

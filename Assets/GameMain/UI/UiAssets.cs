@@ -18,6 +18,26 @@ namespace Game
 
         // Dialog
         public const string TimerPauseForm = "Assets/GameMain/UI/Forms/TimerPauseForm.prefab";
+        public const string CommonDialogForm = "Assets/GameMain/UI/Forms/CommonDialogForm.prefab";
+
+        // Download chain
+        public const string RequestDownloadForm = "Assets/GameMain/UI/Forms/Download/RequestDownloadForm.prefab";
+        public const string DownloadProgressForm = "Assets/GameMain/UI/Forms/Download/DownloadProgressForm.prefab";
+        public const string MobileDataConfirmForm = "Assets/GameMain/UI/Forms/Download/MobileDataConfirmForm.prefab";
+        public const string InsufficientStorageForm = "Assets/GameMain/UI/Forms/Download/InsufficientStorageForm.prefab";
+        public const string NoNetworkForm = "Assets/GameMain/UI/Forms/Download/NoNetworkForm.prefab";
+
+        // Pause / Timer
+        public const string PauseTipForm = "Assets/GameMain/UI/Forms/PauseTipForm.prefab";
+        public const string TimerEndForm = "Assets/GameMain/UI/Forms/TimerEndForm.prefab";
+
+        // Login / Account
+        public const string AgreementForm = "Assets/GameMain/UI/Forms/AgreementForm.prefab";
+        public const string CancelAccountReminderForm = "Assets/GameMain/UI/Forms/CancelAccountReminderForm.prefab";
+
+        // Settings
+        public const string LogoutConfirmForm = "Assets/GameMain/UI/Forms/LogoutConfirmForm.prefab";
+        public const string SaveConfirmForm = "Assets/GameMain/UI/Forms/SaveConfirmForm.prefab";
 
         public static void OpenPanel(string assetPath)
         {
@@ -25,9 +45,9 @@ namespace Game
             GameEntry.UI.OpenUIForm(assetPath, "Panel");
         }
 
-        public static void OpenDialog(string assetPath)
+        public static void OpenDialog(string assetPath, object userData = null)
         {
-            GameEntry.UI.OpenUIForm(assetPath, "Dialog");
+            GameEntry.UI.OpenUIForm(assetPath, "Dialog", userData);
         }
 
         public static void CloseGroup(string groupName)

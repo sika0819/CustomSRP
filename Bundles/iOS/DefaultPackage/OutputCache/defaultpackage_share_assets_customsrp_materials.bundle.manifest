@@ -1,0 +1,33 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 4291956348
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: c581abbc4fd3a853705060bd9d402a8d
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d5b1802501938ccd9ac76dfe2ea9b09e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: c1f5e2e89f91b20b84c4c42e03cf99d4
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/CustomSRP/Materials/TerrainOilNPRIsland.mat
+- Assets/CustomSRP/Materials/OilCloud.mat
+- Assets/CustomSRP/Materials/OilSkybox.mat
+- Assets/CustomSRP/Materials/LitMooreaOcean.mat
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_textures_cloud.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_textures_skybox.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_textures_foam.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

@@ -1,0 +1,1340 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3638855531
+HashAppended: 0
+AssetBundleManifest:
+  AssetBundleInfos:
+    Info_0:
+      Name: defaultpackage_assets_assetraw_configs.bundle
+      Dependencies: {}
+    Info_1:
+      Name: defaultpackage_assets_assetraw_island.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_effects.bundle
+        Dependency_3: defaultpackage_share_assets_customsrp_materials.bundle
+        Dependency_4: defaultpackage_share_assets_customsrp_settings.bundle
+        Dependency_5: defaultpackage_share_assets_terrain_island.bundle
+    Info_2:
+      Name: defaultpackage_assets_assetraw_ocean.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_materials.bundle
+    Info_3:
+      Name: defaultpackage_assets_gamemain_ui_forms_islandmainform.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_ui_forms.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_ui_settings.bundle
+    Info_4:
+      Name: defaultpackage_assets_gamemain_ui_forms_loadingform.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_ui_forms.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_ui_settings.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_ui_video.bundle
+    Info_5:
+      Name: defaultpackage_assets_gamemain_ui_forms_musicform.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_ui_forms.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_ui_settings.bundle
+    Info_6:
+      Name: defaultpackage_assets_gamemain_ui_forms_presetform.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_ui_forms.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_ui_settings.bundle
+    Info_7:
+      Name: defaultpackage_assets_gamemain_ui_forms_timerpauseform.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_ui_forms.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_ui_settings.bundle
+    Info_8:
+      Name: defaultpackage_assets_gamemain_ui_forms_volumeform.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_ui_forms.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_ui_settings.bundle
+    Info_9:
+      Name: defaultpackage_assets_gamemain_ui_forms_weatherform.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_ui_forms.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_ui_settings.bundle
+    Info_10:
+      Name: defaultpackage_assets_gamemain_environment_islandpresets.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_ui_textures_presetitem.bundle
+    Info_11:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_common_river_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_12:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_common_river_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_13:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_common_river_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_14:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_common_river_04.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_15:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_bush_1.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_16:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_bush_2.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_17:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_evergreen_bush_1.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_18:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_evergreen_bush_2.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_19:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_herb_bush.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_20:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_red_bush.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_21:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_sm_env_bush_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_22:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_sm_env_bush_palm_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_23:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_sm_env_bush_palm_04.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_24:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_sm_env_bush_tropical_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_25:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_sm_env_bush_tropical_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_26:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_sm_env_bush_tropical_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_27:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_sm_env_bush_tropical_04.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_materials_billboard.bundle
+    Info_28:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_winter_berry_bush_1.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+    Info_29:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_winter_berry_bush_2.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+    Info_30:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_guanmu_winter_berry_bush_3.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+    Info_31:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_hua_flowers_3.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_32:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_hua_scene_cao_007.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_33:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_hua_sm_env_lillies_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_34:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_hua_sm_env_lillies_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_35:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_hua_sm_env_wildflowers_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_36:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_hua_sm_env_wildflowers_01_lod0.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_37:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_house_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models_houseextracted.bundle
+    Info_38:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_barrel_01b.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_39:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_barrel_01d.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle
+    Info_40:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_barrel_stack_01b.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_41:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_basket_03b.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_42:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_bench_wood_01a.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_43:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_bench_wood_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_44:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_box_wood_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_45:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_building_closed_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_houseextracted.bundle
+    Info_46:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_building_closed_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_houseextracted.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+    Info_47:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_container_wood_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_48:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_crate_01b.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_49:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_crate_02a.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_50:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_planks_01b.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+    Info_51:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_shed_wood_02a_log.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_wooduv.bundle
+    Info_52:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_shed_wood_02b_log.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_wooduv.bundle
+    Info_53:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_stairs_entrance_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+    Info_54:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_rpgpp_ag_wagon_01b.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_55:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_sm_env_dock_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_56:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_jianzhu_tent_2.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_57:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_golden_larch_1.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_golden_larch_1_billboard.bundle
+    Info_58:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_golden_larch_2.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_golden_larch_2_billboard.bundle
+    Info_59:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_golden_larch_5.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_golden_larch_5_billboard.bundle
+    Info_60:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_larch_3.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_larch_3_billboard.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_larchuv.bundle
+    Info_61:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_larch_4.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_larchuv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_larch_4_billboard.bundle
+    Info_62:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_larch_7.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_larchuv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_larch_7_billboard.bundle
+    Info_63:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_maple_1.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_maple_1_billboard.bundle
+    Info_64:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_maple_2.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_maple_2_billboard.bundle
+    Info_65:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_birch_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_birch_01_billboard.bundle
+    Info_66:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_birch_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_birch_02_billboard.bundle
+    Info_67:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_birch_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_birch_03_billboard.bundle
+    Info_68:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_forest_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_forest_01_billboard.bundle
+    Info_69:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_forest_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_forest_02_billboard.bundle
+    Info_70:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_forest_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_forest_03_billboard.bundle
+    Info_71:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_fruit_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_fruit_01_billboard.bundle
+    Info_72:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_fruit_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_fruit_02_billboard.bundle
+    Info_73:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_fruit_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_fruit_03_billboard.bundle
+    Info_74:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_meadow_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_meadow_01_billboard.bundle
+    Info_75:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_meadow_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_meadow_02_billboard.bundle
+    Info_76:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_lvshu_spruce_3.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_tffoiluv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_spruce_3_billboard.bundle
+    Info_77:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_other_forest_mountain_1.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+    Info_78:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_other_forest_mountain_4.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+    Info_79:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_other_huodui.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_assets_gamemain_environment_fx_unityfire_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_3: defaultpackage_share_assets_gamemain_environment_other_scene_asset_synty_polygongeneric_materials_fx.bundle
+    Info_80:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_other_mountain_2.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+    Info_81:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_other_mountain_3.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+    Info_82:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_other_sm_veh_canoe_animated.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models_canoeextracted.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_fx_animations.bundle
+    Info_83:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_qiao_sws_demopier.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_84:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_ground_cliff_large_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_85:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_86:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_87:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_04.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_88:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_05.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_89:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_06.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_90:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_cave_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_91:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_cliff_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_92:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_cliff_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_93:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_cliff_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_94:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_flat_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_95:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_flat_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_96:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_ground_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_97:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_ground_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_98:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_pile_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_99:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_pile_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_100:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_pile_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_101:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_pile_04.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_102:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_pile_05.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_103:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_pile_06.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_104:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_pile_07.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_105:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_ramp_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_106:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_ramp_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_107:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_ramp_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_108:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_round_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_109:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_small_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_110:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_small_pile_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_111:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_small_pile_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_112:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_spike_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_113:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_spikes_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_114:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_shitou_sm_env_rock_spikes_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+    Info_115:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_1.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_tffoiluv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_1_billboard.bundle
+    Info_116:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_2.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_tffoiluv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_2_billboard.bundle
+    Info_117:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_3.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_tffoiluv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_3_billboard.bundle
+    Info_118:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_4.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_tffoiluv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_4_billboard.bundle
+    Info_119:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_5.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_tffoiluv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_5_billboard.bundle
+    Info_120:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_6.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_tffoiluv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_6_billboard.bundle
+    Info_121:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_7.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_tffoiluv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_7_billboard.bundle
+    Info_122:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_8.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_tffoiluv.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_8_billboard.bundle
+    Info_123:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_texiao_waterfallmist.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_effects.bundle
+    Info_124:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_texiao_waterfallsplash.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_effects.bundle
+    Info_125:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_yeshu_sm_env_tree_palm_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_126:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_yeshu_sm_env_tree_palm_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_127:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_yeshu_sm_env_tree_palm_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_128:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_yeshu_sm_env_tree_palm_04.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_129:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_detail.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_130:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_fern_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_131:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_fern_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_132:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_fern_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_133:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_fern_04.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_134:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_fern_part_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_135:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_fern_part_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_136:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_flowers_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_137:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_flowers_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_138:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_flowers_04.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_139:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_flowers_05.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_140:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_flowers_flat_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_141:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_flowers_flat_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_142:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_flowers_flat_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_143:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zacao_sm_env_grass_bush_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_144:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_branch_1.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_145:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_maple_2_dead.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_materials_billboard.bundle
+    Info_146:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_maple_3_dead.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_materials_billboard.bundle
+    Info_147:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_rpgpp_ag_fence_01_2x2m_corner.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle
+    Info_148:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_rpgpp_ag_fence_01a_2m.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle
+    Info_149:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_rpgpp_ag_fence_01b_2m.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle
+    Info_150:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_env_driftwood_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_151:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_env_driftwood_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_152:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_env_driftwood_04.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_153:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_env_driftwood_05.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_154:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_barrel_broken_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_155:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_coconut_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_156:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_coral_06.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_157:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_coral_07.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_158:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_coral_09.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_159:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_giantclam_01_lid_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_160:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_leaves_branch_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_161:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_leaves_pile_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_162:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_meadow_fence_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle
+    Info_163:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_meadow_fence_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle
+    Info_164:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_mushroom_group_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_165:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_mushroom_group_05.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_166:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_mushroom_sparse_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_167:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_mushroom_sparse_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_168:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_mushroom_sparse_04.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_169:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_mushroom_sparse_05.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_170:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_scarecrow_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle
+    Info_171:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_starfish_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_172:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_starfish_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_173:
+      Name: defaultpackage_assets_gamemain_environment_prefabs_daoyu1_zawu_sm_prop_starfish_03.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_environment_models.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+    Info_174:
+      Name: defaultpackage_assets_gamemain_environment_fx_fx_butterflies_cabbage_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_assets_gamemain_environment_fx_fx_mats.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_fx_fx_models.bundle
+    Info_175:
+      Name: defaultpackage_assets_gamemain_environment_fx_fx_butterflies_lunar_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_assets_gamemain_environment_fx_fx_mats.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_fx_fx_models.bundle
+    Info_176:
+      Name: defaultpackage_assets_gamemain_environment_fx_fx_crabs_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_assets_gamemain_environment_fx_fx_mats.bundle
+    Info_177:
+      Name: defaultpackage_assets_gamemain_environment_fx_fx_fireflies_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_assets_gamemain_environment_fx_fx_mats.bundle
+    Info_178:
+      Name: defaultpackage_assets_gamemain_environment_fx_fx_fireflies_02.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_assets_gamemain_environment_fx_fx_mats.bundle
+    Info_179:
+      Name: defaultpackage_assets_gamemain_environment_fx_fx_fish_large_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_assets_gamemain_environment_fx_fx_mats.bundle
+    Info_180:
+      Name: defaultpackage_assets_gamemain_environment_fx_fx_sunbeam_01.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_assets_gamemain_environment_fx_fx_mats.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_fx_fx_models.bundle
+    Info_181:
+      Name: defaultpackage_assets_gamemain_environment_fx_fx_mats.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_textures.bundle
+        Dependency_3: defaultpackage_share_assets_gamemain_environment_other_scene_asset_synty_polygongeneric_textures_fx.bundle
+        Dependency_4: defaultpackage_share_assets_gamemain_environment_art.bundle
+        Dependency_5: defaultpackage_share_assets_gamemain_environment_fx_fx_texture.bundle
+    Info_182:
+      Name: defaultpackage_assets_gamemain_environment_fx_unityfire_materials.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_assets_gamemain_environment_fx_unityfire_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_183:
+      Name: defaultpackage_assets_gamemain_environment_fx_unityfire_textures.bundle
+      Dependencies: {}
+    Info_184:
+      Name: defaultpackage_share_assets_gamemain_environment_models.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_textures.bundle
+    Info_185:
+      Name: defaultpackage_share_assets_gamemain_environment_materials.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_textures.bundle
+        Dependency_3: defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_textures.bundle
+    Info_186:
+      Name: defaultpackage_share_assets_customsrp_textures.bundle
+      Dependencies: {}
+    Info_187:
+      Name: defaultpackage_unityshaders.bundle
+      Dependencies: {}
+    Info_188:
+      Name: defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_effects.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_unityshaders.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_effects_textures.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_textures.bundle
+    Info_189:
+      Name: defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_effects_textures.bundle
+      Dependencies: {}
+    Info_190:
+      Name: defaultpackage_share_assets_gamemain_environment_textures.bundle
+      Dependencies: {}
+    Info_191:
+      Name: defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_textures.bundle
+      Dependencies: {}
+    Info_192:
+      Name: defaultpackage_share_assets_customsrp_materials.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+        Dependency_2: defaultpackage_share_assets_customsrp_textures_cloud.bundle
+        Dependency_3: defaultpackage_share_assets_customsrp_textures_skybox.bundle
+        Dependency_4: defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_textures_foam.bundle
+    Info_193:
+      Name: defaultpackage_share_assets_customsrp_settings.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+    Info_194:
+      Name: defaultpackage_share_assets_customsrp_textures_cloud.bundle
+      Dependencies: {}
+    Info_195:
+      Name: defaultpackage_share_assets_customsrp_textures_skybox.bundle
+      Dependencies: {}
+    Info_196:
+      Name: defaultpackage_share_assets_terrain_island.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_terrain_island_layers.bundle
+    Info_197:
+      Name: defaultpackage_share_assets_terrain_island_layers.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_terrain_island_textures.bundle
+    Info_198:
+      Name: defaultpackage_share_assets_terrain_island_textures.bundle
+      Dependencies: {}
+    Info_199:
+      Name: defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_textures_foam.bundle
+      Dependencies: {}
+    Info_200:
+      Name: defaultpackage_share_assets_gamemain_ui_forms.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_ui_components.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_ui_fonts.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_ui_textures_islandmainform.bundle
+        Dependency_3: defaultpackage_share_assets_gamemain_ui_textures_loadingform.bundle
+        Dependency_4: defaultpackage_share_assets_gamemain_ui_textures_noticecard.bundle
+        Dependency_5: defaultpackage_share_assets_gamemain_ui_textures_musicform.bundle
+        Dependency_6: defaultpackage_share_assets_gamemain_ui_textures_presetform.bundle
+        Dependency_7: defaultpackage_share_assets_gamemain_ui_textures_presetitem.bundle
+        Dependency_8: defaultpackage_share_assets_gamemain_ui_textures_timerpauseform.bundle
+        Dependency_9: defaultpackage_share_assets_gamemain_ui_textures_volumeform.bundle
+        Dependency_10: defaultpackage_share_assets_gamemain_ui_textures_weatherform.bundle
+    Info_201:
+      Name: defaultpackage_share_assets_gamemain_ui_components.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_gamemain_ui_textures_hudicon.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_ui_fonts.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_ui_textures_noticecard.bundle
+        Dependency_3: defaultpackage_share_assets_gamemain_ui_textures_volumerow.bundle
+        Dependency_4: defaultpackage_share_assets_gamemain_ui_textures_levelknob.bundle
+    Info_202:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_hudicon.bundle
+      Dependencies: {}
+    Info_203:
+      Name: defaultpackage_share_assets_gamemain_ui_fonts.bundle
+      Dependencies: {}
+    Info_204:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_islandmainform.bundle
+      Dependencies: {}
+    Info_205:
+      Name: defaultpackage_share_assets_gamemain_ui_settings.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_ui_toolkit_unitythemes.bundle
+    Info_206:
+      Name: defaultpackage_share_assets_ui_toolkit_unitythemes.bundle
+      Dependencies: {}
+    Info_207:
+      Name: defaultpackage_share_assets_gamemain_ui_video.bundle
+      Dependencies: {}
+    Info_208:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_loadingform.bundle
+      Dependencies: {}
+    Info_209:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_noticecard.bundle
+      Dependencies: {}
+    Info_210:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_musicform.bundle
+      Dependencies: {}
+    Info_211:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_presetform.bundle
+      Dependencies: {}
+    Info_212:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_presetitem.bundle
+      Dependencies: {}
+    Info_213:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_timerpauseform.bundle
+      Dependencies: {}
+    Info_214:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_volumeform.bundle
+      Dependencies: {}
+    Info_215:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_volumerow.bundle
+      Dependencies: {}
+    Info_216:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_levelknob.bundle
+      Dependencies: {}
+    Info_217:
+      Name: defaultpackage_share_assets_gamemain_ui_textures_weatherform.bundle
+      Dependencies: {}
+    Info_218:
+      Name: defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+        Dependency_2: defaultpackage_share_assets_gamemain_environment_textures.bundle
+        Dependency_3: defaultpackage_share_assets_gamemain_environment_models_houseextracted.bundle
+        Dependency_4: defaultpackage_share_assets_gamemain_environment_other_assetraw_graphics_colorramp.bundle
+        Dependency_5: defaultpackage_share_assets_gamemain_environment_textures_barkoil.bundle
+    Info_219:
+      Name: defaultpackage_share_assets_gamemain_environment_materials_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_unityshaders.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_textures.bundle
+    Info_220:
+      Name: defaultpackage_share_assets_gamemain_environment_models_houseextracted.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_unityshaders.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_textures.bundle
+    Info_221:
+      Name: defaultpackage_share_assets_gamemain_environment_other_assetraw_graphics_colorramp.bundle
+      Dependencies: {}
+    Info_222:
+      Name: defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle
+      Dependencies: {}
+    Info_223:
+      Name: defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+      Dependencies: {}
+    Info_224:
+      Name: defaultpackage_share_assets_gamemain_environment_models_wooduv.bundle
+      Dependencies: {}
+    Info_225:
+      Name: defaultpackage_share_assets_gamemain_environment_textures_barkoil.bundle
+      Dependencies: {}
+    Info_226:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_golden_larch_1_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_227:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_golden_larch_2_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_228:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_golden_larch_5_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_229:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_larch_3_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_230:
+      Name: defaultpackage_share_assets_gamemain_environment_models_larchuv.bundle
+      Dependencies: {}
+    Info_231:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_larch_4_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_232:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_larch_7_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_233:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_maple_1_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_234:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_maple_2_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_235:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_birch_01_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_236:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_birch_02_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_237:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_birch_03_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_238:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_forest_01_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_239:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_forest_02_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_240:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_forest_03_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_241:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_fruit_01_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_242:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_fruit_02_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_243:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_fruit_03_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_244:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_meadow_01_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_245:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_meadow_02_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_246:
+      Name: defaultpackage_share_assets_gamemain_environment_models_tffoiluv.bundle
+      Dependencies: {}
+    Info_247:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_spruce_3_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_248:
+      Name: defaultpackage_share_assets_gamemain_environment_other_scene_asset_synty_polygongeneric_materials_fx.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_unityshaders.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_other_scene_asset_synty_polygongeneric_textures_fx.bundle
+    Info_249:
+      Name: defaultpackage_share_assets_gamemain_environment_other_scene_asset_synty_polygongeneric_textures_fx.bundle
+      Dependencies: {}
+    Info_250:
+      Name: defaultpackage_share_assets_gamemain_environment_models_canoeextracted.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_unityshaders.bundle
+        Dependency_1: defaultpackage_share_assets_gamemain_environment_textures.bundle
+    Info_251:
+      Name: defaultpackage_share_assets_gamemain_environment_fx_animations.bundle
+      Dependencies: {}
+    Info_252:
+      Name: defaultpackage_share_assets_gamemain_environment_models_shitou.bundle
+      Dependencies: {}
+    Info_253:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_1_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_254:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_2_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_255:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_3_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_256:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_4_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_257:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_5_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_258:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_6_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_259:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_7_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_260:
+      Name: defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_songshu_grand_fir_8_billboard.bundle
+      Dependencies:
+        Dependency_0: defaultpackage_share_assets_customsrp_textures.bundle
+        Dependency_1: defaultpackage_unityshaders.bundle
+    Info_261:
+      Name: defaultpackage_share_assets_gamemain_environment_art.bundle
+      Dependencies: {}
+    Info_262:
+      Name: defaultpackage_share_assets_gamemain_environment_fx_fx_models.bundle
+      Dependencies: {}
+    Info_263:
+      Name: defaultpackage_share_assets_gamemain_environment_fx_fx_texture.bundle
+      Dependencies: {}

@@ -1,0 +1,24 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1823762829
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: d27932880318d3f52a7f672595e09e98
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1cfddeea06ce0ec573e0d0ec81ebe20e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: ede67bb6758185b85618dd6afe53a6fe
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/FX/FX Texture/Firefly_Glow_Impasto_Alpha.png
+- Assets/GameMain/Environment/FX/FX Texture/Crab_Texture.png
+- Assets/GameMain/Environment/FX/FX Texture/Crab_Normals.png
+- Assets/GameMain/Environment/FX/FX Texture/Fish_02.png
+Dependencies: []

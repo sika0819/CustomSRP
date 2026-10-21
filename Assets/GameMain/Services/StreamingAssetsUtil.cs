@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Text;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -24,6 +25,54 @@ namespace Game
                 return RootPath;
             string normalized = relativePath.Replace('\\', '/').TrimStart('/');
             return Path.Combine(RootPath, normalized).Replace('\\', '/');
+        }
+
+        /// <summary>
+        /// Copy a StreamingAssets file to a real filesystem path.
+        /// Android: UnityWebRequest from jar; elsewhere: File.Copy.
+        /// </summary>
+        public static async UniTask<bool> CopyFileToAsync(string relativePath, string destAbsolutePath)
+        {
+            if (string.IsNullOrEmpty(relativePath) || string.IsNullOrEmpty(destAbsolutePath))
+                return false;
+
+            string full = Combine(relativePath);
+            try
+            {
+                string destDir = Path.GetDirectoryName(destAbsolutePath);
+                if (!string.IsNullOrEmpty(destDir))
+                    Directory.CreateDirectory(destDir);
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+                using (UnityWebRequest req = UnityWebRequest.Get(full))
+                {
+                    await req.SendWebRequest();
+                    if (req.result != UnityWebRequest.Result.Success
+                        || req.downloadHandler?.data == null
+                        || req.downloadHandler.data.Length == 0)
+                    {
+                        return false;
+                    }
+
+                    string tmp = destAbsolutePath + ".tmp";
+                    File.WriteAllBytes(tmp, req.downloadHandler.data);
+                    if (File.Exists(destAbsolutePath))
+                        File.Delete(destAbsolutePath);
+                    File.Move(tmp, destAbsolutePath);
+                    return true;
+                }
+#else
+                if (!File.Exists(full))
+                    return false;
+                File.Copy(full, destAbsolutePath, overwrite: true);
+                return true;
+#endif
+            }
+            catch (Exception e)
+            {
+                Log.Warning($"[StreamingAssets] CopyFileTo failed {relativePath}: {e.Message}");
+                return false;
+            }
         }
 
         public static bool TryReadTextSync(string relativePath, out string text)
@@ -89,6 +138,32 @@ namespace Game
                 done?.Invoke(true, text);
             else
                 done?.Invoke(false, "missing " + full);
+#endif
+        }
+
+        /// <summary>Async text read (Android jar-safe). Prefer over bare ReadTextCoroutine.</summary>
+        public static async UniTask<(bool ok, string text)> ReadTextAsync(string relativePath)
+        {
+            string full = Combine(relativePath);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (UnityWebRequest req = UnityWebRequest.Get(full))
+                {
+                    await req.SendWebRequest();
+                    if (req.result != UnityWebRequest.Result.Success)
+                        return (false, req.error ?? "request failed");
+                    return (true, req.downloadHandler?.text ?? "");
+                }
+            }
+            catch (Exception e)
+            {
+                return (false, e.Message);
+            }
+#else
+            if (TryReadTextSync(relativePath, out string text))
+                return (true, text);
+            return (false, "missing " + full);
 #endif
         }
 

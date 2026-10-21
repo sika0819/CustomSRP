@@ -14,6 +14,15 @@ CBUFFER_START(UnityPerDraw)
     float4 unity_ProbesOcclusion;
 
     float4 unity_SpecCube0_HDR;
+    float4 unity_SpecCube1_HDR;
+    float4 unity_SpecCube0_BoxMax;
+    float4 unity_SpecCube0_BoxMin;
+    float4 unity_SpecCube0_ProbePosition;
+    float4 unity_SpecCube0_Rotation;
+    float4 unity_SpecCube1_BoxMax;
+    float4 unity_SpecCube1_BoxMin;
+    float4 unity_SpecCube1_ProbePosition;
+    float4 unity_SpecCube1_Rotation;
 
     float4 unity_LightmapST;
     float4 unity_DynamicLightmapST;

@@ -1,0 +1,43 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 48769588
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: c340787683a6675d685c82a9313ef629
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: b7551e808e7dfc30a3e6023276dff6e5
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 1c5407856cf497e8fe0f614cb2fd8caf
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 11500000, guid: 8631340fc53c54648beee4a84e04df89, type: 3}
+- Class: 115
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers:
+- AssemblyName: UnityEngine.CoreModule
+  ClassName: UnityEngine.Color
+- AssemblyName: UnityEngine.CoreModule
+  ClassName: UnityEngine.Vector3
+Assets:
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_02.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_08.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_12.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_01.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_03.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_05.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_04.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_13.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_07.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_10.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_14.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_09.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_11.asset
+- Assets/GameMain/Environment/IslandPresets/IslandPreset_06.asset
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_ui_textures_presetitem.bundle

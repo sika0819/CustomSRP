@@ -72,6 +72,8 @@ namespace Game
             PlayerPrefs.DeleteKey("Game.UserToken");
             PlayerPrefs.DeleteKey("Game.UserId");
             PlayerPrefs.DeleteKey("Game.IsGuest");
+            // ClearUserSession 已 Save；再清旧键后强制落盘一次
+            PlayerPrefs.Save();
         }
 
         public static void SyncFromBoluo()

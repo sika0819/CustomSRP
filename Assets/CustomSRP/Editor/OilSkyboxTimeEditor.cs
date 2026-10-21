@@ -61,7 +61,8 @@ namespace CustomSRP.Editor
                 $"内部 _Period = {period:0.00}（0 黎明 / 1 白天 / 2 黄昏 / 3 夜晚）\n" +
                 $"雾色 = #{fogHex}（夜晚固定 #36363C）· Lighting Fog Density 勿超过 ~0.01\n" +
                 "日月方向：Boluo Cozy 轨道（sunDirection=308），不跟随镜头。\n" +
-                "拖动 Time Of Day 会同步天空、环境光、雾色与平行光。",
+                "拖动 Time Of Day 会同步天空、环境光、雾色与平行光。\n" +
+                "勾选 Override Colors 后，颜色用 Color Set，时间只改日月方向。",
                 MessageType.None);
         }
     }

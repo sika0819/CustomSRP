@@ -609,8 +609,8 @@ namespace CustomSRP.Editor
             }
 
             // 对齐 OilRiverNPR：深/浅水色 + Monet 笔触 + 钛白岸沫；浅滩保留折射。
-            material.SetColor("_BaseColor", new Color(0.32f, 0.48f, 0.68f, 0.88f));
-            material.SetColor("_ShallowColor", new Color(0.55f, 0.62f, 0.48f, 0.72f));
+            material.SetColor("_BaseColor", new Color(0.176f, 0.396f, 0.573f, 0.88f));
+            material.SetColor("_ShallowColor", new Color(0.275f, 0.404f, 0.576f, 0.72f));
             material.SetColor("_FoamColor", new Color(0.94f, 0.97f, 1f, 1f));
             material.SetColor("_GlintColor", new Color(1f, 0.92f, 0.55f, 1f));
             material.SetFloat("_FoamStrength", 1.55f);

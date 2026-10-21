@@ -1,6 +1,5 @@
 using System;
 using Game.BoluoApi.Music;
-using Game.Native;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 using WanosAudio;
@@ -52,6 +51,7 @@ namespace Game
                 _instance._musicSerialId = -1;
                 _instance.IsPlaying = false;
             }
+            NowPlayingService.CleanupAfterLeaveIsland();
         }
 
         // -----------------------------------------------------------------------
@@ -60,8 +60,9 @@ namespace Game
 
         public void ApplySavedVolumes()
         {
-            MusicVolume = LoadVolume(VolumeForm.MusicVolumeKey);
-            EffectVolume = LoadVolume(VolumeForm.EffectVolumeKey);
+            BoluoGameSave.EnsureLoaded();
+            MusicVolume = BoluoGameSave.MusicVolume01;
+            EffectVolume = BoluoGameSave.EffectVolume01;
             PlayMode = LoadPlayMode();
             PushVolumesToEngine();
             ApplyGroupVolumes();
@@ -127,7 +128,8 @@ namespace Game
         }
 
         /// <summary>
-        /// Stop current BGM (GF agent + engine <c>Stop_Music</c>). Used by track switch and preset apply.
+        /// Stop current BGM (GF agent + engine <c>Stop_Music</c>). Used by track switch / user stop.
+        /// Preset apply must use <see cref="ForceRetargetAtLanding"/> — do not stop BGM across iris.
         /// </summary>
         public void Stop(bool publish = true)
         {
@@ -145,7 +147,29 @@ namespace Game
 
             IsPlaying = false;
             if (publish)
-                PublishNowPlaying();
+                NowPlayingService.PublishFromPlaylist();
+        }
+
+        /// <summary>
+        /// Preset landing: switch BGM to <paramref name="preferredBankName"/> (or hard-restart
+        /// the current track when null). Always goes through <see cref="PlayIndex"/> so prior
+        /// <c>Stop_Music</c> runs before the new <c>Play_*</c> — no stacked voices, no silent gap.
+        /// </summary>
+        public void ForceRetargetAtLanding(string preferredBankName = null)
+        {
+            if (!MusicCatalog.IsReady)
+                return;
+
+            if (!string.IsNullOrEmpty(preferredBankName)
+                && MusicCatalog.TryFindByBankName(preferredBankName, out int album, out int track))
+            {
+                PlayIndex(album, track, restart: true);
+                return;
+            }
+
+            if (CurrentAlbumIndex < 0 || CurrentTrackIndex < 0)
+                return;
+            PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
         }
 
         /// <summary>
@@ -266,11 +290,13 @@ namespace Game
             {
                 AudioInteractionBootstrap.SetContentAudioPaused(true);
             }
-            PublishNowPlaying();
+            NowPlayingService.NoteUserPaused(true);
+            NowPlayingService.PublishFromPlaylist();
         }
 
         public void Resume()
         {
+            NowPlayingService.NoteUserPaused(false);
             if (_musicSerialId >= 0 && GameEntry.Sound != null)
                 GameEntry.Sound.ResumeSound(_musicSerialId);
             else
@@ -278,7 +304,7 @@ namespace Game
             IsPlaying = true;
             WanosEngine.Unmute("music-resume");
             AudioInteractionBootstrap.SetContentAudioPaused(false);
-            PublishNowPlaying();
+            NowPlayingService.PublishFromPlaylist();
         }
 
         // -----------------------------------------------------------------------
@@ -356,29 +382,7 @@ namespace Game
 
         void PublishNowPlaying()
         {
-            var track = MusicCatalog.GetTrack(CurrentAlbumIndex, CurrentTrackIndex);
-            string albumName = "";
-            string title = "";
-            if (track != null)
-            {
-                title = track.Value.MusicName;
-                var album = MusicCatalog.GetAlbum(CurrentAlbumIndex);
-                albumName = album?.Name ?? "";
-            }
-
-            NativeBridgeFacade.PublishNowPlaying(
-                IsPlaying, 0,
-                CurrentAlbumIndex,
-                title,
-                albumName,
-                0, 0);
-        }
-
-        static float LoadVolume(string key)
-        {
-            if (GameEntry.Setting != null && GameEntry.Setting.HasSetting(key))
-                return Mathf.Clamp01(GameEntry.Setting.GetFloat(key, 1f));
-            return 1f;
+            NowPlayingService.PublishFromPlaylist();
         }
 
         static int LoadPlayMode()

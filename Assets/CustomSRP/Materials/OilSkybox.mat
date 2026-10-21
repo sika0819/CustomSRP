@@ -48,7 +48,7 @@ Material:
     - _BrushStrength: 1
     - _Period: 1
     - _StarDensity: 3
-    - _StarSize: 0.5
+    - _StarSize: 2
     m_Colors: []
   m_BuildTextureStacks: []
   m_AllowLocking: 1

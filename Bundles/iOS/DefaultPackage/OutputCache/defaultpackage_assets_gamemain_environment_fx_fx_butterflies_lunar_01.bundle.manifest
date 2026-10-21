@@ -1,0 +1,33 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2884372722
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 575f57da6906bbdc3179e8d66c5cc3d4
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 2072b2970ba124e4c44e6e16ffcc867c
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 599ce9c09464ceb28553f4547ec7ddf4
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 198
+  Script: {instanceID: 0}
+- Class: 199
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/FX/FX_Butterflies_Lunar_01.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_assets_gamemain_environment_fx_fx_mats.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_fx_fx_models.bundle

@@ -1,0 +1,29 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2020321579
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 19602b8d893d6a1806007e71d7e8f040
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d5b1802501938ccd9ac76dfe2ea9b09e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 7fcdafac427a6e0d1ef49a1d483bf998
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/ThirdParty/StylizedWater2/Materials/Effects/WaterfallSplashParticle.mat
+- Assets/GameMain/Environment/ThirdParty/StylizedWater2/Materials/Effects/WaterMistParticle.mat
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_effects_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

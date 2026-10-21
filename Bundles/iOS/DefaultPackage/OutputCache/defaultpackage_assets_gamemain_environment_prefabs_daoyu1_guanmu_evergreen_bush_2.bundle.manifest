@@ -1,0 +1,35 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2323791962
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 65d4d33b32eb84fb0078402ef177b6fd
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 58052c9889bb80a28ad47c57aec02a9e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 71b709d472f6fcf6aba9ac0083bad689
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Guanmu/Evergreen Bush 2.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_materials.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models.bundle

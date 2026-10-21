@@ -43,6 +43,9 @@ namespace CustomSRP
 
         public Shader cameraRendererShader;
         public Shader cameraDebuggerShader;
+
+        [Tooltip("Optional rain system configuration asset. Leave null to disable rain.")]
+        public OilRainSettings rainSettings;
     }
 }
 

@@ -1,0 +1,35 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3687661367
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 3e9ddf143608a06a76399c098c6586ef
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1df11c452e685770f9ac2072971e1861
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: e324e455cd2ad66aa24be7a37df4d545
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 11500000, guid: 8a7558e1eb525420e8c06804e4289730, type: 3}
+- Class: 114
+  Script: {fileID: 19101, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 11995, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 115
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Forms/MusicForm.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_ui_forms.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_ui_settings.bundle

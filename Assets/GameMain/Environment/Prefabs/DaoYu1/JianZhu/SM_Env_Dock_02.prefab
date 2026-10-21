@@ -101,6 +101,7 @@ GameObject:
   - component: {fileID: 6709129979222323476}
   - component: {fileID: 1273025111356937333}
   - component: {fileID: 620893402489502176}
+  - component: {fileID: 6332927448646155166}
   m_Layer: 0
   m_Name: SM_Env_Dock_02
   m_TagString: Untagged
@@ -118,7 +119,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.326277, y: 1.326276, z: 1.326277}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 3513039211726914761}
@@ -152,7 +153,7 @@ LODGroup:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6219557431182633902}
-  serializedVersion: 2
+  serializedVersion: 3
   m_LocalReferencePoint: {x: 0.047091722, y: -0.021791458, z: -0.044633865}
   m_Size: 7.645689
   m_FadeMode: 0
@@ -164,3 +165,29 @@ LODGroup:
     renderers:
     - renderer: {fileID: 7734179231867368615}
   m_Enabled: 1
+  m_GlobalIlluminationLOD: 0
+--- !u!114 &6332927448646155166
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6219557431182633902}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6eeb5dc026fdf4b488bc7ae0138ab719, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.AI.Navigation::Unity.AI.Navigation.NavMeshLink
+  m_SerializedVersion: 1
+  m_AgentTypeID: 0
+  m_StartPoint: {x: 0, y: 0, z: -2.5}
+  m_EndPoint: {x: 0, y: 0, z: 2.5}
+  m_StartTransform: {fileID: 0}
+  m_EndTransform: {fileID: 0}
+  m_Activated: 1
+  m_Width: 0
+  m_CostModifier: 1
+  m_IsOverridingCost: 0
+  m_Bidirectional: 1
+  m_AutoUpdatePosition: 0
+  m_Area: 0

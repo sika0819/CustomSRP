@@ -1,0 +1,41 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2784784462
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: a99e42582a1bfb0e929998b1be063f34
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 256e02639fbd397197f8a99ec5d2bb9a
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 38f2a5ef1b4542ece7506aa0a8a766e9
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Models/JianZhu/rpgpp_ag_shed_wood_02a_log.fbx
+- Assets/GameMain/Environment/Models/JianZhu/rpgpp_ag_fence_01a_2m.fbx
+- Assets/GameMain/Environment/Models/JianZhu/SM_Prop_Meadow_Fence_03.fbx
+- Assets/GameMain/Environment/Models/JianZhu/SM_Prop_Meadow_Fence_01.fbx
+- Assets/GameMain/Environment/Models/JianZhu/SM_Prop_ScareCrow_01.fbx
+- Assets/GameMain/Environment/Models/JianZhu/rpgpp_ag_fence_01_2x2m_corner.fbx
+- Assets/GameMain/Environment/Models/JianZhu/rpgpp_ag_fence_01b_2m.fbx
+- Assets/GameMain/Environment/Models/JianZhu/rpgpp_ag_barrel_01d.fbx
+- Assets/GameMain/Environment/Models/JianZhu/rpgpp_ag_stairs_entrance_01.fbx
+Dependencies: []

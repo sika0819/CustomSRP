@@ -54,8 +54,10 @@ namespace Game
 
             WanosAudio.WanosBankStore.SetPaths(WanosBankPaths.Instance);
             bool engineOk = WanosAudio.WanosEngine.Load("ProcedureGuestLogin");
+            // Android：StreamingAssets bank 在 jar 内，EnsureLocalBanksReadyAsync 会先解压再灌引擎。
+            // Start() 内部也会 await 解压；此处异步启动，不挡进岛流程。
             if (engineOk)
-                BankUpgradeBootstrap.EnsureEssentialBanksLoaded();
+                BankUpgradeBootstrap.EnsureLocalBanksReadyAsync().Forget();
             Log.Info(
                 $"[ProcedureGuestLogin] Wanos engine load result={engineOk} " +
                 $"isCreated={WanosAudio.WanosNative.Instance.IsCreated} " +

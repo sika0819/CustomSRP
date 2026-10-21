@@ -1,0 +1,41 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3747026893
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: b673d2df002b24492d044020216a26de
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: c2426a7084c48aa838094ab6ad87ea86
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 9410e82aeef9b5150218eececa84833a
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 213
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Textures/IslandMainForm/profile-glyph.png
+- Assets/GameMain/UI/Textures/IslandMainForm/color-swatch.png
+- Assets/GameMain/UI/Textures/IslandMainForm/pause-hint.png
+- Assets/GameMain/UI/Textures/IslandMainForm/preset-icon2.png
+- Assets/GameMain/UI/Textures/IslandMainForm/default-state22.png
+- Assets/GameMain/UI/Textures/IslandMainForm/breath-hint.png
+- Assets/GameMain/UI/Textures/IslandMainForm/joystick-knob.png
+- Assets/GameMain/UI/Textures/IslandMainForm/time-icon1.png
+- Assets/GameMain/UI/Textures/IslandMainForm/time-icon2.png
+- Assets/GameMain/UI/Textures/IslandMainForm/background.png
+- Assets/GameMain/UI/Textures/IslandMainForm/pressure-loading.png
+- Assets/GameMain/UI/Textures/IslandMainForm/time-background22.png
+- Assets/GameMain/UI/Textures/IslandMainForm/activity-entry.png
+- Assets/GameMain/UI/Textures/IslandMainForm/qingchent.png
+- Assets/GameMain/UI/Textures/IslandMainForm/music-background-glyph.png
+- Assets/GameMain/UI/Textures/IslandMainForm/joystick-ring.png
+- Assets/GameMain/UI/Textures/IslandMainForm/close-button.png
+- Assets/GameMain/UI/Textures/IslandMainForm/background2.png
+- Assets/GameMain/UI/Textures/IslandMainForm/hand.png
+Dependencies: []

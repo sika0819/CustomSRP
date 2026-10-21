@@ -28,3 +28,37 @@
     background-color: rgba(0, 0, 0, 0.001);
     picking-mode: Position;
 }
+
+/* Boluo UICanvasTip / TipWindows toast bubble. */
+.game-tip-toast {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    min-width: 288px;
+    min-height: 138px;
+    max-width: 666px;
+    padding-left: 60px;
+    padding-right: 60px;
+    padding-top: 36px;
+    padding-bottom: 36px;
+    align-items: center;
+    justify-content: center;
+    background-image: url("../Textures/Shared/tip.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 0.902);
+    -unity-slice-left: 45px;
+    -unity-slice-right: 45px;
+    -unity-slice-top: 40px;
+    -unity-slice-bottom: 40px;
+    picking-mode: Ignore;
+}
+
+.game-tip-toast__label {
+    flex-grow: 0;
+    flex-shrink: 1;
+    -unity-text-align: middle-center;
+    font-size: 36px;
+    color: rgba(255, 255, 255, 1);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}

@@ -96,6 +96,8 @@ namespace Game.BoluoApi
             PlayerPrefs.DeleteKey(UserTokenKey);
             PlayerPrefs.DeleteKey(UserIdKey);
             PlayerPrefs.DeleteKey(IsGuestKey);
+            // 必须立即落盘，防止杀进程后仍以旧 token 自动登录
+            PlayerPrefs.Save();
         }
 
         public static void ClearDeviceToken()
@@ -106,6 +108,7 @@ namespace Game.BoluoApi
             PlayerPrefs.DeleteKey(DeviceTokenKey);
             PlayerPrefs.DeleteKey(DeviceTokenExpireKey);
             PlayerPrefs.DeleteKey(DeviceTokenVersionKey);
+            PlayerPrefs.Save();
         }
 
         static uint GetUnixTimeSeconds()

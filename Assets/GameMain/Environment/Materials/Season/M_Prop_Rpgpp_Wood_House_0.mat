@@ -12,9 +12,9 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
-  - _CANVAS_ON
   - _SHADOWS_CLIP
   m_InvalidKeywords:
+  - _CANVAS_ON
   - _OUTLINE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
@@ -28,7 +28,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 2800000, guid: dab107fe807fc4c5dbbb2430c922bd8b, type: 3}
+        m_Texture: {fileID: 2800000, guid: 9ad65051d1e944f79813f65cc88e110b, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _BrushTex:
@@ -78,12 +78,16 @@ Material:
     - _Cull: 2
     - _Cutoff: 0.5
     - _DstBlend: 0
+    - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
     - _InternalEdge: 0
     - _LayerDetailStrength: 0
     - _LightStrength: 0.22
     - _LightThreshold: 0.72
     - _NightContour: 1
+    - _NormalStrength: 0.85
+    - _OilCrossBillboard: 0
+    - _OilFoliage: 0
     - _Outline: 1
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5
@@ -103,13 +107,14 @@ Material:
     - _ShadowThreshold: 0.42
     - _ShadowWobble: 0.45
     - _Shadows: 1
+    - _Smoothness: 0
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
     - _TriplanarTiling: 0.22
     - _WorldTriplanar: 0
     - _ZWrite: 1
     m_Colors:
-    - _AmbientColor: {r: 0.35, g: 0.4, b: 0.32, a: 1}
+    - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _BottomColor: {r: 0.4157, g: 0.3569, b: 0.2941, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
@@ -118,6 +123,7 @@ Material:
     - _OutlineColor: {r: 0.14, g: 0.1, b: 0.08, a: 1}
     - _ShadowTint: {r: 0.34, g: 0.3, b: 0.36, a: 1}
     - _ShadowWarm: {r: 0.62, g: 0.45, b: 0.31999996, a: 1}
+    - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
     - _SpecularColor: {r: 0.54999995, g: 0.47999996, b: 0.39999998, a: 1}
     - _TopColor: {r: 0.4157, g: 0.3569, b: 0.2941, a: 1}
   m_BuildTextureStacks: []

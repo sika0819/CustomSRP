@@ -1,0 +1,38 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2054820637
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: c1dfb620b497d6d7c832d822da08356e
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: c2426a7084c48aa838094ab6ad87ea86
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: ad13e8b449ad80d8e5897fdb31ce731f
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 213
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Textures/HudIcon/plate.png
+- Assets/GameMain/UI/Textures/HudIcon/bar-right.png
+- Assets/GameMain/UI/Textures/HudIcon/bar-left.png
+- Assets/GameMain/UI/Textures/HudIcon/bar-center.png
+- Assets/GameMain/UI/Textures/HudIcon/dial-spin.png
+- Assets/GameMain/UI/Textures/HudIcon/music-pause.png
+- Assets/GameMain/UI/Textures/HudIcon/top-right-decor.png
+- Assets/GameMain/UI/Textures/HudIcon/timer-idle.png
+- Assets/GameMain/UI/Textures/HudIcon/effectvolumeyuan.png
+- Assets/GameMain/UI/Textures/HudIcon/timer-fill.png
+- Assets/GameMain/UI/Textures/HudIcon/musicvolumeyuan.png
+- Assets/GameMain/UI/Textures/HudIcon/top-rule.png
+- Assets/GameMain/UI/Textures/HudIcon/volume-track1.png
+- Assets/GameMain/UI/Textures/HudIcon/volume-track2.png
+- Assets/GameMain/UI/Textures/HudIcon/glyph.png
+- Assets/GameMain/UI/Textures/HudIcon/volume-track.png
+Dependencies: []

@@ -1,6 +1,7 @@
 using Game;
 using GameFramework.Event;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace CustomSRP
 {
@@ -61,7 +62,11 @@ namespace CustomSRP
         void Awake()
         {
             ResolveRefs();
+            ResolveRainSettings();
             ClearCelestialLookOverride();
+            // Sync rain/cloud from default weather so a stale OilRainSettings.intensity
+            // (asset default) does not leave the curtain on before WeatherService pushes.
+            ApplyWeatherVisuals();
             ApplyFogSettings();
             Shader.SetGlobalFloat(FogDensityId, FoggyShaderWeight());
         }
@@ -70,10 +75,12 @@ namespace CustomSRP
         {
             BindPresetEvent();
             ClearCelestialLookOverride();
+            PresetWeatherHold.HeldChanged += OnWeatherHoldChanged;
         }
 
         void OnDisable()
         {
+            PresetWeatherHold.HeldChanged -= OnWeatherHoldChanged;
             UnbindPresetEvent();
         }
 
@@ -81,6 +88,8 @@ namespace CustomSRP
         {
             BindPresetEvent();
         }
+
+        void OnWeatherHoldChanged() => SetRainIntensity();
 
         void ResolveRefs()
         {
@@ -92,6 +101,24 @@ namespace CustomSRP
                 CloudLayer = FindAnyObjectByType<OilCloudLayer>();
         }
 
+        /// <summary>
+        /// Find OilRainSettings via the pipeline asset and expose it as OilRainSettings.Current
+        /// so all rain components (RippleManager, FlipbookDriver, RenderHook) can
+        /// read it without a direct inspector reference.
+        /// </summary>
+        void ResolveRainSettings()
+        {
+            // Try pipeline asset first (always set in CustomRenderPipelineAsset).
+            var pipeline = GraphicsSettings.defaultRenderPipeline as CustomRenderPipelineAsset;
+            OilRainSettings settings = pipeline?.Settings?.rainSettings;
+
+            // Fallback: find in scene if pipeline not assigned yet.
+            if (settings == null)
+                settings = FindAnyObjectByType<OilRainSettings>();
+
+            OilRainSettings.Current = settings;
+        }
+
         public void SetTimeOfDayHours(float hours)
         {
             if (SkyboxTime == null)
@@ -101,6 +128,8 @@ namespace CustomSRP
 
             SkyboxTime.ReleaseCelestialLookForClock();
             SkyboxTime.SetTimeOfDay(hours);
+            // Re-scale ExpSquared density for Cozy fogDensityMultiplier at this TOD.
+            ApplyFogSettings();
         }
 
         public void SetWeather(IslandWeatherKind kind, int level01To03)
@@ -126,6 +155,17 @@ namespace CustomSRP
             SkyboxTime.SetLightColorOverride(color);
         }
 
+        public void SetLookKind(IslandLookKind lookKind)
+        {
+            if (SkyboxTime == null)
+                ResolveRefs();
+            if (SkyboxTime == null)
+                return;
+            SkyboxTime.ClearColorOverride();
+            SkyboxTime.SetLookId((OilSkyLookId)(int)lookKind);
+            ApplyFogSettings();
+        }
+
         void BindPresetEvent()
         {
             if (_presetEventBound || GameEntry.Event == null)
@@ -147,6 +187,8 @@ namespace CustomSRP
         void OnPresetChanged(object sender, GameEventArgs e)
         {
             ClearCelestialLookOverride();
+            if (e is PresetChangedEventArgs preset)
+                SkyboxTime?.ApplyPresetPoster(preset.PresetId);
         }
 
         void ClearCelestialLookOverride()
@@ -174,23 +216,53 @@ namespace CustomSRP
             if (CloudLayer != null)
                 CloudLayer.coverage = cloud;
 
+            // Drive rain visual intensity from weather state.
+            SetRainIntensity();
+
             ApplyFogSettings();
             Shader.SetGlobalFloat(FogDensityId, FoggyShaderWeight());
         }
 
+        void SetRainIntensity()
+        {
+            var settings = OilRainSettings.Current;
+            if (settings == null) return;
+
+            // Map weather level 0–3 → rain intensity 0–1.
+            // Level 0 (Clear / Cloud) = no rain, level 1 = light, level 2 = medium, level 3 = heavy.
+            float rainIntensity = _kind == IslandWeatherKind.Rain ? (_level / 3f) : 0f;
+            // Preset iris close / black / half-open: force dry so rain never punches through.
+            if (PresetWeatherHold.IsHeld)
+                rainIntensity = 0f;
+            if (Mathf.Abs(settings.intensity - rainIntensity) > 0.001f)
+            {
+                settings.intensity = rainIntensity;
+            }
+        }
+
         void ApplyFogSettings()
         {
-            RenderSettings.fog = true;
-            RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogDensity = Mathf.Max(0f, _fogDensity);
+            float foggyT = FoggyShaderWeight();
+            OilSkyboxTime.SetFoggyBlend(foggyT);
 
             if (SkyboxTime == null)
                 ResolveRefs();
-            if (SkyboxTime != null)
-            {
-                OilSkyboxTime.EvaluateFog(SkyboxTime.CurrentPeriod(), out Color tint);
-                RenderSettings.fogColor = tint;
-            }
+
+            // Note: TOD fog-density scaling (Cozy fogDensityMultiplier) is intentionally
+            // removed — the weather panel writes an absolute ExpSquared density
+            // (WeatherService.FogDensity) and the user-facing knob is now authoritative.
+            // We still lift the haze during Foggy weather
+            // (Boluo Foggy dens 2→5 / mul 1.53 ≈ up to ~1.7×).
+            float foggyScale = foggyT > 0.001f ? Mathf.Lerp(1f, 1.7f, foggyT) : 1f;
+
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.ExponentialSquared;
+            RenderSettings.fogDensity = Mathf.Max(0f, _fogDensity * foggyScale);
+
+            float period = SkyboxTime != null ? SkyboxTime.CurrentPeriod() : OilSkyboxTime.HoursToPeriod(12f);
+            OilSkyboxTime.EvaluateFog(period, out Color tint);
+            RenderSettings.fogColor = tint;
+            SkyboxTime?.PushFogGlobals();
         }
 
         float FoggyShaderWeight()

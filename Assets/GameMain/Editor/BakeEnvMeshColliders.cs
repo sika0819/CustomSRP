@@ -39,6 +39,23 @@ namespace Game.Editor
             Debug.Log($"[BakeEnvMeshColliders] BatchBake updated {n} MeshCollider(s)");
         }
 
+        /// <summary>只重烤单个 DaoYu1 prefab 的 MeshCollider（可读 *_Collision）。</summary>
+        public static int BakePrefabPath(string prefabPath)
+        {
+            if (string.IsNullOrEmpty(prefabPath) || !File.Exists(prefabPath))
+            {
+                Debug.LogError("[BakeEnvMeshColliders] Missing prefab " + prefabPath);
+                return 0;
+            }
+
+            EnsureFolder(CollisionDir);
+            var touched = new HashSet<string>();
+            int n = BakePrefab(prefabPath, touched);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            return n;
+        }
+
         public static int BakeAll()
         {
             EnsureFolder(CollisionDir);

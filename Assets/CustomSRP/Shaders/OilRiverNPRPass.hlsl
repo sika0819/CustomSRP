@@ -5,6 +5,8 @@
 #include "OilNPRLighting.hlsl"
 #include "OilPaintNoise.hlsl"
 #include "OilRiverShore.hlsl"
+#include "OilWaterReflect.hlsl"
+#include "OilRainRippleFlipbook.hlsl"
 
 TEXTURE2D(_IntersectionNoise);
 SAMPLER(sampler_IntersectionNoise);
@@ -106,6 +108,8 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     half3 flowN = RiverFlowNormal(input.flowUv, t, crest);
     half3 geoN = normalize((half3)input.normalWS);
     half3 normalWS = normalize(lerp(geoN, flowN, 0.55h));
+    // 雨滴涟漪：法线序列帧直接扰动法线，光照/折射/高光都会跟着动。
+    normalWS = ApplyRainRippleNormal(normalWS, input.positionWS);
     // 光照用法线压平，避免 NdotL / 高光在河面打出圆形光斑。
     half3 lightN = half3(0.0h, 1.0h, 0.0h);
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
@@ -136,10 +140,10 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     half intersection = shore.x;
     half shoreWash = shore.y;
 
-    half3 whiteEdge = half3(0.94h, 0.97h, 0.99h);
-    half3 shorePigment = lerp(albedo, whiteEdge, 0.7h);
-    albedo = lerp(albedo, _ShallowColor.rgb, shoreWash * 0.28h);
-    albedo = lerp(albedo, shorePigment, intersection * 0.72h);
+    half3 whiteEdge = half3(0.72h, 0.80h, 0.84h);
+    half3 shorePigment = lerp(albedo, whiteEdge, 0.45h);
+    albedo = lerp(albedo, _ShallowColor.rgb, shoreWash * 0.16h);
+    albedo = lerp(albedo, shorePigment, intersection * 0.55h);
 
     Surface surface;
     surface.position = input.positionWS;
@@ -159,19 +163,16 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     half3 color = OilNPRLightingEx(
         surface,
         albedo,
-        OilPeriodAmbient((half3)_AmbientColor.rgb),
-        (half3)_ShadowTint.rgb,
-        (half3)_ShadowWarm.rgb,
+        OilNPRAmbient(surface),
         (half3)_SpecularColor.rgb,
         (half)_SpecularThreshold,
         max((half)_ShadeSteps, 3.0h),
         0.0h,
-        (half)_ShadowLift,
-        (half)_ShadeLift,
         stroke,
-        (half)_ShadowWobble,
+        0.0h,
         1.0h,
         0.0h,
+        surface.smoothness,
         fragment.screenUV);
 
     color = ImpastoDeviation(color, stroke, relief * 0.45h);
@@ -186,17 +187,28 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
 
     color = (half3)ApplyOilFog((float3)color, surface.depth, stroke, input.positionWS);
 
-    half3 shoreEdge = lerp(color, whiteEdge, 0.72h);
-    color = lerp(color, _ShallowColor.rgb, shoreWash * 0.22h);
-    color = lerp(color, shoreEdge, intersection * 0.68h);
+    color = ApplyOilWaterReflection(
+        color,
+        input.positionWS,
+        normalWS,
+        viewDir,
+        stroke,
+        1.0h - intersection,
+        fragment.screenUV);
+
+    half3 shoreEdge = lerp(color, whiteEdge, 0.45h);
+    color = lerp(color, _ShallowColor.rgb, shoreWash * 0.14h);
+    color = lerp(color, shoreEdge, intersection * 0.5h);
 
     float viewDepth = max(fragment.bufferDepth - fragment.depth, 0.0);
     float clearReach = max((float)_IntersectionLength * 1.6, 1.8);
     half glass = (half)(1.0 - smoothstep(0.05, clearReach, viewDepth));
+    // 浅水区 glass→1 时，颜色再压一档（暗度补偿），避免 Premul 之后整片浅滩发白。
+    color *= lerp(0.78h, 1.0h, 1.0h - glass);
     half deepA = (half)_BaseColor.a;
     half shallowA = (half)_ShallowColor.a;
     half alpha = lerp(deepA, shallowA, glass * 0.65h);
-    alpha = lerp(alpha, min(shallowA, 0.55h), glass * glass * 0.5h);
+    alpha = lerp(alpha, min(shallowA, 0.85h), glass * glass * 0.5h);
     alpha = saturate(alpha + intersection * 0.18h + relief * 0.08h);
 
 #if defined(_PREMULTIPLY_ALPHA)

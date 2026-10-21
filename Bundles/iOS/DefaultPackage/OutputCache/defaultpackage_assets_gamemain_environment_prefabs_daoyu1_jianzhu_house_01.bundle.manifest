@@ -1,0 +1,36 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 658815060
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: d2ab53728a86469b0ab01ad702c0f279
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 9157ba3ca2babef3c4aa408c0262726c
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 57f0188469110fb4381752d1f9b222ad
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 65
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/JianZhu/House_01.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_houseextracted.bundle

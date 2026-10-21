@@ -64,6 +64,10 @@ namespace CustomSRP
 
         public bool UsesShadowMask { get; private set; }
 
+        /// <summary>Mirror probe never schedules BuildRendererLists; clears
+        /// HasLights without re-parsing settings.</summary>
+        public void ResetHasLights() => _lightCount = 0;
+
         public void Setup(ShadowSettings settings)
         {
             _settings = settings.other;

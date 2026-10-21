@@ -53,7 +53,8 @@ namespace WanosAudio
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         static extern void SetEngineMode(int mode);
 
-        #if UNITY_OSX && !UNITY_EDITOR
+        // Editor 也要走 wrapper：OSXEditor 下 !UNITY_EDITOR 为假，否则 DSP 永不启动、揭罩无声。
+#if UNITY_OSX
         // --- macOS wrapper: calls WIAEngine's private C++ methods via runtime dlsym ---
         // These are exposed as free C functions in libWanosAudioMac.dylib.
         // Non-macOS platforms fall back to EngineStart/EngineResume (below).
@@ -77,10 +78,11 @@ namespace WanosAudio
         static extern IntPtr GetEngineVersionNative();
 
         // --- Logging ---
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        // libWIAEngine exports SetLogEnabled / SetLogLevel (no _impl suffix).
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SetLogEnabled")]
         static extern void SetLogEnabled_impl([MarshalAs(UnmanagedType.I1)] bool enabled);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SetLogLevel")]
         static extern void SetLogLevel_impl(int level);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -347,8 +349,8 @@ namespace WanosAudio
             if (!_created)
                 return false;
 
-#if UNITY_OSX && !UNITY_EDITOR
-            // macOS: call the runtime dlsym wrapper
+#if UNITY_OSX
+            // macOS Editor + Player: call the runtime dlsym wrapper (was !UNITY_EDITOR — Editor silent).
             try
             {
                 int r = WanosDSP_StartEngine();
@@ -382,7 +384,7 @@ namespace WanosAudio
             if (!_created)
                 return;
 
-#if UNITY_OSX && !UNITY_EDITOR
+#if UNITY_OSX
             try
             {
                 int r = WanosDSP_StopEngine();

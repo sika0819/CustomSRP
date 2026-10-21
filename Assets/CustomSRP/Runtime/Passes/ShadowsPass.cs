@@ -38,8 +38,19 @@ namespace CustomSRP
             RenderGraph renderGraph,
             CullingResults cullingResults,
             Shadows shadows,
-            ScriptableRenderContext context)
+            ScriptableRenderContext context,
+            bool isReflection = false)
         {
+            // Planar mirror: Cull() above sets shadowDistance=0, _shadows.Setup was
+            // skipped so directional/other HasLights carry stale true from the
+            // previous main-camera frame. Force-reset HasLights here so
+            // DirectionalShadowsPass / OtherShadowsPass skip BuildRendererLists,
+            // and skip context.CullShadowCasters (expensive shadow caster cull).
+            if (isReflection)
+            {
+                shadows.ResetHasLights();
+            }
+
             int visibleLightCount = cullingResults.visibleLights.Length;
             var cullingInfos = new ShadowCastersCullingInfos
             {
@@ -56,8 +67,9 @@ namespace CustomSRP
                 OtherShadowsPass.Record(
                     renderGraph, cullingResults, cullingInfos, shadows));
 
-            if (shadows.directionalShadows.HasLights
-                || shadows.otherShadows.HasLights)
+            if (!isReflection &&
+                (shadows.directionalShadows.HasLights
+                || shadows.otherShadows.HasLights))
             {
                 context.CullShadowCasters(cullingResults, cullingInfos);
             }

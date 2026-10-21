@@ -8,7 +8,20 @@
 #endif
 
 // OilCanvas ridges, then sun and moon discs.
-// Period colors stay in the shader and blend with _Period.
+// Period colors come from C# OilSkyLookTables via global arrays (fallback: Camera_1).
+
+float4 _OilSkyZenith[4];
+float4 _OilSkyMid[4];
+float4 _OilSkyHorizon[4];
+float4 _OilSkyGround[4];
+float4 _OilSkySunDisc[4];
+float4 _OilSkySunGlow[4];
+float4 _OilSkyMoonDisc[4];
+float4 _OilSkyMoonGlow[4];
+float4 _OilSkySunParams[4];  // size, intensity, glow, unused
+float4 _OilSkyMoonParams[4]; // size, intensity, glow, unused
+float _OilSkyStarIntensity[4];
+float _OilSkyLookReady;
 
 struct SkyPeriodLook
 {
@@ -117,27 +130,23 @@ float3 ResolveSkyMoonDir(float period)
     return CozyMoonDirFromPeriod(period);
 }
 
-SkyPeriodLook PeriodLookAt(int index)
+SkyPeriodLook PeriodLookFallback(int index)
 {
+    // Camera_1 / BoluoLookPalette hard fallback when C# has not pushed look globals yet.
     SkyPeriodLook p;
-    // Mixed oil pigments, not a primary-blue game sky. Same four anchors:
-    // dawn 06:00, day 12:00, dusk 18:00, night 00:00. Disc dirs set in EvaluatePeriodLook.
     if (index <= 0)
     {
-        // 基础配色尝试：dawn sand #D2CA97, soft blue mid — not ochre blaze.
-        p.zenith = half3(0.42h, 0.58h, 0.78h);
-        p.mid = half3(0.62h, 0.70h, 0.82h);
-        p.horizon = half3(0.824h, 0.792h, 0.592h);
+        p.zenith = half3(0.0078h, 0.1451h, 0.7412h);
+        p.mid = half3(0.9098h, 0.7686h, 0.6902h);
+        p.horizon = half3(1.0000h, 0.7373h, 0.0000h);
         p.ground = half3(0.40h, 0.36h, 0.26h);
-        p.sunDisc = float3(1.0000, 0.9400, 0.8200);
-        p.sunGlowColor = float3(0.8350, 0.7530, 0.4860); // #D5C07C
-        p.sunDir = float3(0, 1, 0);
+        p.sunDisc = float3(1.0000, 0.9725, 0.9098);
+        p.sunGlowColor = float3(1.0000, 0.8235, 0.3922);
         p.sunSize = 0.07;
         p.sunIntensity = 0.9;
         p.sunGlow = 0.24;
         p.moonDisc = float3(0.7800, 0.8200, 0.9000);
         p.moonGlowColor = float3(0.4500, 0.5200, 0.7000);
-        p.moonDir = float3(0, 1, 0);
         p.moonSize = 0.05;
         p.moonIntensity = 0.12;
         p.moonGlow = 0.06;
@@ -145,20 +154,17 @@ SkyPeriodLook PeriodLookAt(int index)
     }
     else if (index == 1)
     {
-        // Day: #80B5E2 / #B1D1F2
-        p.zenith = half3(0.502h, 0.710h, 0.886h);
-        p.mid = half3(0.620h, 0.780h, 0.910h);
-        p.horizon = half3(0.694h, 0.820h, 0.949h);
-        p.ground = half3(0.784h, 0.827h, 0.847h);
-        p.sunDisc = float3(1.0000, 0.9600, 0.8200);
-        p.sunGlowColor = float3(0.8350, 0.7530, 0.4860);
-        p.sunDir = float3(0, 1, 0);
+        p.zenith = half3(0.0667h, 0.4784h, 1.0000h);
+        p.mid = half3(0.361h, 0.632h, 0.965h);
+        p.horizon = half3(0.7216h, 0.8196h, 0.9216h);
+        p.ground = half3(0.8392h, 0.7686h, 0.7020h);
+        p.sunDisc = float3(1.0000, 0.9804, 0.8235);
+        p.sunGlowColor = float3(1.0000, 0.9804, 0.8235);
         p.sunSize = 0.055;
         p.sunIntensity = 1.0;
         p.sunGlow = 0.16;
         p.moonDisc = float3(0.0, 0.0, 0.0);
         p.moonGlowColor = float3(0.0, 0.0, 0.0);
-        p.moonDir = float3(0, 1, 0);
         p.moonSize = 0.05;
         p.moonIntensity = 0.0;
         p.moonGlow = 0.0;
@@ -166,20 +172,17 @@ SkyPeriodLook PeriodLookAt(int index)
     }
     else if (index == 2)
     {
-        // Dusk: muted #D1B885 horizon — not fire orange.
-        p.zenith = half3(0.12h, 0.14h, 0.28h);
-        p.mid = half3(0.42h, 0.32h, 0.36h);
-        p.horizon = half3(0.820h, 0.722h, 0.522h);
+        p.zenith = half3(0.2157h, 0.2588h, 0.4314h);
+        p.mid = half3(0.459h, 0.437h, 0.473h);
+        p.horizon = half3(0.9098h, 0.7686h, 0.5490h);
         p.ground = half3(0.22h, 0.16h, 0.14h);
-        p.sunDisc = float3(1.0000, 0.8600, 0.6200);
-        p.sunGlowColor = float3(0.8350, 0.7530, 0.4860); // #D5C07C
-        p.sunDir = float3(0, 1, 0);
+        p.sunDisc = float3(1.0000, 0.7843, 0.4157);
+        p.sunGlowColor = float3(1.0000, 0.7843, 0.4157);
         p.sunSize = 0.08;
         p.sunIntensity = 0.75;
         p.sunGlow = 0.28;
         p.moonDisc = float3(0.7000, 0.7400, 0.8600);
         p.moonGlowColor = float3(0.3500, 0.4000, 0.5800);
-        p.moonDir = float3(0, 1, 0);
         p.moonSize = 0.055;
         p.moonIntensity = 0.45;
         p.moonGlow = 0.14;
@@ -187,26 +190,56 @@ SkyPeriodLook PeriodLookAt(int index)
     }
     else
     {
-        // BoluoLookPalette sky only: NightZenith #031252 · NightHorizon #000D4D
         p.zenith = half3(0.0118h, 0.0706h, 0.3216h);
         p.mid = half3(0.0059h, 0.0608h, 0.3118h);
         p.horizon = half3(0.0000h, 0.0510h, 0.3020h);
         p.ground = half3(0.0000h, 0.0306h, 0.1812h);
         p.sunDisc = float3(0.4000, 0.4500, 0.5800);
         p.sunGlowColor = float3(0.0800, 0.0900, 0.1200);
-        p.sunDir = float3(0, 1, 0);
         p.sunSize = 0.05;
         p.sunIntensity = 0.08;
         p.sunGlow = 0.02;
         p.moonDisc = float3(0.6200, 0.6800, 0.8200);
         p.moonGlowColor = float3(0.2800, 0.3400, 0.5200);
-        p.moonDir = float3(0, 1, 0);
         p.moonSize = 0.07;
         p.moonIntensity = 0.85;
         p.moonGlow = 0.22;
         p.starIntensity = 0.58;
     }
 
+    p.sunDir = float3(0, 1, 0);
+    p.moonDir = float3(0, 1, 0);
+    p.sunVisibility = 1.0;
+    p.moonVisibility = 1.0;
+    return p;
+}
+
+SkyPeriodLook PeriodLookAt(int index)
+{
+    index = clamp(index, 0, 3);
+    if (_OilSkyLookReady < 0.5)
+    {
+        return PeriodLookFallback(index);
+    }
+
+    SkyPeriodLook p;
+    p.zenith = (half3)_OilSkyZenith[index].rgb;
+    p.mid = (half3)_OilSkyMid[index].rgb;
+    p.horizon = (half3)_OilSkyHorizon[index].rgb;
+    p.ground = (half3)_OilSkyGround[index].rgb;
+    p.sunDisc = _OilSkySunDisc[index].rgb;
+    p.sunGlowColor = _OilSkySunGlow[index].rgb;
+    p.moonDisc = _OilSkyMoonDisc[index].rgb;
+    p.moonGlowColor = _OilSkyMoonGlow[index].rgb;
+    p.sunSize = _OilSkySunParams[index].x;
+    p.sunIntensity = _OilSkySunParams[index].y;
+    p.sunGlow = _OilSkySunParams[index].z;
+    p.moonSize = _OilSkyMoonParams[index].x;
+    p.moonIntensity = _OilSkyMoonParams[index].y;
+    p.moonGlow = _OilSkyMoonParams[index].z;
+    p.starIntensity = _OilSkyStarIntensity[index];
+    p.sunDir = float3(0, 1, 0);
+    p.moonDir = float3(0, 1, 0);
     p.sunVisibility = 1.0;
     p.moonVisibility = 1.0;
     return p;

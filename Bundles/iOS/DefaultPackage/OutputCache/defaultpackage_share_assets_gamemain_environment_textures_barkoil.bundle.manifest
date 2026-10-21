@@ -1,0 +1,36 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3149128202
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: b9e4fc4805cb9685bc4a727c54513a33
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1cfddeea06ce0ec573e0d0ec81ebe20e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: a76b9a6952bf69238ff0cfbafa37aa4e
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Textures/BarkOil/Maple3Dead_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Fruit03_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Forest03_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/GoldLarch5_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Meadow02_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Fruit01_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/GoldLarch1_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Maple1_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Birch03_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/GoldLarch2_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Forest01_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Forest02_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Maple2Dead_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Fruit02_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Maple2_Bark.png
+- Assets/GameMain/Environment/Textures/BarkOil/Meadow01_Bark.png
+Dependencies: []

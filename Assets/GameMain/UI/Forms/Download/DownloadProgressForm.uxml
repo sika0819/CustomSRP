@@ -1,0 +1,10 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="../../GameFormShared.uss" />
+    <Style src="DownloadProgressForm.uss" />
+    <ui:Template name="CommonDialog" src="../../Components/CommonDialog.uxml" />
+    <ui:VisualElement name="root" class="game-form-backdrop">
+        <ui:VisualElement name="stage" class="game-form-stage">
+            <ui:Instance template="CommonDialog" name="dialog" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

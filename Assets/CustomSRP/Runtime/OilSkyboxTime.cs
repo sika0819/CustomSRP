@@ -11,7 +11,7 @@ namespace CustomSRP
     /// Internal period 0 dawn / 1 day / 2 dusk / 3 night maps to 06 / 12 / 18 / 00.
     /// Sky colors are mixed oil pigments at the same four anchors; the shader blends them from _Period.
     /// Sun/moon discs use Boluo Cozy celestial orbits (sunDirection=308).
-    /// Parallel light color/intensity still lerps the LightPresets table; direction follows the disc.
+    /// Parallel light color/intensity lerps the active OilSkyLookTables; direction follows the disc.
     /// Edit mode: sky + ambient apply immediately; sun is deferred (same-GO Transform + IMGUI recursion).
     /// </summary>
     [DisallowMultipleComponent]
@@ -32,69 +32,11 @@ namespace CustomSRP
             public float moonGlow;
             public float starIntensity;
 
-            // 基础配色尝试.xlsx · 01：天顶 #80B5E2 · 地平偏 #B1D1F2 · 雾 #C8D3D8 · 云高光 #FBF3E9
-            // Dawn tip: soft warm sand horizon (#D2CA97 family), not ochre blaze.
-            public static SkyLookPreset Dawn => new SkyLookPreset
-            {
-                zenith = new Color(0.42f, 0.58f, 0.78f),
-                mid = new Color(0.62f, 0.70f, 0.82f),
-                horizon = new Color(0.824f, 0.792f, 0.592f), // #D2CA97
-                ground = new Color(0.40f, 0.36f, 0.32f),
-                sunSize = 0.07f,
-                sunIntensity = 0.9f,
-                sunGlow = 0.24f,
-                moonSize = 0.05f,
-                moonIntensity = 0.12f,
-                moonGlow = 0.06f,
-                starIntensity = 0f,
-            };
-
-            public static SkyLookPreset Day => new SkyLookPreset
-            {
-                zenith = new Color(0.502f, 0.710f, 0.886f), // #80B5E2
-                mid = new Color(0.620f, 0.780f, 0.910f),
-                horizon = new Color(0.694f, 0.820f, 0.949f), // #B1D1F2
-                ground = new Color(0.784f, 0.827f, 0.847f),
-                sunSize = 0.055f,
-                sunIntensity = 1f,
-                sunGlow = 0.16f,
-                moonSize = 0.05f,
-                moonIntensity = 0f,
-                moonGlow = 0f,
-                starIntensity = 0f,
-            };
-
-            // Dusk: muted rose-sand (#D1B885), not fire orange.
-            public static SkyLookPreset Dusk => new SkyLookPreset
-            {
-                zenith = new Color(0.12f, 0.14f, 0.28f),
-                mid = new Color(0.42f, 0.32f, 0.36f),
-                horizon = new Color(0.820f, 0.722f, 0.522f), // #D1B885
-                ground = new Color(0.22f, 0.16f, 0.14f),
-                sunSize = 0.08f,
-                sunIntensity = 0.75f,
-                sunGlow = 0.28f,
-                moonSize = 0.055f,
-                moonIntensity = 0.45f,
-                moonGlow = 0.14f,
-                starIntensity = 0.12f,
-            };
-
-            // BoluoLookPalette sky only: NightZenith #031252 · NightHorizon #000D4D
-            public static SkyLookPreset Night => new SkyLookPreset
-            {
-                zenith = new Color(0.0118f, 0.0706f, 0.3216f),
-                mid = new Color(0.0059f, 0.0608f, 0.3118f),
-                horizon = new Color(0.0000f, 0.0510f, 0.3020f),
-                ground = new Color(0.0000f, 0.0306f, 0.1812f),
-                sunSize = 0.05f,
-                sunIntensity = 0.08f,
-                sunGlow = 0.02f,
-                moonSize = 0.07f,
-                moonIntensity = 0.85f,
-                moonGlow = 0.22f,
-                starIntensity = 0.58f,
-            };
+        /// <summary>Canonical Camera_1 dawn — kept for editor / bake tooling.</summary>
+        public static SkyLookPreset Dawn => OilSkyLookTables.SkyLookAt(OilSkyLookId.Canonical, 0);
+        public static SkyLookPreset Day => OilSkyLookTables.SkyLookAt(OilSkyLookId.Canonical, 1);
+        public static SkyLookPreset Dusk => OilSkyLookTables.SkyLookAt(OilSkyLookId.Canonical, 2);
+        public static SkyLookPreset Night => OilSkyLookTables.SkyLookAt(OilSkyLookId.Canonical, 3);
 
             public static SkyLookPreset Lerp(SkyLookPreset a, SkyLookPreset b, float t)
             {
@@ -116,57 +58,23 @@ namespace CustomSRP
             }
         }
 
-        struct LightPreset
-        {
-            public float elevation;
-            public float azimuth;
-            public Color color;
-            public float intensity;
-            public Color fogColor;
-        }
-
         // Boluo Atmosphere default yaw (Camera_1 / Profile 10). Cozy orbit parent Euler Y.
         public const float DefaultSunDirectionDeg = 308f;
         public const float DefaultSunPitchDeg = 0f;
         public const float DawnSunElevationDeg = 7f;
         public const float SleepMoonElevationDeg = 12f;
 
-        /// <summary>Boluo NightDistanceFog #36363C — all night TOD / island presets share this fog tint.</summary>
+        /// <summary>Boluo NightDistanceFog #36363C — Canonical night fog (NightCold may differ).</summary>
         public static readonly Color NightFogColor = new Color(0x36 / 255f, 0x36 / 255f, 0x3C / 255f, 1f);
 
-        // Light color/intensity + fog anchors (direction comes from Cozy orbits).
-        // Anchors: 06:00 / 12:00 / 18:00 / 00:00 → period 0 / 1 / 2 / 3.
-        // Day/dawn/dusk fog follows light; night fog is always NightFogColor.
-        static readonly LightPreset[] LightPresets =
-        {
-            new()
-            {
-                elevation = -1.69f, azimuth = 90.60f,
-                // 基础配色尝试：暖光 #D5C07C · 远景雾 #C8D3D8
-                color = new Color(0.835f, 0.753f, 0.486f), intensity = 0.47f,
-                fogColor = new Color(0.784f, 0.827f, 0.847f),
-            },
-            new()
-            {
-                elevation = 72.44f, azimuth = 5.96f,
-                // Noon peak: all island presets share this table; keep ≤ 1.5 so ocean/terrain don't blow out.
-                color = Color.white, intensity = 1.5f,
-                fogColor = new Color(0.784f, 0.827f, 0.847f), // #C8D3D8
-            },
-            new()
-            {
-                elevation = 1.73f, azimuth = 270.48f,
-                // Soft dusk gold #D5C07C · muted sand fog #D1BD94 (not fire orange).
-                color = new Color(0.835f, 0.753f, 0.486f), intensity = 0.57f,
-                fogColor = new Color(0.820f, 0.741f, 0.580f),
-            },
-            new()
-            {
-                elevation = -72.31f, azimuth = 174.09f,
-                color = new Color(0.10f, 0.16f, 0.55f), intensity = 0.18f,
-                fogColor = NightFogColor,
-            },
-        };
+        /// <summary>Active AtmosphereProfile-equivalent look (Boluo Camera_1/5/3/7/8/10).</summary>
+        public OilSkyLookId ActiveLookId { get; private set; } = OilSkyLookId.Canonical;
+
+        static OilSkyLookId s_activeLookId = OilSkyLookId.Canonical;
+        static float s_clockHours = 12f;
+
+        public static OilSkyLookId CurrentLookId => s_activeLookId;
+        public static bool ColorOverrideActive => s_overrideColors;
 
         const int TimeOfDayVersionHours = 1;
 
@@ -186,6 +94,15 @@ namespace CustomSRP
         public Material skyboxMaterial;
         public Light sun;
         public bool driveSun = true;
+
+        [Header("Color Override")]
+        [Tooltip("打开后天空、雾、环境光、主光颜色用下面这组，不再跟时间表走。日月方向仍跟时钟。")]
+        public bool overrideColors;
+
+        public OilSkyColorSet colorSet = OilSkyColorSet.DefaultDay;
+
+        static bool s_overrideColors;
+        static OilSkyColorSet s_colorSet = OilSkyColorSet.DefaultDay;
 
         [Header("Brush")]
         [Range(0.5f, 8f)] public float brushScale = 8f;
@@ -219,9 +136,11 @@ namespace CustomSRP
         static readonly int StarDensityId = Shader.PropertyToID("_StarDensity");
         static readonly int StarSizeId = Shader.PropertyToID("_StarSize");
         static readonly int PeriodId = Shader.PropertyToID("_Period");
+        static readonly int OilSkyPeriodId = Shader.PropertyToID("_OilSkyPeriod");
         static readonly int OilPeriodAmbientId = Shader.PropertyToID("_OilPeriodAmbient");
         static readonly int OilSkySunDirId = Shader.PropertyToID("_OilSkySunDir");
         static readonly int OilSkyMoonDirId = Shader.PropertyToID("_OilSkyMoonDir");
+
         static readonly int OilFogCanvasId = Shader.PropertyToID("_OilFogCanvas");
         static readonly int OilFogCanvasEnableId = Shader.PropertyToID("_OilFogCanvasEnable");
         static readonly int OilFogCanvasStId = Shader.PropertyToID("_OilFogCanvas_ST");
@@ -232,6 +151,30 @@ namespace CustomSRP
         static readonly int CustomFogSkyPowerId = Shader.PropertyToID("_CustomFogSkyPower");
         static readonly int AtmosphereFogColorId = Shader.PropertyToID("_OilAtmosphereFogColor");
         static readonly int AtmosphereFogAmountId = Shader.PropertyToID("_OilAtmosphereFogAmount");
+        static readonly int OilSkyZenithId = Shader.PropertyToID("_OilSkyZenith");
+        static readonly int OilSkyMidId = Shader.PropertyToID("_OilSkyMid");
+        static readonly int OilSkyHorizonId = Shader.PropertyToID("_OilSkyHorizon");
+        static readonly int OilSkyGroundId = Shader.PropertyToID("_OilSkyGround");
+        static readonly int OilSkySunDiscId = Shader.PropertyToID("_OilSkySunDisc");
+        static readonly int OilSkySunGlowId = Shader.PropertyToID("_OilSkySunGlow");
+        static readonly int OilSkyMoonDiscId = Shader.PropertyToID("_OilSkyMoonDisc");
+        static readonly int OilSkyMoonGlowId = Shader.PropertyToID("_OilSkyMoonGlow");
+        static readonly int OilSkySunParamsId = Shader.PropertyToID("_OilSkySunParams");
+        static readonly int OilSkyMoonParamsId = Shader.PropertyToID("_OilSkyMoonParams");
+        static readonly int OilSkyStarIntensityId = Shader.PropertyToID("_OilSkyStarIntensity");
+        static readonly int OilSkyLookReadyId = Shader.PropertyToID("_OilSkyLookReady");
+
+        static readonly Vector4[] s_zenithBuf = new Vector4[4];
+        static readonly Vector4[] s_midBuf = new Vector4[4];
+        static readonly Vector4[] s_horizonBuf = new Vector4[4];
+        static readonly Vector4[] s_groundBuf = new Vector4[4];
+        static readonly Vector4[] s_sunDiscBuf = new Vector4[4];
+        static readonly Vector4[] s_sunGlowBuf = new Vector4[4];
+        static readonly Vector4[] s_moonDiscBuf = new Vector4[4];
+        static readonly Vector4[] s_moonGlowBuf = new Vector4[4];
+        static readonly Vector4[] s_sunParamsBuf = new Vector4[4];
+        static readonly Vector4[] s_moonParamsBuf = new Vector4[4];
+        static readonly float[] s_starBuf = new float[4];
 
         // Boluo ApplyCelestialOrbits moon satellite constants (AbsoluteDay=0).
         const float MoonOrbitOffsetDeg = -95f;
@@ -284,15 +227,167 @@ namespace CustomSRP
             timeOfDayVersion = TimeOfDayVersionHours;
         }
 
+        /// <summary>Use these colors instead of the time-of-day look table.</summary>
+        public void SetColorOverride(OilSkyColorSet set)
+        {
+            colorSet = set;
+            overrideColors = true;
+            PublishColorOverride();
+            Apply(markDirty: true);
+        }
+
+        /// <summary>
+        /// Pin sky, ambient, fog, and sun to zhanweitu1–8. Ids outside 1–8 clear the pin.
+        /// </summary>
+        public bool ApplyPresetPoster(int presetId)
+        {
+            if (!TryPoster(presetId, out OilSkyColorSet set))
+            {
+                ClearColorOverride();
+                return false;
+            }
+
+            SetColorOverride(set);
+            return true;
+        }
+
+        /// <summary>展位图取样：天空 / 地平雾 / 环境光（叶草灌木叠色）/ 主光。</summary>
+        static bool TryPoster(int presetId, out OilSkyColorSet set)
+        {
+            set = default;
+            switch (presetId)
+            {
+                case 1: // 清晨起床 — 桃粉霞、暖橄榄植被
+                    set = Poster(
+                        0xC4, 0x86, 0x84, 0xE4, 0xB0, 0x9C, 0xF2, 0xC8, 0xA4,
+                        0x8A, 0x60, 0x48, 0xE0, 0xA0, 0x70,
+                        0xFF, 0xB0, 0x60, 0.65f, 0xE8, 0xC0, 0xA8);
+                    return true;
+                case 2: // 独自旅行 — 青白天、薄荷植被
+                    set = Poster(
+                        0xA9, 0xC3, 0xDD, 0x8E, 0xC8, 0xD4, 0x7E, 0xC8, 0xC8,
+                        0x5A, 0xA8, 0xB8, 0x7E, 0xD0, 0xC0,
+                        0xF2, 0xF7, 0xF4, 1.15f, 0x7E, 0xC8, 0xC8);
+                    return true;
+                case 3: // 午后放松 — 奶油天空、青绿植被、暖金雾
+                    set = Poster(
+                        0xD6, 0xCA, 0xA5, 0xC8, 0xB8, 0x88, 0xC8, 0xB8, 0x88,
+                        0x8A, 0x9A, 0x78, 0xD0, 0xB0, 0x70,
+                        0xFF, 0xE6, 0xA0, 0.85f, 0xD6, 0xC8, 0xA0);
+                    return true;
+                case 4: // 委屈泛滥 — 夜雨篝火、深蓝雾、暗青植被
+                    set = Poster(
+                        0x2D, 0x43, 0x60, 0x1A, 0x30, 0x48, 0x13, 0x2C, 0x42,
+                        0x1A, 0x30, 0x58, 0x10, 0x28, 0x30,
+                        0x6A, 0x88, 0xC0, 0.16f, 0x1A, 0x30, 0x48);
+                    return true;
+                case 5: // 专注工作 — 雾林，桃顶、青雾、深青植被
+                    set = Poster(
+                        0xE4, 0xC8, 0xC0, 0xA8, 0xC0, 0xC4, 0x8F, 0xB8, 0xC0,
+                        0x3A, 0x78, 0x78, 0x6A, 0x98, 0x98,
+                        0xF4, 0xE8, 0xDC, 0.50f, 0x7A, 0xA8, 0xB0);
+                    return true;
+                case 6: // 放空发呆 — 深夜雨、海军蓝
+                    set = Poster(
+                        0x1E, 0x3B, 0x52, 0x15, 0x28, 0x38, 0x11, 0x1F, 0x27,
+                        0x15, 0x28, 0x38, 0x10, 0x18, 0x20,
+                        0x5A, 0x78, 0xA8, 0.14f, 0x15, 0x24, 0x30);
+                    return true;
+                case 7: // 灵感唤醒 — 晴天瀑布、亮青空、鲜绿
+                    set = Poster(
+                        0x70, 0xB1, 0xC2, 0x9A, 0xC8, 0xC8, 0xB0, 0xD0, 0xD8,
+                        0x6A, 0x9A, 0x78, 0xC0, 0xD8, 0xA8,
+                        0xFF, 0xF4, 0xD0, 1.40f, 0xB0, 0xD0, 0xD8);
+                    return true;
+                case 8: // 假日躺平 — 正午海岛、淡蓝天、饱和绿
+                    set = Poster(
+                        0x84, 0xC3, 0xE7, 0xA8, 0xD4, 0xE4, 0xA8, 0xD0, 0xE8,
+                        0x6A, 0xAA, 0x88, 0xD0, 0xE8, 0xC0,
+                        0xFF, 0xF8, 0xEC, 1.50f, 0xA8, 0xD0, 0xE8);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        static OilSkyColorSet Poster(
+            byte zR, byte zG, byte zB,
+            byte mR, byte mG, byte mB,
+            byte hR, byte hG, byte hB,
+            byte azR, byte azG, byte azB,
+            byte ahR, byte ahG, byte ahB,
+            byte lR, byte lG, byte lB, float lightIntensity,
+            byte fR, byte fG, byte fB)
+        {
+            Color zenith = new Color(zR / 255f, zG / 255f, zB / 255f, 1f);
+            Color mid = new Color(mR / 255f, mG / 255f, mB / 255f, 1f);
+            Color horizon = new Color(hR / 255f, hG / 255f, hB / 255f, 1f);
+            bool night = lightIntensity < 0.35f;
+            return new OilSkyColorSet
+            {
+                zenith = zenith,
+                mid = mid,
+                horizon = horizon,
+                ground = horizon * 0.55f,
+                sunDisc = night ? new Color(0.75f, 0.82f, 0.95f, 1f) : new Color(1f, 0.98f, 0.92f, 1f),
+                sunGlow = night ? new Color(0.45f, 0.55f, 0.75f, 1f) : horizon,
+                moonDisc = night ? new Color(0.85f, 0.90f, 1f, 1f) : Color.black,
+                moonGlow = night ? new Color(0.45f, 0.55f, 0.80f, 1f) : Color.black,
+                lightColor = new Color(lR / 255f, lG / 255f, lB / 255f, 1f),
+                lightIntensity = lightIntensity,
+                fogColor = new Color(fR / 255f, fG / 255f, fB / 255f, 1f),
+                ambientZenith = new Color(azR / 255f, azG / 255f, azB / 255f, 1f),
+                ambientHorizon = new Color(ahR / 255f, ahG / 255f, ahB / 255f, 1f),
+            };
+        }
+
+        /// <summary>Drop the external colors and follow the time-of-day look table again.</summary>
+        public void ClearColorOverride()
+        {
+            if (!overrideColors && !s_overrideColors)
+                return;
+            overrideColors = false;
+            PublishColorOverride();
+            Apply(markDirty: true);
+        }
+
+        public void PublishColorOverride()
+        {
+            s_overrideColors = overrideColors;
+            bool unset = colorSet.zenith.maxColorComponent <= 0.001f
+                && colorSet.horizon.maxColorComponent <= 0.001f
+                && colorSet.lightIntensity <= 0.001f;
+            s_colorSet = unset ? OilSkyColorSet.DefaultDay : colorSet;
+        }
+
         public void SetTimeOfDay(float hours)
         {
             timeOfDay = Mathf.Repeat(hours, 24f);
+            s_clockHours = timeOfDay;
             timeOfDayVersion = TimeOfDayVersionHours;
             Apply(markDirty: Application.isPlaying);
             if (Application.isPlaying && driveSun)
             {
                 DisableCompetingDirectionalLights();
             }
+        }
+
+        /// <summary>
+        /// Swap Boluo AtmosphereProfile-equivalent look table (sky + light + fog).
+        /// HUD dial: daytime → Canonical, night → NightCold. Presets pin their own look.
+        /// </summary>
+        public void SetLookId(OilSkyLookId lookId)
+        {
+            if (ActiveLookId == lookId && s_activeLookId == lookId)
+            {
+                PushLookGlobals(lookId);
+                return;
+            }
+
+            ActiveLookId = lookId;
+            s_activeLookId = lookId;
+            PushLookGlobals(lookId);
+            Apply(markDirty: true);
         }
 
         /// <summary>
@@ -314,6 +409,7 @@ namespace CustomSRP
         public void ApplyEditorHours(float hours)
         {
             timeOfDay = Mathf.Repeat(hours, 24f);
+            s_clockHours = timeOfDay;
             timeOfDayVersion = TimeOfDayVersionHours;
             ApplyEditorPreview();
         }
@@ -328,6 +424,7 @@ namespace CustomSRP
                 return;
             }
 
+            PublishColorOverride();
             float period = CurrentPeriod();
             skyboxApplyDepth++;
             try
@@ -397,6 +494,12 @@ namespace CustomSRP
                 ResolveSunLight();
             }
 
+            // Keep a look already chosen by WeatherService before this component enabled.
+            if (s_activeLookId != OilSkyLookId.Canonical || ActiveLookId != OilSkyLookId.Canonical)
+                ActiveLookId = s_activeLookId;
+            s_clockHours = timeOfDay;
+            PublishColorOverride();
+            PushLookGlobals(s_activeLookId);
             // Assign Light color/intensity immediately (Launch scene may keep a second dir light).
             Apply(markDirty: false);
             DisableCompetingDirectionalLights();
@@ -461,6 +564,7 @@ namespace CustomSRP
             }
 
             timeOfDay = Mathf.Repeat(timeOfDay + Time.deltaTime / cycleSeconds * 24f, 24f);
+            s_clockHours = timeOfDay;
             // Skip redundant sky/light writes when TOD barely moved (keeps oil look).
             if (!float.IsNaN(_lastAppliedTimeOfDay)
                 && Mathf.Abs(timeOfDay - _lastAppliedTimeOfDay) < 0.02f)
@@ -589,6 +693,7 @@ namespace CustomSRP
 
         void ApplyInternal(bool markDirty)
         {
+            PublishColorOverride();
             float period = CurrentPeriod();
 
             BindSkybox();
@@ -765,6 +870,15 @@ namespace CustomSRP
 
             // Push TOD fog into shader globals here too — skybox must see tint even when
             // SetupPass Environment evaluate races RenderSettings.fog for a frame.
+            PushFogShaderGlobals(fog);
+        }
+
+        /// <summary>Re-push fog color/density shader globals after OilAtmosphereDriver edits RenderSettings.</summary>
+        public void PushFogGlobals()
+        {
+            EvaluateFog(CurrentPeriod(), out Color fog);
+            if (RenderSettings.fogColor != fog)
+                RenderSettings.fogColor = fog;
             PushFogShaderGlobals(fog);
         }
 
@@ -965,26 +1079,140 @@ namespace CustomSRP
         }
 #endif
 
-        public static SkyLookPreset EvaluateSkyLook(float period)
+        public static SkyLookPreset EvaluateSkyLook(float period) =>
+            EvaluateSkyLook(s_activeLookId, period);
+
+        public static SkyLookPreset EvaluateSkyLook(OilSkyLookId lookId, float period)
         {
             float wrapped = Mathf.Repeat(period, 4f);
             int i0 = Mathf.FloorToInt(wrapped) % 4;
             int i1 = (i0 + 1) % 4;
             float t = wrapped - Mathf.Floor(wrapped);
-            SkyLookPreset a = SkyLookAtIndex(i0);
-            SkyLookPreset b = SkyLookAtIndex(i1);
-            return SkyLookPreset.Lerp(a, b, t);
+            if (s_overrideColors)
+                return SkyLookFromOverride();
+
+            SkyLookPreset a = OilSkyLookTables.SkyLookAt(lookId, i0);
+            SkyLookPreset b = OilSkyLookTables.SkyLookAt(lookId, i1);
+            SkyLookPreset look = SkyLookPreset.Lerp(a, b, t);
+            float sunrise = OilSkyLookTables.CanonicalSunriseWeight(lookId, PeriodToHours(period));
+            if (sunrise > 0.001f)
+            {
+                look.zenith = Color.Lerp(look.zenith, OilSkyLookTables.SunriseSkyZenith, sunrise);
+                look.mid = Color.Lerp(look.mid, OilSkyLookTables.SunriseSkyMid, sunrise);
+                look.horizon = Color.Lerp(look.horizon, OilSkyLookTables.SunriseSkyHorizon, sunrise);
+                look.sunIntensity = Mathf.Lerp(look.sunIntensity, 1.05f, sunrise);
+                look.sunGlow = Mathf.Lerp(look.sunGlow, 0.28f, sunrise);
+            }
+
+            return look;
         }
 
-        static SkyLookPreset SkyLookAtIndex(int index)
+        static SkyLookPreset SkyLookFromOverride()
         {
-            return index switch
+            OilSkyColorSet c = s_colorSet;
+            bool night = c.lightIntensity < 0.35f;
+            return new SkyLookPreset
             {
-                0 => SkyLookPreset.Dawn,
-                1 => SkyLookPreset.Day,
-                2 => SkyLookPreset.Dusk,
-                _ => SkyLookPreset.Night,
+                zenith = c.zenith,
+                mid = c.mid,
+                horizon = c.horizon,
+                ground = c.ground,
+                sunSize = night ? 0.02f : 0.07f,
+                sunIntensity = night ? 0.02f : 1.05f,
+                sunGlow = night ? 0.02f : 0.22f,
+                moonSize = night ? 0.07f : 0.02f,
+                moonIntensity = night ? 0.55f : 0f,
+                moonGlow = night ? 0.16f : 0f,
+                starIntensity = night ? 0.9f : 0.02f,
             };
+        }
+
+        static void PushOverrideLookGlobals()
+        {
+            OilSkyColorSet c = s_colorSet;
+            bool night = c.lightIntensity < 0.35f;
+            var sunParams = night ? new Vector4(0.02f, 0.02f, 0.02f, 0f) : new Vector4(0.07f, 1.05f, 0.22f, 0f);
+            var moonParams = night ? new Vector4(0.07f, 0.55f, 0.16f, 0f) : new Vector4(0.02f, 0f, 0f, 0f);
+            float stars = night ? 0.9f : 0.02f;
+            for (int i = 0; i < 4; i++)
+            {
+                s_zenithBuf[i] = c.zenith;
+                s_midBuf[i] = c.mid;
+                s_horizonBuf[i] = c.horizon;
+                s_groundBuf[i] = c.ground;
+                s_sunDiscBuf[i] = c.sunDisc;
+                s_sunGlowBuf[i] = c.sunGlow;
+                s_moonDiscBuf[i] = c.moonDisc;
+                s_moonGlowBuf[i] = c.moonGlow;
+                s_sunParamsBuf[i] = sunParams;
+                s_moonParamsBuf[i] = moonParams;
+                s_starBuf[i] = stars;
+            }
+
+            Shader.SetGlobalVectorArray(OilSkyZenithId, s_zenithBuf);
+            Shader.SetGlobalVectorArray(OilSkyMidId, s_midBuf);
+            Shader.SetGlobalVectorArray(OilSkyHorizonId, s_horizonBuf);
+            Shader.SetGlobalVectorArray(OilSkyGroundId, s_groundBuf);
+            Shader.SetGlobalVectorArray(OilSkySunDiscId, s_sunDiscBuf);
+            Shader.SetGlobalVectorArray(OilSkySunGlowId, s_sunGlowBuf);
+            Shader.SetGlobalVectorArray(OilSkyMoonDiscId, s_moonDiscBuf);
+            Shader.SetGlobalVectorArray(OilSkyMoonGlowId, s_moonGlowBuf);
+            Shader.SetGlobalVectorArray(OilSkySunParamsId, s_sunParamsBuf);
+            Shader.SetGlobalVectorArray(OilSkyMoonParamsId, s_moonParamsBuf);
+            Shader.SetGlobalFloatArray(OilSkyStarIntensityId, s_starBuf);
+            Shader.SetGlobalFloat(OilSkyLookReadyId, 1f);
+        }
+
+        /// <summary>Push 4-anchor sky pigments to the OilSkyboxNPR shader.</summary>
+        public static void PushLookGlobals(OilSkyLookId lookId)
+        {
+            if (s_overrideColors)
+            {
+                PushOverrideLookGlobals();
+                return;
+            }
+
+            var table = OilSkyLookTables.Get(lookId);
+            float sunrise = OilSkyLookTables.CanonicalSunriseWeight(lookId, s_clockHours);
+            for (int i = 0; i < 4; i++)
+            {
+                var sky = table.sky[i];
+                if (i == 0 && sunrise > 0.001f)
+                {
+                    sky.zenith = Color.Lerp(sky.zenith, OilSkyLookTables.SunriseSkyZenith, sunrise);
+                    sky.mid = Color.Lerp(sky.mid, OilSkyLookTables.SunriseSkyMid, sunrise);
+                    sky.horizon = Color.Lerp(sky.horizon, OilSkyLookTables.SunriseSkyHorizon, sunrise);
+                    sky.sunDisc = Color.Lerp(sky.sunDisc, OilSkyLookTables.SunriseSunDisc, sunrise);
+                    sky.sunGlow = Color.Lerp(sky.sunGlow, OilSkyLookTables.SunriseSun, sunrise);
+                    sky.sunIntensity = Mathf.Lerp(sky.sunIntensity, 1.05f, sunrise);
+                    sky.sunGlowAmt = Mathf.Lerp(sky.sunGlowAmt, 0.28f, sunrise);
+                }
+
+                s_zenithBuf[i] = sky.zenith;
+                s_midBuf[i] = sky.mid;
+                s_horizonBuf[i] = sky.horizon;
+                s_groundBuf[i] = sky.ground;
+                s_sunDiscBuf[i] = sky.sunDisc;
+                s_sunGlowBuf[i] = sky.sunGlow;
+                s_moonDiscBuf[i] = sky.moonDisc;
+                s_moonGlowBuf[i] = sky.moonGlow;
+                s_sunParamsBuf[i] = new Vector4(sky.sunSize, sky.sunIntensity, sky.sunGlowAmt, 0f);
+                s_moonParamsBuf[i] = new Vector4(sky.moonSize, sky.moonIntensity, sky.moonGlowAmt, 0f);
+                s_starBuf[i] = sky.starIntensity;
+            }
+
+            Shader.SetGlobalVectorArray(OilSkyZenithId, s_zenithBuf);
+            Shader.SetGlobalVectorArray(OilSkyMidId, s_midBuf);
+            Shader.SetGlobalVectorArray(OilSkyHorizonId, s_horizonBuf);
+            Shader.SetGlobalVectorArray(OilSkyGroundId, s_groundBuf);
+            Shader.SetGlobalVectorArray(OilSkySunDiscId, s_sunDiscBuf);
+            Shader.SetGlobalVectorArray(OilSkySunGlowId, s_sunGlowBuf);
+            Shader.SetGlobalVectorArray(OilSkyMoonDiscId, s_moonDiscBuf);
+            Shader.SetGlobalVectorArray(OilSkyMoonGlowId, s_moonGlowBuf);
+            Shader.SetGlobalVectorArray(OilSkySunParamsId, s_sunParamsBuf);
+            Shader.SetGlobalVectorArray(OilSkyMoonParamsId, s_moonParamsBuf);
+            Shader.SetGlobalFloatArray(OilSkyStarIntensityId, s_starBuf);
+            Shader.SetGlobalFloat(OilSkyLookReadyId, 1f);
         }
 
         void SyncSkyMaterial(Material mat, float period, bool force)
@@ -1009,12 +1237,14 @@ namespace CustomSRP
             _lastStarSize = starSize;
 
             mat.SetFloat(PeriodId, period);
+            Shader.SetGlobalFloat(OilSkyPeriodId, period);
             mat.SetFloat(BrushScaleId, brushScale);
             mat.SetFloat(BrushStrengthId, brushStrength);
             mat.SetFloat(BrushContrastId, brushContrast);
             mat.SetFloat(BrushReliefId, brushRelief);
             mat.SetFloat(StarDensityId, starDensity);
             mat.SetFloat(StarSizeId, starSize);
+            PushLookGlobals(ActiveLookId);
             PushFogCanvasGlobal(mat);
 
             ResolveCelestialDirections(period, out Vector3 sunDir, out Vector3 moonDir);
@@ -1056,12 +1286,14 @@ namespace CustomSRP
             float starSize = 1f)
         {
             mat.SetFloat(PeriodId, period);
+            Shader.SetGlobalFloat(OilSkyPeriodId, period);
             mat.SetFloat(BrushScaleId, brushScale);
             mat.SetFloat(BrushStrengthId, brushStrength);
             mat.SetFloat(BrushContrastId, brushContrast);
             mat.SetFloat(BrushReliefId, brushRelief);
             mat.SetFloat(StarDensityId, starDensity);
             mat.SetFloat(StarSizeId, starSize);
+            PushLookGlobals(s_activeLookId);
             PushFogCanvasGlobal(mat);
             Shader.SetGlobalVector(OilSkySunDirId, SunDirectionAt(period));
             Shader.SetGlobalVector(OilSkyMoonDirId, MoonDirectionAt(period));
@@ -1070,16 +1302,28 @@ namespace CustomSRP
         static float _lastEnvironmentPeriod = float.NaN;
         static OilCloudLayer _cachedCloudLayer;
 
+        /// <summary>Foggy weather weight 0–1 for OilDistanceFog.Soften (set by OilAtmosphereDriver).</summary>
+        static float s_foggyBlend;
+
+        public static void SetFoggyBlend(float foggy01To1) =>
+            s_foggyBlend = Mathf.Clamp01(foggy01To1);
+
         /// <summary>
-        /// Environment Lighting Source = Skybox; refresh SH when period moves.
-        /// Oil NPR does not sample SH — _OilPeriodAmbient is still the equator-weighted fill.
+        /// Boluo Trilight ambient (Cozy ambientLightZenith/Horizon × mul). NPR uses oilFill.
+        /// Also nails far-tree billboard period multiply so ApplyOilFog can melt into haze.
         /// </summary>
         static void ApplyAmbient(float period)
         {
-            EvaluateAmbient(period, ResolveCumulus(), out _, out _, out _, out Color fill);
-            RenderSettings.ambientMode = AmbientMode.Skybox;
+            EvaluateAmbient(period, ResolveCumulus(), out Color sky, out Color equator, out Color ground, out Color fill);
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = sky;
+            RenderSettings.ambientEquatorColor = equator;
+            RenderSettings.ambientGroundColor = ground;
             RenderSettings.ambientIntensity = 1f;
             Shader.SetGlobalColor(OilPeriodAmbientId, fill);
+            // Far trees now read _OilPeriodAmbient via OilFoliageLighting — same path
+            // as near leaves. The legacy _OilTreeBBAmbient upload was a 4-anchor fixed
+            // palette that left far trees yellow-green against the foliage.
 
             if (float.IsNaN(_lastEnvironmentPeriod) || Mathf.Abs(period - _lastEnvironmentPeriod) > 0.02f)
             {
@@ -1089,7 +1333,7 @@ namespace CustomSRP
         }
 
         /// <summary>
-        /// Period sky/equator/ground + Oil fill (clouds / NPR). Cumulus dims equator/ground.
+        /// Cozy ambient channels + Oil NPR fill. Cumulus dims equator/ground.
         /// </summary>
         public static void EvaluateAmbient(
             float period,
@@ -1099,16 +1343,22 @@ namespace CustomSRP
             out Color ground,
             out Color oilFill)
         {
-            SkyLookPreset look = EvaluateSkyLook(period);
-            float horizonScale = 1f - Mathf.Clamp01(cumulus) * 0.5f;
-            sky = look.zenith;
-            equator = look.horizon * horizonScale;
-            ground = look.ground * horizonScale;
-            oilFill = new Color(
-                equator.r * 0.62f + sky.r * 0.38f,
-                equator.g * 0.62f + sky.g * 0.38f,
-                equator.b * 0.62f + sky.b * 0.38f,
-                1f);
+            if (s_overrideColors)
+            {
+                float horizonScale = 1f - Mathf.Clamp01(cumulus) * 0.5f;
+                sky = s_colorSet.ambientZenith;
+                equator = s_colorSet.ambientHorizon * horizonScale;
+                ground = s_colorSet.ambientHorizon * new Color(0.5f, 0.5f, 0.5f, 1f) * horizonScale;
+                oilFill = new Color(
+                    equator.r * 0.62f + sky.r * 0.38f,
+                    equator.g * 0.62f + sky.g * 0.38f,
+                    equator.b * 0.62f + sky.b * 0.38f,
+                    1f);
+                return;
+            }
+
+            OilSkyLookTables.EvaluateAmbient(
+                s_activeLookId, period, cumulus, out sky, out equator, out ground, out oilFill);
         }
 
         static float ResolveCumulus()
@@ -1124,37 +1374,34 @@ namespace CustomSRP
         /// <summary>Main-light tint/intensity at period (same table as <see cref="ApplySun"/>).</summary>
         public static void EvaluateLight(float period, out Color color, out float intensity)
         {
-            SampleLightPreset(period, out LightPreset a, out LightPreset b, out float t);
-            color = Color.Lerp(a.color, b.color, t);
-            intensity = Mathf.Lerp(a.intensity, b.intensity, t);
-        }
-
-        /// <summary>
-        /// Distance fog tint. Night clock (21:00–06:00, same as WeatherService) always uses
-        /// <see cref="NightFogColor"/> (#36363C) so every night preset shares one fog.
-        /// </summary>
-        public static void EvaluateFog(float period, out Color fogColor)
-        {
-            float hours = PeriodToHours(period);
-            if (hours >= 21f || hours < 6f)
+            if (s_overrideColors)
             {
-                fogColor = NightFogColor;
+                color = s_colorSet.lightColor;
+                intensity = Mathf.Max(0f, s_colorSet.lightIntensity);
                 return;
             }
 
-            SampleLightPreset(period, out LightPreset a, out LightPreset b, out float t);
-            fogColor = Color.Lerp(a.fogColor, b.fogColor, t);
+            OilSkyLookTables.EvaluateLight(s_activeLookId, period, out color, out intensity);
         }
 
-        static void SampleLightPreset(float period, out LightPreset a, out LightPreset b, out float t)
+        /// <summary>
+        /// Distance fog tint from the active look table, softened like BoluoDistanceFog.
+        /// Night clock (21:00–06:00) uses that look's night fog.
+        /// </summary>
+        public static void EvaluateFog(float period, out Color fogColor)
         {
-            float wrapped = Mathf.Repeat(period, 4f);
-            int i0 = Mathf.FloorToInt(wrapped) % 4;
-            int i1 = (i0 + 1) % 4;
-            t = wrapped - Mathf.Floor(wrapped);
-            a = LightPresets[i0];
-            b = LightPresets[i1];
+            if (s_overrideColors)
+            {
+                fogColor = s_colorSet.fogColor;
+                return;
+            }
+
+            OilSkyLookTables.EvaluateFog(s_activeLookId, period, out fogColor, s_foggyBlend);
         }
+
+        /// <summary>Cozy fogDensityMultiplier scale relative to noon (preset density × this).</summary>
+        public static float EvaluateFogDensityScale(float period) =>
+            OilSkyLookTables.EvaluateFogDensityScale(s_activeLookId, period);
 
         /// <summary>
         /// Boluo SkyWeatherController.ApplyCelestialOrbits — Cozy sun pivot.
@@ -1223,6 +1470,41 @@ namespace CustomSRP
             Vector3 lerped = Vector3.Lerp(sunDir, moonDir, moonBlend);
             float mag = lerped.magnitude;
             return mag > 1e-6f ? lerped / mag : sunDir;
+        }
+
+        [System.Serializable]
+        public struct OilSkyColorSet
+        {
+            public Color zenith;
+            public Color mid;
+            public Color horizon;
+            public Color ground;
+            public Color sunDisc;
+            public Color sunGlow;
+            public Color moonDisc;
+            public Color moonGlow;
+            public Color lightColor;
+            public float lightIntensity;
+            public Color fogColor;
+            public Color ambientZenith;
+            public Color ambientHorizon;
+
+            public static OilSkyColorSet DefaultDay => new OilSkyColorSet
+            {
+                zenith = new Color(0.0667f, 0.4784f, 1f),
+                mid = new Color(0.361f, 0.632f, 0.965f),
+                horizon = new Color(0.7216f, 0.8196f, 0.9216f),
+                ground = new Color(0.8392f, 0.7686f, 0.7020f),
+                sunDisc = new Color(1f, 0.9804f, 0.8235f),
+                sunGlow = new Color(1f, 0.9804f, 0.8235f),
+                moonDisc = Color.black,
+                moonGlow = Color.black,
+                lightColor = new Color(1f, 0.9804f, 0.8235f),
+                lightIntensity = 1.5f,
+                fogColor = new Color(0.424f, 0.600f, 0.855f),
+                ambientZenith = new Color(0.592f, 0.710f, 0.482f),
+                ambientHorizon = new Color(0.482f, 0.710f, 0.663f),
+            };
         }
 
         public static Vector3 DirectionFromAngles(float elevationDeg, float azimuthDeg)

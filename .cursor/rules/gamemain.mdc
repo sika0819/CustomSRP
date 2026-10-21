@@ -57,7 +57,7 @@ GameMain（`Assets/GameMain/`，`Game.asmdef`）是游戏侧程序集，与 `Cus
   - `QualitySettings.SetQualityLevel(2, true)`（Medium）。
   - `Application.targetFrameRate = 60`；`QualitySettings.vSyncCount = 0`。
   - `QualitySettings.resolutionScalingFixedDPIFactor = 0.7f`。
-  - `Screen.SetResolution(1280, 720, FullScreenMode.FullScreenWindow)`（Awake 一次，Start 再保险一次）。
+  - **禁止** `Screen.SetResolution`：固定 16:9 缓冲会被 `FullScreenWindow` 非等比拉到真机（20:9 等），UI/画面变扁。像素量只用 `resolutionScalingFixedDPIFactor = 0.7f` + CRP render scale。
   - `Shader.EnableKeyword("OIL_MOBILE_PERF")`。
 - Editor 专属代码用 `#if UNITY_EDITOR` 包裹（参考 `GameEntry.cs` 的 `Base.EditorResourceMode`）。
 

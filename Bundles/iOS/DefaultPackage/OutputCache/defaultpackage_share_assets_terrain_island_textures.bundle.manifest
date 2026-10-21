@@ -1,0 +1,27 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 816120984
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 2137e548d7ae870de6a3e0f72a4d5b48
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1cfddeea06ce0ec573e0d0ec81ebe20e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 661422f41d92d9a2b96c44fcaffaef15
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/Terrain/Island/Textures/Grass_mask.png
+- Assets/Terrain/Island/Textures/Grass_n.png
+- Assets/Terrain/Island/Textures/Rock.png
+- Assets/Terrain/Island/Textures/Rock_mask.png
+- Assets/Terrain/Island/Textures/Rock_n.png
+- Assets/Terrain/Island/Textures/Grass.png
+- Assets/Terrain/Island/Textures/Sand.png
+Dependencies: []

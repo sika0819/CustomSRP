@@ -1,0 +1,36 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1362647309
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 2e6d4cd52a0608a17ae74050f1d742f5
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 58052c9889bb80a28ad47c57aec02a9e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: b7ea2e158655d232234cb084aad37c73
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Lvshu/Larch 3.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_larchuv.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_larch_3_billboard.bundle

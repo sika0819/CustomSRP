@@ -1,7 +1,25 @@
 #ifndef CUSTOM_OIL_NPR_PASS_INCLUDED
 #define CUSTOM_OIL_NPR_PASS_INCLUDED
 
+#include "OilNPRInput.hlsl"
 #include "OilNPRLighting.hlsl"
+
+// 树叶风力偏移函数：使用局部空间偏移，树叶只在原地摇摆不离树干。
+float3 OilFoliageWindDisplace(float3 positionOS, float3 normalOS, float foliageFlag)
+{
+    if (foliageFlag < 0.5)
+        return positionOS;
+
+    float wind = _OilGrassWindStrength;
+    if (wind < 0.001)
+        return positionOS;
+
+    // 轻微摆动：只在局部 XZ 方向做小幅偏移，保持与树干的连接。
+    float gust = 0.7 + 0.3 * sin(_Time.y * 1.5 + positionOS.x * 0.06 + positionOS.z * 0.05);
+    float sway = sin(_Time.y * 2.0 + positionOS.x * 0.1 + positionOS.z * 0.08) * 0.3;
+    float amp = wind * sway * gust * 0.15; // 偏移量很小，保持与树干连接
+    return positionOS + float3(amp, 0.0, amp * 0.5);
+}
 
 struct Attributes
 {
@@ -17,6 +35,7 @@ struct Varyings
     float3 positionWS : VAR_POSITION;
     float3 normalWS : VAR_NORMAL;
     float2 baseUV : VAR_BASE_UV;
+    float keepCard : VAR_KEEP_CARD;
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
@@ -26,16 +45,44 @@ Varyings OilNPRPassVertex(Attributes input)
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
-    output.positionWS = TransformObjectToWorld(input.positionOS);
+    float3 positionOS = input.positionOS;
+    float3 normalWS;
+    float keep = 1.0;
+    // Metal stage-split: both flags must be read in vertex or fragment-only
+    // CBUFFER members are stripped while this file is still parsed.
+    float foliageFlag = _OilFoliage;
+    float crossBb = _OilCrossBillboard;
+    if (crossBb > 0.5)
+    {
+        positionOS = OilTreeCrossBillboardRotateYaw(
+            input.positionOS, input.normalOS, normalWS, keep);
+    }
+    else
+    {
+        normalWS = TransformObjectToWorldNormal(input.normalOS);
+    }
+
+    // 风力偏移：树叶在局部空间摇摆，不离树干。
+    if (foliageFlag > 0.5 || crossBb > 0.5)
+    {
+        positionOS = OilFoliageWindDisplace(positionOS, input.normalOS, foliageFlag);
+    }
+
+    float3 positionWS = TransformObjectToWorld(positionOS);
+
+    output.positionWS = positionWS;
     output.positionCS_SS = TransformWorldToHClip(output.positionWS);
-    output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+    output.normalWS = normalWS;
     output.baseUV = TransformBaseUV(input.baseUV);
+    output.keepCard = keep + foliageFlag * 0.0;
     return output;
 }
 
 half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
+    clip(input.keepCard - 0.5);
+    OilBakeClipAboveWater(input.positionWS);
 
     InputConfig config = GetInputConfig(input.positionCS_SS, input.baseUV);
 
@@ -74,7 +121,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     surface.alpha = (float)alpha;
     surface.metallic = 0.0;
     surface.occlusion = 1.0;
-    surface.smoothness = 0.0;
+    surface.smoothness = (half)_Smoothness;
     surface.fresnelStrength = 0.0;
 #if defined(OIL_MOBILE_PERF)
     surface.dither = 0.5;
@@ -85,15 +132,54 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
 
     half brush = SampleShadowBrush(input.positionWS, config.baseUV);
 
+    // Keep material flags live on Metal fragment stage (vertex-only reads get stripped).
+    float foliageFlagFrag = _OilFoliage;
+    float crossBbFrag = _OilCrossBillboard;
+
+    // Far cross-card billboards: same lit term as near leaves (OilFoliageLighting)
+    // so directional SH ambient (keyed to surface normal) + sun N·L + shadow match
+    // within a fragment. OilNPRLighting functions now sample SH9 internally, so
+    // there's no per-pass ambient color to thread through.
+    if (crossBbFrag > 0.5)
+    {
+#if !defined(OIL_MOBILE_PERF)
+        half3 viewBb = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
+        half ndotv = abs(dot(normalWS, viewBb));
+        clip(ndotv - (half)_EdgeFade);
+#endif
+        half3 bakedN = (half3)SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, config.baseUV).rgb;
+        half3 bb = OilTreeCrossBillboardShade(
+            albedo, bakedN, (half)_NormalStrength, surface);
+#if defined(OIL_MOBILE_PERF)
+        bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush);
+#else
+        bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush, input.positionWS);
+#endif
+        return half4(bb, alpha);
+    }
+
+    // Near leaves: directional SH ambient × albedo, then distance fog (same as Boluo MixFog).
+    if (foliageFlagFrag > 0.5)
+    {
+        half3 foliage = OilFoliageLighting(
+            surface, albedo, (half)_ShadeSteps, config.fragment.screenUV);
+#if defined(OIL_MOBILE_PERF)
+        foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush);
+#else
+        foliage = OilWeaveTint(foliage, input.positionWS.xz * 0.15);
+        foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush, input.positionWS);
+#endif
+        return half4(foliage, alpha);
+    }
+
 #if defined(OIL_MOBILE_PERF)
     // Quantize bands only — no dither / rim / weave / fog-canvas.
     half3 color = OilNPRLighting(
         surface,
         albedo,
-        OilPeriodAmbient((half3)_AmbientColor.rgb),
         half3(0.42h, 0.48h, 0.72h),
         half3(0.62h, 0.45h, 0.32h),
-        half3(0.0h, 0.0h, 0.0h),
+        (half3)_SpecColor.rgb,
         0.0h,
         (half)_ShadeSteps,
         0.0h,
@@ -102,16 +188,16 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         brush,
         (half)_ShadowWobble,
         0.0h,
+        surface.smoothness,
         config.fragment.screenUV);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush);
 #else
     half3 color = OilNPRLighting(
         surface,
         albedo,
-        OilPeriodAmbient((half3)_AmbientColor.rgb),
         half3(0.42h, 0.48h, 0.72h),
         half3(0.62h, 0.45h, 0.32h),
-        half3(0.0h, 0.0h, 0.0h),
+        (half3)_SpecColor.rgb,
         0.0h,
         (half)_ShadeSteps,
         paintRim,
@@ -120,6 +206,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         brush,
         (half)_ShadowWobble,
         0.2h,
+        surface.smoothness,
         config.fragment.screenUV);
     color = OilWeaveTint(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);

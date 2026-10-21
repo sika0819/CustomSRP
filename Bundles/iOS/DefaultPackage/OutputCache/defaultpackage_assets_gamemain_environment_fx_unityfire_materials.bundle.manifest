@@ -1,0 +1,29 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1142351041
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 61f933a31740eb5212fd32de784a4dc9
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d5b1802501938ccd9ac76dfe2ea9b09e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 6862144e984b060b75a12f772f0db3e6
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/FX/UnityFire/Materials/Campfire_NoiseFire.mat
+- Assets/GameMain/Environment/FX/UnityFire/Materials/Campfire_CutFire.mat
+- Assets/GameMain/Environment/FX/UnityFire/Materials/Campfire_CycleFire.mat
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_assets_gamemain_environment_fx_unityfire_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

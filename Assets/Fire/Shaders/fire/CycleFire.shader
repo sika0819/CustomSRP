@@ -1,4 +1,4 @@
-﻿Shader "Mine/CycleFire"
+Shader "Mine/CycleFire"
 {
     // Dead-Rabbit UnityFire Cycle flame — Custom SRP.
     Properties

@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 2142478634766517879}
   - component: {fileID: 4206199042487595709}
   - component: {fileID: 4149729438861430530}
+  - component: {fileID: 958274280922750928}
   m_Layer: 0
   m_Name: SM_Env_Rock_Small_01
   m_TagString: Untagged
@@ -111,3 +112,25 @@ LODGroup:
     - renderer: {fileID: 4206199042487595709}
   m_Enabled: 1
   m_GlobalIlluminationLOD: 0
+--- !u!64 &958274280922750928
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2404807638410859368}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 22
+  m_Mesh: {fileID: 4300000, guid: a84d2de2915d040a79cc61eb2f59618b, type: 2}

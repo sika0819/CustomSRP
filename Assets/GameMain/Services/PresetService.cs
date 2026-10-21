@@ -10,6 +10,11 @@ namespace Game
         IslandPresetAsset[] _presets = System.Array.Empty<IslandPresetAsset>();
         public int CurrentId { get; private set; }
 
+        /// <summary>0 idle / 1 switching (veil + weather) / 2 playing — Boluo curSchemeState.</summary>
+        public int SchemeState { get; private set; }
+
+        public bool IsTransitioning => SchemeState == 1;
+
         public IslandPresetAsset[] Presets => _presets;
 
         public static PresetService Ensure()
@@ -75,6 +80,7 @@ namespace Game
             if (GetById(id) == null)
                 return;
 
+            SchemeState = 1;
             if (GameEntry.Event != null)
             {
                 GameEntry.Event.Fire(this, PresetTransitionRequestEventArgs.Create(id));
@@ -84,18 +90,27 @@ namespace Game
             Apply(id, teleportPlayer: true);
         }
 
+        /// <summary>Called when the HUD veil finishes and the preset is live.</summary>
+        public void MarkPlaying()
+        {
+            if (CurrentId > 0)
+                SchemeState = 2;
+        }
+
         public void Apply(int id, bool teleportPlayer = true)
         {
             IslandPresetAsset preset = GetById(id);
             if (preset == null)
                 return;
 
-            // Switching preset stops BGM (one content stream at a time).
-            GameEntry.Music?.Stop();
+            // Doc: BGM 不停播，落点强制切曲 —— 播本预设 Music* bank（先 Stop_Music 再 Play，不叠声）。
+            GameEntry.Music?.ForceRetargetAtLanding(ResolvePresetMusicBank(preset));
             // Drop every content 3D voice before teleport so old emitters never follow.
+            // Iris path already cleared + held; direct Apply clears here then retriggers below.
             AudioInteractionBootstrap.ClearContent3D();
 
             CurrentId = id;
+            GameEntry.Weather?.SetLookKind(preset.LookKind);
             GameEntry.Weather?.SetTimeOfDay(preset.TimeHours);
             GameEntry.Weather?.ClearPanelTransitionLock();
             GameEntry.Weather?.SetWeather(preset.WeatherKind, preset.WeatherLevel);
@@ -107,13 +122,45 @@ namespace Game
             GameEntry.Weather?.SetLightColorOverride(lightOverride);
 
             if (teleportPlayer)
-                IslandJoystickCamera.Current?.ApplyPreset(preset);
+            {
+                // Iris path: far framing then enter-dolly. Direct Apply (no transition): final pose.
+                if (SchemeState == 1)
+                    IslandJoystickCamera.Current?.ApplyPresetForReveal(preset);
+                else
+                    IslandJoystickCamera.Current?.ApplyPreset(preset);
+            }
 
-            // Re-enter zones from the new listener position (weather already applied above).
-            AudioInteractionBootstrap.RetriggerContentAtListener();
+            // Iris transition holds precip + zone ambience until reveal; direct Apply retriggers now.
+            if (SchemeState != 1)
+                AudioInteractionBootstrap.RetriggerContentAtListener();
+
+            // Veil path keeps SchemeState=1 until MarkPlaying; direct Apply is already live.
+            if (SchemeState != 1)
+                SchemeState = 2;
 
             if (GameEntry.Event != null)
                 GameEntry.Event.Fire(this, PresetChangedEventArgs.Create(preset));
+        }
+
+        /// <summary>Interrupt (leave island / form close) — drop switching latch without a stuck busy state.</summary>
+        public void AbortTransition()
+        {
+            SchemeState = CurrentId > 0 ? 2 : 0;
+        }
+
+        /// <summary>First <c>Music*</c> entry in <see cref="IslandPresetAsset.BankNames"/>, or null.</summary>
+        static string ResolvePresetMusicBank(IslandPresetAsset preset)
+        {
+            string[] banks = preset != null ? preset.BankNames : null;
+            if (banks == null)
+                return null;
+            for (int i = 0; i < banks.Length; i++)
+            {
+                string bn = banks[i];
+                if (AmbienceEventCatalog.IsMusicBank(bn))
+                    return bn;
+            }
+            return null;
         }
 
         public void ApplyIndex(int index, bool teleportPlayer = true)

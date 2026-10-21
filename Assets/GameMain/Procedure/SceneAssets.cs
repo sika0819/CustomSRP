@@ -16,6 +16,10 @@ namespace Game
         public const string IslandInlandWaterLocation = "IslandInlandWater";
         public const string IslandInlandWaterPrefabPath = "Assets/AssetRaw/Island/IslandInlandWater.prefab";
 
+        /// <summary>Baked walkable NavMesh (AddressByFileName under AssetRaw/Island).</summary>
+        public const string IslandNavMeshLocation = "IslandNavMesh";
+        public const string IslandNavMeshAssetPath = "Assets/AssetRaw/Island/IslandNavMesh.asset";
+
         /// <summary>YooAsset location (AddressByFileName under AssetRaw/Configs).</summary>
         public const string AllMapItemLocation = "AllMapItem";
         public const string AllMapItemAssetPath = "Assets/AssetRaw/Configs/AllMapItem.bytes";
@@ -24,6 +28,11 @@ namespace Game
         public const string BakedWaterStationsLocation = "BakedWaterStations";
         public const string BakedWaterStationsAssetPath =
             "Assets/AssetRaw/Configs/BakedWaterStations.asset";
+
+        /// <summary>Default island spawn pose (AddressByFileName under AssetRaw/Configs).</summary>
+        public const string IslandSpawnPoseLocation = "IslandSpawnPose";
+        public const string IslandSpawnPoseAssetPath =
+            "Assets/AssetRaw/Configs/IslandSpawnPose.asset";
 
         /// <summary>GPU 草地种点 sidecar（SGB1，与 AllMapItem 同 Configs 采集）。</summary>
         public const string IslandGrassBakeLocation = "Island_GrassBake";

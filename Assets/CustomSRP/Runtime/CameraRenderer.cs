@@ -62,6 +62,20 @@ namespace CustomSRP
                 return;
             }
 
+            // Push rain globals once per frame BEFORE any draw, so NPR shaders
+            // can read _OilRainWetStrength / _OilRainIntensity without per-material
+            // property overrides. Falls back to OilRainManager.LateUpdate if active.
+            if (settings.rainSettings != null)
+            {
+                float rainI = settings.rainSettings.intensity;
+                Shader.SetGlobalFloat("_OilRainWetStrength", settings.rainSettings.wetStrength * rainI);
+                Shader.SetGlobalFloat("_OilRainWetSmoothnessBoost", settings.rainSettings.wetSmoothnessBoost * rainI);
+                Shader.SetGlobalFloat("_OilRainWetDarkening", settings.rainSettings.wetDarkening * rainI);
+                Shader.SetGlobalFloat("_OilRainIntensity", rainI);
+                Shader.SetGlobalColor("_OilRainAmbientColor",
+                    new Color(0.3f, 0.6f, 0.8f, 1f));
+            }
+
             CameraBufferSettings bufferSettings = settings.cameraBuffer;
             PostFXSettings postFXSettings = settings.postFXSettings;
             ShadowSettings shadowSettings = settings.shadows;
@@ -86,12 +100,15 @@ namespace CustomSRP
                 cameraSettings = DefaultCameraSettings;
             }
 
+            bool isReflection = camera.cameraType == CameraType.Reflection;
+
             bool useColorTexture;
             bool useDepthTexture;
-            if (camera.cameraType == CameraType.Reflection)
+            if (isReflection)
             {
-                useColorTexture = bufferSettings.copyColorReflection;
-                useDepthTexture = bufferSettings.copyDepthReflection;
+                // Planar water mirror: color/depth copies are unused and expensive.
+                useColorTexture = false;
+                useDepthTexture = false;
             }
             else
             {
@@ -105,6 +122,7 @@ namespace CustomSRP
             }
 
             bool hasActivePostFX =
+                !isReflection &&
                 postFXSettings != null &&
                 postFXSettings.Material != null &&
                 PostFXSettings.AreApplicableTo(camera);
@@ -116,13 +134,16 @@ namespace CustomSRP
             float renderScale = cameraSettings.GetRenderScale(bufferSettings.renderScale);
             // Mobile mid-tier: nudge render scale down unless the asset explicitly overrode it.
             // ~28% fewer fragments on a 0.85 scale, with bicubic rescale preserving edges.
-            if (Application.isMobilePlatform &&
+            if (!isReflection &&
+                Application.isMobilePlatform &&
                 cameraSettings.renderScaleMode == CameraSettings.RenderScaleMode.Inherit &&
                 renderScale >= 0.99f)
             {
                 renderScale = 0.85f;
             }
-            bool useScaledRendering = renderScale < 0.99f || renderScale > 1.01f;
+            // Reflection cameras already target a low-res RT — do not scale again.
+            bool useScaledRendering = !isReflection &&
+                (renderScale < 0.99f || renderScale > 1.01f);
 
 #if UNITY_EDITOR
             if (camera.cameraType == CameraType.SceneView)
@@ -146,9 +167,21 @@ namespace CustomSRP
                 return;
             }
 
-            cullingParameters.shadowDistance =
-                Mathf.Min(shadowSettings.maxDistance, camera.farClipPlane);
+            // Cull may rebuild matrices from transform — restore planar reflection view.
+            if (isReflection)
+            {
+                OilPlanarReflection.ReapplyMatrices(camera);
+            }
+
+            cullingParameters.shadowDistance = isReflection
+                ? 0f
+                : Mathf.Min(shadowSettings.maxDistance, camera.farClipPlane);
             CullingResults cullingResults = context.Cull(ref cullingParameters);
+
+            if (isReflection)
+            {
+                OilPlanarReflection.ReapplyMatrices(camera);
+            }
 
             bufferSettings.allowHDR &= camera.allowHDR;
             Vector2Int bufferSize = default;
@@ -190,6 +223,14 @@ namespace CustomSRP
                         ? unchecked((int)(uint)cameraSettings.renderingLayerMask)
                         : -1;
 
+                    // Shadows.Setup only stores the settings struct and resets
+                    // _lightCount counters; atlas memory is allocated lazily by
+                    // DirectionalShadows.GetHandles when _lightCount > 0. The
+                    // reflection path keeps _lightCount at 0 (LightingPass.SetupLights
+                    // skips ReserveShadows for isReflection, and ShadowsPass.Record
+                    // calls ResetHasLights) so no atlas is allocated — but
+                    // ShadowsPass still records the keyword pass that reads
+                    // _settings.filterQuality, so Setup must run unconditionally.
                     _shadows.Setup(shadowSettings);
 
                     LightResources lightResources = new LightResources(
@@ -199,9 +240,11 @@ namespace CustomSRP
                             bufferSize,
                             settings.forwardPlus,
                             _shadows,
-                            lightMask),
+                            lightMask,
+                            isReflection),
                         ShadowsPass.Record(
-                            renderGraph, cullingResults, _shadows, context));
+                            renderGraph, cullingResults, _shadows, context,
+                            isReflection));
 
                     CameraRendererTextures textures = SetupPass.Record(
                         renderGraph,
@@ -223,7 +266,10 @@ namespace CustomSRP
 
                     SkyboxPass.Record(renderGraph, camera, textures);
 
-                    CloudPass.Record(renderGraph, camera, bufferSize, textures);
+                    if (!isReflection)
+                    {
+                        CloudPass.Record(renderGraph, camera, bufferSize, textures);
+                    }
 
                     CopyAttachmentsPass.Record(
                         renderGraph,
@@ -233,17 +279,20 @@ namespace CustomSRP
                         textures,
                         bufferSize);
 
-                    GeometryPass.Record(
-                        renderGraph,
-                        camera,
-                        cullingResults,
-                        (uint)cameraSettings.renderingLayerMask,
-                        false,
-                        textures,
-                        lightResources);
+                    if (!isReflection)
+                    {
+                        GeometryPass.Record(
+                            renderGraph,
+                            camera,
+                            cullingResults,
+                            (uint)cameraSettings.renderingLayerMask,
+                            false,
+                            textures,
+                            lightResources);
 
-                    UnsupportedShadersPass.Record(
-                        renderGraph, camera, cullingResults, textures);
+                        UnsupportedShadersPass.Record(
+                            renderGraph, camera, cullingResults, textures);
+                    }
 
                     TextureHandle colorLUT;
                     if (hasActivePostFX)
@@ -253,10 +302,14 @@ namespace CustomSRP
                         _postFXStack.Camera = camera;
                         _postFXStack.FinalBlendMode = cameraSettings.finalBlendMode;
                         _postFXStack.Settings = postFXSettings;
+                        // OilRain screen-space ripples run AFTER OilFilter (in PostFXPass.Record)
+                        // when rain settings exist. We do nothing here — the post pass owns the
+                        // integration point so it sees the OilFilter output.
                         colorLUT = PostFXPass.Record(
                             renderGraph, _postFXStack,
                             (int)settings.colorLUTResolution,
-                            cameraSettings.keepAlpha, textures);
+                            cameraSettings.keepAlpha, textures,
+                            settings.rainSettings);
                     }
                     else
                     {
@@ -267,10 +320,17 @@ namespace CustomSRP
                             renderGraph, copier, textures, useBicubic, bufferSize);
                     }
 
-                    DebugPass.Record(
-                        renderGraph, settings, camera,
-                        (int)settings.colorLUTResolution, colorLUT, lightResources);
-                    GizmosPass.Record(renderGraph, copier, textures);
+                    // Iris overlays the resolved camera target (covers world + rain curtain).
+                    if (!isReflection)
+                        PresetIrisPass.Record(renderGraph, textures, camera);
+
+                    if (!isReflection)
+                    {
+                        DebugPass.Record(
+                            renderGraph, settings, camera,
+                            (int)settings.colorLUTResolution, colorLUT, lightResources);
+                        GizmosPass.Record(renderGraph, copier, textures);
+                    }
                 }
 
                 renderGraph.EndRecordingAndExecute();

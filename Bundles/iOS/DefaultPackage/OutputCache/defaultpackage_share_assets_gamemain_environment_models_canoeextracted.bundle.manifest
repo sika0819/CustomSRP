@@ -1,0 +1,34 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3101768021
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 906408e8a89204fc522e9dce1634942e
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: f0374ecc39ba544ef3199a798fb47d87
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 219b3331a403a79b729f4ba7ad5f80b8
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Models/CanoeExtracted/SM_Veh_Outrigger_Canoe_01_Canopy_01.asset
+- Assets/GameMain/Environment/Models/CanoeExtracted/SM_Veh_Outrigger_Canoe_01_Canopy_01.png
+- Assets/GameMain/Environment/Models/CanoeExtracted/SM_Veh_Outrigger_Canoe_01.png
+- Assets/GameMain/Environment/Models/CanoeExtracted/SM_Veh_Outrigger_Canoe_01.asset
+- Assets/GameMain/Environment/Models/CanoeExtracted/SM_Veh_Outrigger_Canoe_01_Canopy_01.mat
+- Assets/GameMain/Environment/Models/CanoeExtracted/SM_Veh_Outrigger_Canoe_01.mat
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

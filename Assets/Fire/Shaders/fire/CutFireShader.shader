@@ -1,4 +1,4 @@
-﻿Shader "Mine/CutFireShader"
+Shader "Mine/CutFireShader"
 {
     // Dead-Rabbit UnityFire Cut flame — Custom SRP.
     Properties

@@ -61,6 +61,7 @@ namespace CustomSRP
         CullingResults _cullingResults;
         int _dirLightCount;
         int _otherLightCount;
+        bool _isReflection;
         Handles _handles;
 
         Vector2 _screenUVToTileCoordinates;
@@ -86,9 +87,11 @@ namespace CustomSRP
             Vector2Int attachmentSize,
             ForwardPlusSettings forwardPlusSettings,
             Shadows shadows,
-            int renderingLayerMask)
+            int renderingLayerMask,
+            bool isReflection = false)
         {
             _cullingResults = cullingResults;
+            _isReflection = isReflection;
 
             _maxLightsPerTile = forwardPlusSettings.maxLightsPerTile <= 0
                 ? 31
@@ -132,7 +135,9 @@ namespace CustomSRP
                 VisibleLight visibleLight = visibleLights[i];
                 Light light = visibleLight.light;
                 bool layerOk = (light.renderingLayerMask & renderingLayerMask) != 0;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                 bool isShadowCapable = light.shadows != LightShadows.None && light.shadowStrength > 0f;
+#endif
                 Vector4 shadowData = default;
 
                 if (layerOk)
@@ -142,15 +147,25 @@ namespace CustomSRP
                         case LightType.Directional:
                             if (_dirLightCount < MaxDirLightCount)
                             {
-                                shadowData = shadows.directionalShadows.ReserveShadows(
-                                    light, i, _cullingResults);
+                                // Planar mirror: shadow caster cull / atlas setup skipped
+                                // (CameraRenderer sets cullingParameters.shadowDistance = 0
+                                //  for reflection, so ReserveShadows here only wastes CPU).
+                                if (!_isReflection)
+                                {
+                                    shadowData = shadows.directionalShadows.ReserveShadows(
+                                        light, i, _cullingResults);
+                                }
                                 DirectionalLightDataArray[_dirLightCount++] =
                                     new DirectionalLightData(
                                         ref visibleLight, light, shadowData);
                             }
                             break;
                         case LightType.Point:
-                            if (_otherLightCount < MaxOtherLightCount)
+                            // Planar mirror collects neither Point nor Spot: no shadow
+                            // reservation, no screen-rect bucketing, and nothing uploaded
+                            // into the other-light buffer. The directional light still
+                            // goes through, so the reflection reads lit rather than black.
+                            if (!_isReflection && _otherLightCount < MaxOtherLightCount)
                             {
                                 shadowData = shadows.otherShadows.ReserveShadows(
                                     light, i, _cullingResults);
@@ -161,7 +176,7 @@ namespace CustomSRP
                             }
                             break;
                         case LightType.Spot:
-                            if (_otherLightCount < MaxOtherLightCount)
+                            if (!_isReflection && _otherLightCount < MaxOtherLightCount)
                             {
                                 shadowData = shadows.otherShadows.ReserveShadows(
                                     light, i, _cullingResults);
@@ -175,6 +190,7 @@ namespace CustomSRP
                 }
 
                 // [SRP][Shadow.Light] 每 60 帧把每个光源过一次,看 ReserveShadows 给的是什么
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if ((Time.frameCount & 63) == 0)
                 {
                     Log.Info(string.Format(
@@ -184,45 +200,63 @@ namespace CustomSRP
                         light.renderingLayerMask,
                         shadowData.x, shadowData.y, shadowData.z, shadowData.w));
                 }
+#endif
             }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if ((Time.frameCount & 63) == 0)
             {
                 Log.Info(string.Format(
                     "[SRP][Shadow.LightSummary] visible={0} dir={1} other={2}",
                     visibleLights.Length, _dirLightCount, _otherLightCount));
             }
+#endif
 
-            int tileDataLength = TileCount * _tileDataSize;
-            if (!TileData.IsCreated || TileData.Length != tileDataLength)
+            // [SRP][Shadow.LightSummary] / Forward+ tile job both skipped for planar mirror:
+// _isReflection path collects directional lights only — no shadow reservation (no
+// shadow caster lists), no Point/Spot, and no per-tile light bucketing (CPU +
+// BurstJob entirely).
+            if (!_isReflection)
             {
-                if (TileData.IsCreated)
+                int tileDataLength = TileCount * _tileDataSize;
+                if (!TileData.IsCreated || TileData.Length != tileDataLength)
                 {
-                    TileData.Dispose();
+                    if (TileData.IsCreated)
+                    {
+                        TileData.Dispose();
+                    }
+
+                    TileData = new NativeArray<int>(
+                        tileDataLength, Allocator.Persistent,
+                        NativeArrayOptions.UninitializedMemory);
                 }
 
-                TileData = new NativeArray<int>(
-                    tileDataLength, Allocator.Persistent,
-                    NativeArrayOptions.UninitializedMemory);
+                var tilesJob = new ForwardPlusTilesJob
+                {
+                    lightBounds = _lightBounds,
+                    tileData = TileData,
+                    otherLightCount = _otherLightCount,
+                    tileScreenUVSize = float2(
+                        1f / _screenUVToTileCoordinates.x,
+                        1f / _screenUVToTileCoordinates.y),
+                    maxLightsPerTile = requiredMaxLightsPerTile,
+                    tilesPerRow = _tileCount.x,
+                    tileDataSize = _tileDataSize
+                };
+                _forwardPlusJobHandle = tilesJob.ScheduleParallelByRef(
+                    TileCount, _tileCount.x, default);
+                // Kick the worker immediately so the job overlaps the GPU pass recording
+                // phase. Render() still calls Complete() before SetBufferData.
+                JobHandle.ScheduleBatchedJobs();
             }
-
-            var tilesJob = new ForwardPlusTilesJob
+            else
             {
-                lightBounds = _lightBounds,
-                tileData = TileData,
-                otherLightCount = _otherLightCount,
-                tileScreenUVSize = float2(
-                    1f / _screenUVToTileCoordinates.x,
-                    1f / _screenUVToTileCoordinates.y),
-                maxLightsPerTile = requiredMaxLightsPerTile,
-                tilesPerRow = _tileCount.x,
-                tileDataSize = _tileDataSize
-            };
-            _forwardPlusJobHandle = tilesJob.ScheduleParallelByRef(
-                TileCount, _tileCount.x, default);
-            // Kick the worker immediately so the job overlaps the GPU pass recording
-            // phase. Render() still calls Complete() before SetBufferData.
-            JobHandle.ScheduleBatchedJobs();
+                _forwardPlusJobHandle = default;
+                // _lightBounds disposal is deferred to Render() so both paths share a
+                // single dispose site. Disposing here used to race with Render()'s
+                // trailing _lightBounds.Dispose() under OilPlanarReflection's mirror
+                // camera, throwing ObjectDisposedException from AtomicSafetyHandle.
+            }
         }
 
         void Render(UnsafeGraphContext context)
@@ -240,14 +274,30 @@ namespace CustomSRP
                 _handles.otherBuffer, OtherLightDataArray, 0, 0, _otherLightCount);
             buffer.SetGlobalBuffer(OtherLightDataId, _handles.otherBuffer);
 
+            // Planar mirror skipped tile bucketing; emit a 1×1 tile buffer so
+            // GPU-side Forward+ loops don't read out-of-range indices.
             _forwardPlusJobHandle.Complete();
-            buffer.SetBufferData(_handles.tilesBuffer, TileData, 0, 0, TileData.Length);
-            buffer.SetGlobalBuffer(TilesId, _handles.tilesBuffer);
-            buffer.SetGlobalVector(TileSettingsId, new Vector4(
-                _screenUVToTileCoordinates.x, _screenUVToTileCoordinates.y,
-                _tileCount.x.ReinterpretAsFloat(),
-                _tileDataSize.ReinterpretAsFloat()));
-            _lightBounds.Dispose();
+            if (_isReflection)
+            {
+                buffer.SetGlobalVector(TileSettingsId, new Vector4(
+                    1f, 1f, 1f, 1f));
+            }
+            else
+            {
+                buffer.SetBufferData(_handles.tilesBuffer, TileData, 0, 0, TileData.Length);
+                buffer.SetGlobalBuffer(TilesId, _handles.tilesBuffer);
+                buffer.SetGlobalVector(TileSettingsId, new Vector4(
+                    _screenUVToTileCoordinates.x, _screenUVToTileCoordinates.y,
+                    _tileCount.x.ReinterpretAsFloat(),
+                    _tileDataSize.ReinterpretAsFloat()));
+            }
+            // Guarded: Render() is the single dispose site for _lightBounds. If a
+            // future code path skips Setup()'s allocation, this stays a no-op instead
+            // of throwing on a freshly-disposed array.
+            if (_lightBounds.IsCreated)
+            {
+                _lightBounds.Dispose();
+            }
         }
 
         public static Handles Record(
@@ -256,13 +306,14 @@ namespace CustomSRP
             Vector2Int attachmentSize,
             ForwardPlusSettings forwardPlusSettings,
             Shadows shadows,
-            int renderingLayerMask)
+            int renderingLayerMask,
+            bool isReflection = false)
         {
             using IUnsafeRenderGraphBuilder builder = renderGraph.AddUnsafePass(
                 Sampler.name, out LightingPass pass, Sampler);
             pass.Setup(
                 cullingResults, attachmentSize, forwardPlusSettings, shadows,
-                renderingLayerMask);
+                renderingLayerMask, isReflection);
 
             var handles = pass._handles = new Handles(
                 renderGraph.CreateBuffer(new BufferDesc(
@@ -275,11 +326,17 @@ namespace CustomSRP
                 {
                     name = "Other Light Data"
                 }),
-                renderGraph.CreateBuffer(new BufferDesc(
-                    pass.TileCount * pass._maxTileDataSize, 4)
-                {
-                    name = "Forward+ Tiles"
-                }));
+                // Planar mirror: 1×1 stub tile buffer (no bucketing scheduled).
+                isReflection
+                    ? renderGraph.CreateBuffer(new BufferDesc(1, 4)
+                    {
+                        name = "Forward+ Tiles (Reflection Stub)"
+                    })
+                    : renderGraph.CreateBuffer(new BufferDesc(
+                        pass.TileCount * pass._maxTileDataSize, 4)
+                    {
+                        name = "Forward+ Tiles"
+                    }));
             builder.UseBuffer(handles.directionalBuffer, AccessFlags.WriteAll);
             builder.UseBuffer(handles.otherBuffer, AccessFlags.WriteAll);
             builder.UseBuffer(handles.tilesBuffer, AccessFlags.WriteAll);

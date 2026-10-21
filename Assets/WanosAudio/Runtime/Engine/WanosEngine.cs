@@ -94,7 +94,7 @@ namespace WanosAudio
                     return;
                 }
 
-                // Engine start is the business's responsibility (call StartEngine() before EnablePlayback).
+                // Call EnablePlayback (device) then StartEngine (DSP) — macOS wrapper needs device open.
                 // This method only attaches the playback device + unblocks PostEvent.
 
                 _playbackEnabled = true;
@@ -123,6 +123,9 @@ namespace WanosAudio
 
             try
             {
+                // Stop events while DSP can still accept them, then halt the thread
+                // before DestoryEngine. GameEntry.OnDestroy / Editor exit used to skip
+                // StopEngine and leave CoreAudio / DSP alive across Play restarts.
                 _eventPostAllowed = true;
                 try
                 {
@@ -138,6 +141,7 @@ namespace WanosAudio
                     _eventPostAllowed = false;
                 }
 
+                StopEngine(reason + "/pre-destroy");
                 WanosInteraction.ShutdownObjects();
                 WanosNative.Instance.Destroy(reason);
                 WanosBankStore.ClearAfterEngineUnload();

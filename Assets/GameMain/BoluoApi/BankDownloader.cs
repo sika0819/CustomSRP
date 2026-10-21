@@ -154,28 +154,88 @@ namespace Game.BoluoApi
                     return false;
             }
 
-            if (!AudioEnginePaths.TryFindLocalBank(bankName, out string path))
-            {
-                string stem = AudioEnginePaths.StripBankExtension(bankName);
-                path = Path.Combine(PersistentBankPath, stem + AudioEnginePaths.BankExtension);
-            }
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            string path = Path.Combine(PersistentBankPath, stem + AudioEnginePaths.BankExtension);
+            if (!File.Exists(path))
+                AudioEnginePaths.TryFindLocalBank(bankName, out path);
+
+            PresetBankCatalog.TryGet(bankName, out var remote);
+
+            // 下载完成写在 .tmp、Move 被打断：size 对齐则提升为正式文件。
+            TryPromoteCompleteTemp(path, remote);
 
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
                 return false;
 
             try
             {
-                if (File.Exists(path + ".tmp"))
-                    return false;
                 var fi = new FileInfo(path);
                 if (!fi.Exists || fi.Length <= 0)
                     return false;
-                if (!PresetBankCatalog.TryGet(bankName, out var remote) || remote == null)
+
+                // 正式文件已就绪时，残留 .tmp 只删不挡（旧逻辑会导致「本地有了还显示要下」）。
+                string tmpPath = path + ".tmp";
+                if (File.Exists(tmpPath))
+                    TryDelete(tmpPath);
+
+                if (remote == null)
                     return true;
                 return FileMatchesRemoteSize(fi.Length, remote);
             }
             catch
             {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 若 <c>path.tmp</c> 长度已对齐 catalog（或无 size 时 &gt;0），提升为正式 bank。
+        /// </summary>
+        static bool TryPromoteCompleteTemp(string finalPath, BankRemoteInfo remote)
+        {
+            if (string.IsNullOrEmpty(finalPath))
+                return false;
+            string tmpPath = finalPath + ".tmp";
+            try
+            {
+                if (!File.Exists(tmpPath))
+                    return false;
+
+                var tmpFi = new FileInfo(tmpPath);
+                if (!tmpFi.Exists || tmpFi.Length <= 0)
+                    return false;
+
+                if (File.Exists(finalPath))
+                {
+                    var finalFi = new FileInfo(finalPath);
+                    if (finalFi.Exists && finalFi.Length > 0
+                        && (remote == null
+                            || string.IsNullOrEmpty(remote.size)
+                            || FileMatchesRemoteSize(finalFi.Length, remote)))
+                    {
+                        TryDelete(tmpPath);
+                        return true;
+                    }
+                }
+
+                // 无 catalog size 不提升：半截 .tmp（如 Plateau 下到 25MB）会被误当成完整包。
+                if (remote == null || string.IsNullOrEmpty(remote.size))
+                    return false;
+                if (!FileMatchesRemoteSize(tmpFi.Length, remote))
+                    return false;
+
+                string dir = Path.GetDirectoryName(finalPath);
+                if (!string.IsNullOrEmpty(dir))
+                    Directory.CreateDirectory(dir);
+                if (File.Exists(finalPath))
+                    File.Delete(finalPath);
+                File.Move(tmpPath, finalPath);
+                Log.Info($"[BankDownloader] promoted complete tmp -> {finalPath} bytes={tmpFi.Length}");
+                return true;
+            }
+            catch (Exception e)
+            {
+                Log.Warning($"[BankDownloader] promote tmp failed path={finalPath}: {e.Message}");
                 return false;
             }
         }
@@ -895,6 +955,8 @@ namespace Game.BoluoApi
                 if (item.State == BankDownloadState.Skipped)
                     continue;
                 string verifyPath = item.LocalPath;
+                PresetBankCatalog.TryGet(item.BankName, out var remoteForPromote);
+                TryPromoteCompleteTemp(verifyPath, remoteForPromote);
                 if (!File.Exists(verifyPath)
                     && AudioEnginePaths.TryFindLocalBank(item.BankName, out string existing)
                     && !string.Equals(existing, verifyPath, StringComparison.OrdinalIgnoreCase))
@@ -1027,6 +1089,16 @@ namespace Game.BoluoApi
             }
         }
 
+        static async UniTask<bool> LocalFileMd5MatchesAsync(string path, string expectedMd5)
+        {
+            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(expectedMd5) || !File.Exists(path))
+                return false;
+            string actual = await RunOffMainAsync(() => ComputeMd5(path));
+            return !string.IsNullOrEmpty(actual)
+                   && !string.Equals(actual, "Error", StringComparison.Ordinal)
+                   && string.Equals(actual, expectedMd5, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// 热更里不要走 <c>UniTask.RunOnThreadPool&lt;T&gt;</c>（Dev IL2CPP 复现 NRE）。
         /// ThreadPool + <c>UniTaskCompletionSource&lt;T&gt;</c> 已在进岛路径验证过。
@@ -1086,6 +1158,43 @@ namespace Game.BoluoApi
                 item.Progress = 0f;
                 item.Error = null;
                 onProgress?.Invoke(item);
+
+                // 插队/改名迁移后可能本地已齐：直接 Ready，勿再 HTTP。
+                PresetBankCatalog.TryGet(item.BankName, out var catalogRemote);
+                BankRemoteInfo sizeHint = catalogRemote;
+                if ((sizeHint == null || string.IsNullOrEmpty(sizeHint.size))
+                    && !string.IsNullOrEmpty(item.SizeKb))
+                {
+                    sizeHint = new BankRemoteInfo
+                    {
+                        bankName = item.BankName,
+                        size = item.SizeKb,
+                        md5 = !string.IsNullOrEmpty(item.Md5) ? item.Md5 : catalogRemote?.md5,
+                    };
+                }
+
+                TryPromoteCompleteTemp(item.LocalPath, sizeHint);
+                if (File.Exists(item.LocalPath))
+                {
+                    long len = 0;
+                    try { len = new FileInfo(item.LocalPath).Length; } catch { /* ignore */ }
+                    bool sizeOk = sizeHint == null
+                                  || string.IsNullOrEmpty(sizeHint.size)
+                                  || FileMatchesRemoteSize(len, sizeHint);
+                    if (sizeOk
+                        && (string.IsNullOrEmpty(item.Md5)
+                            || await LocalFileMd5MatchesAsync(item.LocalPath, item.Md5)))
+                    {
+                        TryDelete(item.LocalPath + ".tmp");
+                        RememberLocalMd5(item);
+                        item.State = BankDownloadState.Ready;
+                        item.Progress = 1f;
+                        item.Error = null;
+                        onProgress?.Invoke(item);
+                        Log.Info($"[BankDownloader] skip HTTP, local ready {item.BankName}");
+                        return false;
+                    }
+                }
 
                 await WaitForNetworkAsync();
                 if (shouldAbort != null && shouldAbort())

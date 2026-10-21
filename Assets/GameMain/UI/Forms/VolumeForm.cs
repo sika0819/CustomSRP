@@ -122,18 +122,22 @@ namespace Game
                     return Mathf.Clamp01(GameEntry.Music.EffectVolume);
             }
 
-            if (GameEntry.Setting != null && GameEntry.Setting.HasSetting(key))
-                return Mathf.Clamp01(GameEntry.Setting.GetFloat(key, 1f));
+            BoluoGameSave.EnsureLoaded();
+            if (key == MusicVolumeKey)
+                return BoluoGameSave.MusicVolume01;
+            if (key == EffectVolumeKey)
+                return BoluoGameSave.EffectVolume01;
             return 1f;
         }
 
         static void SaveVolume(string key, float value)
         {
             PushVolume(key, value);
-            if (GameEntry.Setting == null)
-                return;
-            GameEntry.Setting.SetFloat(key, Mathf.Clamp01(value));
-            GameEntry.Setting.Save();
+            value = Mathf.Clamp01(value);
+            if (key == MusicVolumeKey)
+                BoluoGameSave.SetMusicVolume01(value);
+            else if (key == EffectVolumeKey)
+                BoluoGameSave.SetEffectVolume01(value);
         }
 
         static void PushVolume(string key, float value)

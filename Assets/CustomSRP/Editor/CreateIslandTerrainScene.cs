@@ -392,7 +392,7 @@ namespace CustomSRP.Editor
             cam.nearClipPlane = 0.3f;
             cam.farClipPlane = Mathf.Max(1800f, data.size.x * 2f);
             cam.fieldOfView = 55f;
-            cam.allowHDR = false;
+            cam.allowHDR = true;
             cam.allowMSAA = false;
             cam.clearFlags = CameraClearFlags.Skybox;
             var crp = cam.gameObject.AddComponent<CustomRenderPipelineCamera>();
@@ -407,7 +407,7 @@ namespace CustomSRP.Editor
                 AssetDatabase.LoadAssetAtPath<PostFXSettings>(
                     "Assets/CustomSRP/Settings/PostFXSettings.asset");
             settings.FindPropertyRelative("renderScaleMode").enumValueIndex = 2;
-            // Idle default 1; IslandJoystickCamera drops to 0.75 while walking.
+            // Runtime IslandCameraSrpSetup overrides by device (GMJ 1/0.75, else 0.5/0.375).
             settings.FindPropertyRelative("renderScale").floatValue = 1f;
             settings.FindPropertyRelative("allowFXAA").boolValue = false;
             settings.FindPropertyRelative("keepAlpha").boolValue = false;

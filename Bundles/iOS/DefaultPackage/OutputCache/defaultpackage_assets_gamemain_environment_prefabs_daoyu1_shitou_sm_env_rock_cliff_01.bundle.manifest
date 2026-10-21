@@ -1,0 +1,38 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3020056375
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 30b8fb0f762d0679678ccdecbae27b90
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 2d6187fd202d3528e0d31df7c41fd6e5
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 94b399496e1e21cc3ab2a37ff5444da7
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 64
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/ShiTou/SM_Env_Rock_Cliff_01.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_materials.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_shitou.bundle

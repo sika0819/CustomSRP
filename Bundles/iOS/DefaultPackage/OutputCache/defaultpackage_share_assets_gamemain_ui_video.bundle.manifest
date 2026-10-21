@@ -1,0 +1,26 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2837861402
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 34e4030254ff662bef5649193c260431
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: b795da1bfd4b1e546f7a4d4c06cb8805
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 36b9a837d384e6d721b8f2065d1bf0c4
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 329
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Video/loading_landscape.mp4
+- Assets/GameMain/UI/Video/loading_landscape.png
+- Assets/GameMain/UI/Video/loading.mp4
+- Assets/GameMain/UI/Video/loading.png
+Dependencies: []

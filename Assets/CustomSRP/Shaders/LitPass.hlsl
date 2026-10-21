@@ -58,6 +58,7 @@ Varyings LitPassVertex(Attributes input)
 float4 LitPassFragment(Varyings input) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
+    OilBakeClipAboveWater(input.positionWS);
 
     InputConfig config = GetInputConfig(input.positionCS_SS, input.baseUV);
 #if defined(_MASK_MAP)

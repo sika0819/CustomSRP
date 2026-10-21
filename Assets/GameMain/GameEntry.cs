@@ -40,10 +40,26 @@ namespace Game
             InitCustomComponents();
             EnsureUiGroups();
 #if !UNITY_EDITOR
-            // Awake is too early on some Android devices; re-apply after display is ready.
-            Screen.SetResolution(1280, 720, FullScreenMode.FullScreenWindow);
-            Log.Info("[GameEntry] res after Start=" + Screen.width + "x" + Screen.height);
+            Log.Info("[GameEntry] res after Start=" + Screen.width + "x" + Screen.height
+                + " dpiScale=" + QualitySettings.resolutionScalingFixedDPIFactor);
 #endif
+        }
+
+        /// <summary>
+        /// Orientation already says landscape, but pixels are still portrait.
+        /// Android chrome can report that for a frame; do not refit FOV on it.
+        /// </summary>
+        public static bool IsTransientPortraitReport
+        {
+            get
+            {
+                if (Screen.width >= Screen.height)
+                    return false;
+
+                ScreenOrientation orientation = Screen.orientation;
+                return orientation == ScreenOrientation.LandscapeLeft
+                    || orientation == ScreenOrientation.LandscapeRight;
+            }
         }
 
         static void ApplyDeviceGraphicsPolicy()
@@ -55,10 +71,10 @@ namespace Game
             QualitySettings.SetQualityLevel(medium, true);
             Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 0;
-            // OEM often ignores SetResolution; DPI scale is the real backbuffer lever.
-            // 0.70×0.75 + bicubic：略低于旧 0.78×0.58 的 fill，换稳定帧。
+            // Never Screen.SetResolution: 1280×720 locks 16:9, then FullScreenWindow
+            // stretches onto taller phones (20:9) and flattens UI + game view.
+            // Pixel budget = native aspect × DPI scale × CRP render scale.
             QualitySettings.resolutionScalingFixedDPIFactor = 0.7f;
-            Screen.SetResolution(1280, 720, FullScreenMode.FullScreenWindow);
             // Keep oil NPR; cut ocean stamps / terrain micro-spec on mobile.
             // Directional hard shadows still sample (see OilNPRLighting).
             Shader.EnableKeyword("OIL_MOBILE_PERF");
@@ -78,6 +94,8 @@ namespace Game
         {
             BootLoadingService.ResetSession();
             AudioInteractionBootstrap.Shutdown();
+            // Unload stops DSP then DestoryEngine. Editor also forces this on
+            // ExitingPlayMode; second call is a no-op if already torn down.
             WanosAudio.WanosEngine.Unload("GameEntry.OnDestroy");
             ClearCustomComponents();
             ClearBuiltinComponents();

@@ -252,6 +252,29 @@ namespace CustomSRP
 
         public OilFilterSettings OilFilter => oilFilter;
 
+        [Serializable]
+        public struct CanvasSettings
+        {
+            [Tooltip("Procedural canvas weave after tonemapping. Not film grain.")]
+            public bool enabled;
+
+            [Range(0f, 0.08f)]
+            public float grain;
+
+            [Range(0f, 0.08f)]
+            public float weave;
+        }
+
+        [SerializeField]
+        CanvasSettings canvas = new CanvasSettings
+        {
+            enabled = false,
+            grain = 0.035f,
+            weave = 0.02f
+        };
+
+        public CanvasSettings Canvas => canvas;
+
         [NonSerialized] Material material;
 
         public Material Material

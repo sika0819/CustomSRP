@@ -10,10 +10,13 @@ namespace Game
         const float TimeToastSeconds = 1.6f;
         const float TimeToastFadeSeconds = 0.35f;
 
-        // Boluo YuSheLable timing (fade in after hold, then fade out).
-        const float PresetVeilInSeconds = 0.35f;
-        const float PresetVeilHoldSeconds = 0.15f;
-        const float PresetVeilOutSeconds = 0.55f;
+        // Boluo IEMoveTo iris timings.
+        const float OutlensSeconds = 2f;
+        const float VignetteStartSeconds = 0.5f;
+        const float VignetteKeepSeconds = 1f;
+        const float InlensSeconds = 2f;
+        const float BlackHoldSeconds = 0.16f;
+        const float BlackHoldLowEndSeconds = 0.08f;
         // Boluo YuSheLable: fadeIn@2s, fadeOut@5s, each 0.6s.
         const float PresetLabelDelaySeconds = 2f;
         const float PresetLabelFadeSeconds = 0.6f;
@@ -24,6 +27,7 @@ namespace Game
         VisualElement _timeLabel;
         VisualElement _timeIcon1;
         VisualElement _timeIcon2;
+        VisualElement _weatherGlyph;
         VisualElement _musicGlyph;
         VisualElement _musicPlaying;
         VisualElement _eqBarLeft;
@@ -45,6 +49,12 @@ namespace Game
         Texture2D _texArrowMorning;
         Texture2D _texArrowEvening;
         Texture2D _texArrowNight;
+        // Boluo HudWeatherBinder atlas: clear + cloud / rain / fog / wind × 小中大.
+        Texture2D _texWeatherClear;
+        Texture2D[] _texWeatherCloud;
+        Texture2D[] _texWeatherRain;
+        Texture2D[] _texWeatherFog;
+        Texture2D[] _texWeatherWind;
         IVisualElementScheduledItem _toastHide;
         float _toastAlpha;
         float _toastFadeFrom;
@@ -59,13 +69,10 @@ namespace Game
         bool _layoutHooked;
 
         VisualElement _presetVeil;
+        VisualElement _hudHeader;
+        VisualElement _hudIcons;
         Label _presetLabel;
         IVisualElementScheduledItem _presetLabelHide;
-        float _veilAlpha;
-        float _veilFadeFrom;
-        float _veilFadeTo;
-        float _veilFadeDuration;
-        float _veilFadeElapsed = -1f;
         float _presetLabelAlpha;
         float _presetLabelFadeFrom;
         float _presetLabelFadeTo;
@@ -74,9 +81,9 @@ namespace Game
         bool _presetTransitionBusy;
         int _transitionPresetId;
         int _queuedPresetId;
-        float _veilHoldElapsed = -1f;
-        enum VeilPhase { None, FadingIn, Holding, FadingOut }
-        VeilPhase _veilPhase;
+        float _phaseElapsed;
+        enum IrisPhase { None, Exiting, Holding, Entering }
+        IrisPhase _irisPhase;
 
         public override void OnOpen(object userData)
         {
@@ -84,7 +91,7 @@ namespace Game
             OnClick("weatherBackground", () => UiAssets.OpenPanel(UiAssets.WeatherForm));
             OnClick("musicBackground", () => UiAssets.OpenPanel(UiAssets.MusicForm));
             OnClick("volumeBackground", () => UiAssets.OpenPanel(UiAssets.VolumeForm));
-            OnClick("presetIcon", () => UiAssets.OpenPanel(UiAssets.PresetForm));
+            OnClick("presetIcon", TryOpenPresetPanel);
             // Hybrid HUD：原生个人中心 / 定时 / 健康；Editor 走 NativeEditorHud 模拟。
             OnClick("profile", () => NativeBridgeFacade.HudProfile());
             OnClick("timerBackground", () => NativeBridgeFacade.HudTimer());
@@ -109,6 +116,9 @@ namespace Game
             EnsurePresetChrome();
             ResetPresetChrome();
 
+            VisualElement weatherIcon = Root.Q("weatherBackground");
+            _weatherGlyph = weatherIcon?.Q("glyph");
+
             VisualElement musicIcon = Root.Q("musicBackground");
             _musicGlyph = musicIcon?.Q("glyph");
             _musicPlaying = musicIcon?.Q("musicPlaying");
@@ -122,6 +132,7 @@ namespace Game
             _volumeMusicFill = volumeIcon?.Q("volumeTrack1");
             _volumeEffectFill = volumeIcon?.Q("volumeTrack2");
             SyncVolumeIcon();
+            SyncWeatherIcon();
 
             VisualElement pauseHint = Root.Q("pauseHint");
             if (pauseHint != null)
@@ -133,7 +144,9 @@ namespace Game
             _locomotion.Bind(_joystick);
             _hudLayout.Bind(formRoot);
 
-            _idle.Bind(Root.Q("hudHeader"), Root.Q("hudIcons"), Root.Q("breathHint"));
+            _hudHeader = Root.Q("hudHeader");
+            _hudIcons = Root.Q("hudIcons");
+            _idle.Bind(_hudHeader, _hudIcons, Root.Q("breathHint"));
 
             if (!_layoutHooked)
             {
@@ -148,12 +161,14 @@ namespace Game
             if (GameEntry.Event != null)
             {
                 GameEntry.Event.Subscribe(TimeOfDayChangedEventArgs.EventId, OnTimeChanged);
+                GameEntry.Event.Subscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
                 GameEntry.Event.Subscribe(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest);
             }
 
             // Cold-start: wall clock → Period → four cardinal dial snaps (Boluo InitClockHandFromTimeType).
             GameEntry.Weather?.ApplyLocalClockIfNeeded();
             SyncDial();
+            SyncWeatherIcon();
             Root.schedule.Execute(SyncDial).StartingIn(0);
         }
 
@@ -170,6 +185,7 @@ namespace Game
             _presetLabelHide?.Pause();
             _presetLabelHide = null;
             _idle.Dispose();
+            AbortPresetTransitionCleanup();
             _locomotion.ForceEnd();
             _joystick?.Dispose();
             _joystick = null;
@@ -177,6 +193,7 @@ namespace Game
             if (GameEntry.Event != null)
             {
                 GameEntry.Event.Unsubscribe(TimeOfDayChangedEventArgs.EventId, OnTimeChanged);
+                GameEntry.Event.Unsubscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
                 GameEntry.Event.Unsubscribe(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest);
             }
 
@@ -190,7 +207,7 @@ namespace Game
             SyncMusicPlaying(realElapseSeconds);
             SyncVolumeIcon();
             TickTimeToastFade(elapseSeconds);
-            TickPresetVeil(elapseSeconds);
+            TickPresetIris(elapseSeconds);
             TickPresetLabelFade(elapseSeconds);
             _locomotion.Tick();
             _idle.Tick(WasPointerPressedThisFrame(), _locomotion.IsMoveInputActive);
@@ -316,6 +333,88 @@ namespace Game
 
         void OnTimeChanged(object sender, GameEventArgs e) => SyncDial();
 
+        void OnWeatherChanged(object sender, GameEventArgs e) => SyncWeatherIcon();
+
+        /// <summary>
+        /// Boluo HudWeatherBinder.Refresh: level 0 → 晴天；否则按 Kind 取 小/中/大 图标。
+        /// </summary>
+        void SyncWeatherIcon()
+        {
+            if (_weatherGlyph == null)
+                return;
+
+            EnsureWeatherIconTextures();
+            WeatherService weather = GameEntry.Weather;
+            IslandWeatherKind kind = weather != null ? weather.Kind : IslandWeatherKind.Cloud;
+            int level = weather != null ? Mathf.Clamp(weather.Level, 0, 3) : 0;
+            SetBackground(_weatherGlyph, ResolveWeatherIcon(kind, level));
+        }
+
+        Texture2D ResolveWeatherIcon(IslandWeatherKind kind, int level)
+        {
+            if (level <= 0 || kind == IslandWeatherKind.Clear)
+                return _texWeatherClear;
+
+            int idx = Mathf.Clamp(level - 1, 0, 2);
+            return kind switch
+            {
+                IslandWeatherKind.Cloud => PickWeatherTier(_texWeatherCloud, idx),
+                IslandWeatherKind.Rain => PickWeatherTier(_texWeatherRain, idx),
+                IslandWeatherKind.Foggy => PickWeatherTier(_texWeatherFog, idx),
+                IslandWeatherKind.Wind => PickWeatherTier(_texWeatherWind, idx),
+                _ => _texWeatherClear,
+            };
+        }
+
+        static Texture2D PickWeatherTier(Texture2D[] list, int idx)
+        {
+            if (list == null || list.Length == 0)
+                return null;
+            return list[Mathf.Clamp(idx, 0, list.Length - 1)];
+        }
+
+        void EnsureWeatherIconTextures()
+        {
+            if (_texWeatherClear != null)
+                return;
+
+            _texWeatherClear = Resources.Load<Texture2D>("UI/WeatherIcons/qingtian");
+            _texWeatherCloud = new[]
+            {
+                Resources.Load<Texture2D>("UI/WeatherIcons/qingtian"),
+                Resources.Load<Texture2D>("UI/WeatherIcons/zhongyun"),
+                Resources.Load<Texture2D>("UI/WeatherIcons/xiaoyun"),
+            };
+            _texWeatherRain = new[]
+            {
+                Resources.Load<Texture2D>("UI/WeatherIcons/xiaoyu"),
+                Resources.Load<Texture2D>("UI/WeatherIcons/zhongyu"),
+                Resources.Load<Texture2D>("UI/WeatherIcons/dayu"),
+            };
+            _texWeatherFog = new[]
+            {
+                Resources.Load<Texture2D>("UI/WeatherIcons/xiaowu"),
+                Resources.Load<Texture2D>("UI/WeatherIcons/zhongwu"),
+                Resources.Load<Texture2D>("UI/WeatherIcons/dawu"),
+            };
+            _texWeatherWind = new[]
+            {
+                Resources.Load<Texture2D>("UI/WeatherIcons/xiaofeng"),
+                Resources.Load<Texture2D>("UI/WeatherIcons/zhongfeng"),
+                Resources.Load<Texture2D>("UI/WeatherIcons/dafeng"),
+            };
+        }
+
+        void TryOpenPresetPanel()
+        {
+            // F1: block open while a preset MoveTo / veil is in flight.
+            if (GameEntry.Presets != null && GameEntry.Presets.IsTransitioning)
+                return;
+            if (_presetTransitionBusy)
+                return;
+            UiAssets.OpenPanel(UiAssets.PresetForm);
+        }
+
         void OnPresetTransitionRequest(object sender, GameEventArgs e)
         {
             if (e is not PresetTransitionRequestEventArgs args)
@@ -335,22 +434,20 @@ namespace Game
             _presetTransitionBusy = true;
             _transitionPresetId = presetId;
             _queuedPresetId = 0;
+            _phaseElapsed = 0f;
             _idle.ExitOnReturnFromForeground();
             HidePresetLabelImmediate();
             HideTimeToastImmediate();
+            _locomotion.ForceEnd();
+            SetHudVisible(false);
+            ShowInputBlocker(true);
 
-            // Veil fade-in still takes a beat — clear 3D immediately so old zones do not linger.
+            PresetWeatherHold.Begin();
+            PresetIrisOverlay.Clear();
             AudioInteractionBootstrap.ClearContent3D();
 
-            if (_presetVeil != null)
-            {
-                _presetVeil.style.display = DisplayStyle.Flex;
-                _presetVeil.pickingMode = PickingMode.Position;
-                _presetVeil.BringToFront();
-            }
-
-            _veilPhase = VeilPhase.FadingIn;
-            StartVeilFade(_veilAlpha, 1f, PresetVeilInSeconds);
+            IslandJoystickCamera.Current?.BeginExitDolly();
+            _irisPhase = IrisPhase.Exiting;
         }
 
         void EnsurePresetChrome()
@@ -379,94 +476,148 @@ namespace Game
 
         void ResetPresetChrome()
         {
-            _veilPhase = VeilPhase.None;
-            _veilFadeElapsed = -1f;
-            _veilAlpha = 0f;
-            ApplyVeilOpacity(0f);
-            if (_presetVeil != null)
-            {
-                _presetVeil.style.display = DisplayStyle.None;
-                _presetVeil.pickingMode = PickingMode.Ignore;
-            }
-
+            AbortPresetTransitionCleanup();
             HidePresetLabelImmediate();
             _presetTransitionBusy = false;
             _transitionPresetId = 0;
             _queuedPresetId = 0;
-            _veilHoldElapsed = -1f;
+            _phaseElapsed = 0f;
+            _irisPhase = IrisPhase.None;
         }
 
-        void TickPresetVeil(float elapseSeconds)
+        void AbortPresetTransitionCleanup()
         {
-            if (_veilPhase == VeilPhase.None)
+            PresetIrisOverlay.Clear();
+            PresetWeatherHold.Abort();
+            IslandJoystickCamera.Current?.EndTransitionDrive();
+            ShowInputBlocker(false);
+            SetHudVisible(true);
+            _locomotion.ForceEnd();
+            GameEntry.Presets?.AbortTransition();
+            _irisPhase = IrisPhase.None;
+            _phaseElapsed = 0f;
+            _presetTransitionBusy = false;
+        }
+
+        void TickPresetIris(float elapseSeconds)
+        {
+            if (_irisPhase == IrisPhase.None)
                 return;
 
-            if (_veilPhase == VeilPhase.Holding)
+            IslandJoystickCamera cam = IslandJoystickCamera.Current;
+            _phaseElapsed += elapseSeconds;
+
+            if (_irisPhase == IrisPhase.Exiting)
             {
-                _veilHoldElapsed += elapseSeconds;
-                if (_veilHoldElapsed < PresetVeilHoldSeconds)
+                float t = Mathf.Clamp01(_phaseElapsed / OutlensSeconds);
+                cam?.SampleExitDolly(t);
+                if (!IslandGraphicsTier.IsLowEnd)
+                    cam?.NudgeExitWalk(elapseSeconds);
+                ApplyExitIris(_phaseElapsed);
+
+                if (_phaseElapsed < OutlensSeconds)
                     return;
 
-                _veilHoldElapsed = -1f;
-                _veilPhase = VeilPhase.FadingOut;
-                StartVeilFade(_veilAlpha, 0f, PresetVeilOutSeconds);
+                PresetIrisOverlay.Peak();
+                GameEntry.Presets?.Apply(_transitionPresetId, teleportPlayer: true);
+                _irisPhase = IrisPhase.Holding;
+                _phaseElapsed = 0f;
+                return;
+            }
+
+            if (_irisPhase == IrisPhase.Holding)
+            {
+                PresetIrisOverlay.Peak();
+                float hold = IslandGraphicsTier.IsLowEnd ? BlackHoldLowEndSeconds : BlackHoldSeconds;
+                if (_phaseElapsed < hold)
+                    return;
+
+                _irisPhase = IrisPhase.Entering;
+                _phaseElapsed = 0f;
                 SchedulePresetLabelAfterReveal();
                 return;
             }
 
-            if (_veilFadeElapsed < 0f)
-                return;
-
-            _veilFadeElapsed += elapseSeconds;
-            float t = Mathf.Clamp01(_veilFadeElapsed / _veilFadeDuration);
-            _veilAlpha = Mathf.Lerp(_veilFadeFrom, _veilFadeTo, t);
-            ApplyVeilOpacity(_veilAlpha);
-            if (t < 1f)
-                return;
-
-            _veilFadeElapsed = -1f;
-
-            if (_veilPhase == VeilPhase.FadingIn)
+            if (_irisPhase == IrisPhase.Entering)
             {
-                GameEntry.Presets?.Apply(_transitionPresetId, teleportPlayer: true);
-                _veilPhase = VeilPhase.Holding;
-                _veilHoldElapsed = 0f;
-                return;
-            }
+                float t = Mathf.Clamp01(_phaseElapsed / InlensSeconds);
+                float softness = t;
+                float alpha = 1f - t;
+                PresetIrisOverlay.Set(softness, alpha);
+                cam?.SampleEnterDolly(t);
 
-            if (_veilPhase == VeilPhase.FadingOut)
-            {
-                if (_presetVeil != null)
-                {
-                    _presetVeil.style.display = DisplayStyle.None;
-                    _presetVeil.pickingMode = PickingMode.Ignore;
-                }
+                if (_phaseElapsed < InlensSeconds)
+                    return;
 
-                _veilPhase = VeilPhase.None;
-                _presetTransitionBusy = false;
-                if (_queuedPresetId > 0)
-                {
-                    int next = _queuedPresetId;
-                    _queuedPresetId = 0;
-                    BeginPresetTransition(next);
-                }
+                FinishPresetReveal();
             }
         }
 
-        void StartVeilFade(float from, float to, float duration)
+        void ApplyExitIris(float timer)
         {
-            _veilFadeFrom = from;
-            _veilFadeTo = to;
-            _veilFadeDuration = Mathf.Max(0.01f, duration);
-            _veilFadeElapsed = 0f;
-            if (_presetVeil != null && to > 0f)
+            if (timer < VignetteStartSeconds)
+            {
+                PresetIrisOverlay.Clear();
+                return;
+            }
+
+            if (timer <= VignetteStartSeconds + VignetteKeepSeconds)
+            {
+                float u = (timer - VignetteStartSeconds) / VignetteKeepSeconds;
+                PresetIrisOverlay.Set(1f - u, u);
+                return;
+            }
+
+            PresetIrisOverlay.Peak();
+        }
+
+        void FinishPresetReveal()
+        {
+            PresetIrisOverlay.Clear();
+            IslandJoystickCamera.Current?.EndTransitionDrive();
+            PresetWeatherHold.Release();
+            ShowInputBlocker(false);
+            SetHudVisible(true);
+            _locomotion.ForceEnd();
+
+            _irisPhase = IrisPhase.None;
+            _phaseElapsed = 0f;
+            _presetTransitionBusy = false;
+            GameEntry.Presets?.MarkPlaying();
+
+            if (_queuedPresetId > 0)
+            {
+                int next = _queuedPresetId;
+                _queuedPresetId = 0;
+                BeginPresetTransition(next);
+            }
+        }
+
+        void ShowInputBlocker(bool on)
+        {
+            if (_presetVeil == null)
+                return;
+            if (on)
+            {
                 _presetVeil.style.display = DisplayStyle.Flex;
+                _presetVeil.style.opacity = 1f;
+                _presetVeil.pickingMode = PickingMode.Position;
+                _presetVeil.BringToFront();
+            }
+            else
+            {
+                _presetVeil.style.display = DisplayStyle.None;
+                _presetVeil.pickingMode = PickingMode.Ignore;
+            }
         }
 
-        void ApplyVeilOpacity(float alpha)
+        void SetHudVisible(bool visible)
         {
-            if (_presetVeil != null)
-                _presetVeil.style.opacity = alpha;
+            DisplayStyle d = visible ? DisplayStyle.Flex : DisplayStyle.None;
+            if (_hudHeader != null)
+                _hudHeader.style.display = d;
+            if (_hudIcons != null)
+                _hudIcons.style.display = d;
         }
 
         void SchedulePresetLabelAfterReveal()
@@ -482,8 +633,6 @@ namespace Game
             _presetLabel.text = text;
             _presetLabel.style.display = DisplayStyle.Flex;
             _presetLabel.BringToFront();
-            if (_presetVeil != null)
-                _presetVeil.BringToFront();
 
             _presetLabelHide?.Pause();
             _presetLabelHide = Root.schedule.Execute(() =>

@@ -1,0 +1,32 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2841097042
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: a244cf1b67f1f2a1ec41aff28aeb0385
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d5b1802501938ccd9ac76dfe2ea9b09e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 3bdccb30f3748b2b0ba694722154be79
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Materials/Billboard/Maple 2 Dead_Billboard.mat
+- Assets/GameMain/Environment/Materials/Billboard/SM_Env_Bush_Tropical_04_Billboard.mat
+- Assets/GameMain/Environment/Materials/Billboard/Maple 3 Dead_Billboard_Trunk.mat
+- Assets/GameMain/Environment/Materials/Billboard/Maple 2 Dead_Billboard_Trunk.mat
+- Assets/GameMain/Environment/Materials/Billboard/SM_Env_Bush_Tropical_04_Billboard_Trunk.mat
+- Assets/GameMain/Environment/Materials/Billboard/Maple 3 Dead_Billboard.mat
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

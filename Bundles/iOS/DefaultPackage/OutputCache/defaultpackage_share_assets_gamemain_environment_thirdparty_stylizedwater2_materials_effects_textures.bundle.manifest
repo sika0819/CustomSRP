@@ -1,0 +1,23 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3262989787
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 827da59eb210528458a28ed188fd9510
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1cfddeea06ce0ec573e0d0ec81ebe20e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 6182d1dd6f8228a217fdf2ee1ad965b8
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/ThirdParty/StylizedWater2/Materials/Effects/Textures/WaterMist_5x5_normals.png
+- Assets/GameMain/Environment/ThirdParty/StylizedWater2/Materials/Effects/Textures/WaterSplashCircle_5x5.png
+- Assets/GameMain/Environment/ThirdParty/StylizedWater2/Materials/Effects/Textures/WaterfallSplash_5x5_normals.png
+Dependencies: []

@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 4868235027490562060}
   - component: {fileID: 7236025381241787590}
   - component: {fileID: -4864232434071645242}
-  - component: {fileID: 714495387870914577}
+  - component: {fileID: 8914168952731175056}
   m_Layer: 0
   m_Name: SM_Env_Rock_03
   m_TagString: Untagged
@@ -112,7 +112,7 @@ LODGroup:
     - renderer: {fileID: 7236025381241787590}
   m_Enabled: 1
   m_GlobalIlluminationLOD: 0
---- !u!64 &714495387870914577
+--- !u!64 &8914168952731175056
 MeshCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -133,4 +133,4 @@ MeshCollider:
   serializedVersion: 5
   m_Convex: 0
   m_CookingOptions: 22
-  m_Mesh: {fileID: 4300000, guid: b8aa3f223bf1f448098dbd7230fdf9d5, type: 2}
+  m_Mesh: {fileID: 4300000, guid: c767c062f86214ab797e83ee6fd5e77b, type: 2}

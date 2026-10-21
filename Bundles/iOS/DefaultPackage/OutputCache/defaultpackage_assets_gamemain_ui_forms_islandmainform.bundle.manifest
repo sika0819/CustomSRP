@@ -1,0 +1,35 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1420240957
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 99d81f2b5e5e3d58d86f6cf8454b1bea
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1757aac913ea2cf24128b97a0c188c9d
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: be2b119ac0f88ce0ccdadae2b237b484
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 11500000, guid: a7aaf8bb4062e4b3fb3cde2ac583c1fa, type: 3}
+- Class: 114
+  Script: {fileID: 19101, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 11995, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 115
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Forms/IslandMainForm.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_ui_forms.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_ui_settings.bundle

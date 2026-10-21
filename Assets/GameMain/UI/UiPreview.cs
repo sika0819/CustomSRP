@@ -165,16 +165,15 @@ namespace Game
             list.itemsSource = labels;
             list.makeItem = () =>
             {
-                // Mirror MusicForm.MakeItem — single Label per row, no per-item
-                // template asset so the editor preview stays in lock-step with
-                // the runtime layout.
+                // Mirror MusicForm.MakeItem — TextElement per row (not Label:
+                // theme :hover washes text white on the card).
                 var root = new VisualElement();
                 root.style.position = Position.Relative;
                 root.style.width = new Length(100, LengthUnit.Percent);
                 root.style.height = itemHeight;
                 root.style.backgroundColor = new Color(0, 0, 0, 0);
 
-                var label = new Label();
+                var label = new TextElement();
                 label.style.position = Position.Absolute;
                 label.style.left = 85;
                 label.style.top = 0;
@@ -190,7 +189,7 @@ namespace Game
             };
             list.bindItem = (element, index) =>
             {
-                Label label = element.Q<Label>();
+                TextElement label = element.Q<TextElement>();
                 if (label != null && index >= 0 && index < labels.Count)
                 {
                     object raw = labels[index];

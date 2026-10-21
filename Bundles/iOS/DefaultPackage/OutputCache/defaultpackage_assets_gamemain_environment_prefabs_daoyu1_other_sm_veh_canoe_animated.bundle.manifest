@@ -1,0 +1,39 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2066780788
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 8ce673ac8971abab8928d90840ad9a53
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 32ae1d52f125fb0086f9fdd7217bd402
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 677ee7a34066e96f398a8ed91904b398
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 91
+  Script: {instanceID: 0}
+- Class: 95
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Other/SM_Veh_Canoe_Animated.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_fx_animations.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_canoeextracted.bundle

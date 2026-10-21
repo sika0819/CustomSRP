@@ -54,6 +54,7 @@ Material:
     - _Canvas: 1
     - _CanvasStrength: 0.1
     - _Clipping: 1
+    - _OilCrossBillboard: 1
     - _Cull: 2
     - _Cutoff: 0.35
     - _DstBlend: 0

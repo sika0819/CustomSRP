@@ -1,0 +1,145 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3796571278
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 4e0a1db819eba6b6b977f6a384b883cd
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 7d185661f2745a9251f3493ef8649496
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 7b71e2f2eb534a882de512fe98c962b8
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+- Class: 64
+  Script: {instanceID: 0}
+- Class: 90
+  Script: {instanceID: 0}
+- Class: 95
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Models/SM_Env_Dock_02.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Mushroom_Sparse_04.fbx
+- Assets/GameMain/Environment/Models/TAI_Wood_Barrel_01A.fbx
+- Assets/GameMain/Environment/Models/Maple 2 Dead_BillboardMesh.asset
+- Assets/GameMain/Environment/Models/TAI_Wood_Barrel_02A.fbx
+- Assets/GameMain/Environment/Models/SM_Env_Bush_Tropical_03.fbx
+- Assets/GameMain/Environment/Models/SM_Mushroom_09.fbx
+- Assets/GameMain/Environment/Models/SM_BirchTree_01.fbx
+- Assets/GameMain/Environment/Models/TFF_Fern_01B.fbx
+- Assets/GameMain/Environment/Models/TAI_Palm_Log_01A.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Leaves_Branch_01.fbx
+- Assets/GameMain/Environment/Models/SM_Mushroom_12.fbx
+- Assets/GameMain/Environment/Models/SM_BirchTree_03.fbx
+- Assets/GameMain/Environment/Models/SM_OakTree_01.fbx
+- Assets/GameMain/Environment/Models/TAI_Palm_Tree_04A.fbx
+- Assets/GameMain/Environment/Models/River_02.fbx
+- Assets/GameMain/Environment/Models/SM_OakTree_02.fbx
+- Assets/GameMain/Environment/Models/SM_Fence_07.fbx
+- Assets/GameMain/Environment/Models/SM_Grass_03_02.fbx
+- Assets/GameMain/Environment/Models/SM_BirchTree_04.fbx
+- Assets/GameMain/Environment/Models/River_01_TerrainSnap.asset
+- Assets/GameMain/Environment/Models/SM_BirchTree_07.fbx
+- Assets/GameMain/Environment/Models/SM_OakTree_05.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Mushroom_Sparse_03.fbx
+- Assets/GameMain/Environment/Models/SM_Plant_02_02.fbx
+- Assets/GameMain/Environment/Models/TAI_StarFish_01A.fbx
+- Assets/GameMain/Environment/Models/SM_Mushroom_10.fbx
+- Assets/GameMain/Environment/Models/SM_Plant_02_01.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Coral_09.fbx
+- Assets/GameMain/Environment/Models/SM_Mushroom_07.fbx
+- Assets/GameMain/Environment/Models/Fallen Branches.fbx
+- Assets/GameMain/Environment/Models/SM_Env_Bush_Tropical_02.fbx
+- Assets/GameMain/Environment/Models/SM_OakTree_07.fbx
+- Assets/GameMain/Environment/Models/TFF_Fern_01A.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Coral_07.fbx
+- Assets/GameMain/Environment/Models/SM_Plant_01_03.fbx
+- Assets/GameMain/Environment/Models/SM_Mountain_03.fbx
+- Assets/GameMain/Environment/Models/SM_Mountain_02.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Barrel_Broken_01.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Mushroom_Sparse_02.fbx
+- Assets/GameMain/Environment/Models/SM_BirchTree_06.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Coral_06.fbx
+- Assets/GameMain/Environment/Models/TFF_Fern_02B.fbx
+- Assets/GameMain/Environment/Models/SM_Plant_02_03.fbx
+- Assets/GameMain/Environment/Models/SM_Docks.fbx
+- Assets/GameMain/Environment/Models/SM_Env_Lillies_03_Oil.asset
+- Assets/GameMain/Environment/Models/rpgpp_ag_wagon_01b.fbx
+- Assets/GameMain/Environment/Models/TAI_Wood_Crate_03A.fbx
+- Assets/GameMain/Environment/Models/SM_Fence_01.fbx
+- Assets/GameMain/Environment/Models/SM_OakTree_03.fbx
+- Assets/GameMain/Environment/Models/SM_Env_Bush_Tropical_04_BillboardMesh.asset
+- Assets/GameMain/Environment/Models/SM_Env_Bush_Tropical_04.fbx
+- Assets/GameMain/Environment/Models/TFF_Fern_02A.fbx
+- Assets/GameMain/Environment/Models/TAI_Wood_Barrels_Rubble_01A.fbx
+- Assets/GameMain/Environment/Models/River_03.fbx
+- Assets/GameMain/Environment/Models/SM_BirchTree_02.fbx
+- Assets/GameMain/Environment/Models/SM_Grass_02_01.fbx
+- Assets/GameMain/Environment/Models/rpgpp_ag_bench_wood_03.fbx
+- Assets/GameMain/Environment/Models/SM_BirchTree_05.fbx
+- Assets/GameMain/Environment/Models/Maple 3 Dead_BillboardMesh.asset
+- Assets/GameMain/Environment/Models/TAI_StarFish_01C.fbx
+- Assets/GameMain/Environment/Models/Bushes.fbx
+- Assets/GameMain/Environment/Models/rpgpp_ag_basket_03b.fbx
+- Assets/GameMain/Environment/Models/SM_OakTree_04.fbx
+- Assets/GameMain/Environment/Models/SM_Mushroom_05.fbx
+- Assets/GameMain/Environment/Models/TAI_Palm_Tree_01A.fbx
+- Assets/GameMain/Environment/Models/SM_Tent.fbx
+- Assets/GameMain/Environment/Models/River_04.fbx
+- Assets/GameMain/Environment/Models/SM_Env_Bush_02.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Mushroom_Group_05.fbx
+- Assets/GameMain/Environment/Models/Forest Details.fbx
+- Assets/GameMain/Environment/Models/SM_Mountain_04.fbx
+- Assets/GameMain/Environment/Models/SM_Grass_03_01.fbx
+- Assets/GameMain/Environment/Models/TAI_Palm_Tree_03A.fbx
+- Assets/GameMain/Environment/Models/SM_Fence_02.fbx
+- Assets/GameMain/Environment/Models/SM_Mountain_01.fbx
+- Assets/GameMain/Environment/Models/SM_Env_Bush_Tropical_01.fbx
+- Assets/GameMain/Environment/Models/TAI_Turtle_Shell_01A.fbx
+- Assets/GameMain/Environment/Models/SM_Plant_01_01.fbx
+- Assets/GameMain/Environment/Models/TAI_Coconut_01A.fbx
+- Assets/GameMain/Environment/Models/SM_Fence_06.fbx
+- Assets/GameMain/Environment/Models/Huodui_LOD1.asset
+- Assets/GameMain/Environment/Models/TAI_Wood_Crate_02A.fbx
+- Assets/GameMain/Environment/Models/TAI_StarFish_01B.fbx
+- Assets/GameMain/Environment/Models/TAI_Palm_Log_02A.fbx
+- Assets/GameMain/Environment/Models/rpgpp_ag_bench_wood_01a.fbx
+- Assets/GameMain/Environment/Models/SM_OakTree_06.fbx
+- Assets/GameMain/Environment/Models/SM_Env_Lillies_01_Oil.asset
+- Assets/GameMain/Environment/Models/TAI_Palm_Tree_02A.fbx
+- Assets/GameMain/Environment/Models/TAI_Wood_Crate_01A.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Mushroom_Group_02.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Leaves_Pile_01.fbx
+- Assets/GameMain/Environment/Models/Winter Berry Bush.mat
+- Assets/GameMain/Environment/Models/SM_Plant_01_02.fbx
+- Assets/GameMain/Environment/Models/SM_Grass_01_01.fbx
+- Assets/GameMain/Environment/Models/TAI_Palm_Tree_05A.fbx
+- Assets/GameMain/Environment/Models/Maple 2 Dead_LOD0.asset
+- Assets/GameMain/Environment/Models/SM_Fence_08.fbx
+- Assets/GameMain/Environment/Models/SM_Prop_Mushroom_Sparse_05.fbx
+- Assets/GameMain/Environment/Models/TAI_Wood_Crate_01B.fbx
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

@@ -1,0 +1,35 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 33801954
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: e0a43d2c41879220f830796c43dd59fe
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 6ba59744ac9028a830919457713b1a9a
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: e8d6a574551171cc2b7bbea82e3638c2
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 11500000, guid: 2d8a4393b397843a69423c00049506ee, type: 3}
+- Class: 114
+  Script: {fileID: 19101, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 11995, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 115
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Forms/VolumeForm.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_ui_forms.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_ui_settings.bundle

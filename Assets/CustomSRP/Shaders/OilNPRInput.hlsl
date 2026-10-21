@@ -5,6 +5,9 @@ TEXTURE2D(_BaseMap);
 SAMPLER(sampler_BaseMap);
 float4 _BaseMap_TexelSize;
 
+TEXTURE2D(_BumpMap);
+SAMPLER(sampler_BumpMap);
+
 TEXTURE2D(_OutlineBrushMap);
 SAMPLER(sampler_OutlineBrushMap);
 
@@ -13,17 +16,28 @@ CBUFFER_START(UnityPerMaterial)
     float4 _OutlineBrushMap_ST;
     float4 _BaseColor;
     float4 _AmbientColor;
+    float4 _SpecColor;
     float _Cutoff;
     float _Clipping;
     float _ShadeSteps;
+    float _Smoothness;
     float _PaintThickness;
     float _ShadowLift;
     float _ShadeLift;
     float _ShadowWobble;
     float _ShadowBrushScale;
+    float _OilFoliage;
+    float _OilCrossBillboard;
+    float _NormalStrength;
+    float _EdgeFade;
+    float _OilGrassWindStrength;
 CBUFFER_END
 
+// 风力参数：与草风力系统共享全局 uniform。
+float3 _OilGrassWindDir;
+
 #include "OilShadowBrush.hlsl"
+#include "OilTreeCrossBillboard.hlsl"
 
 half SampleShadowBrush(float3 positionWS, float2 baseUV)
 {

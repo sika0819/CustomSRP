@@ -12,6 +12,7 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - _OIL_NO_VIOLET_UMBRA
   - _PREMULTIPLY_ALPHA
   m_InvalidKeywords: []
   m_LightmapFlags: 4
@@ -30,7 +31,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _PaintMap:
-        m_Texture: {fileID: 2800000, guid: 1e2efbc9ddeb410391549d3310d1fc7d, type: 3}
+        m_Texture: {fileID: 2800000, guid: e64396a97cad4145a95cdde3549ae2b9, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _SparkleBrush:
@@ -39,48 +40,46 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _AlbedoBoost: 1.08
+    - _AlbedoBoost: 0.85
     - _Canvas: 1
     - _CanvasStrength: 0.28
     - _Clipping: 0
     - _ColorSteps: 5
     - _Cutoff: 0.5
     - _DepthRange: 900
-    - _DepthVertical: 0.3
+    - _DepthVertical: 2.15
     - _DstBlend: 10
     - _FoamCrest: 0.38
     - _FoamHardness: 0.12
-    - _FoamStrength: 1.55
+    - _FoamStrength: 0.49
     - _HorizonFresnel: 0.35
     - _Impasto: 1.6
     - _IntersectionClipping: 0.12
-    - _IntersectionDistortion: 2
-    - _IntersectionLength: 0.55
+    - _IntersectionDistortion: 30.6
+    - _IntersectionLength: 0.65
     - _IntersectionSpeed: 4
-    - _IntersectionTiling: 0.25
+    - _IntersectionTiling: 0.196
+    - _NoVioletUmbra: 1
     - _PaintContrast: 3
-    - _PaintRelief: 1
+    - _PaintRelief: 0.118
     - _PaintSheen: 0.55
     - _PaintThickness: 0.49
     - _PaintTile: 80
     - _PremulAlpha: 1
     - _ReceiveShadows: 0
-    - _RefractionStrength: 0.55
-    - _ShadeLift: 0.52
+    - _ReflectStrength: 0.478
+    - _RefractionStrength: 0.289
     - _ShadeSteps: 3
-    - _ShadowBrushScale: 1.5
-    - _ShadowLift: 1.05
-    - _ShadowWobble: 0.48
     - _Shadows: 2
     - _ShoreFoamWidth: 16
     - _SparkleDensity: 0.42
     - _SparkleScale: 0.08
-    - _SpecularBoost: 1.6
+    - _SpecularBoost: 0.6
     - _SpecularThreshold: 0.84
     - _SrcBlend: 1
-    - _StrokeBands: 52
-    - _StrokeSlice: 0.172
-    - _StrokeWarp: 1.05
+    - _StrokeBands: 8
+    - _StrokeSlice: 0
+    - _StrokeWarp: 0
     - _SunPathStrength: 2.4
     - _SunPathWidth: 4.5
     - _WaveFrequency: 0.00022
@@ -89,16 +88,14 @@ Material:
     - _WorldScale: 0.02
     - _ZWrite: 0
     m_Colors:
-    - _AmbientColor: {r: 0.72, g: 0.76, b: 0.82, a: 1}
-    - _BaseColor: {r: 0.32, g: 0.48, b: 0.68, a: 0.88}
-    - _DeepColor: {r: 0.32, g: 0.48, b: 0.68, a: 1}
-    - _FoamColor: {r: 0.94, g: 0.97, b: 1, a: 1}
-    - _GlintColor: {r: 1, g: 0.92, b: 0.55, a: 1}
-    - _MidColor: {r: 0.32, g: 0.48, b: 0.68, a: 1}
+    - _AmbientColor: {r: 0.4, g: 0.46, b: 0.56, a: 1}
+    - _BaseColor: {r: 0.21960784, g: 0.38039216, b: 0.52156866, a: 0.96}
+    - _DeepColor: {r: 0.1, g: 0.22, b: 0.36, a: 1}
+    - _FoamColor: {r: 0.78, g: 0.84, b: 0.88, a: 1}
+    - _GlintColor: {r: 0.92, g: 0.78, b: 0.42, a: 1}
+    - _MidColor: {r: 0.1, g: 0.22, b: 0.36, a: 1}
     - _OchreTint: {r: 1, g: 0.92, b: 0.55, a: 1}
-    - _ShadowTint: {r: 0.42, g: 0.48, b: 0.62, a: 1}
-    - _ShadowWarm: {r: 0.72, g: 0.55, b: 0.38, a: 1}
-    - _ShallowColor: {r: 0.55, g: 0.62, b: 0.48, a: 0.72}
-    - _SpecularColor: {r: 1, g: 0.93, b: 0.62, a: 1}
+    - _ShallowColor: {r: 0.18, g: 0.28, b: 0.36, a: 0.9}
+    - _SpecularColor: {r: 0.11472549, g: 0.25490198, b: 0.41960785, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

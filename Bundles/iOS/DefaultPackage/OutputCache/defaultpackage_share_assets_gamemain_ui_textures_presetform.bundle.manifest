@@ -1,0 +1,25 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1989197081
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 7817ff0bfaf9ab378481434de1906007
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: c2426a7084c48aa838094ab6ad87ea86
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: a5b894795b63f45a015bc369e406ba0a
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 213
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Textures/PresetForm/scroll-track.png
+- Assets/GameMain/UI/Textures/PresetForm/scroll-track-active.png
+- Assets/GameMain/UI/Textures/PresetForm/preset-button.png
+Dependencies: []

@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 2064526163715484693}
   - component: {fileID: 4270077455388252383}
   - component: {fileID: 3701155447674998429}
-  - component: {fileID: 2022090193400372023}
+  - component: {fileID: 423048883989289293}
   m_Layer: 0
   m_Name: SM_Env_Rock_Flat_02
   m_TagString: Untagged
@@ -28,13 +28,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2324596976756046090}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
 --- !u!33 &2064526163715484693
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -112,7 +112,7 @@ LODGroup:
     - renderer: {fileID: 4270077455388252383}
   m_Enabled: 1
   m_GlobalIlluminationLOD: 0
---- !u!64 &2022090193400372023
+--- !u!64 &423048883989289293
 MeshCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -133,4 +133,4 @@ MeshCollider:
   serializedVersion: 5
   m_Convex: 0
   m_CookingOptions: 22
-  m_Mesh: {fileID: 4300000, guid: c6e7641f42f804be180451e5d646c0d8, type: 2}
+  m_Mesh: {fileID: 4300000, guid: e3cc4647f7355469490fa4d8cad71768, type: 2}

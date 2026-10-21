@@ -21,7 +21,8 @@ namespace CustomSRP
             FinalRescale,
             FXAA,
             FXAAWithLuma,
-            OilFilter
+            OilFilter,
+            OilRain
         }
 
         public static readonly int

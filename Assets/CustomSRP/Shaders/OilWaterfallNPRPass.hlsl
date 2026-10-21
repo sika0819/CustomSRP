@@ -57,6 +57,7 @@ half SampleWaterfallMist(float2 meshUv, float t)
 half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
+    OilBakeClipAboveWater(input.positionWS);
 
     float t = _Time.y;
     half crest;
@@ -124,19 +125,16 @@ half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
     half3 color = OilNPRLightingEx(
         s,
         sheet,
-        OilPeriodAmbient((half3)_AmbientColor.rgb),
-        (half3)_ShadowTint.rgb,
-        (half3)_ShadowWarm.rgb,
+        OilNPRAmbient(s),
         (half3)_SpecularColor.rgb,
         (half)_SpecularThreshold,
         max((half)_ShadeSteps, 3.0h),
         0.0h,
-        (half)_ShadowLift,
-        (half)_ShadeLift,
         stroke,
-        (half)_ShadowWobble,
+        0.0h,
         1.0h,
         0.0h,
+        s.smoothness,
         fragment.screenUV);
 
     color = ImpastoDeviation(color, stroke, relief * 0.4h);

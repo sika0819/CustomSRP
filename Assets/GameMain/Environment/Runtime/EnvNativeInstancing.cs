@@ -20,7 +20,12 @@ namespace Game
 
         readonly Plane[] _frustumPlanes = new Plane[6];
         readonly Matrix4x4[] _batch = new Matrix4x4[BatchSize];
+        // Instances inside ShadowCastMaxDist flush into their own batch so the only
+        // shadow-casting batch is the handful of trees the player is standing next
+        // to; everything further out keeps ShadowCastingMode.Off.
+        readonly Matrix4x4[] _batchNear = new Matrix4x4[BatchSize];
         float _maxDist = EnvStreamingConfig.NativeInstancingMaxDist;
+        float _shadowCastMaxDist = EnvStreamingConfig.ShadowCastMaxDist;
         Camera _cachedCam;
         int _cachedCamFrame = -1;
 
@@ -30,6 +35,8 @@ namespace Game
             public Mesh Mesh;
             public Material Material;
             public Bounds LocalBounds;
+            public bool CanCastShadows;
+            public bool MainCameraOnly;
         }
 
         sealed class Bucket
@@ -136,7 +143,17 @@ namespace Game
                 _maxDist = maxDist;
         }
 
-        public int AddPrototype(GameObject prefabAsset)
+        /// <summary>Near-batch shadow radius. Matches the streamer's
+        /// <see cref="EnvStreamingConfig.ShadowCastMaxDist"/> hysteresis band so the
+        /// instanced batch casts from exactly the same set of trees the MeshRenderer
+        /// path would.</summary>
+        public void SetShadowCastMaxDist(float dist)
+        {
+            if (dist > 0f)
+                _shadowCastMaxDist = dist;
+        }
+
+        public int AddPrototype(GameObject prefabAsset, bool mainCameraOnly, bool canCastShadows)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (prefabAsset == null)
@@ -159,6 +176,8 @@ namespace Game
                 Mesh = mesh,
                 Material = material,
                 LocalBounds = localBounds,
+                CanCastShadows = canCastShadows,
+                MainCameraOnly = mainCameraOnly,
             };
             _prototypes.Add(proto);
             _buckets.Add(new Bucket());
@@ -231,6 +250,7 @@ namespace Game
             Vector3 camPos = cam.transform.position;
             GeometryUtility.CalculateFrustumPlanes(cam, _frustumPlanes);
             float maxDistSq = _maxDist * _maxDist;
+            float shadowDistSq = _shadowCastMaxDist * _shadowCastMaxDist;
 
             for (int p = 0; p < _prototypes.Count; p++)
             {
@@ -240,7 +260,13 @@ namespace Game
                     continue;
 
                 bucket.SyncMatrices();
+                // Shadow-capable prototypes (big trees / buildings) split into a near
+                // casting batch and a far non-casting batch, mirroring the streamer's
+                // per-distance ShadowCastMaxDist toggle. Prototypes that never cast
+                // (shrubs / small veg / clutter) stay single-batch Off.
+                bool splitShadows = proto.CanCastShadows;
                 int batchCount = 0;
+                int nearCount = 0;
                 for (int i = 0; i < bucket.Matrices.Count; i++)
                 {
                     Matrix4x4 m = bucket.Matrices[i];
@@ -248,30 +274,68 @@ namespace Game
                     float dx = pos.x - camPos.x;
                     float dy = pos.y - camPos.y;
                     float dz = pos.z - camPos.z;
-                    if (dx * dx + dy * dy + dz * dz > maxDistSq)
+                    float distSq = dx * dx + dy * dy + dz * dz;
+                    if (distSq > maxDistSq)
                         continue;
 
                     Bounds worldBounds = TransformBounds(proto.LocalBounds, m);
                     if (!GeometryUtility.TestPlanesAABB(_frustumPlanes, worldBounds))
                         continue;
 
+                    if (splitShadows && distSq <= shadowDistSq)
+                    {
+                        _batchNear[nearCount++] = m;
+                        if (nearCount >= BatchSize)
+                        {
+                            FlushBatch(cam, proto, _batchNear, nearCount,
+                                ShadowCastingMode.On);
+                            nearCount = 0;
+                        }
+                        continue;
+                    }
+
                     _batch[batchCount++] = m;
                     if (batchCount >= BatchSize)
                     {
-                        Graphics.DrawMeshInstanced(
-                            proto.Mesh, 0, proto.Material, _batch, batchCount, null,
-                            ShadowCastingMode.Off, true);
+                        FlushBatch(cam, proto, _batch, batchCount,
+                            ShadowCastingMode.Off);
                         batchCount = 0;
                     }
                 }
 
+                if (nearCount > 0)
+                {
+                    FlushBatch(cam, proto, _batchNear, nearCount, ShadowCastingMode.On);
+                }
+
                 if (batchCount > 0)
                 {
-                    Graphics.DrawMeshInstanced(
-                        proto.Mesh, 0, proto.Material, _batch, batchCount, null,
-                        ShadowCastingMode.Off, true);
+                    FlushBatch(cam, proto, _batch, batchCount, ShadowCastingMode.Off);
                 }
             }
+        }
+
+        static void FlushBatch(
+            Camera cam, Prototype proto, Matrix4x4[] batch, int count,
+            ShadowCastingMode shadowCastingMode)
+        {
+            // Bind to the main camera so the planar mirror probe never picks up
+            // these instances. Graphics.DrawMeshInstanced (legacy overload) draws
+            // for every camera rendering that frame including reflection probes,
+            // which is exactly what we don't want for grass / clutter / small veg.
+            // RenderMeshInstanced takes a RenderParams.camera that scopes the draw.
+            var rp = new RenderParams(proto.Material)
+            {
+                camera = cam,
+                worldBounds = proto.LocalBounds,
+                shadowCastingMode = shadowCastingMode,
+                receiveShadows = false,
+                renderingLayerMask = 1,
+                rendererPriority = 0,
+                layer = 0
+            };
+
+            Graphics.RenderMeshInstanced(rp, proto.Mesh, 0, batch, count);
         }
 
         Camera ResolveCamera()

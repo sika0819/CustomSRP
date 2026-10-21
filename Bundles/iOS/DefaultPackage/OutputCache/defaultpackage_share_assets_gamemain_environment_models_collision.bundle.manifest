@@ -1,0 +1,57 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3576746210
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 5c00f8a0dd2cfc3d3dcf7e5ae935640b
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: fd81ad4dbb8db7477521c97fec51a8ca
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 3e37156e29c4f7628aee338f75adb02f
+HashAppended: 0
+ClassTypes:
+- Class: 43
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_04_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Mountain_01_LOD1_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Small_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_03_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Ground_02_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Flat_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Pile_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Pile_04_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Round_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Pile_03_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Flat_02_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Ramp_03_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Pile_07_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Ramp_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Cliff_03_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Small_Pile_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Pile_06_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Spikes_02_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_05_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Spike_02_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/House_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Ramp_02_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Mountain_02_LOD1_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_06_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Small_Pile_02_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Cliff_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Pile_05_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Spikes_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Ground_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/rpgpp_ag_stairs_entrance_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Mountain_04_LOD1_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Ground_Cliff_Large_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Pile_02_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Cave_01_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Env_Rock_Cliff_02_Collision.asset
+- Assets/GameMain/Environment/Models/Collision/SM_Mountain_03_LOD1_Collision.asset
+Dependencies: []

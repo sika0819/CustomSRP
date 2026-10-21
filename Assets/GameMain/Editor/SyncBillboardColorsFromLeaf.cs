@@ -71,18 +71,6 @@ namespace Game
                                 Debug.Log($"[SyncBillboardColors] {assetPath} <- {leaf.name}");
                             }
                         }
-
-                        // Also Materials/Billboard twin by name
-                        string twin = $"Assets/GameMain/Environment/Materials/Billboard/{root.name}_Billboard.mat";
-                        var twinMat = AssetDatabase.LoadAssetAtPath<Material>(twin);
-                        if (twinMat != null && seen.Add(twin))
-                        {
-                            if (CopyColors(leaf, twinMat))
-                            {
-                                EditorUtility.SetDirty(twinMat);
-                                updated++;
-                            }
-                        }
                     }
                     finally
                     {

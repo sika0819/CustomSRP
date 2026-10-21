@@ -11,36 +11,38 @@
     margin-top: -1597.5px; /* -1218 (stage half) - 379.5 (sheet nudge) */
 }
 
+/* Boluo TipWindows (UICanvasTip tip.png); size/position refined in MusicForm.cs. */
 .game-music-form__hintwindows {
     position: absolute;
     left: 50%;
-    margin-left: -123px;
     top: 50%;
-    margin-top: -403px;
+    margin-left: -144px;
+    margin-top: -541px; /* -(472 + 138/2) — TipWindows anchoredY 472 */
     margin-right: 0;
-    width: 246px;
     margin-bottom: 0;
-    height: 126px;
-    background-image: url("../Textures/MusicForm/hintwindows.png");
+    min-width: 288px;
+    min-height: 138px;
+    max-width: 666px;
+    width: 288px;
+    padding-left: 60px;
+    padding-right: 60px;
+    padding-top: 36px;
+    padding-bottom: 36px;
+    align-items: center;
+    justify-content: center;
+    background-image: url("../Textures/Shared/tip.png");
     -unity-background-scale-mode: stretch-to-fill;
-    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
-    -unity-slice-left: 31px;
-    -unity-slice-right: 34px;
-    -unity-slice-top: 0px;
-    -unity-slice-bottom: 0px;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 0.902);
+    -unity-slice-left: 45px;
+    -unity-slice-right: 45px;
+    -unity-slice-top: 40px;
+    -unity-slice-bottom: 40px;
     picking-mode: Ignore;
     opacity: 0.000;
 }
 .game-music-form__labeltmp {
-    position: absolute;
-    left: 0;
-    margin-left: 23px;
-    top: 0;
-    margin-top: 22.19px;
-    margin-right: 0;
-    width: 200px;
-    margin-bottom: 0;
-    height: 81.62px;
+    flex-grow: 0;
+    flex-shrink: 1;
     -unity-text-align: middle-center;
     font-size: 36px;
     color: rgba(255, 255, 255, 1.000);
@@ -178,6 +180,7 @@
     -unity-background-scale-mode: scale-to-fit;
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
 }
+/* TextElement (not Label) — same hover-wash fix as album strip labels. */
 .game-music-form__title {
     position: absolute;
     left: 86px;
@@ -190,19 +193,18 @@
     height: 59px;
     -unity-text-align: middle-left;
     font-size: 42px;
-    color: rgba(135, 135, 145, 1.000);
+    color: rgba(135, 135, 145, 1.000) !important;
     white-space: normal;
     -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+    picking-mode: Ignore;
 }
 
-/* Unity 6 UI Toolkit applies a default :hover tint to Label which washes the
-   grey title out to white on desktop / Editor hover. Lock the color across
-   every interactive pseudo-state so dragging the pointer across the title
-   while scrolling the strip doesn't flash white. */
+/* Theme .unity-label:hover can beat a plain class colour when the sheet
+   slides up under the pointer on a pooled reopen. */
 .game-music-form__title:hover,
 .game-music-form__title:focus,
 .game-music-form__title:active {
-    color: rgba(135, 135, 145, 1.000);
+    color: rgba(135, 135, 145, 1.000) !important;
 }
 .game-music-form__music-list {
     position: absolute;

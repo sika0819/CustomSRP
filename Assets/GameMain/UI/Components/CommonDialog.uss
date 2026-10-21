@@ -1,0 +1,165 @@
+/* Common dialog base styles — all dialogs inherit from these.
+   Each form overrides specific positions/textures via its own .uss. */
+
+/* Root covers the full screen backdrop. */
+.common-dialog__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+/* Card sits in the lower-center of the 1125×2436 stage. */
+.common-dialog__card {
+    position: absolute;
+    left: 50%;
+    margin-left: -492px;
+    top: 50%;
+    margin-top: -200px;
+    width: 984px;
+    overflow: visible;
+}
+
+/* Icon at the top of the card. */
+.common-dialog__icon {
+    position: absolute;
+    left: 50%;
+    margin-left: -128px;
+    top: 64px;
+    width: 256px;
+    height: 256px;
+}
+
+/* Title text centered near top. */
+.common-dialog__title {
+    position: absolute;
+    left: 54px;
+    top: 360px;
+    width: 876px;
+    height: 80px;
+    -unity-text-align: middle-center;
+    font-size: 66px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../../Fonts/pingfangsc-medium.ttf");
+}
+
+/* Body text below title. */
+.common-dialog__body {
+    position: absolute;
+    left: 54px;
+    top: 480px;
+    width: 876px;
+    height: auto;
+    min-height: 120px;
+    -unity-text-align: upper-center;
+    font-size: 39px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../../Fonts/pingfangsc-medium.ttf");
+}
+
+/* Primary button (full-width, main action). */
+.common-dialog__primary {
+    position: absolute;
+    left: 54px;
+    top: 680px;
+    width: 876px;
+    height: 156px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.common-dialog__primary-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    picking-mode: Ignore;
+    -unity-text-align: middle-center;
+    font-size: 50px;
+    color: rgba(255, 255, 255, 1.000);
+    white-space: nowrap;
+    -unity-font: url("../../Fonts/pingfangsc-medium.ttf");
+    overflow: visible;
+    min-width: 0;
+    min-height: 0;
+}
+
+/* Secondary button (slimmer, below primary). */
+.common-dialog__secondary {
+    position: absolute;
+    left: 54px;
+    top: 860px;
+    width: 876px;
+    height: 90px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    padding: 0;
+    border-width: 0;
+    min-width: 0;
+    min-height: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.common-dialog__secondary-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    picking-mode: Ignore;
+    -unity-text-align: middle-center;
+    font-size: 45px;
+    color: rgba(0, 0, 0, 0.588);
+    white-space: nowrap;
+    -unity-font: url("../../Fonts/pingfangsc-medium.ttf");
+    overflow: visible;
+    min-width: 0;
+    min-height: 0;
+}
+
+/* Progress bar container (for download progress). */
+.common-dialog__progress-track {
+    position: absolute;
+    left: 54px;
+    top: 640px;
+    width: 876px;
+    height: 40px;
+    background-color: rgba(0, 0, 0, 0.100);
+    border-radius: 20px;
+}
+
+.common-dialog__progress-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0%;
+    height: 40px;
+    background-color: rgba(255, 255, 255, 1.000);
+    border-radius: 20px;
+}
+
+.common-dialog__progress-text {
+    position: absolute;
+    left: 54px;
+    top: 690px;
+    width: 876px;
+    height: 50px;
+    -unity-text-align: middle-center;
+    font-size: 36px;
+    color: rgba(0, 0, 0, 0.588);
+    white-space: nowrap;
+    -unity-font: url("../../Fonts/pingfangsc-medium.ttf");
+}

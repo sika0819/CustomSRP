@@ -1,4 +1,4 @@
-﻿Shader "Unlit/Floor"
+Shader "Unlit/Floor"
 {
     Properties
     {

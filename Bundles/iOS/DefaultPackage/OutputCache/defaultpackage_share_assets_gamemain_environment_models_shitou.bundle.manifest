@@ -1,0 +1,63 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1759337454
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 8a7fcfd114c8b3d8cb3836f15b411aaa
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 256e02639fbd397197f8a99ec5d2bb9a
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: a6837de3ab4125799d8f7e5f0636eae3
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Pile_05.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Flat_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Pile_02.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Pile_04.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Round_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_03.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Pile_03.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_05.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Ground_Cliff_Large_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Ground_02.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_06.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Spikes_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Cave_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Spike_02.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Small_Pile_02.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Pile_07.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Spikes_02.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Ramp_03.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Cliff_02.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Pile_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Cliff_03.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_04.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Ramp_02.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Ramp_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Small_Pile_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Ground_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Small_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Cliff_01.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Pile_06.fbx
+- Assets/GameMain/Environment/Models/ShiTou/SM_Env_Rock_Flat_02.fbx
+Dependencies: []

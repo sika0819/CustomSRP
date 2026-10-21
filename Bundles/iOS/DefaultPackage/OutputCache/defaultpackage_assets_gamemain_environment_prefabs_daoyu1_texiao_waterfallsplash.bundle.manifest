@@ -1,0 +1,30 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 233172940
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 940724b4822e21d28459fb3411e9b334
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d18bfa1f26e9e10285ce9b0e490a15a5
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 38d5250ed42dd6ad6dcfe101439a2e4d
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 198
+  Script: {instanceID: 0}
+- Class: 199
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/texiao/WaterfallSplash.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_effects.bundle

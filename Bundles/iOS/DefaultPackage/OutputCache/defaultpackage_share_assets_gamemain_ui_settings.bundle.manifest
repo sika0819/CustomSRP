@@ -1,0 +1,36 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3374435157
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 1abbce82042c363a78882e0a20ad73d1
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d687e09800148fd719b686a574e38c0a
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: b112f4924fa0323a55fcddb6824bcad9
+HashAppended: 0
+ClassTypes:
+- Class: 48
+  Script: {instanceID: 0}
+- Class: 49
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 19101, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 19202, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 115
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers:
+- AssemblyName: UnityEngine.CoreModule
+  ClassName: UnityEngine.Color
+- AssemblyName: UnityEngine.CoreModule
+  ClassName: UnityEngine.Vector2Int
+- AssemblyName: UnityEngine.UIElementsModule
+  ClassName: UnityEngine.UIElements.DynamicAtlasSettings
+Assets:
+- Assets/GameMain/UI/Settings/PhonePanelSettings.asset
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_ui_toolkit_unitythemes.bundle

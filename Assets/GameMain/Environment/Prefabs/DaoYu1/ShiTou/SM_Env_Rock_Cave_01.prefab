@@ -12,13 +12,13 @@ GameObject:
   - component: {fileID: 3931523248341054176}
   - component: {fileID: 1255207806900766250}
   - component: {fileID: 7227540707240640105}
-  - component: {fileID: 622561627906486404}
+  - component: {fileID: 4900664168654613125}
   m_Layer: 0
   m_Name: SM_Env_Rock_Cave_01
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 4294967295
+  m_StaticEditorFlags: 0
   m_IsActive: 1
 --- !u!4 &81143980502416709
 Transform:
@@ -112,7 +112,7 @@ LODGroup:
     - renderer: {fileID: 1255207806900766250}
   m_Enabled: 1
   m_GlobalIlluminationLOD: 0
---- !u!64 &622561627906486404
+--- !u!64 &4900664168654613125
 MeshCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -133,4 +133,4 @@ MeshCollider:
   serializedVersion: 5
   m_Convex: 0
   m_CookingOptions: 22
-  m_Mesh: {fileID: 4300000, guid: e155ad2dc93db45e9bc3f3ee58ac0fb9, type: 2}
+  m_Mesh: {fileID: 4300000, guid: 1a84b63f87fc04afbafe20d88bf65aa6, type: 2}

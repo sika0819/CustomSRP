@@ -1,0 +1,25 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 979727631
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 25433ac9b31653ab86269390bf5bf4f5
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: c2426a7084c48aa838094ab6ad87ea86
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: d3bebe0f672abbd9d802b6e5e216765f
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 213
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Textures/VolumeRow/knob-face.png
+- Assets/GameMain/UI/Textures/VolumeRow/fill.png
+- Assets/GameMain/UI/Textures/VolumeRow/track-plate.png
+Dependencies: []

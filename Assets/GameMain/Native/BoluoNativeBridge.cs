@@ -35,6 +35,7 @@ namespace Game.Native
         void Update()
         {
             NativePushReceiver.Drain();
+            Game.NowPlayingService.Tick();
 #if UNITY_EDITOR
             NativeEditorHud.Tick();
             NativePushReceiver.Drain();

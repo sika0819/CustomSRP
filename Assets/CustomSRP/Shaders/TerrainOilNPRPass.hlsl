@@ -178,6 +178,7 @@ TerrainOilSample SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 
 half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
+    OilBakeClipAboveWater(input.positionWS);
 
     TerrainOilSample terrain = SampleTerrainCheap(input.controlUV, input.positionWS, input.normalWS);
     half3 albedo = terrain.albedo;
@@ -204,7 +205,6 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
     half3 color = OilNPRLighting(
         surface,
         albedo,
-        OilPeriodAmbient((half3)_AmbientColor.rgb),
         half3(0.36h, 0.46h, 0.62h),
         half3(0.58h, 0.48h, 0.3h),
         (half3)_SpecularColor.rgb,
@@ -216,6 +216,7 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
         brush,
         (half)_ShadowWobble,
         (half)_OilDetail,
+        terrain.smoothness,
         fragment.screenUV);
 
 #if !defined(OIL_MOBILE_PERF)

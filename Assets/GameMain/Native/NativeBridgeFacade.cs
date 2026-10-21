@@ -24,6 +24,7 @@ namespace Game.Native
             _done = true;
 
             NativeBridgeBootstrap.Init();
+            NowPlayingService.Init();
             NativeTimerService.AttachTo(BoluoNativeBridge.Instance != null
                 ? BoluoNativeBridge.Instance.gameObject
                 : null);
@@ -40,22 +41,7 @@ namespace Game.Native
             MessageRouter.Register(MsgType.MediaCommand, (cmd, _, __) =>
             {
                 Log.Info($"[IMP] MediaCommand cmd={cmd}");
-                MusicPlaylist music = GameEntry.Music ?? MusicPlaylist.Instance;
-                switch (cmd)
-                {
-                    case MsgType.MediaPause:
-                        music.Pause();
-                        break;
-                    case MsgType.MediaPlay:
-                        music.Resume();
-                        break;
-                    case MsgType.MediaNext:
-                        music.Next();
-                        break;
-                    case MsgType.MediaPrev:
-                        music.Prev();
-                        break;
-                }
+                NowPlayingService.HandleMediaCommand(cmd);
             });
 
             if (Game.GameEntry.Event != null)
@@ -74,6 +60,7 @@ namespace Game.Native
             BlocksLocomotion = false;
             MessageRouter.Unregister(MsgType.TimerProgress);
             MessageRouter.Unregister(MsgType.MediaCommand);
+            NowPlayingService.ResetSession();
             NativeBridgeBootstrap.ResetSession();
             if (Game.GameEntry.Event != null)
                 Game.GameEntry.Event.Unsubscribe(Game.IslandWorldReadyEventArgs.EventId, OnWorldReady);

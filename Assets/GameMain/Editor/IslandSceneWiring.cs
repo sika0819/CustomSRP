@@ -178,7 +178,7 @@ namespace Game.Editor
             Camera camera = Camera.main;
             if (camera != null)
             {
-                camera.allowHDR = false;
+                camera.allowHDR = true;
                 camera.allowMSAA = false;
                 IslandCameraSrpSetup.EnsureCustomRenderPipelineCamera(camera.gameObject);
             }

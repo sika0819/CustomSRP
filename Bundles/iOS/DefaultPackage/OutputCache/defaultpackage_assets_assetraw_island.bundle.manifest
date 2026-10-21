@@ -1,0 +1,73 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3642712910
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 59b8bdc6d56e1fea495ac9596debd286
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 925e1942c86d2ebaac1a44f933b914c3
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 07a7037d774431c9ac4b7392fa20fedf
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+- Class: 108
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 11500000, guid: b152308e61cd4a24e5f7091b23d46802, type: 3}
+- Class: 114
+  Script: {fileID: 11500000, guid: b7f9c097855554c03b642e8921a299cf, type: 3}
+- Class: 114
+  Script: {fileID: 11500000, guid: aa51aca1c2858442dae56a8a69cf8451, type: 3}
+- Class: 114
+  Script: {fileID: 11500000, guid: 11ac0b0b3e5264d45a6a1a18ec36b4bd, type: 3}
+- Class: 114
+  Script: {fileID: 11500000, guid: bba7340f39a97491fa2fe8a4313c806f, type: 3}
+- Class: 114
+  Script: {fileID: 11500000, guid: 1396c3e36ff6d4d029d78c4873c301f9, type: 3}
+- Class: 114
+  Script: {fileID: 11500000, guid: d3f4a5162738495a0b1c2d3e4f506182, type: 3}
+- Class: 115
+  Script: {instanceID: 0}
+- Class: 154
+  Script: {instanceID: 0}
+- Class: 156
+  Script: {instanceID: 0}
+- Class: 198
+  Script: {instanceID: 0}
+- Class: 199
+  Script: {instanceID: 0}
+- Class: 218
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers:
+- AssemblyName: Assembly-CSharp
+  ClassName: CustomSRP.OilSkyboxTime/OilSkyColorSet
+- AssemblyName: UnityEngine.CoreModule
+  ClassName: UnityEngine.Color
+Assets:
+- Assets/AssetRaw/Island/IslandInlandWater.prefab
+- Assets/AssetRaw/Island/MapItem.prefab
+- Assets/AssetRaw/Island/IslandTerrain.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_materials.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_settings.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_materials.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_effects.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_terrain_island.bundle

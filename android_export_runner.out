@@ -1,0 +1,6 @@
+[runner] launching Unity Android export...
+[runner] Unity: /Applications/Unity/Hub/Editor/6000.6.4f1/Unity.app/Contents/MacOS/Unity
+[runner] flavor: skyworthUltra → /Users/sika/Desktop/code/BoluoProjectNew/AndroidProject/UnityExport/Boluo_Android/unityLibrary
+[runner] log: /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/android_export.log
+[runner] Unity pid=35418，等待导出完成...
+[runner] Unity 导出失败 exit=-11，详见 /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/android_export.log

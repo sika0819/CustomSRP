@@ -29,7 +29,21 @@ namespace CustomSRP
 
         ShadowSettings _settings;
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         static int _setupLogCounter;
+#endif
+
+        /// <summary>
+        /// Planar mirror path: keep counters cleared so DirectionalShadowsPass /
+        /// OtherShadowsPass skip their BuildRendererLists loops and the heavy
+        /// <c>context.CullShadowCasters</c>. Call from <see cref="ShadowsPass.Record"/>
+        /// when the camera is a reflection probe.
+        /// </summary>
+        public void ResetHasLights()
+        {
+            directionalShadows.ResetHasLights();
+            otherShadows.ResetHasLights();
+        }
 
         public void Setup(ShadowSettings settings)
         {
@@ -38,6 +52,7 @@ namespace CustomSRP
             otherShadows.Setup(settings);
 
             // [SRP][Shadow.Setup] 每 60 帧打一次,打印当前配置 + 平台信息,便于真机排查"为啥没阴影"
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if ((_setupLogCounter++ & 63) == 0)
             {
                 Log.Info(string.Format(
@@ -52,6 +67,7 @@ namespace CustomSRP
                     SystemInfo.graphicsDeviceType,
                     SystemInfo.supportsShadows));
             }
+#endif
         }
 
         public void Render(UnsafeCommandBuffer buffer)
@@ -76,6 +92,7 @@ namespace CustomSRP
                 otherAtlasSize, 1f / otherAtlasSize));
 
             // [SRP][Shadow.Render] 每 60 帧打一次,看最终有多少 directional/other 影子光被纳入绘制
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if ((_setupLogCounter & 63) == 0)
             {
                 Log.Info(string.Format(
@@ -86,6 +103,7 @@ namespace CustomSRP
                     otherShadows.LightCount,
                     directionalShadows.UsesShadowMask || otherShadows.UsesShadowMask));
             }
+#endif
         }
 
         public static Matrix4x4 ConvertToAtlasMatrix(

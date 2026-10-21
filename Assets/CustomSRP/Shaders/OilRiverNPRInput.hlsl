@@ -9,8 +9,6 @@ CBUFFER_START(UnityPerMaterial)
     float4 _ShallowColor;
     float4 _IntersectionColor;
     float4 _AmbientColor;
-    float4 _ShadowTint;
-    float4 _ShadowWarm;
     float4 _SpecularColor;
     float4 _GlintColor;
     float4 _MeshFlowScale;
@@ -32,11 +30,9 @@ CBUFFER_START(UnityPerMaterial)
     float _ShoreSteep;
     float _AlbedoBoost;
     float _ShadeSteps;
-    float _ShadowLift;
-    float _ShadeLift;
-    float _ShadowWobble;
     float _SpecularThreshold;
     float _SpecularBoost;
+    float _ReflectStrength;
 CBUFFER_END
 
 float2 RiverMeshFlowUv(float2 meshUv)

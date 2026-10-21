@@ -4,9 +4,27 @@
 #include "../ShaderLibrary/Surface.hlsl"
 #include "../ShaderLibrary/Shadows.hlsl"
 #include "../ShaderLibrary/Light.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
 #include "OilTerrainGrassWind.hlsl"
 
 float4 _OilPeriodAmbient;
+
+// Directional SH9 ambient sampled by world normal (zenith→ground gradient).
+// UnityOutput the SH coefficients from RenderSettings (Trilight) are flat, so the
+// gradient only appears when OilSkyboxTime publishes via DynamicGI + ambient probe.
+// We keep this inline so the grass pass doesn't have to drag in the full NPR lighting.
+half3 OilTerrainGrassSampleAmbient(float3 normalWS)
+{
+    float4 coefficients[7];
+    coefficients[0] = unity_SHAr;
+    coefficients[1] = unity_SHAg;
+    coefficients[2] = unity_SHAb;
+    coefficients[3] = unity_SHBr;
+    coefficients[4] = unity_SHBg;
+    coefficients[5] = unity_SHBb;
+    coefficients[6] = unity_SHC;
+    return (half3)max(0.0, SampleSH9(coefficients, normalWS));
+}
 
 StructuredBuffer<float4> _AllInstancesPosWSBuffer;
 StructuredBuffer<uint> _VisibleInstanceOnlyTransformIDBuffer;
@@ -28,17 +46,9 @@ CBUFFER_START(UnityPerMaterial)
     float4 _GrassAtlasRects[16];
 CBUFFER_END
 
-half QuantizeGrassNdotL(half ndotL, half steps)
-{
-    steps = max(steps, 2.0h);
-    return floor(ndotL * steps) / (steps - 1.0h);
-}
-
 half3 OilTerrainGrassVertexLit(half3 albedo, half3 normalWS, float3 positionWS)
 {
-    half3 ambient = half3(0.55h, 0.50h, 0.44h);
-    if (_OilPeriodAmbient.a > 0.5h)
-        ambient = (half3)_OilPeriodAmbient.rgb;
+    half3 ambient = OilTerrainGrassSampleAmbient(normalWS);
 
     if (GetDirectionalLightCount() <= 0)
         return ambient * albedo;
@@ -71,14 +81,10 @@ half3 OilTerrainGrassVertexLit(half3 albedo, half3 normalWS, float3 positionWS)
     half attenuation = (half)light.attenuation;
 #endif
 
-    half halfLambert = saturate(dot(normalWS, L) * 0.5h + 0.5h);
-    half lit = halfLambert * lerp(max((half)_ShadeLift, 0.2h), 1.0h, attenuation);
-    lit = QuantizeGrassNdotL(saturate(lit), (half)_ShadeSteps);
-
-    half3 litColor = albedo * (ambient * 0.45h + lightColor);
-    half3 umbraColor = albedo * half3(0.2h, 0.14h, 0.36h) + half3(0.02h, 0.012h, 0.035h);
-    umbraColor = lerp(umbraColor, albedo * half3(0.42h, 0.48h, 0.72h), 0.35h);
-    return lerp(umbraColor, litColor, lit);
+    // Same term as OilFoliageLighting / Boluo EnvGrass: albedo * (N·L * sun * shadow + ambient).
+    half ndotl = saturate(dot(normalWS, L));
+    half att = saturate(attenuation);
+    return albedo * (lightColor * ndotl * att + ambient);
 }
 
 struct Attributes
@@ -172,6 +178,7 @@ Varyings OilTerrainGrassPassVertex(Attributes input)
 
 half4 OilTerrainGrassPassFragment(Varyings input) : SV_TARGET
 {
+    OilBakeClipAboveWater(input.positionWS);
     half4 tex = SAMPLE_TEXTURE2D(_GrassTexture, sampler_GrassTexture, input.uv);
     half alpha = tex.a * (half)input.fade;
     half clipT = input.useTex > 0.5h ? min((half)_AlphaClip, 0.34h) : (half)_AlphaClip;

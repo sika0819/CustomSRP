@@ -17,4 +17,18 @@ namespace Game
         Evening,
         Night,
     }
+
+    /// <summary>
+    /// Boluo Cozy AtmosphereProfile slots (Camera_1 / 5 / 3 / 7 / 8 / 10).
+    /// Values must match CustomSRP.OilSkyLookId.
+    /// </summary>
+    public enum IslandLookKind
+    {
+        Canonical = 0,
+        CoolFocus = 1,
+        WarmAfternoon = 2,
+        CyanMorning = 3,
+        WarmNoon = 4,
+        NightCold = 5,
+    }
 }

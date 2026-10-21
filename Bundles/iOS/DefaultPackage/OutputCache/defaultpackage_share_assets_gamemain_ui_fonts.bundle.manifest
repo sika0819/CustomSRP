@@ -1,0 +1,28 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 345760529
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: a78e8b27e0c7271c81040463882a5ec3
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: cc22748113318568a8304d6ea04f09f3
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 43221edc469f3fe0024c9332a416e193
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+- Class: 128
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Fonts/pingfangsc-medium.ttf
+- Assets/GameMain/UI/Fonts/pingfangsc-semibold.ttf
+Dependencies: []

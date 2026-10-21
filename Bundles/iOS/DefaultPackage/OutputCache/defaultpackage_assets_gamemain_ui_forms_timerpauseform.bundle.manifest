@@ -1,0 +1,35 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3961484318
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 1d0ce4a47c795383c63f4e231462ef13
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 0833b927db663c21b0b09fc4e745e788
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 96d22a498718f38319da3d58aea804bd
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 11500000, guid: 919b5964fee2240b4b026fb2a218576d, type: 3}
+- Class: 114
+  Script: {fileID: 19101, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 114
+  Script: {fileID: 11995, guid: 0000000000000000e000000000000000, type: 0}
+- Class: 115
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Forms/TimerPauseForm.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_ui_forms.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_ui_settings.bundle

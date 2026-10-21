@@ -1,0 +1,29 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="CommonDialog.uss" />
+    <ui:VisualElement name="root" class="game-form-backdrop common-dialog__root">
+        <ui:VisualElement name="stage" class="game-form-stage">
+            <!-- Card container -->
+            <ui:VisualElement name="card" class="common-dialog__card">
+                <!-- Optional icon -->
+                <ui:VisualElement name="icon" class="common-dialog__icon" />
+                <!-- Title -->
+                <ui:Label name="title" class="common-dialog__title" text="" />
+                <!-- Body -->
+                <ui:Label name="body" class="common-dialog__body" text="" />
+                <!-- Progress bar (hidden by default, shown in download progress) -->
+                <ui:VisualElement name="progress-track" class="common-dialog__progress-track" style="display: none;">
+                    <ui:VisualElement name="progress-fill" class="common-dialog__progress-fill" />
+                </ui:VisualElement>
+                <ui:Label name="progress-text" class="common-dialog__progress-text" text="" style="display: none;" />
+                <!-- Primary button -->
+                <ui:Button name="primary" class="common-dialog__primary">
+                    <ui:Label name="primaryLabel" class="common-dialog__primary-label" text="确定" />
+                </ui:Button>
+                <!-- Secondary button -->
+                <ui:Button name="secondary" class="common-dialog__secondary">
+                    <ui:Label name="secondaryLabel" class="common-dialog__secondary-label" text="取消" />
+                </ui:Button>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

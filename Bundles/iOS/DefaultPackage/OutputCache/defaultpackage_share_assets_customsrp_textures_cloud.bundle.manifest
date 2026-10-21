@@ -1,0 +1,23 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 480297758
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 22c8e3d97cd8df29d93c899caa9bb7c3
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1cfddeea06ce0ec573e0d0ec81ebe20e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 9daf02d5d9d721a5d6c62a9dffff3758
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/CustomSRP/Textures/Cloud/CloudNoise.png
+- Assets/CustomSRP/Textures/Cloud/Cloud_A.png
+- Assets/CustomSRP/Textures/Cloud/CloudMap_SDF.png
+Dependencies: []

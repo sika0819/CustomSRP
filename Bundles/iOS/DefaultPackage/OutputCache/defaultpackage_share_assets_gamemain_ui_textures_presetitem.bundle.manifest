@@ -1,0 +1,38 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1116586340
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 613a7cc53a212e3a7b8ad63961f7a5b7
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: c2426a7084c48aa838094ab6ad87ea86
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 8094c570646aed8769c772c022f92170
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 213
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Textures/PresetItem/stateready.png
+- Assets/GameMain/UI/Textures/PresetItem/zhanweitu1.png
+- Assets/GameMain/UI/Textures/PresetItem/vip.png
+- Assets/GameMain/UI/Textures/PresetItem/zhanweitu4.png
+- Assets/GameMain/UI/Textures/PresetItem/zhanweitu6.png
+- Assets/GameMain/UI/Textures/PresetItem/zhanweitu8.png
+- Assets/GameMain/UI/Textures/PresetItem/bofangzhuangtai.png
+- Assets/GameMain/UI/Textures/PresetItem/zhanweitu2.png
+- Assets/GameMain/UI/Textures/PresetItem/zhanweitu7.png
+- Assets/GameMain/UI/Textures/PresetItem/zhanweitu3.png
+- Assets/GameMain/UI/Textures/PresetItem/stateerror.png
+- Assets/GameMain/UI/Textures/PresetItem/statedownloadsuccess.png
+- Assets/GameMain/UI/Textures/PresetItem/zhanweitu9.png
+- Assets/GameMain/UI/Textures/PresetItem/zhanweitu10.png
+- Assets/GameMain/UI/Textures/PresetItem/statewaitdownload.png
+- Assets/GameMain/UI/Textures/PresetItem/zhanweitu5.png
+Dependencies: []

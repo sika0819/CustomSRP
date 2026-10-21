@@ -24,9 +24,9 @@ RenderSettings:
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
   m_AmbientIntensity: 1
-  m_AmbientMode: 0
+  m_AmbientMode: 1
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
+  m_SkyboxMaterial: {fileID: 2100000, guid: f5b6c738495a6b7c1d2e3f4051627384, type: 2}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -339,9 +339,9 @@ MonoBehaviour:
     renderingLayerMask:
       serializedVersion: 0
       m_Bits: 4294967295
-    maskLights: 0
+    maskLights: 1
     renderScaleMode: 2
-    renderScale: 0.75
+    renderScale: 0.5
     allowFXAA: 0
     ignoreFog: 0
     keepAlpha: 0
@@ -377,9 +377,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Game::Game.ScreenLayout
   PhonePanelSettings: {fileID: 11400000, guid: 0a2a947f8b9b5424fa361f53de6cbe08, type: 2}
   PadPanelSettings: {fileID: 11400000, guid: f9432c016397247b9b5ed8f2a6f87aa4, type: 2}
-  _width: 0
-  _height: 0
-  _orientation: 0
 --- !u!114 &2089181188
 MonoBehaviour:
   m_ObjectHideFlags: 0

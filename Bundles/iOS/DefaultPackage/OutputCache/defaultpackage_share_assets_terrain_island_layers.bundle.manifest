@@ -1,0 +1,26 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 494832789
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: f574a3f5706c2c5988ee016dadaf1046
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 46aaf2bfe9877f851db35f843aadf949
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 467da61907617efbd38252d7a57e0968
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 1953259897
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/Terrain/Island/Layers/SWS_DemoRock.terrainlayer
+- Assets/Terrain/Island/Layers/Grass.terrainlayer
+- Assets/Terrain/Island/Layers/SWS_OceanFloorSmooth.terrainlayer
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_terrain_island_textures.bundle

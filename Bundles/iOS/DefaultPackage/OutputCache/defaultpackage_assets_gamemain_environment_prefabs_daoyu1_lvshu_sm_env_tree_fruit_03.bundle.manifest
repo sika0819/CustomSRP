@@ -1,0 +1,36 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 994750532
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 246c3bad23c58d7bdd78d92cd1aff8f7
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 58052c9889bb80a28ad47c57aec02a9e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 9bba96ca477036fc9fdbe174da39e150
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Lvshu/SM_Env_Tree_Fruit_03.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_prefabs_daoyu1_lvshu_sm_env_tree_fruit_03_billboard.bundle

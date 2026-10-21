@@ -1,0 +1,36 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1800170729
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 9ffa7179398f7d1c4a81a70f01b7ac48
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d5b1802501938ccd9ac76dfe2ea9b09e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 996288dbc5b9b17ec45ce3abfad464c2
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Materials/Shugan_02.mat
+- Assets/GameMain/Environment/Materials/Stylized River.mat
+- Assets/GameMain/Environment/Materials/shu_2.mat
+- Assets/GameMain/Environment/Materials/ShiTou.mat
+- Assets/GameMain/Environment/Materials/Stylized Waterfall.mat
+- Assets/GameMain/Environment/Materials/shu_1.mat
+- Assets/GameMain/Environment/Materials/Zawu_01.mat
+- Assets/GameMain/Environment/Materials/Rock_Grass_Triplanar_01_Stone.mat
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

@@ -1,3 +1,4 @@
+using Game;
 using UnityEngine;
 
 namespace CustomSRP
@@ -302,10 +303,24 @@ namespace CustomSRP
 
             _windFrame = Time.frameCount;
             float dt = Mathf.Max(0f, Time.deltaTime);
-            float target = Mathf.Clamp01(wind);
+            // Get target wind from weather system. When weather is not Wind, clouds should not move.
+            float target = GetWeatherWindIntensity();
             _windIntensity = Mathf.MoveTowards(_windIntensity, target, dt / WindBlendSeconds);
             float yawSpeed = Mathf.Lerp(CalmYawRad, StormYawRad, _windIntensity);
             _yaw += dt * yawSpeed;
+        }
+
+        /// <summary>
+        /// Get wind intensity from weather system. When weather is not Wind type, returns 0
+        /// so clouds don't move without wind.
+        /// </summary>
+        float GetWeatherWindIntensity()
+        {
+            var weather = WeatherService.Ensure();
+            if (weather.Kind != IslandWeatherKind.Wind)
+                return 0f;
+            // Map weather level (0-3) to wind intensity (0-1)
+            return weather.Level / 3f;
         }
 
         float ResolveSeaLevel()
@@ -387,6 +402,11 @@ namespace CustomSRP
 
             body = Color.Lerp(look.horizon, look.mid, 0.45f);
             body = Color.Lerp(body, new Color(0.93f, 0.94f, 0.96f), 0.28f * day);
+            // boluo-main Camera_1 @ 清晨起床：云 #BC7273。
+            float sunrise = OilSkyLookTables.CanonicalSunriseWeight(
+                OilSkyboxTime.CurrentLookId, hours);
+            if (!OilSkyboxTime.ColorOverrideActive && sunrise > 0.001f)
+                body = Color.Lerp(body, OilSkyLookTables.SunriseCloud, sunrise);
             // 云高光 #FBF3E9 — pale cream, keep impasto readable under fog.
             Color cloudHilite = new Color(0.984f, 0.953f, 0.914f);
             body = Color.Lerp(body, cloudHilite, 0.22f * dawn);

@@ -1,0 +1,38 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1232536985
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 76280547f9609d97f5ae44bfea84ffe2
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 2d6187fd202d3528e0d31df7c41fd6e5
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: d426ff0a8b1b914e8a537f2838663c5e
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 64
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Other/Forest Mountain 4.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_collision.bundle

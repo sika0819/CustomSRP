@@ -38,10 +38,11 @@ namespace WanosAudio
         public static event Action<string> OnBankLoaded;
 
         /// <summary>
-        /// 延迟卸载 Bank 的秒数。等待 DSP 线程完成当前音频帧处理后再卸载，
+        /// 默认延迟卸载秒数。等待 DSP 线程完成当前音频帧处理后再卸载，
         /// 避免 SIGSEGV（竞态条件导致 DSP 线程访问已释放的 DecodedClipData）。
+        /// 区域声可按种类传入更短/更长延迟（见 <see cref="Release(string, float)"/>）。
         /// </summary>
-        const float BankUnloadDelaySeconds = 2.0f;
+        public const float DefaultUnloadDelaySeconds = 2.0f;
 
         /// <summary>
         /// 待延迟卸载的 Bank 名 → 预计卸载时间。
@@ -333,10 +334,16 @@ namespace WanosAudio
         }
 
         /// <summary>
-        /// Drop one retain; unload after <see cref="BankUnloadDelaySeconds"/> seconds delay.
+        /// Drop one retain; unload after <see cref="DefaultUnloadDelaySeconds"/> seconds delay.
         /// Delay lets DSP thread finish current audio frame before native UnloadBank.
         /// </summary>
-        public static void Release(string bankName)
+        public static void Release(string bankName) => Release(bankName, DefaultUnloadDelaySeconds);
+
+        /// <summary>
+        /// Drop one retain; unload after <paramref name="unloadDelaySeconds"/> (clamped ≥ 0).
+        /// Zero schedules unload on the next <see cref="Update"/> tick.
+        /// </summary>
+        public static void Release(string bankName, float unloadDelaySeconds)
         {
             string stem = Strip(bankName);
             if (string.IsNullOrEmpty(stem))
@@ -362,24 +369,25 @@ namespace WanosAudio
             }
 
             if (unload)
-                ScheduleUnload(stem);
+                ScheduleUnload(stem, unloadDelaySeconds);
         }
 
         /// <summary>
         /// Schedule native UnloadBank after a delay (DSP thread grace period).
         /// </summary>
-        static void ScheduleUnload(string bankName)
+        static void ScheduleUnload(string bankName, float unloadDelaySeconds)
         {
             string stem = Strip(bankName);
             if (string.IsNullOrEmpty(stem))
                 return;
 
-            float when = Time.realtimeSinceStartup + BankUnloadDelaySeconds;
+            float delay = unloadDelaySeconds < 0f ? 0f : unloadDelaySeconds;
+            float when = Time.realtimeSinceStartup + delay;
             lock (Gate)
             {
                 PendingUnloads[stem] = when;
             }
-            Debug.Log($"[{LogTag}] Release({stem}) scheduled for {BankUnloadDelaySeconds}s later");
+            Debug.Log($"[{LogTag}] Release({stem}) scheduled for {delay:F2}s later");
         }
 
         /// <summary>

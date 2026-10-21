@@ -14,7 +14,8 @@ namespace CustomSRP
 
         static readonly int
             copyBicubicId = Shader.PropertyToID("_CopyBicubic"),
-            fxaaConfigId = Shader.PropertyToID("_FXAAConfig");
+            fxaaConfigId = Shader.PropertyToID("_FXAAConfig"),
+            canvasGrainId = Shader.PropertyToID("_CanvasGrain");
 
         static readonly GlobalKeyword
             fxaaLowKeyword = GlobalKeyword.Create("FXAA_QUALITY_LOW"),
@@ -25,6 +26,7 @@ namespace CustomSRP
 
         PostFXStack _stack;
         bool _keepAlpha;
+        bool _applyFxaa;
 
         enum ScaleMode { None, Linear, Bicubic }
 
@@ -62,10 +64,38 @@ namespace CustomSRP
             UnsafeCommandBuffer buffer = context.cmd;
             buffer.SetGlobalFloat(finalSrcBlendId, 1f);
             buffer.SetGlobalFloat(finalDstBlendId, 0f);
+            PostFXSettings.CanvasSettings canvas = _stack.Settings.Canvas;
+            buffer.SetGlobalVector(
+                canvasGrainId,
+                canvas.enabled
+                    ? new Vector4(canvas.grain, canvas.weave, 0f, 0f)
+                    : Vector4.zero);
+
+            if (_scaleMode != ScaleMode.None)
+            {
+                buffer.SetGlobalFloat(
+                    copyBicubicId, _scaleMode == ScaleMode.Bicubic ? 1f : 0f);
+                if (_applyFxaa)
+                {
+                    ConfigureFXAA(buffer);
+                    _stack.Draw(
+                        buffer, _colorSource, _scaledResult,
+                        _keepAlpha ? Pass.FXAA : Pass.FXAAWithLuma);
+                    _stack.DrawFinal(
+                        buffer, _scaledResult, _cameraTarget, Pass.FinalRescale);
+                }
+                else
+                {
+                    _stack.DrawFinal(
+                        buffer, _colorSource, _cameraTarget, Pass.FinalRescale);
+                }
+
+                return;
+            }
 
             TextureHandle finalSource;
             Pass finalPass;
-            if (_stack.BufferSettings.fxaa.enabled)
+            if (_applyFxaa)
             {
                 finalSource = _colorGradingResult;
                 finalPass = _keepAlpha ? Pass.FXAA : Pass.FXAAWithLuma;
@@ -80,18 +110,7 @@ namespace CustomSRP
                 finalPass = Pass.ApplyColorGrading;
             }
 
-            if (_scaleMode == ScaleMode.None)
-            {
-                _stack.DrawFinal(buffer, finalSource, _cameraTarget, finalPass);
-            }
-            else
-            {
-                _stack.Draw(buffer, finalSource, _scaledResult, finalPass);
-                buffer.SetGlobalFloat(
-                    copyBicubicId, _scaleMode == ScaleMode.Bicubic ? 1f : 0f);
-                _stack.DrawFinal(
-                    buffer, _scaledResult, _cameraTarget, Pass.FinalRescale);
-            }
+            _stack.DrawFinal(buffer, finalSource, _cameraTarget, finalPass);
         }
 
         public static TextureHandle Record(
@@ -99,12 +118,23 @@ namespace CustomSRP
             PostFXStack stack,
             int colorLUTResolution,
             bool keepAlpha,
-            in CameraRendererTextures textures)
+            in CameraRendererTextures textures,
+            OilRainSettings rainSettings = null)
         {
             using var _ = new RenderGraphProfilingScope(renderGraph, GroupSampler);
 
             TextureHandle colorSource = BloomPass.Record(renderGraph, stack, textures);
             colorSource = OilFilterPass.Record(renderGraph, stack, colorSource, textures);
+
+            // OilRain screen-space water ripples run AFTER OilFilter (which likes our
+            // strong colour edges), BEFORE the colour grading pass (which would shift hue).
+            // Only runs when rain settings present AND post ripples enabled.
+            if (rainSettings != null && rainSettings.postRippleEnabled)
+            {
+                colorSource = OilRainPostPass.Record(
+                    renderGraph, stack, colorSource, textures, rainSettings);
+            }
+
             TextureHandle colorLUT = ColorLUTPass.Record(
                 renderGraph, stack, colorLUTResolution);
 
@@ -139,20 +169,22 @@ namespace CustomSRP
             // Mobile: FXAA is expensive on tile GPUs; rely on render-scale + bicubic instead.
             if (Application.isMobilePlatform)
                 applyFXAA = false;
-            if (applyFXAA || pass._scaleMode != ScaleMode.None)
+            pass._applyFxaa = applyFXAA;
+            // Scaled output grades inside FinalRescale. An intermediate is only
+            // needed when FXAA must run before that upscale.
+            if (applyFXAA)
             {
                 var desc = new TextureDesc(stack.BufferSize.x, stack.BufferSize.y)
                 {
                     colorFormat = ColorFormat,
                     filterMode = FilterMode.Bilinear
                 };
-                if (applyFXAA)
+                if (pass._scaleMode == ScaleMode.None)
                 {
                     desc.name = "Color Grading Result";
                     pass._colorGradingResult = builder.CreateTransientTexture(desc);
                 }
-
-                if (pass._scaleMode != ScaleMode.None)
+                else
                 {
                     desc.name = "Scaled Result";
                     pass._scaledResult = builder.CreateTransientTexture(desc);

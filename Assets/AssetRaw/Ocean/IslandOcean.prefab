@@ -12,7 +12,9 @@ GameObject:
   - component: {fileID: 2660837105596759810}
   - component: {fileID: 9096655336762458295}
   - component: {fileID: 7695219914254890505}
-  m_Layer: 0
+  - component: {fileID: 4283115826024016720}
+  - component: {fileID: 3346955025011913911}
+  m_Layer: 4
   m_Name: IslandOcean
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -106,6 +108,46 @@ MonoBehaviour:
   gridScale: 2500
   vertexDistance: 500
   followCamera: 0
-  terrain: {fileID: 0}
   waveHeight: 0.2
   boundsPadding: 4
+--- !u!114 &4283115826024016720
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 824393784923529746}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e3fdca004f2d45fe8abbed571a8abd5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.AI.Navigation::Unity.AI.Navigation.NavMeshModifier
+  m_SerializedVersion: 0
+  m_OverrideArea: 1
+  m_Area: 1
+  m_OverrideGenerateLinks: 0
+  m_GenerateLinks: 0
+  m_IgnoreFromBuild: 1
+  m_ApplyToChildren: 1
+  m_AffectedAgents: ffffffffi
+--- !u!65 &3346955025011913911
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 824393784923529746}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 2500, y: 1, z: 2500}
+  m_Center: {x: 0, y: 0.2, z: 0}

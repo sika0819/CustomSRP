@@ -1,0 +1,22 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2883721024
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 42f3f1ed5f223bd233554043774026db
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: fd81ad4dbb8db7477521c97fec51a8ca
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: a185b5711bc5eb58eb0862973b2cec54
+HashAppended: 0
+ClassTypes:
+- Class: 43
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Models/WoodUV/TAI_Cabin_01A_Module_2_LOD1_WoodUV.asset
+- Assets/GameMain/Environment/Models/WoodUV/TAI_Cabin_01A_Module_2_LOD2_WoodUV.asset
+Dependencies: []

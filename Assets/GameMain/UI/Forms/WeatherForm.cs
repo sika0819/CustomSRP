@@ -37,7 +37,7 @@ namespace Game
         VisualElement _knob;
         VisualElement _knobHighlight;
         Label _knobLabel;
-        Label _toast;
+        VisualElement _toast;
         VisualElement _track;
         EventCallback<PointerDownEvent> _knobDown;
         EventCallback<PointerMoveEvent> _knobMove;
@@ -472,35 +472,15 @@ namespace Game
         void EnsureToast()
         {
             VisualElement stage = Root.Q("stage") ?? Root;
-            _toast = stage.Q<Label>(ToastName);
-            if (_toast != null)
-                return;
-
-            _toast = new Label("天气正在改变,稍后再操作") { name = ToastName };
-            _toast.pickingMode = PickingMode.Ignore;
-            _toast.style.position = Position.Absolute;
-            _toast.style.left = 80;
-            _toast.style.right = 80;
-            _toast.style.top = Length.Percent(42);
-            _toast.style.height = 72;
-            _toast.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _toast.style.fontSize = 36;
-            _toast.style.color = new Color(0.09f, 0.09f, 0.1f, 1f);
-            _toast.style.backgroundColor = new Color(1f, 1f, 1f, 0.94f);
-            _toast.style.borderTopLeftRadius = 16;
-            _toast.style.borderTopRightRadius = 16;
-            _toast.style.borderBottomLeftRadius = 16;
-            _toast.style.borderBottomRightRadius = 16;
-            _toast.style.display = DisplayStyle.None;
-            stage.Add(_toast);
+            _toast = UiTipToast.Ensure(stage, ToastName);
         }
 
         void ShowToast()
         {
             if (_toast == null)
                 return;
-            _toast.style.display = DisplayStyle.Flex;
-            _toast.BringToFront();
+            // TipWindow.ShowTip default y=0 (stage center); busy tips stay centered.
+            UiTipToast.Show(_toast, "天气正在改变,稍后再操作", anchoredY: 0f);
             _toastHide?.Pause();
             _toastHide = _toast.schedule.Execute(HideToast).StartingIn((long)(ToastSeconds * 1000f));
         }
@@ -509,8 +489,7 @@ namespace Game
         {
             _toastHide?.Pause();
             _toastHide = null;
-            if (_toast != null)
-                _toast.style.display = DisplayStyle.None;
+            UiTipToast.Hide(_toast);
         }
     }
 }

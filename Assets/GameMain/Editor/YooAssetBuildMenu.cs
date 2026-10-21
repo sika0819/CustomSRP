@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Game.Editor.BuildTool;
 using UnityEditor;
 using UnityEngine;
 using YooAsset;
@@ -59,33 +60,9 @@ namespace Game.Editor
         [MenuItem("Game/YooAsset/Copy Latest Package To StreamingAssets", false, 220)]
         public static void CopyLatestToStreamingAssets()
         {
-            string outputRoot = AssetBundleBuilderHelper.GetDefaultBuildOutputRoot();
-            string platform = EditorUserBuildSettings.activeBuildTarget.ToString();
-            string packageRoot = Path.Combine(outputRoot, platform, PackageName);
-            if (!Directory.Exists(packageRoot))
-            {
-                Log.Error($"[YooAsset] Missing build output:\n{packageRoot}\nBuild DefaultPackage first.");
-                return;
-            }
-
-            string[] versions = Directory.GetDirectories(packageRoot);
-            if (versions.Length == 0)
-            {
-                Log.Error($"[YooAsset] Empty package dir:\n{packageRoot}");
-                return;
-            }
-
-            Array.Sort(versions);
-            string latest = versions[versions.Length - 1];
-            string streamingRoot = AssetBundleBuilderHelper.GetStreamingAssetsRoot();
-            string dest = Path.Combine(streamingRoot, PackageName);
-
-            if (Directory.Exists(dest))
-                Directory.Delete(dest, true);
-            Directory.CreateDirectory(streamingRoot);
-            CopyDirectory(latest, dest);
-            AssetDatabase.Refresh();
-            Log.Info($"[YooAsset] Copied {latest} → {dest}");
+            BoluoYooAssetBuildPipeline.CopyPackageToStreamingAssets(
+                EditorUserBuildSettings.activeBuildTarget,
+                msg => Log.Info($"[YooAsset] {msg}"));
         }
 
         [MenuItem("Game/YooAsset/Open Bundles Output", false, 240)]
@@ -121,32 +98,9 @@ namespace Game.Editor
         [MenuItem("Game/YooAsset/iOS/Copy iOS Package to StreamingAssets", false, 301)]
         public static void CopyIOSToStreamingAssets()
         {
-            string outputRoot = AssetBundleBuilderHelper.GetDefaultBuildOutputRoot();
-            string packageRoot = Path.Combine(outputRoot, "iOS", PackageName);
-            if (!Directory.Exists(packageRoot))
-            {
-                Log.Error($"[YooAsset] Missing iOS build output:\n{packageRoot}\nBuild for iOS first.");
-                return;
-            }
-
-            string[] versions = Directory.GetDirectories(packageRoot);
-            if (versions.Length == 0)
-            {
-                Log.Error($"[YooAsset] Empty iOS package dir:\n{packageRoot}");
-                return;
-            }
-
-            Array.Sort(versions);
-            string latest = versions[versions.Length - 1];
-            string streamingRoot = AssetBundleBuilderHelper.GetStreamingAssetsRoot();
-            string dest = Path.Combine(streamingRoot, PackageName);
-
-            if (Directory.Exists(dest))
-                Directory.Delete(dest, true);
-            Directory.CreateDirectory(streamingRoot);
-            CopyDirectory(latest, dest);
-            AssetDatabase.Refresh();
-            Log.Info($"[YooAsset] Copied iOS {latest} → {dest}");
+            BoluoYooAssetBuildPipeline.CopyPackageToStreamingAssets(
+                BuildTarget.iOS,
+                msg => Log.Info($"[YooAsset] {msg}"));
         }
 
         static bool Build(EBuildPipeline buildPipeline)
@@ -202,22 +156,6 @@ namespace Game.Editor
 
             Log.Error($"[YooAsset] Build failed: {buildResult.ErrorInfo}");
             return false;
-        }
-
-        static void CopyDirectory(string sourceDir, string destDir)
-        {
-            Directory.CreateDirectory(destDir);
-            foreach (string file in Directory.GetFiles(sourceDir))
-            {
-                string name = Path.GetFileName(file);
-                File.Copy(file, Path.Combine(destDir, name), true);
-            }
-
-            foreach (string dir in Directory.GetDirectories(sourceDir))
-            {
-                string name = Path.GetFileName(dir);
-                CopyDirectory(dir, Path.Combine(destDir, name));
-            }
         }
     }
 }

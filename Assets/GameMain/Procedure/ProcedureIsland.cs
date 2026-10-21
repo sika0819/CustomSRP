@@ -81,7 +81,7 @@ namespace Game
             IslandJoystickCamera cam = main.GetComponent<IslandJoystickCamera>();
             if (cam == null)
                 cam = main.gameObject.AddComponent<IslandJoystickCamera>();
-            cam.ApplySpawnPose();
+            IslandPlayerPosSave.InitAndArm(cam);
             Log.Info(
                 "[ProcedureIsland] camera pose pos="
                 + main.transform.position.ToString("F1")
@@ -102,7 +102,10 @@ namespace Game
         {
             base.OnUpdate(procedureOwner, elapseSeconds, realElapseSeconds);
             if (_phase == Phase.Done)
+            {
+                IslandPlayerPosSave.Tick();
                 return;
+            }
 
             TickPhase();
         }
@@ -117,6 +120,8 @@ namespace Game
 
             if (!isShutdown)
             {
+                IslandPlayerPosSave.TrySaveCurrent();
+                IslandPlayerPosSave.ResetSession();
                 AudioInteractionBootstrap.Shutdown();
                 WanosAudio.WanosEngine.StopEngine("ProcedureIsland.OnLeave");
                 WanosAudio.WanosEngine.Unload("ProcedureIsland.OnLeave");
@@ -137,6 +142,11 @@ namespace Game
                     WanosSoundSetup.EnsureSoundGroups();
                     if (GameEntry.World == null)
                         GameEntry.InitWorldService();
+                    // 正式账号进岛前清密码节流；主存档加载后应用音量
+                    if (!GuestSession.IsGuest)
+                        AccountPasswordLoginThrottle.ClearAll();
+                    BoluoGameSave.Load();
+                    DownloadedUnplayedManager.EnsureLoaded();
                     GameEntry.Weather?.ApplyLocalClockIfNeeded();
                     GameEntry.Music?.ApplySavedVolumes();
                     BootLoadingService.ReportProgress(0.71f, "正在进入世界...");
@@ -200,20 +210,28 @@ namespace Game
                     {
                         _fadeStarted = true;
                         Log.Info("[ProcedureIsland] FadeHide loading cover");
-                        // Business owns engine lifecycle: start DSP thread, then attach device, then unmute.
-                        WanosAudio.WanosEngine.StartEngine("ProcedureIsland.Uncover");
-                        WanosAudio.WanosEngine.EnablePlayback("ProcedureIsland.Uncover");
-                        WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover");
-                        AudioInteractionBootstrap.StartAfterUncover();
-                        // Wait Critical banks then cue Music1_1 (no race with download).
-                        BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();
-                        BootLoadingService.FadeHide(1f);
+                        UncoverAsync().Forget();
                     }
 
                     if (!BootLoadingService.IsVisible && !GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
                         _phase = Phase.Done;
                     break;
             }
+        }
+
+        static async UniTaskVoid UncoverAsync()
+        {
+            // Android：jar 内 bank 须先落到 persistent，Ambience Retain 才能找到 Ocean_Calm_Quad 等。
+            await BankUpgradeBootstrap.EnsureLocalBanksReadyAsync();
+
+            // Device first, then DSP (macOS WanosDSP_StartEngine needs playback device open).
+            WanosAudio.WanosEngine.EnablePlayback("ProcedureIsland.Uncover");
+            WanosAudio.WanosEngine.StartEngine("ProcedureIsland.Uncover");
+            WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover");
+            AudioInteractionBootstrap.StartAfterUncover();
+            // Cue Music1_1 as soon as bank is ready (does not wait for full Critical wave).
+            BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();
+            BootLoadingService.FadeHide(1f);
         }
     }
 }

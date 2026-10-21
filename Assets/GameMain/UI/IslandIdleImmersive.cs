@@ -14,6 +14,9 @@ namespace Game
         const float FadeOutDuration = 1f;
         const float FadeInDuration = 0.35f;
 
+        /// <summary>HUD 已完全淡出；供相机压 renderScale 等查询。</summary>
+        public static bool IsActive { get; private set; }
+
         readonly VisualElement[] _fadeRoots = new VisualElement[2];
         readonly IslandBreathHint _breath = new IslandBreathHint();
 
@@ -87,6 +90,7 @@ namespace Game
             _breath.Hide();
             KillFade();
             _fullyFadedOut = false;
+            IsActive = false;
             _armed = false;
             SetHudAlpha(1f);
         }
@@ -117,6 +121,7 @@ namespace Game
         {
             KillFade();
             _fullyFadedOut = false;
+            IsActive = false;
             SetHudAlpha(1f);
             _breath.Hide();
             ArmCountdown();
@@ -134,6 +139,7 @@ namespace Game
             bool wasImmersive = _fullyFadedOut;
             KillFade();
             _fullyFadedOut = false;
+            IsActive = false;
             _breath.Hide();
             StartFade(_currentAlpha, 1f, FadeInDuration);
             ArmCountdown();
@@ -170,6 +176,7 @@ namespace Game
         void OnFadeOutComplete()
         {
             _fullyFadedOut = true;
+            IsActive = true;
             _breath.Show();
             Log.Info("[IslandIdleImmersive] enter");
         }

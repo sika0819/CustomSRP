@@ -1,0 +1,27 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 439687800
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 9aa6da20fd517109defb764006c10f1d
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d5b1802501938ccd9ac76dfe2ea9b09e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: dbd618c175b231790944a7756530741f
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Other/Scene Asset/Synty/PolygonGeneric/Materials/FX/Generic_Circle_Additive_01.mat
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_other_scene_asset_synty_polygongeneric_textures_fx.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

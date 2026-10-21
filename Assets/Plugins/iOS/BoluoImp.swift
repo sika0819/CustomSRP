@@ -20,7 +20,7 @@ private let kQueryNotReady: UnsafePointer<CChar> = {
     return UnsafePointer(p)
 }()
 
-@_used
+@used
 @_cdecl("BoluoImp_RegisterPush")
 func BoluoImp_RegisterPush(
     _ fn: (@convention(c) (Int32, Int32, Int32, Int32) -> Void)?
@@ -30,7 +30,7 @@ func BoluoImp_RegisterPush(
     BoluoImpSlots.lock.unlock()
 }
 
-@_used
+@used
 @_cdecl("BoluoImp_UnregisterPush")
 func BoluoImp_UnregisterPush() {
     BoluoImpSlots.lock.lock()
@@ -38,7 +38,7 @@ func BoluoImp_UnregisterPush() {
     BoluoImpSlots.lock.unlock()
 }
 
-@_used
+@used
 @_cdecl("BoluoImp_Push")
 func BoluoImp_Push(_ type: Int32, _ a: Int32, _ b: Int32, _ c: Int32) {
     BoluoImpSlots.lock.lock()
@@ -47,7 +47,7 @@ func BoluoImp_Push(_ type: Int32, _ a: Int32, _ b: Int32, _ c: Int32) {
     fn?(type, a, b, c)
 }
 
-@_used
+@used
 @_cdecl("BoluoImp_RegisterHost")
 func BoluoImp_RegisterHost(
     _ notifyFn: (@convention(c) (Int32, Int32, Int32, Int32) -> Void)?,
@@ -61,7 +61,7 @@ func BoluoImp_RegisterHost(
     BoluoImpSlots.lock.unlock()
 }
 
-@_used
+@used
 @_cdecl("BoluoImp_RegisterSign")
 func BoluoImp_RegisterSign(
     _ signFn: (@convention(c) (UnsafePointer<CChar>?) -> UnsafePointer<CChar>?)?
@@ -71,7 +71,7 @@ func BoluoImp_RegisterSign(
     BoluoImpSlots.lock.unlock()
 }
 
-@_used
+@used
 @_cdecl("BoluoImp_Notify")
 func BoluoImp_Notify(_ type: Int32, _ a: Int32, _ b: Int32, _ c: Int32) {
     BoluoImpSlots.lock.lock()
@@ -80,7 +80,7 @@ func BoluoImp_Notify(_ type: Int32, _ a: Int32, _ b: Int32, _ c: Int32) {
     fn?(type, a, b, c)
 }
 
-@_used
+@used
 @_cdecl("BoluoImp_Query")
 func BoluoImp_Query(
     _ type: Int32,
@@ -96,7 +96,7 @@ func BoluoImp_Query(
     return fn(type, a, b, c, inBlob)
 }
 
-@_used
+@used
 @_cdecl("BoluoImp_GenerateSign")
 func BoluoImp_GenerateSign(_ jsonBody: UnsafePointer<CChar>?) -> UnsafePointer<CChar>? {
     BoluoImpSlots.lock.lock()
@@ -105,7 +105,7 @@ func BoluoImp_GenerateSign(_ jsonBody: UnsafePointer<CChar>?) -> UnsafePointer<C
     return fn?(jsonBody)
 }
 
-@_used
+@used
 private let _boluoImpKeep: Void = {
     _ = BoluoImp_RegisterPush as Any
     _ = BoluoImp_UnregisterPush as Any

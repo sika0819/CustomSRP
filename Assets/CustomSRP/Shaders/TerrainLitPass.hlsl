@@ -52,6 +52,7 @@ Varyings TerrainLitPassVertex(Attributes input)
 float4 TerrainLitPassFragment(Varyings input) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
+    OilBakeClipAboveWater(input.positionWS);
 
     TerrainSurface ts = SampleTerrainSurface(input.controlUV);
 

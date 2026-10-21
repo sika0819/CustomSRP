@@ -10,11 +10,19 @@ Shader "CustomSRP/OilNPR"
         _PaintThickness ("Paint Thickness", Range(0, 2)) = 0.18
 
         _ShadeSteps ("Shade Steps", Range(2, 8)) = 4
+        [HDR] _SpecColor ("Specular Color", Color) = (0.5, 0.5, 0.5, 1)
+        _Smoothness ("Smoothness (Blinn-Phong exponent base)", Range(0, 1)) = 0
         _ShadeLift ("Shade Lift", Range(0, 1)) = 0.42
         _ShadowLift ("Shadow Lift", Range(0, 1.5)) = 0.95
         _ShadowWobble ("Shadow Brush Edge", Range(0, 1)) = 0.45
         _ShadowBrushScale ("Shadow Brush Scale", Range(0.2, 8)) = 1.8
         _AmbientColor ("Ambient", Color) = (0.55, 0.5, 0.44, 1)
+        [Toggle] _OilFoliage ("Foliage (ambient × albedo)", Float) = 0
+        // Cross-card LOD billboards: yaw kept card to camera, drop the orthogonal card.
+        [Toggle] _OilCrossBillboard ("Tree Cross Billboard", Float) = 0
+        [NoScaleOffset] _BumpMap ("Billboard Baked Normal (RGB)", 2D) = "bump" {}
+        _NormalStrength ("Billboard Normal Strength", Range(0, 1)) = 0.85
+        _EdgeFade ("Billboard Edge Fade", Range(0, 0.5)) = 0.12
 
         [Toggle(_RECEIVE_SHADOWS)] _ReceiveShadows ("Receive Shadows", Float) = 1
         [KeywordEnum(On, Clip, Dither, Off)] _Shadows ("Shadows", Float) = 0

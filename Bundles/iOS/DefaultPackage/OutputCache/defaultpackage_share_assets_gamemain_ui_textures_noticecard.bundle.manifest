@@ -1,0 +1,25 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1500510077
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 537e68c199fa6476002c47d7818e7a79
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: c2426a7084c48aa838094ab6ad87ea86
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 4f2eb5c7ee5f9f7d01d73211f61c976d
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 213
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Textures/NoticeCard/primary.png
+- Assets/GameMain/UI/Textures/NoticeCard/panel.png
+- Assets/GameMain/UI/Textures/NoticeCard/icon.png
+Dependencies: []

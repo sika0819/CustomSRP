@@ -38,13 +38,23 @@ namespace Game
         public const float LakeMinPlayerY = 20f;
         public const float LakeMaxPlayerY = 50f;
 
-        // 可听 / 3D radius：对齐 Boluo WanosAudio.prefab WanosObject.radius + SpatialAmbienceRange。
+        // 可听 / 进出半径：对齐「3D区域声景」听感常量（催加载体积本工程合并进 Enter）。
         public const float RiverAttenuationMeters = 20f;
         public const float OceanAttenuationMeters = 60f;
+        /// <summary>近岸海已播后再加约 12m 宽限（河不加）。</summary>
+        public const float OceanNearSurfaceMeters = 12f;
         public const float LakeAttenuationMeters = 20f;
         public const float CampfireAttenuationMeters = 30f;
-        public const float WaterfallBigAttenuationMeters = 50f;
-        public const float WaterfallSmallAttenuationMeters = 72f;
+        /// <summary>大瀑开播半径。</summary>
+        public const float WaterfallBigEnterMeters = 42f;
+        /// <summary>大瀑停播半径。</summary>
+        public const float WaterfallBigExitMeters = 50f;
+        /// <summary>大瀑在篝火旁的静音圈。</summary>
+        public const float WaterfallCampfireMuteMeters = 22f;
+        /// <summary>小瀑开播半径。</summary>
+        public const float WaterfallSmallEnterMeters = 50f;
+        /// <summary>小瀑停播半径。</summary>
+        public const float WaterfallSmallExitMeters = 72f;
         /// <summary>Boluo Forest_Audio SphereCollider：3D 半径 150 才是进出区，曲线 160 只衰减。</summary>
         public const float ForestEnterMeters = 150f;
         /// <summary>Boluo <c>NearTriggerMeters</c>：刚出球仍贴表面时继续播。</summary>
@@ -52,13 +62,22 @@ namespace Game
         /// <summary>Boluo <c>MinTriggerExitGraceSeconds</c>：离开球体至少再等这么久才 Stop。</summary>
         public const float ForestExitGraceSeconds = 2f;
         public const float ForestExitMeters = ForestEnterMeters;
-        /// <summary>Boluo GrassLand_Audio WanosObject.radius。</summary>
+        public const float ForestUnloadDelaySeconds = 3f;
+        /// <summary>草地主区触发球（增益曲线远端仍 150）。</summary>
+        public const float GrasslandEnterMeters = 180f;
+        /// <summary>增益曲线远端 / 空间化。</summary>
         public const float GrasslandAttenuationMeters = 150f;
-        /// <summary>Boluo GrassLand_S_Audio WanosObject.radius（北岸小草地）。</summary>
+        public const float GrasslandUnloadDelaySeconds = 0f;
+        /// <summary>草地卫星触发（胶囊约 75；增益远端 60）。</summary>
+        public const float GrasslandSecondaryEnterMeters = 75f;
         public const float GrasslandSecondaryAttenuationMeters = 60f;
-        /// <summary>Boluo Plateau_Audio WanosObject.radius。</summary>
+        public const float GrasslandSecondaryUnloadDelaySeconds = 1f;
+        /// <summary>高原触发球约 350；增益曲线远端约 316。</summary>
+        public const float PlateauEnterMeters = 350f;
         public const float PlateauAttenuationMeters = 316f;
-        /// <summary>点源（河/岸/瀑）进出区滞回；biome 用固定 Enter/Exit，不用此系数。</summary>
+        public const float PlateauUnloadDelaySeconds = 2f;
+        public const float CampfireUnloadDelaySeconds = 5f;
+        /// <summary>点源（河/岸）进出区滞回；瀑用显式 Enter/Exit；biome 用固定 Enter/Exit。</summary>
         public const float AttenuationExitScale = 1.1f;
 
         /// <summary>
@@ -71,8 +90,8 @@ namespace Game
             Ocean("ocean_shore_8", 603.174f, 5.7f, 650.0313f),
             ForestBed("Forest_Audio", 561.7f, 46.78f, 517.84f),
             Lake("Lake_Audio", 461.1f, 32.77f, 461.12f),
-            Grassland("GrassLand_Audio", 419.46387f, 41.16188f, 362.95004f, GrasslandAttenuationMeters),
-            Grassland("GrassLand_S_Audio", 503.9f, 17.36f, 667.1f, GrasslandSecondaryAttenuationMeters),
+            Grassland("GrassLand_Audio", 419.46387f, 41.16188f, 362.95004f, GrasslandEnterMeters),
+            Grassland("GrassLand_S_Audio", 503.9f, 17.36f, 667.1f, GrasslandSecondaryEnterMeters),
             Plateau("Plateau_Audio", 171.5f, 50.5f, 583.7f),
         };
 
@@ -95,7 +114,8 @@ namespace Game
                     small ? "Play_Waterfall_Small_LR" : "Play_Waterfall_Big_LR",
                     small ? "Stop_Waterfall_Small" : "Stop_Waterfall_Big",
                     item.Pos,
-                    small ? WaterfallSmallAttenuationMeters : WaterfallBigAttenuationMeters);
+                    small ? WaterfallSmallEnterMeters : WaterfallBigEnterMeters,
+                    small ? WaterfallSmallExitMeters : WaterfallBigExitMeters);
                 spec.UseXzDistance = false;
                 spec.RiverCatalogIndex = catalogIndex;
                 spec.RiverMeshName = prefab;
@@ -142,19 +162,31 @@ namespace Game
             add(Native("River_01", AmbienceEmitterKind.River, new Vector3(238.85437f, 101.538124f, 637.07263f), false));
             add(Native("River_02", AmbienceEmitterKind.River, new Vector3(435.38004f, 22.099998f, 424.85004f), false));
             add(Native("River_03", AmbienceEmitterKind.River, new Vector3(352.2f, 64.2f, 435.9f), false));
-            add(Native("River_04", AmbienceEmitterKind.Waterfall, new Vector3(352.2f, 64.2f, 435.9f), true));
+            // 瀑音锚在 WaterfallSplash（听感位置），River_04 mesh 原点离飞溅点约 70m，
+            // 用 42m Enter 会「贴着瀑布特效也没声」。
+            add(Native("WaterfallSplash", AmbienceEmitterKind.Waterfall, new Vector3(423.81f, 66.34f, 457.4f), true));
         }
 
         static AmbienceEmitterSpec Native(string name, AmbienceEmitterKind kind, Vector3 pos, bool waterfall)
         {
-            var spec = Point(
-                waterfall ? $"waterfall_native_{name}" : $"river_native_{name}",
-                kind,
-                waterfall ? "Waterfall_Big_Quad" : "River_ADD",
-                waterfall ? "Play_Waterfall_Big_LR" : "Play_River_ADD",
-                waterfall ? "Stop_Waterfall_Big" : "Stop_River",
-                pos,
-                waterfall ? WaterfallBigAttenuationMeters : RiverAttenuationMeters);
+            AmbienceEmitterSpec spec = waterfall
+                ? Point(
+                    $"waterfall_native_{name}",
+                    kind,
+                    "Waterfall_Big_Quad",
+                    "Play_Waterfall_Big_LR",
+                    "Stop_Waterfall_Big",
+                    pos,
+                    WaterfallBigEnterMeters,
+                    WaterfallBigExitMeters)
+                : Point(
+                    $"river_native_{name}",
+                    kind,
+                    "River_ADD",
+                    "Play_River_ADD",
+                    "Stop_River",
+                    pos,
+                    RiverAttenuationMeters);
             spec.UseXzDistance = false;
             spec.RiverMeshName = name;
             return spec;
@@ -186,7 +218,7 @@ namespace Game
                 StopEvent = "Stop_Boluodao_Ocean",
                 Position = new Vector3(x, y, z),
                 EnterRadius = OceanAttenuationMeters,
-                ExitRadius = OceanAttenuationMeters * AttenuationExitScale,
+                ExitRadius = OceanAttenuationMeters + OceanNearSurfaceMeters,
                 UseXzDistance = true,
             };
         }
@@ -249,8 +281,8 @@ namespace Game
                 PlayEvent = "Play_Boluodao_Plateau",
                 StopEvent = "Stop_Boluodao_Plateau",
                 Position = new Vector3(x, y, z),
-                EnterRadius = PlateauAttenuationMeters,
-                ExitRadius = PlateauAttenuationMeters * AttenuationExitScale,
+                EnterRadius = PlateauEnterMeters,
+                ExitRadius = PlateauEnterMeters,
                 UseXzDistance = true,
             };
         }
@@ -264,6 +296,20 @@ namespace Game
             Vector3 pos,
             float attenuationMeters)
         {
+            return Point(id, kind, bank, play, stop, pos, attenuationMeters,
+                attenuationMeters * AttenuationExitScale);
+        }
+
+        static AmbienceEmitterSpec Point(
+            string id,
+            AmbienceEmitterKind kind,
+            string bank,
+            string play,
+            string stop,
+            Vector3 pos,
+            float enterMeters,
+            float exitMeters)
+        {
             return new AmbienceEmitterSpec
             {
                 Id = id,
@@ -272,8 +318,8 @@ namespace Game
                 PlayEvent = play,
                 StopEvent = stop,
                 Position = pos,
-                EnterRadius = attenuationMeters,
-                ExitRadius = attenuationMeters * AttenuationExitScale,
+                EnterRadius = enterMeters,
+                ExitRadius = exitMeters,
                 UseXzDistance = true,
             };
         }

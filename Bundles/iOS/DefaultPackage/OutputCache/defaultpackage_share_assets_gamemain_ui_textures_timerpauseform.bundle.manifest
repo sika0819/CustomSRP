@@ -1,0 +1,24 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3808385962
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 77134216afc73c6b2c07118b75bbf270
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: c2426a7084c48aa838094ab6ad87ea86
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: f32121de3e40246dd948974a1ed71d93
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 213
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Textures/TimerPauseForm/timer-dialog-primary.png
+- Assets/GameMain/UI/Textures/TimerPauseForm/timer-dialog-icon.png
+Dependencies: []

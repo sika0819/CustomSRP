@@ -4,8 +4,8 @@ namespace Game
 {
     /// <summary>
     /// ShiTou 碰撞：Cliff/Cave/Ramp/Spike/Large 按名；其余仅世界尺寸够大才补碰撞体。
-    /// MeshCollider 仅在 sharedMesh.isReadable（或已预烘焙可读 Collision mesh）时使用；
-    /// 否则用 BoxCollider，避免真机 "mesh has been marked as non-accessible"。
+    /// 预制体已有 MeshCollider 时保留三角网格（勿降成 Box，悬崖轮廓会穿模）。
+    /// 仅在无碰撞体且 mesh 不可用于 PhysX 时才退回 BoxCollider。
     /// </summary>
     public static class EnvRockColliders
     {
@@ -30,16 +30,26 @@ namespace Game
                         continue;
 
                     Mesh mesh = mc.sharedMesh;
-                    if (mesh == null || !CanUseMeshCollider(mesh))
+                    if (mesh == null)
                     {
-                        Bounds b = mesh != null ? mesh.bounds : new Bounds(Vector3.zero, Vector3.one);
-                        ReplaceWithBoxCollider(mc.gameObject, b);
+                        MeshFilter mf = mc.GetComponent<MeshFilter>();
+                        mesh = mf != null ? mf.sharedMesh : null;
+                        if (mesh != null)
+                            mc.sharedMesh = mesh;
+                    }
+
+                    if (mesh == null)
+                    {
+                        ReplaceWithBoxCollider(mc.gameObject, new Bounds(Vector3.zero, Vector3.one));
                         Object.Destroy(mc);
                         continue;
                     }
 
+                    // 已有三角碰撞：保持 MeshCollider。运行时改 cookingOptions 会强制 recook，
+                    // 真机非可读 / 无 *_Collision 时会把有效预烘焙碰撞弄坏。
                     mc.convex = false;
-                    mc.cookingOptions = LeanCooking;
+                    if (CanRecookMeshCollider(mesh) && mc.cookingOptions != LeanCooking)
+                        mc.cookingOptions = LeanCooking;
                 }
 
                 return;
@@ -54,9 +64,8 @@ namespace Game
 
                 Mesh mesh = mf.sharedMesh;
                 // AddComponent<MeshCollider>() auto-binds MeshFilter.sharedMesh and cooks
-                // immediately — only do that for pre-baked readable *_Collision meshes.
-                // Non-readable / render FBX → BoxCollider (avoids device PhysX spam).
-                if (CanUseMeshCollider(mesh))
+                // immediately — only do that for readable / *_Collision meshes.
+                if (CanRecookMeshCollider(mesh))
                 {
                     MeshCollider mc = mf.gameObject.AddComponent<MeshCollider>();
                     mc.sharedMesh = mesh;
@@ -71,11 +80,10 @@ namespace Game
         }
 
         /// <summary>
-        /// MeshCollider + LeanCooking needs a CPU-readable mesh. Prefab bake writes
-        /// *_Collision assets; render FBX often reports isReadable inconsistently on
-        /// Android AssetBundles, so require the Collision suffix on device.
+        /// 运行时新建 / recook MeshCollider 需要 CPU 可读 mesh。
+        /// Android AssetBundle 上渲染 FBX 的 isReadable 不可靠，故真机要求 *_Collision。
         /// </summary>
-        static bool CanUseMeshCollider(Mesh mesh)
+        static bool CanRecookMeshCollider(Mesh mesh)
         {
             if (mesh == null || !mesh.isReadable)
                 return false;

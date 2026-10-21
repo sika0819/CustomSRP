@@ -1,0 +1,28 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3892853107
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 37149bff9e17f93520b229cb269065e5
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: ff4574b5e44775c113d83e0e9810733b
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 05481814317996eae8c504ad292a1450
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+- Class: 156
+  Script: {instanceID: 0}
+- Class: 1953259897
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/Terrain/Island/IslandTerrainData.asset
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_terrain_island_layers.bundle

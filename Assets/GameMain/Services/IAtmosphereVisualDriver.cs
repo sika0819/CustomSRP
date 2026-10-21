@@ -11,5 +11,7 @@ namespace Game
         void SetFogDensity(float exponentialSquaredDensity);
         /// <summary>Optional directional-light color override. Pass null to clear and fall back to the time-of-day table.</summary>
         void SetLightColorOverride(UnityEngine.Color? color);
+        /// <summary>Boluo AtmosphereProfile-equivalent sky/light/fog table.</summary>
+        void SetLookKind(IslandLookKind lookKind);
     }
 }

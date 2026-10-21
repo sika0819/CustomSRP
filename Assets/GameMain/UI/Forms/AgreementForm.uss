@@ -1,0 +1,16 @@
+#dialog #card {
+    background-image: url("../Textures/NoticeCard/panel.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+#dialog #icon {
+    display: none;
+}
+
+/* Body text for agreement — larger, centered. */
+#dialog #body {
+    -unity-text-align: upper-center;
+    font-size: 42px;
+    white-space: normal;
+}

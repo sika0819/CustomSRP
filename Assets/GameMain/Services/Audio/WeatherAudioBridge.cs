@@ -74,11 +74,15 @@ namespace Game
             ApplyFromWeather();
         }
 
-        /// <summary>Hard-stop wind/rain loops without changing the BGM content-pause latch.</summary>
+        /// <summary>
+        /// Hard-stop wind/rain loops without changing the BGM content-pause latch.
+        /// Preset iris: stop events / zero RTPCs but <b>keep</b> banks retained so reveal
+        /// can re-Post without a late Release racing a fresh Retain.
+        /// </summary>
         public static void ClearPlaying()
         {
-            StopLoop(ref _windPlaying, WanosInteraction.WindObjectId, WindStop, ref _windBankHeld, WindBank);
-            StopLoop(ref _rainPlaying, WanosInteraction.RainObjectId, RainStop, ref _rainBankHeld, RainBank);
+            StopLoopKeepBank(ref _windPlaying, WanosInteraction.WindObjectId, WindStop);
+            StopLoopKeepBank(ref _rainPlaying, WanosInteraction.RainObjectId, RainStop);
             WriteWeatherRtpc(WindParam, 0f, ref _windRtpc);
             WriteWeatherRtpc(RainParam, 0f, ref _rainRtpc);
             WriteWeatherRtpc(FoggyParam, 0f, ref _foggyRtpc);
@@ -116,7 +120,7 @@ namespace Game
             bool wantWind = false;
             bool wantRain = false;
 
-            if (weather != null)
+            if (weather != null && !PresetWeatherHold.IsHeld)
             {
                 // Boluo: RTPC = curWeatherState * 30 (关闭=0, 小=30, 中=60, 大=90).
                 float intensity = weather.Level <= 0 ? 0f : Mathf.Clamp(weather.Level, 0, 3) * 30f;
@@ -221,6 +225,16 @@ namespace Game
                 WanosInteraction.ReleaseBank(bank);
                 bankHeld = false;
             }
+        }
+
+        /// <summary>Stop voice/event only; leave <see cref="_windBankHeld"/> / rain retain intact.</summary>
+        static void StopLoopKeepBank(ref bool playing, ulong objectId, string stopEvent)
+        {
+            if (!playing)
+                return;
+            if (!string.IsNullOrEmpty(stopEvent))
+                WanosInteraction.PostEvent(stopEvent, objectId);
+            playing = false;
         }
     }
 }

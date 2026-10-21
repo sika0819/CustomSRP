@@ -1,0 +1,78 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2692253379
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: e02a560d8060231ed66faa58b3ee1687
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d5b1802501938ccd9ac76dfe2ea9b09e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: cf125cd61b1936d5a5f2dc489ba4722e
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Materials/Season/M_Grass_T_Grass_03_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Rock_T_Mountain_01_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Leaf_T_BirchTree_Leaf_01_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_TAI_Atlas_1A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Maple1.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Forest01.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_Coral_09.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_ScareCrow_01.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_Rpgpp_Wood_House_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Grass_T_Plants_01_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Leaf_TFF_Atlas_Vegetation_1A_D_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Rock_T_Mountain_03_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_TFF_Atlas_1A_D_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_GoldLarch1.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Maple3Dead.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_T_Mushroom_Brown_01_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_T_Mushroom_Red_01_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Grass_T_Grass_02_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_GoldLarch5.mat
+- Assets/GameMain/Environment/Materials/Season/M_Leaf_Lillies_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_Coral_06.mat
+- Assets/GameMain/Environment/Materials/Season/M_Leaf_TAI_Atlas_1A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Forest03.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Forest02.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Fruit02.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_T_BirchTree_Bark_01_A_1.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_T_Tent_03_C_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_Rpgpp_Wood_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Rock_T_Mountain_04_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Leaf_T_BirchTree_Leaf_01_A_1.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Maple2Dead.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Larch_CylUv.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_T_BirchTree_Bark_02_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Fruit01.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_Coral_07.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Maple2.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Meadow01.mat
+- Assets/GameMain/Environment/Materials/Season/M_Prop_Zawu_Mix_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Meadow02.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_GoldLarch2.mat
+- Assets/GameMain/Environment/Materials/Season/M_Rock_T_Mountain_02_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_T_Plank_01_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Fruit03.mat
+- Assets/GameMain/Environment/Materials/Season/M_Leaf_T_Ivy_01_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Leaf_T_OakTree_Leaf_01_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Leaf_T_OakTree_Leaf_01_A_1.mat
+- Assets/GameMain/Environment/Materials/Season/M_Grass_T_Grass_01_A_0.mat
+- Assets/GameMain/Environment/Materials/Season/M_Bark_Birch03.mat
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_houseextracted.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_other_assetraw_graphics_colorramp.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_textures_barkoil.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

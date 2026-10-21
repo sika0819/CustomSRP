@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Cysharp.Threading.Tasks;
 using Game.BoluoApi;
 using Game.BoluoApi.Music;
 using UnityEngine;
@@ -68,6 +69,31 @@ namespace Game
         {
             if (_albums != null || _loading)
                 return;
+            LoadLocalAsync().Forget();
+        }
+
+        /// <summary>
+        /// Await until catalog is ready (server or local). Used before critical BGM cue.
+        /// </summary>
+        public static async UniTask EnsureReadyAsync(float timeoutSeconds = 8f)
+        {
+            if (_albums != null)
+                return;
+
+            LoadAsync();
+            float deadline = Time.realtimeSinceStartup + Mathf.Max(0.5f, timeoutSeconds);
+            while (_albums == null && Time.realtimeSinceStartup < deadline)
+            {
+                if (!_loading && _albums == null)
+                    LoadAsync();
+                await UniTask.Delay(50, DelayType.UnscaledDeltaTime);
+            }
+        }
+
+        static async UniTaskVoid LoadLocalAsync()
+        {
+            if (_albums != null || _loading)
+                return;
             _loading = true;
 
             string path = JsonPath();
@@ -81,7 +107,7 @@ namespace Game
 #if UNITY_EDITOR
             LoadJsonFromEditorPath(path);
 #else
-            LoadJsonFromPlayer(path);
+            await LoadJsonFromPlayerAsync(path);
 #endif
         }
 
@@ -243,7 +269,7 @@ namespace Game
             }
         }
 #else
-        static void LoadJsonFromPlayer(string path)
+        static async UniTask LoadJsonFromPlayerAsync(string path)
         {
             Debug.Log($"[MusicCatalog] Loading local JSON (Player): {path}");
             // Extract relative path for StreamingAssetsUtil.
@@ -252,17 +278,16 @@ namespace Game
             if (!string.IsNullOrEmpty(sa) && path.StartsWith(sa, StringComparison.OrdinalIgnoreCase))
                 relative = path.Substring(sa.Length).TrimStart('/', '\\');
 
-            StreamingAssetsUtil.ReadTextCoroutine(relative, (ok, text) =>
+            var (ok, text) = await StreamingAssetsUtil.ReadTextAsync(relative);
+            if (ok && !string.IsNullOrEmpty(text))
+                ParseJson(text);
+            else
             {
-                if (ok && !string.IsNullOrEmpty(text))
-                    ParseJson(text);
-                else
-                {
-                    _loading = false;
-                    Debug.LogWarning($"[MusicCatalog] Failed to load local JSON via StreamingAssetsUtil.");
-                    BroadcastReady();
-                }
-            });
+                _loading = false;
+                Debug.LogWarning(
+                    $"[MusicCatalog] Failed to load local JSON via StreamingAssetsUtil: {text}");
+                BroadcastReady();
+            }
         }
 #endif
 

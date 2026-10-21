@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 using YooAsset;
 
 using UnityGameFramework.Runtime;
@@ -33,6 +34,8 @@ namespace Game
             public GameObject Go;
             public int ProtoIndex;
             public bool InNative;
+            public Renderer[] ShadowCasters;
+            public bool CastingShadows;
         }
 
         readonly List<Item> _items = new List<Item>(2560);
@@ -68,6 +71,7 @@ namespace Game
             {
                 _native = EnvNativeInstancing.Ensure();
                 _native.SetMaxDist(EnvStreamingConfig.NativeInstancingMaxDist);
+                _native.SetShadowCastMaxDist(EnvStreamingConfig.ShadowCastMaxDist);
             }
 #endif
 
@@ -176,7 +180,13 @@ namespace Game
 
 #if UNITY_ANDROID && !UNITY_EDITOR
                 if (_native != null && !item.SkipNative)
-                    _native.AddPrototype(prefab);
+                {
+                    bool mainCameraOnly = EnvStreamingConfig.ShouldBeMainCameraOnly(
+                        item.Category, item.PrefabName);
+                    bool canCastShadows = EnvStreamingConfig.CanItemCastShadows(
+                        item.Category, item.PrefabName);
+                    _native.AddPrototype(prefab, mainCameraOnly, canCastShadows);
+                }
 #endif
 
                 GameObject instance = Instantiate(prefab, item.Parent, false);
@@ -266,6 +276,10 @@ namespace Game
                     if (_despawnQueued.Add(i))
                         _despawnQueue.Add(i);
                 }
+                else if (item.ShadowCasters != null && UpdateShadowRange(ref item, distSq))
+                {
+                    _items[i] = item;
+                }
             }
 
             // _evalCursor 轮询入队顺序与距离无关；按距离升序，保证 StreamLoop 排出时"近先远后"。
@@ -349,6 +363,17 @@ namespace Game
                 EnvRockColliders.Ensure(instance, item.PrefabName);
             if (EnvStreamingConfig.IsBridgeCategory(item.Category))
                 EnvBridgePillarFit.Ensure(instance);
+            // Small rocks (ShiTou + !IsLargeRockPrefab) skip native instancing and
+            // would otherwise be picked up by the planar mirror camera. Flag them
+            // onto the ReflectionSkip layer at spawn time so the mirror cull
+            // mask (<see cref="OilWaterLayers.PlanarReflectionCullingMask"/>) drops
+            // them. Big landmark rocks (Cliff / Cave / Ramp / Spike / Large) keep
+            // their default layer and remain visible in the mirror.
+            if (EnvStreamingConfig.IsRockCategory(item.Category) &&
+                EnvStreamingConfig.IsSmallRockForFarCull(item.PrefabName))
+            {
+                EnvStreamerReflectionSkip.Apply(instance);
+            }
             if (item.FarField)
                 EnvLandmarkColliders.Ensure(instance, item.PrefabName);
             _colliderLod?.Register(instance, pos);
@@ -358,7 +383,11 @@ namespace Game
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!item.SkipNative && _native != null)
             {
-                proto = _native.AddPrototype(prefab);
+                bool mainCameraOnly = EnvStreamingConfig.ShouldBeMainCameraOnly(
+                    item.Category, item.PrefabName);
+                bool canCastShadows = EnvStreamingConfig.CanItemCastShadows(
+                    item.Category, item.PrefabName);
+                proto = _native.AddPrototype(prefab, mainCameraOnly, canCastShadows);
                 if (proto >= 0 && _native.TryAddInstance(instance, proto))
                     inNative = true;
             }
@@ -368,6 +397,19 @@ namespace Game
             item.State = StateVisible;
             item.ProtoIndex = proto;
             item.InNative = inNative;
+            item.ShadowCasters = CaptureShadowCasters(instance, item);
+            if (item.ShadowCasters != null)
+            {
+                bool cast = DistSqToFocus(item.Pos) <=
+                    EnvStreamingConfig.ShadowCastMaxDist * EnvStreamingConfig.ShadowCastMaxDist;
+                SetShadowCasting(item.ShadowCasters, cast);
+                item.CastingShadows = cast;
+            }
+            else
+            {
+                item.CastingShadows = false;
+            }
+
             _items[index] = item;
             _spawnedCount++;
         }
@@ -394,8 +436,87 @@ namespace Game
             item.State = StateHidden;
             item.InNative = false;
             item.ProtoIndex = -1;
+            item.ShadowCasters = null;
+            item.CastingShadows = false;
             _items[index] = item;
             _spawnedCount = Mathf.Max(0, _spawnedCount - 1);
+        }
+
+        static bool NeverCastsShadows(Item item)
+        {
+            return EnvGroundFit.IsFlatGroundCard(item.PrefabName)
+                || item.FarField
+                || EnvStreamingConfig.IsSmallTreeCategory(item.Category)
+                || EnvStreamingConfig.IsSmallVegCategory(item.Category)
+                || EnvStreamingConfig.IsClutterCategory(item.Category);
+        }
+
+        static Renderer[] CaptureShadowCasters(GameObject instance, Item item)
+        {
+            if (instance == null || NeverCastsShadows(item))
+                return null;
+
+            Renderer[] all = instance.GetComponentsInChildren<Renderer>(true);
+            int count = 0;
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null && all[i].shadowCastingMode != ShadowCastingMode.Off)
+                    count++;
+            }
+
+            if (count == 0)
+                return null;
+
+            var casters = new Renderer[count];
+            int write = 0;
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null && all[i].shadowCastingMode != ShadowCastingMode.Off)
+                    casters[write++] = all[i];
+            }
+
+            return casters;
+        }
+
+        float DistSqToFocus(Vector3 pos)
+        {
+            Vector3 focus = _focus != null ? _focus.position : pos;
+            float dx = pos.x - focus.x;
+            float dz = pos.z - focus.z;
+            return dx * dx + dz * dz;
+        }
+
+        static void SetShadowCasting(Renderer[] casters, bool on)
+        {
+            ShadowCastingMode mode = on ? ShadowCastingMode.On : ShadowCastingMode.Off;
+            for (int i = 0; i < casters.Length; i++)
+            {
+                Renderer renderer = casters[i];
+                if (renderer != null && renderer.shadowCastingMode != mode)
+                    renderer.shadowCastingMode = mode;
+            }
+        }
+
+        /// <summary>大于 26 米关，小于 22 米开；中间保持当前状态。</summary>
+        static bool UpdateShadowRange(ref Item item, float distSq)
+        {
+            float max = EnvStreamingConfig.ShadowCastMaxDist;
+            float restore = EnvStreamingConfig.ShadowCastRestoreDist;
+            if (item.CastingShadows && distSq > max * max)
+            {
+                SetShadowCasting(item.ShadowCasters, false);
+                item.CastingShadows = false;
+                return true;
+            }
+
+            if (!item.CastingShadows && distSq < restore * restore)
+            {
+                SetShadowCasting(item.ShadowCasters, true);
+                item.CastingShadows = true;
+                return true;
+            }
+
+            return false;
         }
 
         IEnumerator LoadPrefab(string location, string editorPath, System.Action<GameObject> onDone)

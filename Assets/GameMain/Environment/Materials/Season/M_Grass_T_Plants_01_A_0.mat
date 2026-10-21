@@ -13,10 +13,11 @@ Material:
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
   - _CLIPPING
-  - _INTERNAL_EDGE_ON
   - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
-  m_InvalidKeywords: []
+  m_InvalidKeywords:
+  - _INTERNAL_EDGE_ON
+  - _OILFOLIAGE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -30,6 +31,10 @@ Material:
     m_TexEnvs:
     - _BaseMap:
         m_Texture: {fileID: 2800000, guid: 70aa4e3134d794053b6cd76f75307d37, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _CanvasMap:
@@ -54,12 +59,16 @@ Material:
     - _Canvas: 0
     - _CanvasStrength: 0.1
     - _Clipping: 1
-    - _Cull: 2
+    - _Cull: 0
     - _Cutoff: 0.5
     - _DstBlend: 0
+    - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
     - _GradientAmount: 0.3
     - _InternalEdge: 1
+    - _NormalStrength: 0.85
+    - _OilCrossBillboard: 0
+    - _OilFoliage: 1
     - _Outline: 0
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5
@@ -75,13 +84,14 @@ Material:
     - _ShadowLift: 0.95
     - _ShadowWobble: 0.45
     - _Shadows: 1
+    - _Smoothness: 0
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
     - _WindScale: 1
     - _WindSpeed: 0.3
     - _ZWrite: 1
     m_Colors:
-    - _AmbientColor: {r: 0.5333333, g: 0.6627451, b: 0.4196078, a: 1}
+    - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _BottomColor: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
@@ -89,6 +99,7 @@ Material:
     - _OutlineColor: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
     - _ShadowTint: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
     - _ShadowWarm: {r: 0.6588235, g: 0.7490196, b: 0.4705882, a: 1}
+    - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
     - _SpecularColor: {r: 0.6588235, g: 0.7490196, b: 0.4705882, a: 1}
     - _TopColor: {r: 0.6588235, g: 0.7490196, b: 0.4705882, a: 1}
     - _WindStrength: {r: 0.2, g: 0, b: 0.2, a: 0}

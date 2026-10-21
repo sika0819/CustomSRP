@@ -2,9 +2,9 @@ Shader "CustomSRP/OilRiverNPR"
 {
     Properties
     {
-        _BaseColor ("Deep", Color) = (0.32, 0.48, 0.68, 0.88)
-        _ShallowColor ("Shallow", Color) = (0.55, 0.62, 0.48, 0.72)
-        _IntersectionColor ("Shore Edge", Color) = (0.94, 0.97, 1.0, 0.95)
+        _BaseColor ("Deep", Color) = (0.18, 0.30, 0.46, 0.92)
+        _ShallowColor ("Shallow", Color) = (0.32, 0.40, 0.34, 0.82)
+        _IntersectionColor ("Shore Edge", Color) = (0.78, 0.84, 0.86, 0.95)
 
         // 对齐 Boluo Mobile/Ocean 平躺河：FlowUvMode=MeshUV，FallSheet=0。
         _MeshFlowScale ("Mesh Flow Scale (m per UV)", Vector) = (50, -100, 0, 0)
@@ -32,18 +32,14 @@ Shader "CustomSRP/OilRiverNPR"
         _IntersectionClipping ("Shore Clip", Range(0, 1)) = 0.2
         _IntersectionDistortion ("Intersection Distort", Float) = 0.12
         _ShoreSteep ("Shore Steep Max Ny", Range(0.2, 0.98)) = 0.92
-        _AlbedoBoost ("Albedo Boost", Range(0.6, 2)) = 1.08
+        _AlbedoBoost ("Albedo Boost", Range(0.6, 2)) = 0.85
 
         _ShadeSteps ("Shade Steps", Range(2, 8)) = 3
-        _ShadeLift ("Shade Lift", Range(0, 1)) = 0.52
-        _ShadowLift ("Shadow Lift", Range(0, 1.5)) = 1.05
-        _ShadowTint ("Shadow Cool", Color) = (0.42, 0.48, 0.62, 1)
-        _ShadowWarm ("Shadow Warm", Color) = (0.72, 0.55, 0.38, 1)
-        _ShadowWobble ("Shadow Brush Edge", Range(0, 1)) = 0.48
-        _SpecularColor ("Specular", Color) = (1.0, 0.93, 0.62, 1)
+        _SpecularColor ("Specular", Color) = (0.78, 0.74, 0.52, 1)
         _SpecularThreshold ("Specular Threshold", Range(0, 1)) = 0.84
         _SpecularBoost ("Sun Glint Boost", Range(0, 2)) = 0.55
-        _AmbientColor ("Ambient", Color) = (0.72, 0.76, 0.82, 1)
+        _AmbientColor ("Ambient", Color) = (0.48, 0.54, 0.62, 1)
+        _ReflectStrength ("Reflection Glaze", Range(0, 1)) = 1
 
         [Toggle(_PREMULTIPLY_ALPHA)] _PremulAlpha ("Premultiply Alpha", Float) = 1
         [Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Src Blend", Float) = 1

@@ -1,0 +1,28 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2149171764
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 3389ad582a6a6fdc8baa5eadc9cdbc1b
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1cfddeea06ce0ec573e0d0ec81ebe20e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 36e4a380d1d5cde262a62b222fda7d3b
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/FX/UnityFire/Textures/color_texture.jpeg
+- Assets/GameMain/Environment/FX/UnityFire/Textures/base.png
+- Assets/GameMain/Environment/FX/UnityFire/Textures/noise2.png
+- Assets/GameMain/Environment/FX/UnityFire/Textures/linelerp.jpeg
+- Assets/GameMain/Environment/FX/UnityFire/Textures/blue_color_texture.jpeg
+- Assets/GameMain/Environment/FX/UnityFire/Textures/MineFireBase.png
+- Assets/GameMain/Environment/FX/UnityFire/Textures/r.jpeg
+- Assets/GameMain/Environment/FX/UnityFire/Textures/noise.jpeg
+Dependencies: []

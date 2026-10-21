@@ -1,0 +1,40 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 4032591531
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: e46ef0a55711097576f469d71092dc46
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 2b23f99aacebc9962b687875d4325254
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 72080db398fdb9046e132a34ee73ade0
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 64
+  Script: {instanceID: 0}
+- Class: 65
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/JianZhu/rpgpp_ag_building_closed_03.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_houseextracted.bundle

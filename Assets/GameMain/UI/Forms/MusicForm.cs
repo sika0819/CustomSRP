@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using Game.BoluoApi;
 using Game.BoluoApi.Music;
 using UnityEngine;
@@ -13,14 +12,6 @@ namespace Game
     public class MusicForm : GameFormLogic
     {
         protected override bool SlidesUpFromBottom => true;
-
-        // -----------------------------------------------------------------------
-        // Persistence keys
-        // -----------------------------------------------------------------------
-
-        /// <summary>Format: "m:{AlbumName}|{MusicName}" — case-insensitive set.</summary>
-        static readonly HashSet<string> _heardBanks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        const string HeardMarkerFile = "music_heard.dat";
 
         // -----------------------------------------------------------------------
         // Runtime state
@@ -72,6 +63,8 @@ namespace Game
         float _ignoreProgrammaticUntil;
         VisualElement _hintWindows;
         Label _hintLabel;
+        /// <summary>「全部歌曲N首」— TextElement only; Label :hover washes grey to white.</summary>
+        TextElement _title;
 
         VisualElement _albumContainer;
         VisualElement _albumContent;
@@ -81,6 +74,10 @@ namespace Game
         readonly List<TextElement> _albumLabels = new List<TextElement>();
         readonly List<EventCallback<ClickEvent>> _albumClicks = new List<EventCallback<ClickEvent>>();
         static readonly Color AlbumTextColor = new Color(24f / 255f, 24f / 255f, 25f / 255f, 1f);
+        // Grey subtitle under the album strip — must stay readable on the white card.
+        static readonly Color TitleTextColor = new Color(135f / 255f, 135f / 255f, 145f / 255f, 1f);
+        static readonly Color TrackTextColor = new Color(0.094f, 0.094f, 0.098f, 1f);
+        static readonly Color TrackPlayingColor = new Color(0f, 0.639f, 0.459f, 1f);
         VisualElement _modeIcon;
         float _dragStartX;
         float _dragStartY;
@@ -109,14 +106,17 @@ namespace Game
         {
             base.OnOpen(userData);
 
-            // Load heard markers from disk.
-            LoadHeardMarkers();
+            DownloadedUnplayedManager.EnsureLoaded();
 
             // Cache frequently used elements.
             _hintWindows = Root.Q("hintwindows");
             _hintLabel = Root.Q<Label>("labeltmp");
             if (_hintWindows != null)
                 _hintWindows.style.opacity = 0f;
+
+            // Force TextElement title — pooled forms may still carry a Label from an
+            // older UXML, and slide-up under the cursor re-triggers :hover → white.
+            EnsureTitleElement();
 
             // Album strip: drag with center snap (boundary stop, no wrap).
             _albumContainer = Root.Q("huadong");
@@ -144,6 +144,11 @@ namespace Game
                 MusicCatalog.OnCatalogReady += OnCatalogReady;
 
             BindScrollbarReveal();
+
+            // Slide-up lands the card under the pointer; re-lock colours after the
+            // animation so a stale :hover resolve cannot leave white text.
+            Root.schedule.Execute(RefreshTitle).StartingIn(50);
+            Root.schedule.Execute(RefreshTitle).StartingIn(360);
         }
 
         public override void OnClose(bool isShutdown, object userData)
@@ -155,10 +160,7 @@ namespace Game
             UnbindScrollbarReveal();
             UnbindAlbumDrag();
             ClearAlbumClicks();
-
-            // Persist heard markers.
-            SaveHeardMarkers();
-
+            _title = null;
             base.OnClose(isShutdown, userData);
         }
 
@@ -171,61 +173,13 @@ namespace Game
             _albumClicks.Clear();
         }
 
-        // -----------------------------------------------------------------------
-        // Heard markers persistence
-        // -----------------------------------------------------------------------
+        static void MarkHeard(string albumName, string musicName) =>
+            DownloadedUnplayedManager.MarkPlayed(DownloadedUnplayedManager.MusicKey(albumName, musicName));
 
-        static string HeardMarkerPath =>
-            Path.Combine(Application.persistentDataPath, HeardMarkerFile);
-
-        static void LoadHeardMarkers()
-        {
-            _heardBanks.Clear();
-            string path = HeardMarkerPath;
-            if (!File.Exists(path))
-                return;
-            try
-            {
-                foreach (var raw in File.ReadAllLines(path))
-                {
-                    if (!string.IsNullOrWhiteSpace(raw))
-                        _heardBanks.Add(raw.Trim());
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning($"[MusicForm] LoadHeardMarkers failed: {ex.Message}");
-            }
-        }
-
-        static void SaveHeardMarkers()
-        {
-            try
-            {
-                string dir = Path.GetDirectoryName(HeardMarkerPath);
-                if (!string.IsNullOrEmpty(dir))
-                    Directory.CreateDirectory(dir);
-                var lines = _heardBanks.ToArray();
-                Array.Sort(lines, StringComparer.OrdinalIgnoreCase);
-                File.WriteAllLines(HeardMarkerPath, lines);
-            }
-            catch (Exception ex)
-            {
-                Log.Warning($"[MusicForm] SaveHeardMarkers failed: {ex.Message}");
-            }
-        }
-
-        /// <summary>Mark a track as heard (red-dot suppressed).</summary>
-        static void MarkHeard(string albumName, string musicName)
-        {
-            _heardBanks.Add($"m:{albumName}|{musicName}");
-        }
-
-        /// <summary>Returns true if this track has been heard before.</summary>
-        static bool HasHeard(string albumName, string musicName)
-        {
-            return _heardBanks.Contains($"m:{albumName}|{musicName}");
-        }
+        /// <summary>True when red-dot should show (unplayed + within 24h first-show).</summary>
+        static bool ShouldShowRedDot(string albumName, string musicName) =>
+            DownloadedUnplayedManager.ShouldShowRedDot(
+                DownloadedUnplayedManager.MusicKey(albumName, musicName));
 
         // -----------------------------------------------------------------------
         // Catalog ready callback
@@ -296,22 +250,59 @@ namespace Game
             }).StartingIn(16);
         }
 
+        /// <summary>
+        /// Replace a pooled <see cref="Label"/> title with <see cref="TextElement"/> so
+        /// Unity's default <c>.unity-label:hover</c> cannot wash grey text to white.
+        /// </summary>
+        void EnsureTitleElement()
+        {
+            if (Root == null)
+                return;
+
+            VisualElement existing = Root.Q("title");
+            if (existing is TextElement te && existing is not Label)
+            {
+                _title = te;
+                _title.pickingMode = PickingMode.Ignore;
+                _title.AddToClassList("game-music-form__title");
+                _title.style.color = TitleTextColor;
+                return;
+            }
+
+            VisualElement parent = existing?.parent ?? Root.Q("musicDialogkapian");
+            if (parent == null)
+                return;
+
+            int index = existing != null ? parent.IndexOf(existing) : parent.childCount;
+            existing?.RemoveFromHierarchy();
+
+            _title = new TextElement { name = "title" };
+            _title.AddToClassList("game-music-form__title");
+            _title.pickingMode = PickingMode.Ignore;
+            _title.style.color = TitleTextColor;
+            parent.Insert(Mathf.Clamp(index, 0, parent.childCount), _title);
+        }
+
         void RefreshTitle()
         {
-            Label title = Root.Q<Label>("title");
-            if (title == null)
+            if (_title == null || _title.panel == null)
+                EnsureTitleElement();
+            if (_title == null)
                 return;
+
+            _title.pickingMode = PickingMode.Ignore;
+            _title.style.color = TitleTextColor;
 
             if (!MusicCatalog.IsReady)
             {
-                title.text = "加载中...";
+                _title.text = "加载中...";
                 return;
             }
 
             // Per InGameYinYueView.RefreshList: title reports the size of the
             // currently-visible album, not the whole catalog sum.
             int count = MusicCatalog.GetTracks(_centerAlbum).Count;
-            title.text = $"全部歌曲{count}首";
+            _title.text = $"全部歌曲{count}首";
         }
 
         void RefreshAlbumStrip()
@@ -334,16 +325,6 @@ namespace Game
                 label.AddToClassList(AlbumLabelClass);
                 label.pickingMode = PickingMode.Position;
                 label.style.color = AlbumTextColor;
-                EventCallback<ClickEvent> click = evt =>
-                {
-                    // Click switches only when it was not a drag.
-                    if (_isDragging)
-                        return;
-                    if (evt.currentTarget is TextElement tapped && tapped.userData is int logical)
-                        OnAlbumClicked(logical);
-                };
-                label.RegisterCallback(click);
-                _albumClicks.Add(click);
                 _albumContent.Add(label);
                 _albumLabels.Add(label);
             }
@@ -358,6 +339,23 @@ namespace Game
                 }
                 _albumLabels.RemoveAt(last);
                 stale?.RemoveFromHierarchy();
+            }
+
+            // Forms are pooled: OnClose clears clicks but keeps labels. Re-bind
+            // any slots that lost their callback so reopen stays clickable.
+            while (_albumClicks.Count < _albumLabels.Count)
+            {
+                int slot = _albumClicks.Count;
+                TextElement label = _albumLabels[slot];
+                EventCallback<ClickEvent> click = evt =>
+                {
+                    if (_isDragging)
+                        return;
+                    if (evt.currentTarget is TextElement tapped && tapped.userData is int logical)
+                        OnAlbumClicked(logical);
+                };
+                label?.RegisterCallback(click);
+                _albumClicks.Add(click);
             }
 
             // Highlight: during drag use live slot under center; otherwise committed album.
@@ -467,10 +465,14 @@ namespace Game
             _list.fixedItemHeight = 144;
             _list.virtualizationMethod = CollectionVirtualizationMethod.FixedHeight;
             _list.selectionType = SelectionType.None;
-            _list.itemsSource = _trackNames;
             _list.makeItem = MakeItem;
             _list.bindItem = BindItem;
             _list.unbindItem = UnbindItem;
+            // Drop any recycled Label rows from a previous open (pooled form) so
+            // MakeItem's TextElement path is what actually binds.
+            _list.itemsSource = null;
+            _list.Rebuild();
+            _list.itemsSource = _trackNames;
             _list.Rebuild();
 
             // Keep the now-playing row in view when the open album matches playback.
@@ -741,18 +743,43 @@ namespace Game
 
         void ShowModeTip(string text)
         {
+            ShowHintToast(text, (long)((ModeTipSeconds + ModeTipFadeSeconds) * 1000f));
+        }
+
+        void ShowHintToast(string text, long hideAfterMs)
+        {
             if (_hintWindows == null)
                 return;
             if (_hintLabel != null)
-                _hintLabel.text = text;
+                _hintLabel.text = text ?? string.Empty;
+
+            // TipWindows sizing: TipWindow.ShowTip pad + max width.
+            if (_hintLabel != null)
+            {
+                _hintLabel.style.whiteSpace = WhiteSpace.NoWrap;
+                float fontSize = _hintLabel.resolvedStyle.fontSize;
+                if (fontSize < 1f)
+                    fontSize = 36f;
+                float textW = (_hintLabel.text != null ? _hintLabel.text.Length : 0) * fontSize * 0.62f;
+                float width = Mathf.Clamp(
+                    textW + UiTipToast.PadHorizontal * 2f,
+                    UiTipToast.MinWidth,
+                    UiTipToast.MaxWidth);
+                _hintWindows.style.width = width;
+                _hintWindows.style.marginLeft = -width * 0.5f;
+                _hintLabel.style.whiteSpace = WhiteSpace.Normal;
+                _hintLabel.style.maxWidth = width - UiTipToast.PadHorizontal * 2f;
+            }
+
             _hintWindows.style.opacity = 1f;
+            _hintWindows.BringToFront();
             _tipHide?.Pause();
             _tipHide = Root.schedule.Execute(() =>
             {
                 if (_hintWindows != null)
                     _hintWindows.style.opacity = 0f;
                 _tipHide = null;
-            }).StartingIn((long)((ModeTipSeconds + ModeTipFadeSeconds) * 1000f));
+            }).StartingIn(hideAfterMs);
         }
 
         // Sprite names for the 3 play modes (yy_danqu / yy_list / yy_suiji).
@@ -916,13 +943,15 @@ namespace Game
             panel.style.left = 85; panel.style.top = 0; panel.style.bottom = 0; panel.style.right = 160;
             panel.pickingMode = PickingMode.Ignore;
 
-            var label = new Label();
+            // TextElement (not Label): ListView rows under the cursor on reopen
+            // would otherwise get .unity-label:hover → white on the white card.
+            var label = new TextElement();
             label.name = "label0";
             label.style.position = Position.Absolute;
             label.style.left = 0; label.style.top = 0; label.style.bottom = 0; label.style.right = 0;
             label.style.unityTextAlign = TextAnchor.MiddleLeft;
             label.style.fontSize = 45;
-            label.style.color = new Color(0.094f, 0.094f, 0.098f, 1f);
+            label.style.color = TrackTextColor;
             label.style.whiteSpace = WhiteSpace.NoWrap;
             label.style.overflow = Overflow.Hidden;
             label.pickingMode = PickingMode.Ignore;
@@ -957,7 +986,7 @@ namespace Game
 
         void BindItem(VisualElement element, int index)
         {
-            Label title = element.Q<Label>("label0");
+            TextElement title = element.Q<TextElement>("label0");
             if (title != null && index >= 0 && index < _trackNames.Count)
                 title.text = _trackNames[index];
 
@@ -977,7 +1006,7 @@ namespace Game
             {
                 ShowIcon(element, "playinganima");
                 if (title != null)
-                    title.style.color = new Color(0, 0.639f, 0.459f, 1f);
+                    title.style.color = TrackPlayingColor;
             }
 
             // Unregister previous bind callback before attaching a new one.
@@ -1032,9 +1061,10 @@ namespace Game
             string bankName = trackData.BankName;
 
             // Pending (user clicked, waiting for download to finish).
-            if (_pendingMusic.HasValue
-                && _pendingMusic.Value.album == album
-                && _pendingMusic.Value.track == track)
+            if (PendingDownloadIntent.IsMusicMatch(album, track)
+                || (_pendingMusic.HasValue
+                    && _pendingMusic.Value.album == album
+                    && _pendingMusic.Value.track == track))
             {
                 return MusicItemUiState.Downloading;
             }
@@ -1057,7 +1087,7 @@ namespace Game
             {
                 // Has the user already heard this track?
                 var albumData = MusicCatalog.GetAlbum(album);
-                if (albumData != null && !HasHeard(albumData.Name, trackData.MusicName))
+                if (albumData != null && ShouldShowRedDot(albumData.Name, trackData.MusicName))
                     return MusicItemUiState.Succeeded;
                 return MusicItemUiState.Ready;
             }
@@ -1079,9 +1109,9 @@ namespace Game
             ShowIcon(element, "playinganima", false);
 
             // Reset label colour.
-            Label title = element.Q<Label>("label0");
+            TextElement title = element.Q<TextElement>("label0");
             if (title != null)
-                title.style.color = new Color(0.094f, 0.094f, 0.098f, 1f);
+                title.style.color = TrackTextColor;
 
             switch (state)
             {
@@ -1109,7 +1139,7 @@ namespace Game
                     ShowIcon(element, "playinganima", true);
                     ApplyPlayingFrame(element.Q("playinganima"), _playingFrameIndex);
                     if (title != null)
-                        title.style.color = new Color(0, 0.639f, 0.459f, 1f);
+                        title.style.color = TrackPlayingColor;
                     break;
             }
         }
@@ -1140,6 +1170,7 @@ namespace Game
                 case MusicItemUiState.Ready:
                 case MusicItemUiState.Succeeded:
                     ClearPendingMusic();
+                    PendingDownloadIntent.Clear();
                     // Mark as heard (suppress red dot).
                     var albumData = MusicCatalog.GetAlbum(album);
                     if (albumData != null)
@@ -1166,23 +1197,11 @@ namespace Game
         // -----------------------------------------------------------------------
 
         /// <summary>
-        /// Shows a brief tip message in the hint window.
+        /// Shows a brief tip message in the hint window (TipWindows / UICanvasTip).
         /// </summary>
         void ShowGateTip(string message)
         {
-            if (_hintLabel != null)
-                _hintLabel.text = message;
-            if (_hintWindows != null)
-            {
-                _hintWindows.style.opacity = 1f;
-                _tipHide?.Pause();
-                _tipHide = Root.schedule.Execute(() =>
-                {
-                    if (_hintWindows != null)
-                        _hintWindows.style.opacity = 0f;
-                    _tipHide = null;
-                }).StartingIn(2500);
-            }
+            ShowHintToast(message, 2500);
         }
 
         /// <summary>
@@ -1235,12 +1254,14 @@ namespace Game
 
         void DoDownload(int album, int track, string bankName)
         {
-            // Register pending intent.
+            // Shared with PresetForm — mutual overwrite (Boluo PendingDownloadIntent).
             _pendingMusic = (album, track);
+            PendingDownloadIntent.SetMusic(album, track);
 
             // Initiate priority download.
             if (PresetBankCatalog.TryGet(bankName, out var remote))
             {
+                IslandPlayerPosSave.PushSaveSuppress();
                 BankDownloader.DownloadBank(
                     remote,
                     loadIntoEngine: true,
@@ -1258,6 +1279,7 @@ namespace Game
         /// <summary>Called when the pending bank download completes (success or failure).</summary>
         void OnBankDownloadDone(BankDownloadItem item)
         {
+            IslandPlayerPosSave.PopSaveSuppress();
             if (item == null || string.IsNullOrEmpty(item.BankName))
             {
                 ClearPendingMusic();
@@ -1265,26 +1287,27 @@ namespace Game
                 return;
             }
 
-            bool wasPending = false;
-            if (_pendingMusic.HasValue)
+            bool wasPending = PendingDownloadIntent.IsMusicMatch(
+                _pendingMusic?.album ?? -1,
+                _pendingMusic?.track ?? -1);
+            if (!wasPending && _pendingMusic.HasValue)
             {
                 var pending = _pendingMusic.Value;
                 var tracks = MusicCatalog.GetTracks(pending.album);
                 if (pending.track >= 0 && pending.track < tracks.Count)
                 {
                     string pendingBank = tracks[pending.track].BankName;
-                    wasPending = string.Equals(pendingBank, item.BankName, StringComparison.OrdinalIgnoreCase);
+                    wasPending = string.Equals(pendingBank, item.BankName, StringComparison.OrdinalIgnoreCase)
+                        && PendingDownloadIntent.Current == PendingDownloadIntent.Kind.Music;
                 }
             }
 
-            if (wasPending)
+            if (wasPending && PendingDownloadIntent.Current == PendingDownloadIntent.Kind.Music)
             {
+                int album = PendingDownloadIntent.MusicAlbum;
+                int track = PendingDownloadIntent.MusicTrack;
                 if (item.State == BankDownloadState.Ready || item.State == BankDownloadState.Skipped)
-                {
-                    // Download succeeded — auto-play.
-                    GameEntry.Music?.PlayIndex(_pendingMusic.Value.album, _pendingMusic.Value.track);
-                }
-                // Download failed — do not auto-play; leave the Failed state visible.
+                    GameEntry.Music?.PlayIndex(album, track);
                 ClearPendingMusic();
             }
 
@@ -1294,6 +1317,8 @@ namespace Game
         void ClearPendingMusic()
         {
             _pendingMusic = null;
+            if (PendingDownloadIntent.Current == PendingDownloadIntent.Kind.Music)
+                PendingDownloadIntent.Clear();
         }
 
         /// <summary>

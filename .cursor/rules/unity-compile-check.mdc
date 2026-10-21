@@ -1,0 +1,142 @@
+---
+description: 改完 Unity 代码（.cs/.shader/.hlsl/.compute/.cginc）必须验证 Unity 能编过。优先级：Unity Editor 已开 + MCP for Unity 已连 → 走 MCP 看 Console；Editor 已开但 MCP 没连 → 先开 MCP（Shift+Cmd+M），启动后再走 MCP；都不行才退 batchmode 编译。
+globs: ["Assets/**/*.cs", "Assets/**/*.shader", "Assets/**/*.hlsl", "Assets/**/*.compute", "Assets/**/*.cginc"]
+alwaysApply: true
+---
+
+# 改完代码必须验证 Unity 编译
+
+本工程 Unity `6000.6.4f1`（Hub 安装路径 `/Applications/Unity/Hub/Editor/6000.6.4f1`）。SRP / GameMain / Shaders / 编辑器扩展改动后，**必须**确认 Unity 整工程能编过，否则不要报"完成"。
+
+## 硬规则
+
+- **禁止**在没跑过 Unity 编译验证的情况下宣称代码改完。
+- 改动跨程序集 / 跨 Shader / 跨 `.asmdef` 引用关系时尤其要跑——这些改动 Editor 体感不到，运行时直接炸。
+- 任何用到的 API 必须是工程当前 Unity 版本里**仍然存在**的；查不到或不确定时先用 `WebSearch` / Unity 文档确认，再写进代码。
+
+## 验证路径选择（按优先级）
+
+### 路径 A — Unity Editor 在跑 + MCP for Unity 已连（**首选**）
+
+工程已装 `com.coplaydev.unity-mcp`（`Packages/MCPForUnity`）。每次改代码后，按下面的顺序操作：
+
+1. **触发刷新**：让 Unity 把磁盘改动捡起来重编译。
+   ```text
+   mcp__MCPForUnity__refresh_unity(mode="force", scope="all")
+   ```
+   等几秒让 AssetDatabase / 重编队列跑完。
+
+2. **读 Console**：拿到所有 CS / Shader 报错和告警。
+   ```text
+   mcp__MCPForUnity__read_console(
+       action="get",
+       types=["error", "warning"],
+       format="detailed",
+       includeStacktrace=false
+   )
+   ```
+   判定：
+   - `error` 数组必须空才算过；任何一条 `error CS` / `Shader error` 都视为未通过。
+   - `warning` 看是不是自己新引入的——已有的项目告警忽略。
+
+3. **如需精确的 Roslyn 校验**（不依赖 Unity 重编）：
+   ```text
+   mcp__MCPForUnity__validate_script(
+       path="Assets/CustomSRP/Runtime/OilDistanceFog.cs",
+       level="standard"
+   )
+   ```
+
+4. **如需确认整个工程的整体编译状态**（不是单文件）：
+   ```text
+   mcp__MCPForUnity__get_editor_state()
+   ```
+   看返回里的 `isCompiling` / `compileErrors` 字段；`isCompiling=false` 且无 compileErrors 才算稳态。
+
+为什么首选这条：Unity 已经开着了，磁盘写完 Editor 自己就重编，秒级拿到 Console；省掉 batchmode 启停 Unity 的 30 秒～几分钟。
+
+### 路径 B — MCP 不可用 / Editor 没开 → batchmode 退路
+
+工程根目录 `/Users/sika/Desktop/code/BoluoProjectNew/CustomSRP`。
+
+```bash
+/Applications/Unity/Hub/Editor/6000.6.4f1/Unity.app/Contents/MacOS/Unity \
+  -batchmode -nographics -quit \
+  -projectPath /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP \
+  -logFile /tmp/unity_compile_check.log \
+  -ignoreCompilerErrors 2>/dev/null; echo "EXIT=$?"
+```
+
+判定：
+- 日志含 `Compilation succeeded` 且**不含** `error CS` / `error SHADER` / `Shader compilation failed`。
+- 退出码 `0` ≠ 编译成功——必须 grep 日志。
+
+一键 grep：
+
+```bash
+grep -E "error CS|error SHADER|Shader compilation failed|FATAL|Compilation succeeded" /tmp/unity_compile_check.log
+```
+
+## MCP 是否可用的判断
+
+按这个顺序判定，命中即用。每一步都先重探测一次 `GetMcpTools(server="MCPForUnity")` / `CallMcpTool(server="MCPForUnity", toolName="get_editor_state")`，确认前一步是否生效，不要看到一次失败就立刻跳到下一步。
+
+1. **`CallMcpTool(server="MCPForUnity", toolName="get_editor_state")` 能成功** → MCP 活着，走路径 A。
+2. **`GetMcpTools(server="MCPForUnity")` 返回非空 `tools` 数组** → 工具列表存在但本会话没连上；先走下方"**先尝试启动 MCP**"再重试，仍失败则告诉用户"Unity Editor 没连上 MCP，请确认 Editor 是前台窗口"，再降级到路径 B。
+3. **`GetMcpTools(server="MCPForUnity")` 返回空** → MCP 完全没注册到这个 Cursor 上下文；只要 Unity Editor 进程在跑，就走下方"**先尝试启动 MCP**"；Editor 都没开就直接路径 B（步骤 4）。
+4. **Unity Editor 进程都不在跑**（`pgrep -lf "Unity.app.*-projectpath.*CustomSRP"` 为空）→ 必须路径 B；路径 A 没意义，**不要**单独为连 MCP 去启 Unity。
+
+### 先尝试启动 MCP（Unity Editor 在跑但 MCP 没连时，**强制先走这一步**）
+
+只要第 2 / 3 步命中且 Unity Editor 进程仍在跑，**禁止**直接跳到路径 B；必须按下面顺序启动 MCP for Unity 并重连：
+
+1. **打开 MCP 窗口**（macOS）：
+   - 优先用快捷键：**Shift+Cmd+M**（菜单 `Window/MCP For Unity/Toggle MCP Window`，Unity 修饰键格式 `%#m`）。
+   - Agent 可靠的话也可以走 `Window/MCP For Unity → Toggle MCP Window` 菜单。
+2. **窗口里点 `Start Local Server`**（HTTP / stdio 任一），等状态变 `Connected` / `Running`。
+3. **Advanced 里把 `AutoStartOnLoad` 勾上**（下次开 Editor 不用再手动启）。
+4. **重新探测**：
+   - `GetMcpTools(server="MCPForUnity")` 现在应当非空；
+   - 仍为空就 `CallMcpTool(server="MCPForUnity", toolName="get_editor_state")` 试一次（部分会话只在调用时才注入）。
+5. **能连上** → 立刻走路径 A：`refresh_unity` → `read_console` → `get_editor_state` 三连。
+
+> ⚠️ Agent 不应静默退到 batchmode。如果**自动启动 MCP 不可靠**（GUI 点击拿不到、键盘事件被 Editor 吞、`Start Local Server` 按下没反应），必须立刻把控制权交回用户：
+>
+> > "我无法可靠地把 Unity 切到 MCP for Unity。请在打开的 Unity Editor 里按 **Shift+Cmd+M** 显示 MCP 窗口，确认 `Start Local Server` 已启动并显示 `Connected`，然后告诉我 `好了` / `继续`。"
+>
+> 等用户回复后再继续验证；**不要**在用户确认前自己悄悄跑 batchmode。
+
+只有下面三种情况才允许降级到路径 B：
+
+- (a) MCP 启动窗口确实打不开 / `Start Local Server` 报明确错误并人工确认无救；
+- (b) 用户明确说"先跳过 MCP，直接 batchmode"；
+- (c) Unity Editor 进程都不在跑（步骤 4）。
+
+## 踩坑清单（这个工程）
+
+改完先自查这几条，大概率能省一次 MCP / batchmode：
+
+- **CS0619 GetInstanceID** → 改 `GetEntityId()`（见 `unity6-entity-id.mdc`，git hook 已自动挡）。
+- **CS0246 找不到类型 / 命名空间** → 大概率忘了 `using`；GameMain 跨目录引用走 `Game.asmdef`，Editor 跨程序集引用走 `Game.Editor.asmdef`，别把 Runtime 代码 `using` 进 Editor 程序集。
+- **CS0103 / CS0117 API 不存在** → Unity 版本 / 包版本不匹配；先看 `Packages/manifest.json` 和 `ProjectSettings/ProjectVersion.txt`。
+- **CS0122 不可访问** → 检查 `internal` / `private` 修饰符和程序集边界（`.asmdef`）。
+- **CS0535 实现缺失** → 接口签名变了，所有实现要一起改；用 `Grep` 找全部实现点。
+- **CS0411 类型实参无法推断** → 泛型方法推断失败，给显式类型实参。
+- **CS0029 类型转换失败** → `int` ↔ `EntityId`、`HashSet<int>` ↔ `HashSet<EntityId>` 混用是高频坑。
+- **Shader error: undeclared identifier** → HLSL 里 `CBUFFER_START` / `SRP Batcher` 兼容块没起，或 `_CameraBufferSize` 之类 cbuffer 字段没在 `UnityInput.hlsl` 注册。
+- **Shader error: redefinition / duplicate declaration** → `Common.hlsl` / `UnityInput.hlsl` 里同名 `float4 _Foo` 被两处声明。
+- **多次 `Assets/...` 路径找不到** → 检查文件是否在 `.gitignore` 里漏掉了 `*.meta`，缺 meta 的资源会被 Unity 报 GUID 缺失。
+
+## 验证范围
+
+至少覆盖到：
+- 改动的 `.cs` 所在程序集（`CustomSRP.asmdef` / `Game.asmdef` / `Game.Editor.asmdef` / `CustomSRP.Editor.asmdef` 等）。
+- 改动的 `.shader` / `.hlsl` 涉及的所有变体（光照 / 雾 / 阴影 keyword 组合）。
+- 任何被改动的 ScriptableObject / Material 字段类型（影响 `.asset` 反序列化）。
+
+## 完成判定
+
+- **首选路径**：`refresh_unity` → `read_console` 返回的 `error` 数组为空，**且** `get_editor_state().isCompiling=false`。
+- **降级路径**：batchmode grep 日志确认无 `error CS` / `error SHADER`。
+- 顺带看一下 `warning` 是不是自己新引入的——已有项目告警忽略。
+- 不要只靠 IDE / Roslyn analyzer 的零报错下结论——Unity 的 `Assets/` 编译流水线有它自己的引用图。

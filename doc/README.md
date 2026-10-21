@@ -1,13 +1,15 @@
 # CustomSRP 文档
 
 路径相对仓库根。Unity：`6000.6.4f1`。  
-场景总表与接线摘要见根目录 [`README.md`](../README.md)。  
+移动端油画管线总览、入口场景与预设示例图见根目录 [`README.md`](../README.md)。  
 跨项目约定：Skill [`.cursor/skills/custom-srp/SKILL.md`](../.cursor/skills/custom-srp/SKILL.md)。
 
 ## 入口
 
 游戏运行起点 [`Assets/GameMain/Scenes/Launch.unity`](../Assets/GameMain/Scenes/Launch.unity) —— `EditorBuildSettings` 第 0 位,`Build And Run` 从这里开始。  
-下表是 SRP 单点验证场景,菜单 `Create*Scene` 生成,只验管线能力,不参与发布。
+油画风格主验：[Oil NPR](oil-npr.md)（`Empty`）、[Terrain](terrain.md)（`MooreaTerrain`）。  
+预设无 UI 截图：菜单 **GameMain → Boluo → 截图 → 各预设 4K 无 UI**（见根 README）。  
+下表其余条目是 SRP 单点验证场景,菜单 `Create*Scene` 生成,只验管线能力,不参与发布。
 
 ## 场景
 

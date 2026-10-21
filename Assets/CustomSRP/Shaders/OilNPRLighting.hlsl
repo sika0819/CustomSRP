@@ -7,19 +7,35 @@
 #include "../ShaderLibrary/Surface.hlsl"
 #include "../ShaderLibrary/Shadows.hlsl"
 #include "../ShaderLibrary/Light.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
 #include "OilPaintNoise.hlsl"
+#include "OilTreeCrossBillboard.hlsl"
 
-// OilSkyboxTime writes the current period fill (环境光 地平/天顶 mix). a>0.5 replaces the material ambient.
+// Real IBL: SH9 directional ambient sampled by surface normal (天顶→地平渐变).
+// Replaces the legacy flat OilPeriodAmbient which ignored the normal.
+// _OilPeriodAmbient (OilSkyboxTime legacy fill) is kept as a global-color fallback
+// for third-party code that still reads it, but Oil NPR now always uses SH.
 float4 _OilPeriodAmbient;
 
-half3 OilPeriodAmbient(half3 materialAmbient)
+half3 OilSampleSHDirectional(half3 n)
 {
-    if (_OilPeriodAmbient.a > 0.5h)
-    {
-        return (half3)_OilPeriodAmbient.rgb;
-    }
+    float4 coefficients[7];
+    coefficients[0] = unity_SHAr;
+    coefficients[1] = unity_SHAg;
+    coefficients[2] = unity_SHAb;
+    coefficients[3] = unity_SHBr;
+    coefficients[4] = unity_SHBg;
+    coefficients[5] = unity_SHBb;
+    coefficients[6] = unity_SHC;
+    return (half3)max(0.0, SampleSH9(coefficients, n));
+}
 
-    return materialAmbient;
+// Returns directional SH ambient keyed to surfaceWS.normal.
+// Weights (0.45 lit / 1.0 foliage / 0.15 rim) are applied at call sites
+// so each lighting region can tune independently.
+half3 OilNPRAmbient(Surface surfaceWS)
+{
+    return OilSampleSHDirectional((half3)surfaceWS.normal);
 }
 
 // Soft poster bands: keep oil masses, feather edges so shadow steps aren't chalk lines.
@@ -159,22 +175,53 @@ half3 OilNPROtherLights(
 #endif
 }
 
+// Port of URP Simple Lit's LightingSpecular (Blinn-Phong).
+// smoothness: 0→2 (very rough), 1→512 (mirror-like).
+// URP Simple Lit uses exp2(10*s+1): 2→2048. We halve the exponent for a softer spec.
+half OilNPRSpecularTerm(half3 N, half3 H, half smoothness)
+{
+    half NdotH = saturate(dot(N, H));
+    // Gentler exponent curve for the oil-paint feel.
+    half shininess = exp2(5.0h * smoothness + 1.0h);
+    return pow(NdotH, shininess);
+}
+
+// Additive Blinn-Phong specular, capped so NPR painterly feel stays dominant.
+half3 OilNPRLightSpecular(
+    half3 lightColor,
+    half3 L,
+    half3 N,
+    half3 V,
+    half3 specColor,
+    half smoothness,
+    half attenuation)
+{
+    if (smoothness < 0.01h || any(specColor <= 0.0h))
+    {
+        return 0.0h;
+    }
+
+    half3 H = normalize(L + V);
+    half spec = OilNPRSpecularTerm(N, H, smoothness);
+    // Clamp specular strength so it doesn't overpower the NPR bands.
+    // The light tint keeps it feeling painted rather than plastic.
+    return lightColor * specColor * spec * attenuation;
+}
+
+// Core lighting with specular support.
 half3 OilNPRLightingEx(
     Surface surfaceWS,
     half3 albedo,
     half3 ambient,
-    half3 shadowTint,
-    half3 shadowWarm,
     half3 specularColor,
     half specularThreshold,
     half shadeSteps,
     half paintRim,
-    half shadowLift,
-    half shadeLift,
     half brush,
     half shadowWobble,
     half forcedAttenuation,
     half quantize,
+    half smoothness,
     float2 screenUV)
 {
     half3 N = (half3)surfaceWS.normal;
@@ -218,9 +265,9 @@ half3 OilNPRLightingEx(
     // Terrain: keep readable contact umbra, slightly lifted so bands don't chalk.
     half lit = halfLambert * lerp(0.22h, 1.0h, attSoft);
 #else
-    half lit = halfLambert * lerp(max(shadeLift, 0.28h), 1.0h, attSoft);
+    // Ocean / River: no cascade shadow → umbra dead code; shadeLift hardcoded 0.28.
+    half lit = halfLambert * lerp(0.28h, 1.0h, attSoft);
 #endif
-    lit += (brush - 0.5h) * shadowWobble * (0.65h / steps);
 #if !defined(OIL_MOBILE_PERF)
     lit += ((half)surfaceWS.dither - 0.5h) * (quantize > 0.001h ? (1.0h / steps) : 0.0h);
 #endif
@@ -237,9 +284,8 @@ half3 OilNPRLightingEx(
 #else
     half3 umbraColor = albedo * half3(0.2h, 0.14h, 0.36h) + half3(0.02h, 0.012h, 0.035h);
 #endif
-    umbraColor = lerp(umbraColor, albedo * shadowTint, 0.35h);
-    umbraColor = lerp(umbraColor, albedo * shadowWarm, 0.15h);
-    umbraColor *= lerp(0.7h, 1.1h, saturate(shadowLift * 0.67h));
+    // Ocean / River: _RECEIVE_SHADOWS=0 → no cascade shadow → umbra never reached.
+    // shadowTint / shadowWarm / shadowLift / shadeLift hardcoded to 0; kept for API compat.
 #if defined(OIL_MOBILE_PERF)
     // One period pull + campfire warm; skip hue/rim/paintRim/ceil.
     half3 lightHue = lightColor / lightPeak;
@@ -248,7 +294,9 @@ half3 OilNPRLightingEx(
     {
         umbraColor = lerp(umbraColor, albedo * half3(0.48h, 0.24h, 0.1h) + other * 0.25h, 0.5h);
     }
-    return lerp(umbraColor, litColor, lit) + other;
+    half3 spec = OilNPRLightSpecular(lightColor, L, N, normalize(_WorldSpaceCameraPos - surfaceWS.position),
+        specularColor, smoothness, attenuation);
+    return lerp(umbraColor, litColor, lit) + other + spec;
 #else
     half3 lightHue = lightColor / lightPeak;
     umbraColor = lerp(umbraColor, albedo * lightHue * 0.2h + lightColor * 0.1h, 0.4h);
@@ -266,15 +314,94 @@ half3 OilNPRLightingEx(
     color += paintRim * ambient * 0.15h;
     half3 ceilC = albedo * (0.85h + saturate(lightPeak) * 0.9h) + lightColor * 0.12h + other;
     color = min(color, ceilC);
+    // Blinn-Phong specular from main directional light.
+    half3 mainSpec = OilNPRLightSpecular(lightColor, L, N, V, specularColor, smoothness, attenuation);
+    color += mainSpec;
     return color;
 #endif
 }
 
+// Boluo EnvFoliage: albedo * (NdotL * mainLight * shadow + SH/ambient).
+// Oil NPR's 0.45 ambient add is drowned by the sun, so leaves stay one green.
+// Ambient is now keyed to surface normal via SH9 (OilNPRAmbient) — zenith→ground gradient.
+half3 OilFoliageLighting(Surface surfaceWS, half3 albedo, half shadeSteps, float2 screenUV)
+{
+    half3 N = normalize((half3)surfaceWS.normal);
+    half3 ambient = OilNPRAmbient(surfaceWS);
+    half3 other = OilNPROtherLights(surfaceWS, albedo, N, shadeSteps, screenUV);
+
+    half3 lightColor = 0.0h;
+    half ndotl = 0.0h;
+    half att = 0.0h;
+    if (GetDirectionalLightCount() > 0)
+    {
+        ShadowData shadowData = GetShadowData(surfaceWS);
+        Light light = GetDirectionalLight(0, surfaceWS, shadowData);
+        lightColor = (half3)light.color;
+        half3 L = (half3)light.direction;
+        ndotl = saturate(dot(N, L));
+        att = (half)light.attenuation;
+    }
+
+    return albedo * (lightColor * ndotl * att + ambient) + other;
+}
+
+// Port of BoluoTreeCrossBillboardShade.
+//
+// Near leaves use OilFoliageLighting (EnvFoliage ambient × albedo). Far cross-card
+// billboards must read the SAME directional ambient so distance fog + tone line up:
+// any divergence shows as a visible seam between near and far trees.
+//
+// The baked daytime atlas is darkened by the directional SH ambient (zenith→ground
+// gradient keyed to the decoded billboard normal). Shadow sampling still goes through
+// the directional light + cascade, matching the near-leaf path.
+half3 OilTreeCrossBillboardShade(
+    half3 albedo,
+    half3 bakedNormalEnc,
+    half normalStrength,
+    Surface surfaceWS)
+{
+    half strength = saturate(normalStrength);
+    half3 bakedN = OilTreeCrossBillboardDecodeWorldNormal(bakedNormalEnc);
+    half3 n = normalize(lerp(half3(0.0h, 1.0h, 0.0h), bakedN, strength));
+
+    // Directional SH ambient keyed to the billboard-derived normal,
+    // so the per-card lit term stays consistent with the rest of the scene.
+    half3 ambient = OilSampleSHDirectional(n);
+
+    half3 other = OilNPROtherLights(surfaceWS, albedo, n, 2.0h, float2(0, 0));
+
+    half3 lightColor = 0.0h;
+    half3 L = half3(0.0h, 1.0h, 0.0h);
+    half attenuation = 1.0h;
+    if (GetDirectionalLightCount() > 0)
+    {
+#if !defined(OIL_MOBILE_PERF)
+        ShadowData shadowData = GetShadowData(surfaceWS);
+        Light light = GetDirectionalLight(0, surfaceWS, shadowData);
+        lightColor = (half3)light.color;
+        L = (half3)light.direction;
+        attenuation = (half)light.attenuation;
+#else
+        DirectionalLightData data = _DirectionalLightData[0];
+        lightColor = (half3)data.color.rgb;
+        L = (half3)data.directionAndMask.xyz;
+#endif
+    }
+
+    // Same lit term as OilFoliageLighting: albedo * (N·L * sun * shadow + ambient).
+    // Near leaves use the same SH sample → far trees match within a fragment.
+    return albedo * (lightColor * saturate(dot(n, L)) * attenuation + ambient) + other;
+}
+
 // Wrapper: sample cascade shadows (forcedAttenuation < 0).
+// shadowTint/shadowWarm/shadowLift/shadeLift: dead code for water (RECEIVE_SHADOWS=0).
+// Kept for terrain/basemap call site API compat.
+// `ambient` is now a no-op — ambient is sampled via OilNPRAmbient(surfaceWS) internally
+// so callers can't accidentally inject a flat color and break the IBL gradient.
 half3 OilNPRLighting(
     Surface surfaceWS,
     half3 albedo,
-    half3 ambient,
     half3 shadowTint,
     half3 shadowWarm,
     half3 specularColor,
@@ -286,15 +413,14 @@ half3 OilNPRLighting(
     half brush,
     half shadowWobble,
     half quantize,
+    half smoothness,
     float2 screenUV)
 {
-    // Always hard-tap cascade shadows (OIL_NPR_HARD_DIRECTIONAL_SHADOW).
-    // OIL_MOBILE_PERF used to force attenuation=1 and wiped tree shadows on terrain —
-    // keep the tap; mobile still skips soft PCF / terrain micro-spec elsewhere.
+    half3 ambient = OilNPRAmbient(surfaceWS);
     return OilNPRLightingEx(
-        surfaceWS, albedo, ambient, shadowTint, shadowWarm, specularColor,
-        specularThreshold, shadeSteps, paintRim, shadowLift, shadeLift,
-        brush, shadowWobble, -1.0h, quantize, screenUV);
+        surfaceWS, albedo, ambient, specularColor,
+        specularThreshold, shadeSteps, paintRim,
+        brush, shadowWobble, -1.0h, quantize, smoothness, screenUV);
 }
 
 #endif

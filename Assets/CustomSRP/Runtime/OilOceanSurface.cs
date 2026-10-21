@@ -3,6 +3,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityGameFramework.Runtime;
+using Game;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -42,6 +43,9 @@ namespace CustomSRP
         public const int MaxSubdivisions = 32;
 
         static readonly int WaveHeightId = Shader.PropertyToID("_OilOceanWaveHeight");
+        static readonly int WindStrengthId = Shader.PropertyToID("_OilOceanWindStrength");
+
+        float _lastWindStrength = float.NaN;
 
         MeshFilter meshFilter;
         Mesh mesh;
@@ -117,6 +121,34 @@ namespace CustomSRP
             }
 
             ApplyWaveHeight();
+            PushWind();
+        }
+
+        void PushWind()
+        {
+            if (!Application.isPlaying)
+                return;
+
+            float wind = GetWeatherWindStrength();
+            if (!float.IsNaN(_lastWindStrength) && Mathf.Abs(_lastWindStrength - wind) < 1e-5f)
+                return;
+            _lastWindStrength = wind;
+            Shader.SetGlobalFloat(WindStrengthId, wind);
+        }
+
+        /// <summary>
+        /// Get wind strength from weather system. Returns 0 when weather is not Wind.
+        /// Safe for editor - only queries WeatherService in play mode.
+        /// </summary>
+        float GetWeatherWindStrength()
+        {
+            if (!Application.isPlaying)
+                return 0f;
+
+            var weather = WeatherService.Ensure();
+            if (weather.Kind != IslandWeatherKind.Wind)
+                return 0f;
+            return weather.Level / 3f;
         }
 
         void ApplyWaveHeight()

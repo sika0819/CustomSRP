@@ -100,12 +100,13 @@ namespace Game.Editor
             },
             new Placement
             {
-                PrefabPath = "Assets/GameMain/Environment/Prefabs/DaoYu1/Common/River_04.prefab",
-                Id = "waterfall_native_River_04",
+                // 听感锚点对齐 WaterfallSplash（与 AmbienceZoneCatalog.AppendNativeRivers 一致）
+                PrefabPath = "Assets/GameMain/Environment/Prefabs/DaoYu1/texiao/WaterfallSplash.prefab",
+                Id = "waterfall_native_WaterfallSplash",
                 Kind = AmbienceEmitterKind.Waterfall,
-                Position = new Vector3(352.2f, 64.2f, 435.9f),
-                Rotation = Quaternion.identity,
-                Scale = Vector3.one,
+                Position = new Vector3(423.81f, 66.34f, 457.4f),
+                Rotation = Quaternion.Euler(0f, 80.507f, 0f),
+                Scale = new Vector3(1.5176096f, 1.5176096f, 1.5176096f),
                 EnterRadius = 80f,
                 ExitRadius = 80f * 1.1f,
                 TargetChainPoints = WaterfallTargetChainPoints,
@@ -195,9 +196,13 @@ namespace Game.Editor
                 }
                 else
                 {
-                    // Fallback: small grid around the catalog anchor.
-                    var fallback = BakeFallbackGrid(LakeAnchor.id, LakeAnchor.position, LakeAnchor.enterRadius, LakeAnchor.exitRadius, AmbienceEmitterKind.Lake, 16f);
+                    // Ocean mesh 读不到时：用海岸 catalog 锚点合成网格（勿误用 LakeAnchor）。
+                    var fallback = BakeFallbackGrid(
+                        OceanAnchor.id, OceanAnchor.position,
+                        OceanAnchor.enterRadius, OceanAnchor.exitRadius,
+                        AmbienceEmitterKind.Ocean, 16f);
                     if (fallback != null) stations.Add(fallback);
+                    Log.Warning("[WaterStationBaker] ocean mesh bake failed — used shore-anchor fallback grid");
                 }
 
                 // 3. Lake has no prefab mesh — synthesize a small CoarseGrid around

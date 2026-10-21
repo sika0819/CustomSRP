@@ -8,12 +8,14 @@ namespace Game
 {
     /// <summary>
     /// 真机无 UI 截图桥：adb 写入 persistentDataPath/preset_shot_cmd.txt，
-    /// 格式 <c>shot N</c>（N=预设 Id 1..10）或 <c>restore</c>。
+    /// 格式 <c>shot N</c>（N=预设 Id 1..10）、<c>restore</c>、或 <c>pose</c>。
     /// 切预设、藏 HUD/Debugger 后打 log <c>[DevicePresetShot] READY id=N</c>。
+    /// <c>pose</c> 写出当前相机机位到 <c>preset_pose.txt</c> 并打 log。
     /// </summary>
     public sealed class DevicePresetShotHelper : MonoBehaviour
     {
         const string CmdFileName = "preset_shot_cmd.txt";
+        const string PoseFileName = "preset_pose.txt";
         const string LogTag = "[DevicePresetShot]";
         const float SettleSeconds = 2.5f;
         const float PollSeconds = 0.35f;
@@ -85,6 +87,41 @@ namespace Game
             {
                 RestoreUi();
                 Log.Info($"{LogTag} RESTORED");
+                return;
+            }
+
+            if (raw.Equals("pose", System.StringComparison.OrdinalIgnoreCase))
+            {
+                DumpCameraPose();
+            }
+        }
+
+        void DumpCameraPose()
+        {
+            IslandJoystickCamera rig = IslandJoystickCamera.Current;
+            Transform t = rig != null ? rig.transform : Camera.main != null ? Camera.main.transform : null;
+            if (t == null)
+            {
+                Log.Warning($"{LogTag} pose: no camera");
+                return;
+            }
+
+            Vector3 p = t.position;
+            Vector3 e = t.eulerAngles;
+            float pitch = e.x > 180f ? e.x - 360f : e.x;
+            string line =
+                $"pos={p.x:F4},{p.y:F4},{p.z:F4} yaw={e.y:F3} pitch={pitch:F3} eyeHeight={(rig != null ? rig.EyeHeight : 0f):F2}";
+            Log.Info($"{LogTag} POSE {line}");
+
+            string path = Path.Combine(Application.persistentDataPath, PoseFileName);
+            try
+            {
+                File.WriteAllText(path, line + "\n");
+                Log.Info($"{LogTag} wrote {path}");
+            }
+            catch (System.Exception ex)
+            {
+                Log.Warning($"{LogTag} pose write failed: {ex.Message}");
             }
         }
 

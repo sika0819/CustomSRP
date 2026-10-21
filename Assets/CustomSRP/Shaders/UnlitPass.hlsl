@@ -17,6 +17,7 @@ struct Attributes
 struct Varyings
 {
     float4 positionCS_SS : SV_POSITION;
+    float3 positionWS : VAR_POSITION;
 #if defined(_VERTEX_COLORS)
     float4 color : VAR_COLOR;
 #endif
@@ -34,6 +35,7 @@ Varyings UnlitPassVertex(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
     float3 positionWS = TransformObjectToWorld(input.positionOS);
+    output.positionWS = positionWS;
     output.positionCS_SS = TransformWorldToHClip(positionWS);
 #if defined(_VERTEX_COLORS)
     output.color = input.color;
@@ -49,6 +51,7 @@ Varyings UnlitPassVertex(Attributes input)
 float4 UnlitPassFragment(Varyings input) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
+    OilBakeClipAboveWater(input.positionWS);
     InputConfig config = GetInputConfig(input.positionCS_SS, input.baseUV);
 #if defined(_VERTEX_COLORS)
     config.color = input.color;

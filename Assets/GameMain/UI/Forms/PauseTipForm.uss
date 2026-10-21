@@ -1,0 +1,15 @@
+#dialog #card {
+    background-image: url("../Textures/NoticeCard/panel.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+#dialog #icon {
+    display: none;
+}
+#dialog #primary {
+    display: none;
+}
+#dialog #secondary {
+    display: none;
+}

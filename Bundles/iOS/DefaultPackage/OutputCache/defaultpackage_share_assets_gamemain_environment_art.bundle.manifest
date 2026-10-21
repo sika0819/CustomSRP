@@ -1,0 +1,23 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2188736373
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 243e7254d7fcb27485dbd4ff58f700e2
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1cfddeea06ce0ec573e0d0ec81ebe20e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 78b289d46cf4c6f0e1ebc40bb7a125c4
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Art/SunBeam_Meadows_oil.png
+- Assets/GameMain/Environment/Art/Butterfly_03_oil.png
+- Assets/GameMain/Environment/Art/Butterfly_01_oil.png
+Dependencies: []

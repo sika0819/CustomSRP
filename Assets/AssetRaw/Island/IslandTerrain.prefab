@@ -118,6 +118,21 @@ MonoBehaviour:
   skyboxMaterial: {fileID: 2100000, guid: f5b6c738495a6b7c1d2e3f4051627384, type: 2}
   sun: {fileID: 5279282574105509466}
   driveSun: 1
+  overrideColors: 0
+  colorSet:
+    zenith: {r: 0.0667, g: 0.4784, b: 1, a: 1}
+    mid: {r: 0.361, g: 0.632, b: 0.965, a: 1}
+    horizon: {r: 0.7216, g: 0.8196, b: 0.9216, a: 1}
+    ground: {r: 0.8392, g: 0.7686, b: 0.702, a: 1}
+    sunDisc: {r: 1, g: 0.9804, b: 0.8235, a: 1}
+    sunGlow: {r: 1, g: 0.9804, b: 0.8235, a: 1}
+    moonDisc: {r: 0, g: 0, b: 0, a: 1}
+    moonGlow: {r: 0, g: 0, b: 0, a: 1}
+    lightColor: {r: 1, g: 0.9804, b: 0.8235, a: 1}
+    lightIntensity: 1.5
+    fogColor: {r: 0.424, g: 0.6, b: 0.855, a: 1}
+    ambientZenith: {r: 0.592, g: 0.71, b: 0.482, a: 1}
+    ambientHorizon: {r: 0.482, g: 0.71, b: 0.663, a: 1}
   brushScale: 8
   brushStrength: 1
   brushContrast: 1.8
@@ -151,6 +166,118 @@ MonoBehaviour:
   topShadow: 1
   topHighlight: 0.92
   edgeIntensity: 1.55
+--- !u!1 &5299142993419594839
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7914951279120241324}
+  - component: {fileID: 6151614193221076652}
+  - component: {fileID: 5712163725604056274}
+  - component: {fileID: 4726676149899263123}
+  - component: {fileID: 3592967434146596045}
+  - component: {fileID: 8820415562193044177}
+  m_Layer: 0
+  m_Name: OilRain
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7914951279120241324
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5299142993419594839}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7399642873338781040}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6151614193221076652
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5299142993419594839}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aa51aca1c2858442dae56a8a69cf8451, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CustomSRP.OilRainManager
+  _settings: {fileID: 11400000, guid: a1b2c3d4e5f6789012345678abcdef00, type: 2}
+  _rippleManager: {fileID: 4726676149899263123}
+  _renderHook: {fileID: 5712163725604056274}
+  _streakQuad: {fileID: 8820415562193044177}
+  _autoFindInScene: 1
+--- !u!114 &5712163725604056274
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5299142993419594839}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11ac0b0b3e5264d45a6a1a18ec36b4bd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CustomSRP.OilRainRenderHook
+  _settings: {fileID: 11400000, guid: a1b2c3d4e5f6789012345678abcdef00, type: 2}
+  _rippleManager: {fileID: 4726676149899263123}
+--- !u!114 &4726676149899263123
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5299142993419594839}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bba7340f39a97491fa2fe8a4313c806f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CustomSRP.OilRainRippleManager
+  _settings: {fileID: 11400000, guid: a1b2c3d4e5f6789012345678abcdef00, type: 2}
+  _rippleDiscPrefab: {fileID: 0}
+  _splashParticlePrefab: {fileID: 0}
+--- !u!114 &3592967434146596045
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5299142993419594839}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b7f9c097855554c03b642e8921a299cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CustomSRP.OilRainFlipbookDriver
+  _settings: {fileID: 11400000, guid: a1b2c3d4e5f6789012345678abcdef00, type: 2}
+  _targetCamera: {fileID: 0}
+  _splashRate: 36
+  _splashPlaneY: 0.05
+--- !u!114 &8820415562193044177
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5299142993419594839}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9954e140fca26411a96e7a3a5042e1e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CustomSRP.OilRainStreakQuad
+  _settings: {fileID: 11400000, guid: a1b2c3d4e5f6789012345678abcdef00, type: 2}
+  _targetCamera: {fileID: 0}
 --- !u!1 &6747982286676756552
 GameObject:
   m_ObjectHideFlags: 0
@@ -276,5 +403,6 @@ Transform:
   m_Children:
   - {fileID: 5463119154472833466}
   - {fileID: 9111034708282265416}
+  - {fileID: 7914951279120241324}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}

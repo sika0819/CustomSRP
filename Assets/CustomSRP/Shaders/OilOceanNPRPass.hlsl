@@ -5,6 +5,13 @@
 #define OIL_NPR_NO_OTHER_LIGHTS
 #include "OilNPRLighting.hlsl"
 #include "OilPaintNoise.hlsl"
+#include "OilWaterReflect.hlsl"
+#include "OilRainRippleFlipbook.hlsl"
+
+// Wave propagation directions: wind=0 → pure oscillation in place,
+// wind>0 → waves travel along these directions.
+#define OCEAN_WAVE_DIR0 float2(0.82, 0.57)
+#define OCEAN_WAVE_DIR1 float2(-0.45, 0.89)
 
 // 与河一致：单列竖带光痕贴图（非横笔印章平铺）。
 TEXTURE2D(_SparkleBrush);
@@ -15,10 +22,10 @@ SAMPLER(sampler_FoamMap);
 // OilOceanSurface writes this. Mesh is a rest plane (Boluo WaterGrid).
 float _OilOceanWaveHeight;
 
-// OilSkyboxTime 写入；清晨预设以它为准。
-float3 _OilSkySunDir;
+// 风力强度：与草/云风力系统同步，风天气时 > 0。
+float _OilOceanWindStrength;
 
-// 天空太阳优先（清晨起床），否则方向光。
+// 天空太阳优先（清晨起床），否则方向光。 _OilSkySunDir 在 OilWaterReflect.hlsl。
 bool OilOceanResolveSun(out float3 L)
 {
     float3 sky = _OilSkySunDir;
@@ -62,9 +69,13 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
     float2 sunH = sunXZ / max(sunLen, 1e-4);
     float2 side = float2(-sunH.y, sunH.x);
     float2 fromCam = positionWS.xz - _WorldSpaceCameraPos.xz;
-    float along = dot(fromCam, sunH);
-    float lat = dot(fromCam, side);
-    lat += dot(float2(normalWS.x, normalWS.z), side) * 2.4;
+
+    // 沿波向滚动：风向决定光痕走向，滚动速度随风力缩放。
+    float2 waveH = OCEAN_WAVE_DIR0;
+    float2 waveSide = float2(-waveH.y, waveH.x);
+    float along = dot(fromCam, waveH);
+    float lat = dot(fromCam, waveSide);
+    lat += dot(float2(normalWS.x, normalWS.z), waveSide) * 2.4;
 
     // 海面车道比河宽；_SunPathWidth 仍作窄度（默认 4.5 → ×1.33）。
     float halfW = lerp(3.5, 16.0, saturate(along / 220.0));
@@ -84,10 +95,11 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
         return 0.0h;
     }
 
-    // U：侧向进竖列中心；V：沿光迹滚动（与河相同，禁止横平铺出多道）。
+    // U：侧向进竖列中心；V：沿光迹滚动（速度随风力缩放）。
     float u = saturate(lat / max(halfW * 2.4, 1e-3) * 0.5 + 0.5);
     float tileM = max(_SunPathWidth * 8.0, 28.0);
-    float v = frac(along / tileM - t * 0.1);
+    float glintSpeed = 0.05 + max(_OilOceanWindStrength, 0.0) * 0.12;
+    float v = frac(along / tileM - t * glintSpeed);
     float2 st = float2(u, v);
 #if defined(OIL_MOBILE_PERF)
     half3 g = (half3)SAMPLE_TEXTURE2D(_SparkleBrush, sampler_SparkleBrush, st).rgb;
@@ -120,6 +132,7 @@ struct Varyings
     float3 positionWS : VAR_POSITION;
     float3 normalWS : VAR_NORMAL;
     float2 worldXZ : TEXCOORD0;
+    float2 waveDir0 : TEXCOORD1;
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
@@ -186,28 +199,32 @@ Varyings OilOceanNPRPassVertex(Attributes input)
     float3 positionWS = TransformObjectToWorld(input.positionOS);
     float2 xz = positionWS.xz;
     float t = _Time.y;
-    // Same layout as Boluo ApplyWaves: two directions, height plus a little chop.
-    // k ≈ 2π / 2000 m and 2π / 1400 m — coarser than that and the crest facets.
-    float2 dir0 = float2(0.82, 0.57);
-    float2 dir1 = float2(-0.45, 0.89);
+    // Wind-controlled drift: wind=0 → spatial term drops out, pure time oscillation (原地动).
+    // Wind>0 → spatial term resumes, waves travel along the wave direction.
     float k0 = 0.00314;
     float k1 = 0.00449;
-    float phase0 = k0 * dot(dir0, xz) + t * 0.35;
-    float phase1 = k1 * dot(dir1, xz) - t * 0.22;
+    float windDrift = max(_OilOceanWindStrength, 0.0);
+    float spatial0 = k0 * dot(OCEAN_WAVE_DIR0, xz);
+    float spatial1 = k1 * dot(OCEAN_WAVE_DIR1, xz);
+    float phase0 = spatial0 * windDrift + t * 0.35;
+    float phase1 = spatial1 * windDrift - t * 0.22;
     float s0 = sin(phase0);
     float c0 = cos(phase0);
     float s1 = sin(phase1);
     float c1 = cos(phase1);
-    float amp = max(_OilOceanWaveHeight, 0.0);
+    // 风力增强波浪幅度：风天气时波涛更汹涌。
+    float windBoost = 1.0 + windDrift * 0.8;
+    float amp = max(_OilOceanWaveHeight, 0.0) * windBoost;
     float steep = 0.12 * amp;
     positionWS.y += (s0 + s1 * 0.35) * amp;
-    positionWS.xz += dir0 * (steep * c0) + dir1 * (steep * 0.35 * c1);
-    float dhx = (dir0.x * k0 * c0 + dir1.x * k1 * 0.35 * c1) * amp;
-    float dhz = (dir0.y * k0 * c0 + dir1.y * k1 * 0.35 * c1) * amp;
+    positionWS.xz += OCEAN_WAVE_DIR0 * (steep * c0) + OCEAN_WAVE_DIR1 * (steep * 0.35 * c1);
+    float dhx = (OCEAN_WAVE_DIR0.x * k0 * c0 + OCEAN_WAVE_DIR1.x * k1 * 0.35 * c1) * amp;
+    float dhz = (OCEAN_WAVE_DIR0.y * k0 * c0 + OCEAN_WAVE_DIR1.y * k1 * 0.35 * c1) * amp;
     output.positionWS = positionWS;
     output.positionCS_SS = TransformWorldToHClip(positionWS);
     output.normalWS = normalize(float3(-dhx, 1.0, -dhz));
     output.worldXZ = xz;
+    output.waveDir0 = OCEAN_WAVE_DIR0;
     return output;
 }
 
@@ -225,6 +242,8 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     half3 geoN = normalize((half3)input.normalWS);
     // 对齐河：波纹法线混合更弱，光照用法线朝上，避免圆影盘。
     half3 normalWS = normalize(lerp(geoN, waveN, 0.55h));
+    // 雨滴涟漪：法线序列帧直接扰动法线，光照/折射/高光都会跟着动。
+    normalWS = ApplyRainRippleNormal(normalWS, input.positionWS);
     half3 lightN = half3(0.0h, 1.0h, 0.0h);
     float camDist = length(_WorldSpaceCameraPos - input.positionWS);
     half overlook = (half)smoothstep(120.0, 420.0, camDist);
@@ -267,14 +286,18 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     lipGrad = saturate(lipGrad * 1.35h);
     half edge = lipGrad;
 
-    half3 sandWarm = half3(0.68h, 0.58h, 0.42h);
+    // 夜晚浅滩不再铺暖沙，避免近岸比夜色海面亮一截。
+    half night = OilWaterNightWeight(_OilSkyPeriod);
+    half3 sandWarm = lerp(half3(0.68h, 0.58h, 0.42h), half3(0.14h, 0.12h, 0.11h), night);
     albedo = lerp(albedo, sandWarm, edge * lerp(0.28h, 0.12h, glass));
     albedo = lerp(albedo, _ShallowColor.rgb, edge * 0.18h);
 
     half deepA = (half)_BaseColor.a;
     half shallowA = (half)_ShallowColor.a;
     half alpha = lerp(deepA, shallowA, glass * 0.65h) * water;
-    alpha = lerp(alpha, min(shallowA, 0.55h) * water, glass * glass * 0.45h);
+    alpha = lerp(alpha, min(shallowA, 0.85h) * water, glass * glass * 0.45h);
+    // 夜晚少透出浅滩底色，折射带跟着海面一起沉下去。
+    alpha = lerp(alpha, deepA * water, night * glass * 0.8h);
 
     Surface surface;
     surface.position = input.positionWS;
@@ -294,19 +317,16 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     half3 color = OilNPRLightingEx(
         surface,
         albedo,
-        OilPeriodAmbient((half3)_AmbientColor.rgb),
-        (half3)_ShadowTint.rgb,
-        (half3)_ShadowWarm.rgb,
+        OilNPRAmbient(surface),
         (half3)_SpecularColor.rgb,
         (half)_SpecularThreshold,
         max((half)_ShadeSteps, 3.0h),
         0.0h,
-        (half)_ShadowLift,
-        (half)_ShadeLift,
         stroke,
-        (half)_ShadowWobble,
+        0.0h,
         1.0h,
         0.0h,
+        surface.smoothness,
         fragment.screenUV);
 
     color = ImpastoDeviation(color, stroke, relief * 0.45h);
@@ -335,21 +355,36 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     float inFront = saturate((fragment.depth - sceneEye) * 4.0);
     half3 sceneCol = (half3)GetBufferColor(fragment, refractOffset).rgb;
     half refractMix = glass * (half)(1.0 - inFront) * lerp(0.5h, 0.25h, overlook);
-    sceneCol *= half3(0.78h, 0.84h, 0.92h);
+    // 折射带染色：从冷白 (0.78,0.84,0.92) 改为深海蓝绿 (0.18,0.30,0.38)，
+    // 避免日光下浅滩透出来一片冷白。
+    half3 refractTint = lerp(half3(0.78h, 0.84h, 0.92h), half3(0.18h, 0.30h, 0.38h), night);
+    sceneCol *= refractTint;
     color = lerp(color, sceneCol, refractMix);
 #endif
 
     color = (half3)ApplyOilFog((float3)color, surface.depth, stroke, input.positionWS);
 
+    // Fog first, then planar / sky reflect — otherwise atmosphere washes the glaze out.
+    color = ApplyOilWaterReflection(
+        color,
+        input.positionWS,
+        normalWS,
+        viewDir,
+        stroke,
+        (1.0h - shoreMask) * (1.0h - shoreWash),
+        fragment.screenUV);
+
     // 对齐河：雾后叠一道太阳光痕（竖列 Glint + 世界车道），再画岸沫。
     half glint = OilOceanSunGlint(input.positionWS, normalWS, t, stroke, shoreMask);
     color += (half3)_GlintColor.rgb * glint;
 
-    // 钛白岸沫：提高对比，不被浅水绿洗掉。
-    half3 whiteFoam = half3(0.96h, 0.98h, 1.0h);
-    half3 shoreCol = lerp(color, whiteFoam, 0.88h);
-    color = lerp(color, shoreCol, shoreWash * 0.45h);
-    color = lerp(color, shoreCol, shoreMask * 0.92h);
+    // 钛白岸沫：白天保持对比；夜晚压暗，避免和浅滩折射叠成一条白带。
+    // whiteFoam 整体压暗、混合权重降一档，让岸沫偏冷灰而不是近白。
+    half3 whiteFoam = half3(0.78h, 0.82h, 0.86h);
+    half3 shoreCol = lerp(color, whiteFoam, 0.72h);
+    half foamNight = lerp(1.0h, 0.38h, night);
+    color = lerp(color, shoreCol, shoreWash * 0.36h * foamNight);
+    color = lerp(color, shoreCol, shoreMask * 0.78h * foamNight);
     alpha = saturate(alpha + shoreMask * 0.35h + relief * 0.06h);
 
 #if defined(_PREMULTIPLY_ALPHA)

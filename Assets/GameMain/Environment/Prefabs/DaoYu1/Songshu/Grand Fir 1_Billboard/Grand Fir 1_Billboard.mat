@@ -12,12 +12,12 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
-  - _CANVAS_ON
   - _CLIPPING
-  - _INTERNAL_EDGE_ON
   - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
-  m_InvalidKeywords: []
+  m_InvalidKeywords:
+  - _CANVAS_ON
+  - _OILCROSSBILLBOARD_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -61,6 +61,8 @@ Material:
     - _EdgeStrength: 0.55
     - _InternalEdge: 1
     - _NormalStrength: 0.85
+    - _OilCrossBillboard: 1
+    - _OilFoliage: 0
     - _Outline: 0
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5
@@ -76,11 +78,12 @@ Material:
     - _ShadowLift: 1.05
     - _ShadowWobble: 0.45
     - _Shadows: 1
+    - _Smoothness: 0
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
     - _ZWrite: 1
     m_Colors:
-    - _AmbientColor: {r: 0.6117647, g: 0.6784314, b: 0.40784314, a: 1}
+    - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _BottomColor: {r: 0.53333336, g: 0.6627451, b: 0.41960785, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
@@ -88,6 +91,7 @@ Material:
     - _OutlineColor: {r: 0.38039216, g: 0.47843137, b: 0.34901962, a: 1}
     - _ShadowTint: {r: 0.38039216, g: 0.47843137, b: 0.34901962, a: 1}
     - _ShadowWarm: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
+    - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
     - _SpecularColor: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
     - _TopColor: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
   m_BuildTextureStacks: []

@@ -2,12 +2,14 @@
     <Style src="GameFormShared.uss" />
     <Style src="PresetForm.uss" />
     <ui:VisualElement name="root" class="game-preset-form__root">
-        <ui:VisualElement name="presetButton" class="game-preset-form__preset-button">
-            <ui:Label name="title" class="game-preset-form__title" text="预设" />
-            <ui:Label name="description" class="game-preset-form__description" text="设置场景预设&#10;点击以下预设可快速切换场景哦～" />
-            <ui:ScrollView name="presetList" class="game-preset-form__preset-list" mode="Horizontal" />
-            <ui:VisualElement name="scrollTrack" class="game-preset-form__scroll-track" />
-            <ui:VisualElement name="scrollTrackActive" class="game-preset-form__scroll-track-active" />
+        <ui:VisualElement name="stage" class="game-form-stage">
+            <ui:VisualElement name="presetButton" class="game-preset-form__preset-button">
+                <ui:Label name="title" class="game-preset-form__title" text="预设" />
+                <ui:Label name="description" class="game-preset-form__description" text="设置场景预设&#10;点击以下预设可快速切换场景哦～" />
+                <ui:ScrollView name="presetList" class="game-preset-form__preset-list" mode="Horizontal" />
+                <ui:VisualElement name="scrollTrack" class="game-preset-form__scroll-track" />
+                <ui:VisualElement name="scrollTrackActive" class="game-preset-form__scroll-track-active" />
+            </ui:VisualElement>
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

@@ -1,0 +1,68 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3144869748
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 6814ce63b6ae86c8cb69c9b0fc0207e7
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: c2426a7084c48aa838094ab6ad87ea86
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: fcb8b173bf72f0fc4114715b03af7e25
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 213
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Textures/SM_Env_Bush_Tropical_04_Billboard_Normal.png
+- Assets/GameMain/Environment/Textures/T_OakTree_Leaf_01_A.png
+- Assets/GameMain/Environment/Textures/TAI_Atlas_1A.png
+- Assets/GameMain/Environment/Textures/T_Tent_03_C.png
+- Assets/GameMain/Environment/Textures/T_Grass_03_A.png
+- Assets/GameMain/Environment/Textures/Shu2_Mix.png
+- Assets/GameMain/Environment/Textures/Maple 2 Dead_Billboard_Normal.png
+- Assets/GameMain/Environment/Textures/SM_Env_Bush_Tropical_04_Billboard_Trunk_Albedo.png
+- Assets/GameMain/Environment/Textures/T_Grass_02_A.png
+- Assets/GameMain/Environment/Textures/Maple 3 Dead_Billboard_Normal.png
+- Assets/GameMain/Environment/Textures/Rpgpp_Wood_Oil.png
+- Assets/GameMain/Environment/Textures/Maple 2 Dead_Billboard_FoliageMask.png
+- Assets/GameMain/Environment/Textures/T_BirchTree_Bark_01_A.png
+- Assets/GameMain/Environment/Textures/T_Mountain_02_Oil.png
+- Assets/GameMain/Environment/Textures/Zawu_Mix.png
+- Assets/GameMain/Environment/Textures/T_Plank_01_A.png
+- Assets/GameMain/Environment/Textures/T_BirchTree_Leaf_01_A.png
+- Assets/GameMain/Environment/Textures/T_BirchTree_Bark_02_A.png
+- Assets/GameMain/Environment/Textures/SM_Prop_ScareCrow_01.png
+- Assets/GameMain/Environment/Textures/T_Tent_03_N.png
+- Assets/GameMain/Environment/Textures/T_Grass_01_A.png
+- Assets/GameMain/Environment/Textures/shitou.png
+- Assets/GameMain/Environment/Textures/Shu_Mix.png
+- Assets/GameMain/Environment/Textures/Maple 3 Dead_Billboard_FoliageMask.png
+- Assets/GameMain/Environment/Textures/Maple 2 Dead_Billboard_Albedo.png
+- Assets/GameMain/Environment/Textures/WaterMist_5x5_OilPainting.png
+- Assets/GameMain/Environment/Textures/Rpgpp_Wood_Oil_N.png
+- Assets/GameMain/Environment/Textures/Leaf Texture 3.png
+- Assets/GameMain/Environment/Textures/T_Plants_01_A.png
+- Assets/GameMain/Environment/Textures/ShiTou_OilTile.png
+- Assets/GameMain/Environment/Textures/TAI_Atlas_1A.tga
+- Assets/GameMain/Environment/Textures/TFF_Atlas_Vegetation_1A_D.png
+- Assets/GameMain/Environment/Textures/SM_Env_Bush_Tropical_04_Billboard_FoliageMask.png
+- Assets/GameMain/Environment/Textures/RockWall_Texture_01.png
+- Assets/GameMain/Environment/Textures/WaterfallSplash_5x5_OilPainting.png
+- Assets/GameMain/Environment/Textures/T_Mountain_01_Oil.png
+- Assets/GameMain/Environment/Textures/T_Mushroom_Red_01_A.png
+- Assets/GameMain/Environment/Textures/Lillies_01_Oil.png
+- Assets/GameMain/Environment/Textures/Maple 3 Dead_Billboard_Trunk_Albedo.png
+- Assets/GameMain/Environment/Textures/SM_Env_Bush_Tropical_04_Billboard_Albedo.png
+- Assets/GameMain/Environment/Textures/Maple 2 Dead_Billboard_Trunk_Albedo.png
+- Assets/GameMain/Environment/Textures/T_Mountain_03_Oil.png
+- Assets/GameMain/Environment/Textures/Leaf Texture 4.png
+- Assets/GameMain/Environment/Textures/T_Mushroom_Brown_01_A.png
+- Assets/GameMain/Environment/Textures/T_Ivy_01_A.png
+- Assets/GameMain/Environment/Textures/Maple 3 Dead_Billboard_Albedo.png
+Dependencies: []

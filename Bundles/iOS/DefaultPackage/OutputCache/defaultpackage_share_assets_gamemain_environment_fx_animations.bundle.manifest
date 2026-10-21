@@ -1,0 +1,24 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1637586016
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: c49450188238f568182e90869d674169
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 13e1976aa7d4be262b9e7d9a256211a2
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 34e5e49a50ffce9a4a8b7fe8c30297df
+HashAppended: 0
+ClassTypes:
+- Class: 74
+  Script: {instanceID: 0}
+- Class: 91
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/FX/Animations/Boat_Anim.anim
+- Assets/GameMain/Environment/FX/Animations/Boat_Controller.controller
+Dependencies: []

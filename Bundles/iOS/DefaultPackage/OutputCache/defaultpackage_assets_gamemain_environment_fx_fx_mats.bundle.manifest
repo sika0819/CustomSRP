@@ -1,0 +1,42 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2402221369
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 8c2ef53352414dbf4fe267790e9b6d70
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d5b1802501938ccd9ac76dfe2ea9b09e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 1a2d7584d5a7d948bb074d0cb6dc6f2d
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/FX/FX Mats/Campfire_GroundGlow.mat
+- Assets/GameMain/Environment/FX/FX Mats/Butterfly_Mat_03.mat
+- Assets/GameMain/Environment/FX/FX Mats/Fish_02.mat
+- Assets/GameMain/Environment/FX/FX Mats/Blank.mat
+- Assets/GameMain/Environment/FX/FX Mats/Campfire_Flame.mat
+- Assets/GameMain/Environment/FX/FX Mats/Sun_Beam_Meadow.mat
+- Assets/GameMain/Environment/FX/FX Mats/Campfire_Wood.mat
+- Assets/GameMain/Environment/FX/FX Mats/Butterfly_Mat_04.mat
+- Assets/GameMain/Environment/FX/FX Mats/Campfire_CoreGlow.mat
+- Assets/GameMain/Environment/FX/FX Mats/FX_Soft_Tropical_02.mat
+- Assets/GameMain/Environment/FX/FX Mats/CrabTest.mat
+- Assets/GameMain/Environment/FX/FX Mats/OilFlameStrokeAtlas.png
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_art.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_fx_fx_texture.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_other_scene_asset_synty_polygongeneric_textures_fx.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

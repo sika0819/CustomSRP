@@ -10,14 +10,9 @@ CBUFFER_START(UnityPerMaterial)
     float4 _FoamColor;
     float4 _GlintColor;
     float4 _AmbientColor;
-    float4 _ShadowTint;
-    float4 _ShadowWarm;
     float4 _SpecularColor;
     float _ShadeSteps;
     float _SpecularThreshold;
-    float _ShadowLift;
-    float _ShadeLift;
-    float _ShadowWobble;
     float _SunPathStrength;
     float _SunPathWidth;
     float _FoamStrength;
@@ -37,6 +32,7 @@ CBUFFER_START(UnityPerMaterial)
     float _StrokeBands;
     float _AlbedoBoost;
     float _ShoreFoamWidth;
+    float _ReflectStrength;
 CBUFFER_END
 
 // 对齐河：横向 Monet 切片。海贴图已是横笔，不再 st.yx 对调。

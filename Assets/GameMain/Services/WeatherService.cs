@@ -19,6 +19,8 @@ namespace Game
         public IslandTimePeriod Period { get; private set; } = IslandTimePeriod.Noon;
         public IslandWeatherKind Kind { get; private set; } = IslandWeatherKind.Cloud;
         public int Level { get; private set; } = 1;
+        /// <summary>Active Boluo AtmosphereProfile look (sky / light / fog pigments).</summary>
+        public IslandLookKind LookKind { get; private set; } = IslandLookKind.Canonical;
         /// <summary>Absolute ExpSquared density pushed to <see cref="IAtmosphereVisualDriver"/>.</summary>
         public float FogDensity { get; private set; } = 0.001f;
         public bool IsTimeTransitioning => _timeLerpActive;
@@ -111,6 +113,11 @@ namespace Game
         /// </summary>
         public void SetPeriod(IslandTimePeriod period, bool animate)
         {
+            // Boluo GameData: dial daytime → Camera_1, night → Atmosphere 10 (decoupled from preset).
+            SetLookKind(period == IslandTimePeriod.Night
+                ? IslandLookKind.NightCold
+                : IslandLookKind.Canonical);
+
             float commitHours = PeriodToAnchorHours(period);
             if (!animate || !isActiveAndEnabled)
             {
@@ -253,9 +260,22 @@ namespace Game
 
         void PushAll()
         {
+            PushLookKind();
             PushTime();
             PushWeather();
             PushFogDensity();
+        }
+
+        public void SetLookKind(IslandLookKind lookKind)
+        {
+            LookKind = lookKind;
+            PushLookKind();
+        }
+
+        void PushLookKind()
+        {
+            foreach (IAtmosphereVisualDriver driver in FindDrivers())
+                driver.SetLookKind(LookKind);
         }
 
         void PushTime()

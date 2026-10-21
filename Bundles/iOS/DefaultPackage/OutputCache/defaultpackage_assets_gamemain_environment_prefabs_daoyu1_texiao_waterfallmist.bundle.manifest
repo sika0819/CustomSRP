@@ -1,0 +1,30 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3886575484
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 447329994f2ce3f02ffe6000c02c6218
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d18bfa1f26e9e10285ce9b0e490a15a5
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 01b1d09e03260db4611ff13047a37943
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 198
+  Script: {instanceID: 0}
+- Class: 199
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/texiao/WaterfallMist.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_thirdparty_stylizedwater2_materials_effects.bundle

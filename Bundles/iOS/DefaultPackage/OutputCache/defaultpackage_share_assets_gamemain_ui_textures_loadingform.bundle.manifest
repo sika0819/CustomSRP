@@ -1,0 +1,34 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1858063684
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 142b65be0097dbbf6db022a2e32fdbcd
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 71713351737a41cca4fd2da324d9aa03
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 6964f1dab7b6f040d614474bdbbd9ee4
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 84
+  Script: {instanceID: 0}
+- Class: 213
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Textures/LoadingForm/hint.png
+- Assets/GameMain/UI/Textures/LoadingForm/logo.png
+- Assets/GameMain/UI/Textures/LoadingForm/bankupdatevideo.renderTexture
+- Assets/GameMain/UI/Textures/LoadingForm/wifidatainusepage-icon.png
+- Assets/GameMain/UI/Textures/LoadingForm/bankupdatebackground.png
+- Assets/GameMain/UI/Textures/LoadingForm/fill.png
+- Assets/GameMain/UI/Textures/LoadingForm/filecorruptedpage-icon.png
+- Assets/GameMain/UI/Textures/LoadingForm/storage-fullstoragepage-icon.png
+- Assets/GameMain/UI/Textures/LoadingForm/background.png
+- Assets/GameMain/UI/Textures/LoadingForm/title.png
+Dependencies: []

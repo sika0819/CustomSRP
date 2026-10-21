@@ -142,10 +142,26 @@ namespace Game.Editor
                 return;
             }
 
+            // Water layer so reflection probes / bake cameras can cull the surface.
+            int waterLayer = LayerMask.NameToLayer("Water");
+            if (waterLayer >= 0)
+            {
+                SetLayerRecursive(root.transform, waterLayer);
+            }
+
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             AssetDatabase.SaveAssets();
             Log.Info("[InlandWater] Built " + PrefabPath + " children=" + placed);
+        }
+
+        static void SetLayerRecursive(Transform root, int layer)
+        {
+            root.gameObject.layer = layer;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                SetLayerRecursive(root.GetChild(i), layer);
+            }
         }
     }
 }

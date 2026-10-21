@@ -7,15 +7,15 @@ TerrainLayer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: SWS_OceanFloorSmooth
-  m_DiffuseTexture: {fileID: 2800000, guid: d7a82d8814c434682bd248482ad41183, type: 3}
-  m_NormalMapTexture: {fileID: 2800000, guid: 02114bb7061d4c60a9c7ff1747f71cb0, type: 3}
-  m_MaskMapTexture: {fileID: 2800000, guid: 37f93f1fcff34a67b0ea4dd09ddbaf5e, type: 3}
+  m_DiffuseTexture: {fileID: 2800000, guid: 97b4098690134d4f95af59b71323dc32, type: 3}
+  m_NormalMapTexture: {fileID: 0}
+  m_MaskMapTexture: {fileID: 0}
   m_TileSize: {x: 20, y: 20}
   m_TileOffset: {x: 0, y: 0}
   m_Specular: {r: 0, g: 0, b: 0, a: 0}
   m_Metallic: 0
-  m_Smoothness: 0.2
-  m_NormalScale: 1
+  m_Smoothness: 0
+  m_NormalScale: 0.1
   m_DiffuseRemapMin: {x: 0, y: 0, z: 0, w: 0}
   m_DiffuseRemapMax: {x: 1, y: 1, z: 1, w: 1}
   m_MaskMapRemapMin: {x: 0, y: 0, z: 0, w: 0}

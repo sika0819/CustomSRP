@@ -71,11 +71,15 @@ Material:
     - _Cull: 2
     - _Cutoff: 0.5
     - _DstBlend: 0
+    - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
     - _InternalEdge: 0
     - _LayerDetailStrength: 0
     - _LightStrength: 0.28
     - _LightThreshold: 0.72
+    - _NormalStrength: 0.85
+    - _OilCrossBillboard: 0
+    - _OilFoliage: 0
     - _Outline: 0
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5
@@ -95,11 +99,12 @@ Material:
     - _ShadowThreshold: 0.42
     - _ShadowWobble: 0.45
     - _Shadows: 1
+    - _Smoothness: 0
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
     - _ZWrite: 1
     m_Colors:
-    - _AmbientColor: {r: 0.35, g: 0.4, b: 0.32, a: 1}
+    - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _Color: {r: 1, g: 0.72, b: 0.62, a: 1}
     - _EdgeColor: {r: 0.35, g: 0.3, b: 0.25, a: 1}
@@ -107,6 +112,7 @@ Material:
     - _OutlineColor: {r: 0.14, g: 0.1, b: 0.08, a: 1}
     - _ShadowTint: {r: 0.55, g: 0.62, b: 0.78, a: 1}
     - _ShadowWarm: {r: 0.62, g: 0.45, b: 0.31999996, a: 1}
+    - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
     - _SpecularColor: {r: 0.54999995, g: 0.47999996, b: 0.39999998, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

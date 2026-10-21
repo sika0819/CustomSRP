@@ -1,0 +1,31 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1976039683
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: fbacde12d37dea15793461b39ecb9864
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: b91d82d7e127683e2ead27f7592d73e4
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: ae2cb50800e19e4a7e4ff8601b2d056e
+HashAppended: 0
+ClassTypes:
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/CustomSRP/Shaders/UnlitParticles.shader
+- Assets/CustomSRP/Shaders/NoiseFire.shader
+- Assets/CustomSRP/Shaders/OilCloudNPR.shader
+- Assets/CustomSRP/Shaders/OilSkyboxNPR.shader
+- Assets/CustomSRP/Shaders/OilNPR.shader
+- Assets/CustomSRP/Shaders/OilRiverNPR.shader
+- Assets/CustomSRP/Shaders/TerrainOilNPR.shader
+- Assets/CustomSRP/Shaders/OilOceanNPR.shader
+- Assets/CustomSRP/Shaders/TerrainLitBasemapGen.shader
+- Assets/CustomSRP/Shaders/TerrainLitBasemap.shader
+- Assets/CustomSRP/Shaders/OilWaterfallNPR.shader
+Dependencies: []

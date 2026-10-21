@@ -1,0 +1,28 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2538095209
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: f7cc4b5015146935c2d5472af6f78421
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1cfddeea06ce0ec573e0d0ec81ebe20e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: bf39be2b49804a0a1cb6ad7a26e90a96
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/CustomSRP/Textures/OilCanvas.png
+- Assets/CustomSRP/Textures/OilOceanGlint.png
+- Assets/CustomSRP/Textures/OilBrush.png
+- Assets/CustomSRP/Textures/OilGlint.png
+- Assets/CustomSRP/Textures/OilWaterfallMist.png
+- Assets/CustomSRP/Textures/RippleFlipbook.png
+- Assets/CustomSRP/Textures/OilWaterfallPaint.png
+- Assets/CustomSRP/Textures/OilRiverPaint.png
+Dependencies: []

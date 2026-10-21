@@ -1,0 +1,25 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1689016036
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: d2e7ddb64b4791a156716b93d3116ffb
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: c2426a7084c48aa838094ab6ad87ea86
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: b8fd2ff54a85c10db89225cc0b47e484
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 213
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/UI/Textures/WeatherForm/tab.png
+- Assets/GameMain/UI/Textures/WeatherForm/weather-dialog.png
+- Assets/GameMain/UI/Textures/WeatherForm/level-background.png
+Dependencies: []

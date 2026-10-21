@@ -1,4 +1,4 @@
-﻿Shader "Unlit/FireShader1"
+Shader "Unlit/FireShader1"
 {
     // Dead-Rabbit UnityFire Smooth flame — Custom SRP (SRPDefaultUnlit).
     // Property names kept for FireShader1.mat compatibility.

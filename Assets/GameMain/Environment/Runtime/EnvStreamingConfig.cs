@@ -65,8 +65,10 @@ namespace Game
         public static float RockRampLandmarkHideDistance = 280f;
 
         /// <summary>
-        /// Android Native DrawMeshInstanced。默认关：OilNPR 移动端剥离 INSTANCING_ON 后，
-        /// 合批会关掉 MeshRenderer 却画不出，树/灌木全丢。需要合批时先保留变体再打开。
+        /// Android Native DrawMeshInstanced。编辑器默认关；真机移动档在
+        /// <see cref="ApplyMobileTierDefaults"/> 里打开。
+        /// OilNPRShaderStripper（CustomSRP.Editor）保留 INSTANCING_ON 变体，剥掉会让
+        /// 合批实例化在真机上整片不可见。
         /// </summary>
         public static bool NativeInstancingEnabled = false;
 
@@ -75,11 +77,14 @@ namespace Game
         public static float FinalizePerFrameBudgetMs = 3f;
         public static int SpawnPerFrameBudget = 24;
         public static int DespawnPerFrameBudget = 16;
-        /// <summary>近距启用 MeshCollider（对齐 Boluo enableDistance≈55）。</summary>
-        public static float MeshColliderEnableRadius = 55f;
+        /// <summary>
+        /// 近距启用 MeshCollider。须明显大于走路半秒路程，否则高速接近大石时
+        /// 碰撞体尚未打开就会穿进 mesh，再打开也难把 CharacterController 顶出来。
+        /// </summary>
+        public static float MeshColliderEnableRadius = 90f;
 
-        /// <summary>远距关闭 MeshCollider（对齐 Boluo disableDistance≈70）。</summary>
-        public static float MeshColliderDisableRadius = 70f;
+        /// <summary>远距关闭 MeshCollider（与 Enable 留滞后）。</summary>
+        public static float MeshColliderDisableRadius = 120f;
 
         /// <summary>
         /// 非 Cliff/Cave/Ramp/Spike/Large 的石头：世界空间最长边 ≥ 此值才补 MeshCollider。
@@ -94,10 +99,13 @@ namespace Game
         public static float PrefillTreeBoostRadius = 180f;
 
         /// <summary>
-        /// 已废弃：勿在 spawn 时按距离关 CastShadows（走近不会恢复）。
-        /// 投射由 Quality/CRP shadowDistance 控制。
+        /// 可投射物体超过此距离关闭 ShadowCasting。与 CRP / Quality shadowDistance 对齐。
+        /// 必须在流送轮询里走近后再打开，不能只在生成时关一次。
         /// </summary>
-        public static float TreeShadowMaxDist = 55f;
+        public static float ShadowCastMaxDist = 26f;
+
+        /// <summary>近于此距离重新打开投射。与 <see cref="ShadowCastMaxDist"/> 之间留滞后，避免边界闪烁。</summary>
+        public static float ShadowCastRestoreDist = 22f;
 
         static readonly string[] TreeCategories =
         {
@@ -183,6 +191,15 @@ namespace Game
         }
 
         /// <summary>
+        /// MeshCollider 永不按距离关闭：Mountain 地标 + Cliff/Cave/Ramp/Spike/Large。
+        /// 大石可视距离远大于旧 collider LOD 半径，关碰撞会直接穿模。
+        /// </summary>
+        public static bool ShouldKeepMeshColliderAlwaysOn(string objectName)
+        {
+            return IsFarFieldLandmark(objectName) || IsLargeRockPrefab(objectName);
+        }
+
+        /// <summary>
         /// 走路碰撞：结构大石按名；其余按实例世界尺寸（须在 localScale 设好后测）。
         /// 远距剔除仍只用 <see cref="IsLargeRockPrefab"/>，不受此门控影响。
         /// </summary>
@@ -246,6 +263,44 @@ namespace Game
                 return false;
             return prefabName.IndexOf("Dock", System.StringComparison.OrdinalIgnoreCase) >= 0
                    || prefabName.IndexOf("Pier", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// Planar mirror probe (CameraType.Reflection) inherits source.cullingMask,
+        /// so anything in the native instancing batch that <see cref="Graphics.DrawMeshInstanced"/>
+        /// queues will show up in the reflection unless we mark it main-camera-only.
+        /// Grass (small veg) and clutter shouldn't reflect in water — they're cheap
+        /// to skip and look wrong blurred into the surface.
+        /// Rocks already skip native (<see cref="ShouldForceSkipNativeInstancing"/>),
+        /// so they're handled separately via the reflection culling layer mask.
+        /// </summary>
+        public static bool ShouldBeMainCameraOnly(string category, string prefabName)
+        {
+            if (IsSmallVegCategory(category))
+                return true;
+            if (IsClutterCategory(category))
+                return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Match <see cref="EnvItemStreamerLite.NeverCastsShadows"/>: small veg,
+        /// clutter, flat ground cards and far-field landmarks skip shadow casting
+        /// to keep shadow atlas headroom for trees/buildings.
+        /// </summary>
+        public static bool CanItemCastShadows(string category, string prefabName)
+        {
+            if (EnvGroundFit.IsFlatGroundCard(prefabName))
+                return false;
+            if (IsFarFieldLandmark(prefabName))
+                return false;
+            if (IsSmallTreeCategory(category))
+                return false;
+            if (IsSmallVegCategory(category))
+                return false;
+            if (IsClutterCategory(category))
+                return false;
+            return true;
         }
 
         public static bool IsFarFieldLandmark(string prefabName)
@@ -395,15 +450,15 @@ namespace Game
             ClutterShowDistance = 32f;
             BuildingLodHideDistance = 110f;
             BuildingLodShowDistance = 95f;
-            // 略收于编辑器，但仍须盖住大石表面相对 pivot 的偏移。
-            MeshColliderEnableRadius = 48f;
-            MeshColliderDisableRadius = 64f;
+            // 真机略收，但仍须大于 MoveSpeed 数帧路程，避免穿进未开碰撞的大石。
+            MeshColliderEnableRadius = 72f;
+            MeshColliderDisableRadius = 96f;
 
             // 格子驻留须盖住树环（Boluo：Ring1 >= TreeRing1）
             Ring1EnterRadius = Mathf.Max(Ring1EnterRadius, TreeRing1EnterRadius);
             Ring1ExitRadius = Mathf.Max(Ring1ExitRadius, TreeRing1ExitRadius);
 
-            NativeInstancingEnabled = false;
+            NativeInstancingEnabled = true;
             NativeInstancingMaxDist = Mathf.Max(150f, TreeBillboardKeepRadius);
             SpawnPerFrameBudget = 8;
             DespawnPerFrameBudget = 8;

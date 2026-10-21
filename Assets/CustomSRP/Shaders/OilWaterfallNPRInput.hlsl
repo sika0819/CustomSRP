@@ -28,7 +28,6 @@ CBUFFER_START(UnityPerMaterial)
     float _ShadeSteps;
     float _ShadowLift;
     float _ShadeLift;
-    float _ShadowWobble;
     float _SpecularThreshold;
 CBUFFER_END
 

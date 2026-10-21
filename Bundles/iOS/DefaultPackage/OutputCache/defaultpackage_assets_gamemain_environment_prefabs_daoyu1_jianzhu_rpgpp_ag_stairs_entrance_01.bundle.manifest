@@ -1,0 +1,38 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2471752307
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: eea193ebef67f3e590ee6b4c131f3e12
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 2d6187fd202d3528e0d31df7c41fd6e5
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: ea45874c0c0a47e2014c5dc405bfdca8
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 64
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/JianZhu/rpgpp_ag_stairs_entrance_01.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_collision.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models_jianzhu.bundle

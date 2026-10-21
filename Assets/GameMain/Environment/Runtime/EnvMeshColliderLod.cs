@@ -6,7 +6,8 @@ namespace Game
 {
     /// <summary>
     /// 按与焦点距离开关环境非 Trigger MeshCollider，降低 CharacterController 对远距三角网格的 PhysX 开销。
-    /// 对齐 Boluo：近处保留启用；仅远距预关；刷新用 bounds.ClosestPoint；Mountain 地标常开。
+    /// 近处保留启用；仅远距预关；刷新用 bounds.ClosestPoint。
+    /// Mountain / Cliff / Cave / Ramp / Spike / Large 常开（可视远、关碰撞会穿模）。
     /// </summary>
     public sealed class EnvMeshColliderLod : MonoBehaviour
     {
@@ -14,7 +15,7 @@ namespace Game
         Transform _focus;
         float _enableSq;
         float _disableSq;
-        float _refreshInterval = 0.4f;
+        float _refreshInterval = 0.25f;
         Coroutine _loop;
 
         public void Begin(Transform focus)
@@ -31,8 +32,8 @@ namespace Game
         }
 
         /// <summary>
-        /// 登记并按相对焦点距离预关远距碰撞；近处保持启用（Boluo ApplyInitialDistance）。
-        /// Mountain 等远景地标始终启用（体积极大，center/出生点距离会误关）。
+        /// 登记并按相对焦点距离预关远距碰撞；近处保持启用。
+        /// 结构大石 / 地标始终启用。
         /// </summary>
         public void Register(GameObject go, Vector3 worldPos)
         {
@@ -40,7 +41,7 @@ namespace Game
                 return;
 
             Vector3 focusPos = _focus != null ? _focus.position : worldPos;
-            bool landmark = EnvStreamingConfig.IsFarFieldLandmark(go.name);
+            bool alwaysOn = EnvStreamingConfig.ShouldKeepMeshColliderAlwaysOn(go.name);
             var colliders = go.GetComponentsInChildren<MeshCollider>(true);
             for (int i = 0; i < colliders.Length; i++)
             {
@@ -50,7 +51,7 @@ namespace Game
 
                 _colliders.Add(mc);
 
-                if (landmark)
+                if (alwaysOn)
                 {
                     mc.enabled = true;
                     continue;
@@ -96,7 +97,7 @@ namespace Game
                     continue;
                 }
 
-                if (IsLandmarkCollider(mc))
+                if (IsAlwaysOnCollider(mc))
                 {
                     if (!mc.enabled)
                         mc.enabled = true;
@@ -136,7 +137,7 @@ namespace Game
                     continue;
                 }
 
-                if (IsLandmarkCollider(mc))
+                if (IsAlwaysOnCollider(mc))
                 {
                     if (!mc.enabled)
                         mc.enabled = true;
@@ -161,12 +162,12 @@ namespace Game
             }
         }
 
-        static bool IsLandmarkCollider(MeshCollider mc)
+        static bool IsAlwaysOnCollider(MeshCollider mc)
         {
             Transform t = mc != null ? mc.transform : null;
             while (t != null)
             {
-                if (EnvStreamingConfig.IsFarFieldLandmark(t.name))
+                if (EnvStreamingConfig.ShouldKeepMeshColliderAlwaysOn(t.name))
                     return true;
                 t = t.parent;
             }

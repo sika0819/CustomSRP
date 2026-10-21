@@ -13,13 +13,17 @@ namespace Game
         public float TargetRotateY;
         public Vector3 CameraOffset;
         public float CameraToTargetDis = 3f;
-        public float PlayerHeight = 6f;
+        public float PlayerHeight = 3f;
         [Range(0f, 24f)] public float TimeHours = 12f;
         public IslandWeatherKind WeatherKind = IslandWeatherKind.Cloud;
         [Range(0, 3)] public int WeatherLevel = 1;
+        [Tooltip("Boluo AtmosphereProfile look (Camera_1/5/3/7/8/10). Drives sky, light, and fog pigments.")]
+        public IslandLookKind LookKind = IslandLookKind.Canonical;
         [Tooltip("Exponential Squared fog density for this preset (Custom SRP / RenderSettings).")]
         [Min(0f)] public float FogDensity = 0.001f;
         [Tooltip("Optional directional-light color override. Alpha=0 means use the time-of-day table; alpha>0 forces this color (RGB) on the main light and fog tint.")]
         public Color LightColorOverride = new Color(0f, 0f, 0f, 0f);
+        [Tooltip("Wanos / Boluo audio banks required before this preset can apply. Empty = always ready.")]
+        public string[] BankNames;
     }
 }

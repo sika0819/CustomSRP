@@ -1,0 +1,22 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 1580561652
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: fa18ad11283e6bd90d1311be56e2591f
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1cfddeea06ce0ec573e0d0ec81ebe20e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: c05a8cddb0def652e3ad5e3cca70b5d2
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Other/Scene Asset/Synty/PolygonGeneric/Textures/FX/Generic_Circle_Soft_01.png
+- Assets/GameMain/Environment/Other/Scene Asset/Synty/PolygonGeneric/Textures/FX/Generic_Circle_01.png
+Dependencies: []

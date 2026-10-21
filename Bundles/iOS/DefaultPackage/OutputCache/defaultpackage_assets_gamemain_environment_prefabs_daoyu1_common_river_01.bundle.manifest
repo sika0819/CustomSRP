@@ -1,0 +1,33 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 194837038
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 935d3b0a4e73bd84f4589ab225a06512
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: f0b0c3ac4e91a92fff13540b2aa2de65
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: f6b8b89f55db531c5b6c4e313b0ee13b
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Common/River_01.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_materials.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models.bundle

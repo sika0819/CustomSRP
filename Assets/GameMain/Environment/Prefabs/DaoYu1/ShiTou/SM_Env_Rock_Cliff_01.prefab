@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 4470662283741117592}
   - component: {fileID: 1868445055898929234}
   - component: {fileID: 1422413700253958746}
-  - component: {fileID: 5000000000000000001}
+  - component: {fileID: 4854966434051121229}
   m_Layer: 0
   m_Name: SM_Env_Rock_Cliff_01
   m_TagString: Untagged
@@ -112,7 +112,7 @@ LODGroup:
     - renderer: {fileID: 1868445055898929234}
   m_Enabled: 1
   m_GlobalIlluminationLOD: 0
---- !u!64 &5000000000000000001
+--- !u!64 &4854966434051121229
 MeshCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -133,4 +133,4 @@ MeshCollider:
   serializedVersion: 5
   m_Convex: 0
   m_CookingOptions: 22
-  m_Mesh: {fileID: 4300000, guid: fba4f0f55d6d642abbe78b65d1a48679, type: 2}
+  m_Mesh: {fileID: 4300000, guid: cb6fc5dc795cf451f961cafaa5589357, type: 2}

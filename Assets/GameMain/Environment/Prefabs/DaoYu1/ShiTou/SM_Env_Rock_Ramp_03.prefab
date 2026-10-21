@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 6238479942021252324}
   - component: {fileID: 8176143551579779118}
   - component: {fileID: 2438155486471425249}
-  - component: {fileID: 518724291277747315}
+  - component: {fileID: 1846376428000012725}
   m_Layer: 0
   m_Name: SM_Env_Rock_Ramp_03
   m_TagString: Untagged
@@ -112,7 +112,7 @@ LODGroup:
     - renderer: {fileID: 8176143551579779118}
   m_Enabled: 1
   m_GlobalIlluminationLOD: 0
---- !u!64 &518724291277747315
+--- !u!64 &1846376428000012725
 MeshCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -133,4 +133,4 @@ MeshCollider:
   serializedVersion: 5
   m_Convex: 0
   m_CookingOptions: 22
-  m_Mesh: {fileID: 4300000, guid: ed28854d067594fab8f9332825f4bc73, type: 2}
+  m_Mesh: {fileID: 4300000, guid: 9bd7be03a3f764e779ceb2b6bd11d086, type: 2}

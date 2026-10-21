@@ -272,28 +272,78 @@ namespace Game
             shouldPlay = false;
             if (!_loaded || _all == null) return;
 
-            BakedWaterStation s = FindById(spec.Id);
+            BakedWaterStation s = FindForSpec(spec);
             if (s == null) return;
 
             float radius = currentlyPlaying ? spec.ExitRadius : spec.EnterRadius;
 
             if (s.Shape == WaterShape.SegmentChain)
             {
-                if (!TryNearestRiver(listener, radius, out Vector3 nearest, out float d3D))
+                // 只在本 station 的折线上取最近点（不要扫全部河，否则多床位会抢同一锚点）。
+                if (!TryNearestOnStation(s, listener, radius, out Vector3 nearest, out float d3D))
                     return;
                 pos = nearest;
                 shouldPlay = d3D <= radius;
             }
             else if (s.Shape == WaterShape.CoarseGrid)
             {
-                if (!TryNearestOceanOrLake(listener, radius, out Vector3 nearest, out float d3D))
+                float d = QueryGridNearest(s, listener, out Vector3 nearest);
+                if (d > radius)
                     return;
                 pos = nearest;
-                shouldPlay = d3D <= radius;
+                shouldPlay = true;
             }
         }
 
-        static BakedWaterStation FindByIdLocal(string id) => FindById(id);
+        /// <summary>
+        /// Id 精确匹配 → PrefabHint / RiverMeshName → 同 Kind 的唯一 Ocean/Lake 网格。
+        /// MapItem 源 id（river_3_River_01）与 baker（river_native_River_01）不一致时仍能命中。
+        /// </summary>
+        static BakedWaterStation FindForSpec(AmbienceEmitterSpec spec)
+        {
+            if (spec == null || _all == null)
+                return null;
+
+            BakedWaterStation byId = FindById(spec.Id);
+            if (byId != null)
+                return byId;
+
+            string hint = spec.RiverMeshName;
+            if (!string.IsNullOrEmpty(hint))
+            {
+                for (int i = 0; i < _all.Length; i++)
+                {
+                    var s = _all[i];
+                    if (s == null)
+                        continue;
+                    if (!string.IsNullOrEmpty(s.PrefabHint)
+                        && string.Equals(s.PrefabHint, hint, StringComparison.OrdinalIgnoreCase))
+                        return s;
+                    if (!string.IsNullOrEmpty(s.Id)
+                        && s.Id.IndexOf(hint, StringComparison.OrdinalIgnoreCase) >= 0)
+                        return s;
+                }
+            }
+
+            // ocean_shore_8 等无独立 bake：复用唯一 Ocean CoarseGrid。
+            if (spec.Kind == AmbienceEmitterKind.Ocean || spec.Kind == AmbienceEmitterKind.Lake)
+            {
+                BakedWaterStation only = null;
+                for (int i = 0; i < _all.Length; i++)
+                {
+                    var s = _all[i];
+                    if (s == null || s.Kind != spec.Kind || s.Shape != WaterShape.CoarseGrid)
+                        continue;
+                    if (only != null)
+                        return null; // 多个同 Kind 网格时不猜
+                    only = s;
+                }
+                return only;
+            }
+
+            return null;
+        }
+
         static BakedWaterStation FindById(string id)
         {
             if (string.IsNullOrEmpty(id) || _all == null) return null;
@@ -303,6 +353,52 @@ namespace Game
                 if (s != null && s.Id == id) return s;
             }
             return null;
+        }
+
+        static bool TryNearestOnStation(
+            BakedWaterStation s, Vector3 listener, float maxDist,
+            out Vector3 closest, out float dist3D)
+        {
+            closest = default;
+            dist3D = float.MaxValue;
+            if (s == null || s.ChainPoints == null || s.ChainPoints.Length == 0)
+                return false;
+
+            if (listener.x < s.BoundsMin.x - maxDist || listener.x > s.BoundsMax.x + maxDist)
+                return false;
+            if (listener.y < s.BoundsMin.y - maxDist || listener.y > s.BoundsMax.y + maxDist)
+                return false;
+            if (listener.z < s.BoundsMin.z - maxDist || listener.z > s.BoundsMax.z + maxDist)
+                return false;
+
+            if (s.ChainPoints.Length == 1)
+            {
+                closest = s.ChainPoints[0];
+                dist3D = Vector3.Distance(listener, closest);
+                return dist3D <= maxDist;
+            }
+
+            closest = s.ChainPoints[0];
+            float bestSq = SqDist(closest, listener);
+            for (int j = 1; j < s.ChainPoints.Length; j++)
+            {
+                Vector3 a = s.ChainPoints[j - 1];
+                Vector3 b = s.ChainPoints[j];
+                Vector3 ab = b - a;
+                float abLenSq = ab.sqrMagnitude;
+                float t = abLenSq > 1e-6f ? Vector3.Dot(listener - a, ab) / abLenSq : 0f;
+                t = Mathf.Clamp01(t);
+                Vector3 p = a + ab * t;
+                float d = SqDist(p, listener);
+                if (d < bestSq)
+                {
+                    bestSq = d;
+                    closest = p;
+                }
+            }
+
+            dist3D = Mathf.Sqrt(bestSq);
+            return dist3D <= maxDist;
         }
 
         /// <summary>

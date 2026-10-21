@@ -27,6 +27,12 @@ namespace CustomSRP
         void Render(UnsafeGraphContext context)
         {
             UnsafeCommandBuffer cmd = context.cmd;
+            // Planar mirror: keep cached view/proj (Cull must not leave rolled transform).
+            if (_camera != null && _camera.cameraType == CameraType.Reflection)
+            {
+                OilPlanarReflection.ReapplyMatrices(_camera);
+            }
+
             cmd.SetupCameraProperties(_camera);
             cmd.SetRenderTarget(
                 _colorAttachment,
@@ -103,13 +109,11 @@ namespace CustomSRP
             desc.depthBufferBits = DepthBits.Depth32;
             desc.name = "Depth Attachment";
             desc.filterMode = FilterMode.Point;
-            // Mobile (tile-based GPU): keep depth on-tile, never write back to system memory.
-            // Saves ~half-screen R32 bandwidth and frees a sizeable transient allocation.
-            // On non-tile platforms Unity silently ignores this flag.
-            if (Application.isMobilePlatform)
-            {
-                desc.memoryless = RenderTextureMemoryless.Depth;
-            }
+            // Do NOT use Memoryless Depth. Pass order is Opaque → CopyAttachments →
+            // Transparent as separate RG passes; memoryless depth never lands in system
+            // memory, so Transparent ZTest sees empty depth and water draws over the
+            // island on TBDR mobiles (e.g. MDX0220). Depth Copy for shore foam needs
+            // a real store as well.
             TextureHandle depthAttachment = pass._depthAttachment =
                 renderGraph.CreateTexture(desc);
             builder.UseTexture(depthAttachment, AccessFlags.WriteAll);
@@ -117,6 +121,7 @@ namespace CustomSRP
             if (copyDepth)
             {
                 desc.name = "Depth Copy";
+                desc.memoryless = RenderTextureMemoryless.None;
                 depthCopy = renderGraph.CreateTexture(desc);
             }
 

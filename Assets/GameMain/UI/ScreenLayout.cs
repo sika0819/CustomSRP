@@ -35,13 +35,16 @@ namespace Game
         {
             get
             {
-                CurrentSize(out int width, out int height);
-                if (height > 0 && width >= height)
-                    return true;
-
                 ScreenOrientation orientation = Screen.orientation;
-                return orientation == ScreenOrientation.LandscapeLeft
-                    || orientation == ScreenOrientation.LandscapeRight;
+                if (orientation == ScreenOrientation.LandscapeLeft
+                    || orientation == ScreenOrientation.LandscapeRight)
+                    return true;
+                if (orientation == ScreenOrientation.Portrait
+                    || orientation == ScreenOrientation.PortraitUpsideDown)
+                    return false;
+
+                CurrentSize(out int width, out int height);
+                return height > 0 && width >= height;
             }
         }
 

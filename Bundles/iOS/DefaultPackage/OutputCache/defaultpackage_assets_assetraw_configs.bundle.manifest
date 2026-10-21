@@ -1,0 +1,31 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 681128891
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 7213450d489d961b5de0643d9a12a991
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 676758fcc88bb3ed522cb1bf302313d2
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 30d4423d399121486cb29d60e008445e
+HashAppended: 0
+ClassTypes:
+- Class: 49
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 11500000, guid: b7f3d1c4a9e24f6b8c05d3e7a1b2f4d6, type: 3}
+- Class: 115
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers:
+- AssemblyName: UnityEngine.CoreModule
+  ClassName: UnityEngine.Vector3
+Assets:
+- Assets/AssetRaw/Configs/IslandSpawnPose.asset
+- Assets/AssetRaw/Configs/yoo_boot.json
+- Assets/AssetRaw/Configs/Island_GrassBake.bytes
+- Assets/AssetRaw/Configs/AllMapItem.bytes
+- Assets/AssetRaw/Configs/MapItemExtras.bytes
+Dependencies: []

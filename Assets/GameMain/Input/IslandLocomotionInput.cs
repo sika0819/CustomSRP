@@ -29,7 +29,8 @@ namespace Game
 
         public void Tick()
         {
-            bool canMove = !HudOverlayGate.BlocksLocomotion();
+            bool canMove = !HudOverlayGate.BlocksLocomotion()
+                && (GameEntry.Presets == null || !GameEntry.Presets.IsTransitioning);
             _joystick?.TickFrame(canMove);
 
             if (!canMove)

@@ -1,4 +1,4 @@
-﻿Shader "Unlit/FireShader2"
+Shader "Unlit/FireShader2"
 {
     Properties
     {

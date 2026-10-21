@@ -95,6 +95,8 @@ namespace Game
         static bool _started;
         static bool _catalogBuilt;
         static bool _contentAudioPaused;
+        /// <summary>Iris / black hold: Evaluate may run but must not StartSource / Retain.</summary>
+        static bool _presetTransitionHeld;
         static bool _pendingEvaluate;
         static readonly List<RuntimeSource> Sources = new List<RuntimeSource>(32);
 
@@ -132,6 +134,9 @@ namespace Game
 
             /// <summary>Forest：第一次离开 150m 球的时刻。&lt;0 表示仍在球内。</summary>
             public float OutsideSince = -1f;
+
+            /// <summary>True after a successful Retain; walk-stop may KeepBank without Release.</summary>
+            public bool BankHeld;
         }
 
         struct DeferredEmitterRelease
@@ -163,12 +168,26 @@ namespace Game
         }
 
         /// <summary>
+        /// Iris window: block new zone loads / plays. Cleared on reveal via
+        /// <see cref="PresetWeatherHold.Release"/>.
+        /// </summary>
+        public static void SetPresetTransitionHeld(bool held)
+        {
+            if (_presetTransitionHeld == held)
+                return;
+            _presetTransitionHeld = held;
+            if (held)
+                StopAllPlaying(forceReleaseBank: true);
+        }
+
+        /// <summary>
         /// Hard-stop every zone voice without changing the BGM content-pause latch.
         /// Used when switching island presets so old emitters do not linger across teleport.
+        /// Forces bank Release (doc: 虹膜中卸掉走路区域加载器).
         /// </summary>
         public static void ClearAllPlaying()
         {
-            StopAllPlaying();
+            StopAllPlaying(forceReleaseBank: true);
         }
 
         public static void EvaluateNow()
@@ -209,13 +228,14 @@ namespace Game
             WanosInteraction.VoiceStateChanged -= OnVoiceStateChanged;
             WanosBankStore.OnBankLoaded -= OnBankLoaded;
             IslandWorldService.OnInlandWaterReady -= OnInlandWaterReady;
-            StopAllPlaying();
+            StopAllPlaying(forceReleaseBank: true);
             FlushDeferredEmitterReleases(force: true);
             Sources.Clear();
             VoiceToSource.Clear();
             _pendingRetryBanks.Clear();
             _catalogBuilt = false;
             _contentAudioPaused = false;
+            _presetTransitionHeld = false;
             _pendingEvaluate = false;
             _inlandWaterReady = false;
             if (_host != null)
@@ -447,7 +467,9 @@ namespace Game
         static void BuildMapItemSources()
         {
             var items = GameEntry.World?.MapItemSpawner?.AllMapItems;
-            bool hasRiver = false;
+            // 仅统计真正的 River_* 床位。MapItem 里的 WaterfallSplash/Mist 不能挡住
+            // AppendNativeRivers，否则河链（River_01..03）整组丢失。
+            bool hasRiverBed = false;
             if (items != null)
             {
                 for (int i = 0; i < items.Count; i++)
@@ -455,14 +477,14 @@ namespace Game
                     var item = items[i];
                     if (AmbienceZoneCatalog.TryCreateFromMapItem(item, i, out var spec))
                     {
-                        if (spec.Kind == AmbienceEmitterKind.River || spec.Kind == AmbienceEmitterKind.Waterfall)
-                            hasRiver = true;
+                        if (spec.Kind == AmbienceEmitterKind.River)
+                            hasRiverBed = true;
                         AddSource(spec);
                     }
                 }
             }
 
-            if (!hasRiver)
+            if (!hasRiverBed)
                 AmbienceZoneCatalog.AppendNativeRivers(AddSource);
         }
 
@@ -479,6 +501,8 @@ namespace Game
             if (!_started || !_catalogBuilt || !WanosInteraction.IsReady)
                 return;
             if (_contentAudioPaused)
+                return;
+            if (_presetTransitionHeld)
                 return;
             if (!WanosInteraction.TryGetListenerPosition(out Vector3 listener))
                 return;
@@ -503,10 +527,14 @@ namespace Game
                     || spec.Kind == AmbienceEmitterKind.Waterfall
                     || spec.Kind == AmbienceEmitterKind.Ocean)
                 {
-                    // River / Waterfall / Ocean：用烘焙最近点放 emitter；增益距离用 catalog/MapItem 位
-                    // （跟随锚点会让 dist≈0，岸线听感全满）。
+                    // Emitter 跟烘焙/河网最近点；增益：
+                    // - Ocean：仍用 catalog 岸点（跟最近点会让 dist≈0、全岸满音）
+                    // - River/Waterfall：必须用表面最近点，否则沿河远离 catalog 原点时
+                    //   gainDist 上百米 → -96dB，贴着河也听不见（见 play dist=235 gain=-96 日志）
                     pos = EvaluateBakedSurfaceSource(src, listener, out want);
-                    float gainDist = Distance(spec, listener, ResolveEmitterPosition(spec));
+                    float gainDist = spec.Kind == AmbienceEmitterKind.Ocean
+                        ? Distance(spec, listener, ResolveEmitterPosition(spec))
+                        : Distance(spec, listener, pos);
                     _wantScratch[i] = want;
                     _posScratch[i] = pos;
                     _distScratch[i] = gainDist;
@@ -516,13 +544,11 @@ namespace Game
                     pos = ResolveEmitterPosition(spec);
                     float dist = Distance(spec, listener, pos);
                     want = ShouldPlay(src, listener, pos);
-                    // 草地/高原：过曲线静音远端强制停。Forest 只认 150m 球，曲线 160 只衰减。
-                    if (want && IsBiomeKind(spec.Kind) && spec.Kind != AmbienceEmitterKind.Forest)
+                    // 草地/高原：触发球可大于增益曲线远端；圈内已播只靠衰减贴地板，
+                    // 未播且增益已近静音则不开播（避免远距空 Post）。
+                    if (want && !src.Playing && IsBiomeKind(spec.Kind) && spec.Kind != AmbienceEmitterKind.Forest)
                     {
-                        float silent = SilentDistanceMeters(spec);
-                        if (dist > silent)
-                            want = false;
-                        else if (!src.Playing && GainDbForDistance(spec, dist) < -40f)
+                        if (GainDbForDistance(spec, dist) < -40f)
                             want = false;
                     }
                     _wantScratch[i] = want;
@@ -535,6 +561,7 @@ namespace Game
             // 另一侧仍持有共用 bank，不得 Stop/Unload。这里压成「每 bank 只保留最近床位」，
             // 床位切换时 Transfer 播放权（不 Stop↔Play 叠音）。
             CollapseExclusiveSharedPlayWants(n);
+            ApplyLakeWaterfallExclusion(n);
             TransferExclusiveSharedPlays(n);
 
             for (int i = 0; i < n; i++)
@@ -606,7 +633,7 @@ namespace Game
 
         /// <summary>
         /// 多床位 / 多岸点共用同一 Play/Stop：只留最近一处 Post，避免叠成「全岛一起响」。
-        /// Ocean 两岸共用 Ocean_Calm_Quad；biome 同 Boluo 同名事件只打一次。
+        /// Ocean 两岸共用 Ocean_Calm_Quad；biome / 河 / 瀑同 Boluo 同名事件只打一次。
         /// </summary>
         static bool IsExclusiveSharedPlayBank(string bank)
         {
@@ -616,7 +643,54 @@ namespace Game
                 || string.Equals(bank, "Boluodao_Grassland", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(bank, "Boluodao_Plateau", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(bank, "Ocean_Calm_Quad", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(bank, "Lake_Quad", StringComparison.OrdinalIgnoreCase);
+                || string.Equals(bank, "Lake_Quad", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(bank, "River_ADD", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(bank, "Waterfall_Big_Quad", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(bank, "Waterfall_Small_Quad", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Lake ↔ Waterfall mutual exclusion: only the nearer side keeps want=true.
+        /// Stop path KeepBank so exclusivity never unloads the suppressed side's bank.
+        /// </summary>
+        static void ApplyLakeWaterfallExclusion(int n)
+        {
+            int bestLake = -1;
+            float bestLakeDist = float.MaxValue;
+            int bestFall = -1;
+            float bestFallDist = float.MaxValue;
+            for (int i = 0; i < n; i++)
+            {
+                if (!_wantScratch[i])
+                    continue;
+                AmbienceEmitterKind kind = Sources[i].Spec.Kind;
+                float d = _distScratch[i];
+                if (kind == AmbienceEmitterKind.Lake && d < bestLakeDist)
+                {
+                    bestLakeDist = d;
+                    bestLake = i;
+                }
+                else if (kind == AmbienceEmitterKind.Waterfall && d < bestFallDist)
+                {
+                    bestFallDist = d;
+                    bestFall = i;
+                }
+            }
+
+            if (bestLake < 0 || bestFall < 0)
+                return;
+
+            bool preferLake = bestLakeDist <= bestFallDist;
+            for (int i = 0; i < n; i++)
+            {
+                if (!_wantScratch[i])
+                    continue;
+                AmbienceEmitterKind kind = Sources[i].Spec.Kind;
+                if (preferLake && kind == AmbienceEmitterKind.Waterfall)
+                    _wantScratch[i] = false;
+                else if (!preferLake && kind == AmbienceEmitterKind.Lake)
+                    _wantScratch[i] = false;
+            }
         }
 
         /// <summary>
@@ -679,6 +753,7 @@ namespace Game
             to.Playing = true;
             to.NeedsRepost = true;
             to.LastPostedDistance = float.NaN;
+            to.BankHeld = from.BankHeld;
 
             for (int i = 0; i < to.VoiceIds.Count; i++)
                 VoiceToSource[to.VoiceIds[i]] = toIdx;
@@ -686,6 +761,7 @@ namespace Game
             from.Playing = false;
             from.NeedsRepost = false;
             from.LastPostedDistance = float.NaN;
+            from.BankHeld = false;
             from.VoiceIds.Clear();
             from.Emitter = null;
 
@@ -698,24 +774,79 @@ namespace Game
 
         /// <summary>
         /// River / Waterfall / Ocean：通过 <see cref="StaticWaterStationIndex"/> 取
-        /// 烘焙的最近代表点 + shouldPlay。
+        /// 烘焙的最近代表点 + shouldPlay。缺烘焙时河/瀑走 InlandWater mesh ClosestPoint。
         /// </summary>
         static Vector3 EvaluateBakedSurfaceSource(RuntimeSource src, Vector3 listener, out bool want)
         {
             var spec = src.Spec;
-            float radius = src.Playing ? spec.ExitRadius : spec.EnterRadius;
+
+            // Ocean / Lake 高度门控：原先只在 ShouldPlay（biome 路径）里，岸线网格路径漏了，
+            // 导致进岛爬高后海声仍按 xz 贴岸衰减「一直响」。
+            if (spec.Kind == AmbienceEmitterKind.Ocean
+                && listener.y > AmbienceZoneCatalog.OceanMaxPlayerY)
+            {
+                want = false;
+                return ResolveEmitterPosition(spec);
+            }
+            if (spec.Kind == AmbienceEmitterKind.Lake
+                && (listener.y < AmbienceZoneCatalog.LakeMinPlayerY
+                    || listener.y > AmbienceZoneCatalog.LakeMaxPlayerY))
+            {
+                want = false;
+                return ResolveEmitterPosition(spec);
+            }
+
+            float radius = src.Playing ? EffectiveExitRadius(spec) : spec.EnterRadius;
             if (StaticWaterStationIndex.IsReady)
             {
+                // Temporarily align ExitRadius for hysteresis query (ocean +12 / waterfall split).
+                float savedExit = spec.ExitRadius;
+                spec.ExitRadius = EffectiveExitRadius(spec);
                 StaticWaterStationIndex.GetEmitterAnchor(spec, listener, src.Playing, out Vector3 anchor, out want);
+                spec.ExitRadius = savedExit;
+                if (want && IsWaterfallMutedByCampfire(spec, listener))
+                    want = false;
                 if (want || src.Playing)
                     return anchor;
             }
 
-            // 降级：未烘焙或 station 缺失 → 用 catalog 位置 + ShouldPlay 半径判断
+            // 缺 BakedWaterStations 时：河/瀑用 InlandWater collider 最近点（沿整条河网），
+            // 避免只靠 catalog 原点 20m 球「贴着河也没声」。
+            // 用 IslandWorldService.InlandWaterReady：事件可能早于 AmbienceZone.Start 已发过。
+            bool inlandReady = _inlandWaterReady || IslandWorldService.InlandWaterReady;
+            if ((spec.Kind == AmbienceEmitterKind.River || spec.Kind == AmbienceEmitterKind.Waterfall)
+                && inlandReady)
+            {
+                if (InlandWaterSampler.TrySampleNamed(
+                        listener, radius, spec.RiverMeshName, out Vector3 closest, out float dMesh))
+                {
+                    want = dMesh <= radius && !IsWaterfallMutedByCampfire(spec, listener);
+                    return closest;
+                }
+            }
+
+            // 再降级：catalog / MapItem 单点
             Vector3 fallback = ResolveEmitterPosition(spec);
             float d = Distance(spec, listener, fallback);
-            want = d <= radius;
+            want = d <= radius && !IsWaterfallMutedByCampfire(spec, listener);
             return fallback;
+        }
+
+        static float EffectiveExitRadius(AmbienceEmitterSpec spec)
+        {
+            if (spec.Kind == AmbienceEmitterKind.Ocean)
+                return Mathf.Max(spec.ExitRadius, spec.EnterRadius + AmbienceZoneCatalog.OceanNearSurfaceMeters);
+            return spec.ExitRadius;
+        }
+
+        static bool IsWaterfallMutedByCampfire(AmbienceEmitterSpec spec, Vector3 listener)
+        {
+            if (spec.Kind != AmbienceEmitterKind.Waterfall)
+                return false;
+            // Big waterfall only (enter ~42); small keeps full radius.
+            if (spec.EnterRadius > AmbienceZoneCatalog.WaterfallBigEnterMeters + 0.5f)
+                return false;
+            return IsInsideCampfireWaterfallMute(listener);
         }
 
         static Vector3 ResolveEmitterPosition(AmbienceEmitterSpec spec)
@@ -762,8 +893,32 @@ namespace Game
             if (spec.Kind == AmbienceEmitterKind.Forest)
                 return ShouldPlayForest(src, dist);
 
-            float radius = src.Playing ? spec.ExitRadius : spec.EnterRadius;
-            return dist <= radius;
+            float radius = src.Playing ? EffectiveExitRadius(spec) : spec.EnterRadius;
+            if (dist > radius)
+                return false;
+            if (IsWaterfallMutedByCampfire(spec, listener))
+                return false;
+            return true;
+        }
+
+        /// <summary>Big waterfall muted inside campfire 22m silence ring.</summary>
+        static bool IsInsideCampfireWaterfallMute(Vector3 listener)
+        {
+            float mute = AmbienceZoneCatalog.WaterfallCampfireMuteMeters;
+            float muteSq = mute * mute;
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var s = Sources[i].Spec;
+                if (s.Kind != AmbienceEmitterKind.Campfire)
+                    continue;
+                Vector3 c = ResolveEmitterPosition(s);
+                float dx = listener.x - c.x;
+                float dy = listener.y - c.y;
+                float dz = listener.z - c.z;
+                if (dx * dx + dy * dy + dz * dz <= muteSq)
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -798,14 +953,6 @@ namespace Game
             kind == AmbienceEmitterKind.Forest
             || kind == AmbienceEmitterKind.Grassland
             || kind == AmbienceEmitterKind.Plateau;
-
-        static float SilentDistanceMeters(AmbienceEmitterSpec spec)
-        {
-            Vector2[] curve = GainCurveForSpec(spec);
-            if (curve == null || curve.Length == 0)
-                return spec.ExitRadius;
-            return curve[curve.Length - 1].x;
-        }
 
         static float Distance(AmbienceEmitterSpec spec, Vector3 listener, Vector3 emitterPos)
         {
@@ -879,8 +1026,8 @@ namespace Game
                 case AmbienceEmitterKind.Forest:
                     return ForestGainCurve;
                 case AmbienceEmitterKind.Grassland:
-                    // GrassLand_S_Audio radius=60；主草地 150。
-                    return spec.EnterRadius <= 80f ? GrasslandSecondaryGainCurve : GrasslandGainCurve;
+                    // 卫星 Enter≈75 / 曲线远端 60；主区 Enter≈180 / 曲线远端 150。
+                    return spec.EnterRadius <= 100f ? GrasslandSecondaryGainCurve : GrasslandGainCurve;
                 case AmbienceEmitterKind.Plateau:
                     return PlateauGainCurve;
                 case AmbienceEmitterKind.Ocean:
@@ -891,8 +1038,8 @@ namespace Game
                 case AmbienceEmitterKind.Campfire:
                     return CampfireGainCurve;
                 case AmbienceEmitterKind.Waterfall:
-                    // Big radius≈50，Small≈72（Boluo）。
-                    return spec.EnterRadius >= 60f ? WaterfallSmallGainCurve : WaterfallBigGainCurve;
+                    // Big enter 42 / exit 50；Small enter 50 / exit 72.
+                    return spec.ExitRadius >= 70f ? WaterfallSmallGainCurve : WaterfallBigGainCurve;
                 default:
                     return OceanGainCurve;
             }
@@ -931,18 +1078,27 @@ namespace Game
             var spec = src.Spec;
             Log.Info($"[AmbienceZone] StartSource enter id={spec.Id} bank={spec.Bank}");
 
-            if (!WanosBankStore.Retain(spec.Bank))
+            if (!src.BankHeld)
             {
-                Log.Warning($"[AmbienceZone] StartSource Retain FAIL id={spec.Id} bank={spec.Bank} (added to retry)");
-                _pendingRetryBanks.Add(spec.Bank);
-                return;
+                if (!WanosBankStore.Retain(spec.Bank))
+                {
+                    Log.Warning($"[AmbienceZone] StartSource Retain FAIL id={spec.Id} bank={spec.Bank} (added to retry)");
+                    _pendingRetryBanks.Add(spec.Bank);
+                    return;
+                }
+
+                src.BankHeld = true;
             }
 
             string[] plays = ResolvePlayEventsForSingleEmitter(spec);
             if (plays.Length == 0)
             {
                 Log.Warning($"[AmbienceZone] StartSource no-events id={spec.Id} bank={spec.Bank} (bank released)");
-                WanosBankStore.Release(spec.Bank);
+                if (src.BankHeld)
+                {
+                    WanosBankStore.Release(spec.Bank);
+                    src.BankHeld = false;
+                }
                 return;
             }
 
@@ -1051,13 +1207,55 @@ namespace Game
         }
 
         /// <summary>
+        /// Walk-stop KeepBank for river/ocean/lake/waterfall (doc: 只停播常保留资源；
+        /// 湖瀑互斥同理). Biome/campfire Release with per-kind delay.
+        /// Preset clear uses <paramref name="forceReleaseBank"/>.
+        /// </summary>
+        static bool ShouldKeepBankOnWalkStop(AmbienceEmitterSpec spec)
+        {
+            if (spec == null)
+                return false;
+            switch (spec.Kind)
+            {
+                case AmbienceEmitterKind.River:
+                case AmbienceEmitterKind.Ocean:
+                case AmbienceEmitterKind.Lake:
+                case AmbienceEmitterKind.Waterfall:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        static float UnloadDelaySecondsFor(AmbienceEmitterSpec spec)
+        {
+            if (spec == null)
+                return WanosBankStore.DefaultUnloadDelaySeconds;
+            switch (spec.Kind)
+            {
+                case AmbienceEmitterKind.Forest:
+                    return AmbienceZoneCatalog.ForestUnloadDelaySeconds;
+                case AmbienceEmitterKind.Grassland:
+                    return spec.EnterRadius <= 100f
+                        ? AmbienceZoneCatalog.GrasslandSecondaryUnloadDelaySeconds
+                        : AmbienceZoneCatalog.GrasslandUnloadDelaySeconds;
+                case AmbienceEmitterKind.Plateau:
+                    return AmbienceZoneCatalog.PlateauUnloadDelaySeconds;
+                case AmbienceEmitterKind.Campfire:
+                    return AmbienceZoneCatalog.CampfireUnloadDelaySeconds;
+                default:
+                    return WanosBankStore.DefaultUnloadDelaySeconds;
+            }
+        }
+
+        /// <summary>
         /// 停止 source：
         /// 1. 对每个 voice 显式 Stop with fade
         /// 2. 发 StopEvent
         /// 3. 释放 emitter
-        /// 4. 释放 bank
+        /// 4. 按策略 Release bank（或 KeepBank）
         /// </summary>
-        static void StopSource(RuntimeSource src)
+        static void StopSource(RuntimeSource src, bool forceReleaseBank = false)
         {
             var spec = src.Spec;
             src.Playing = false;
@@ -1092,16 +1290,22 @@ namespace Game
                 src.Emitter = null;
             }
 
-            WanosBankStore.Release(spec.Bank);
-            Log.Info($"[AmbienceZone] stop id={spec.Id}");
+            bool keep = !forceReleaseBank && ShouldKeepBankOnWalkStop(spec);
+            if (src.BankHeld && !keep)
+            {
+                WanosBankStore.Release(spec.Bank, UnloadDelaySecondsFor(spec));
+                src.BankHeld = false;
+            }
+            Log.Info($"[AmbienceZone] stop id={spec.Id} keepBank={keep}");
         }
 
-        static void StopAllPlaying()
+        static void StopAllPlaying(bool forceReleaseBank = false)
         {
             for (int i = 0; i < Sources.Count; i++)
             {
-                if (Sources[i].Playing)
-                    StopSource(Sources[i]);
+                var src = Sources[i];
+                if (src.Playing || (forceReleaseBank && src.BankHeld))
+                    StopSource(src, forceReleaseBank);
             }
         }
 

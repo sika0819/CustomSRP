@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Game;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -355,10 +356,22 @@ namespace CustomSRP
                 bool settled = _hasGrassView
                     && (camTf.position - _lastGrassCamPos).sqrMagnitude <= 0.04f
                     && Quaternion.Angle(camTf.rotation, _lastGrassCamRot) <= 0.75f;
-                if (_hasLastGrassSubmit && settled)
-                    ReplayLastGrassDraw();
-                else
-                    CullAndDraw(cam);
+                // DrawMeshInstancedIndirect only scopes the submit when its camera
+                // argument is set; leaving it null makes the planar mirror probe
+                // re-draw the whole grass window into the reflection RT. Bind the
+                // main camera for both the fresh and the replay path.
+                _bindDrawCamera = cam;
+                try
+                {
+                    if (_hasLastGrassSubmit && settled)
+                        ReplayLastGrassDraw();
+                    else
+                        CullAndDraw(cam);
+                }
+                finally
+                {
+                    _bindDrawCamera = null;
+                }
             }
         }
 
@@ -390,19 +403,35 @@ namespace CustomSRP
         void PushWindGlobals()
         {
             Vector3 dir = windDirection.sqrMagnitude > 1e-6f ? windDirection.normalized : Vector3.right;
+            // Get effective wind strength from weather system. When weather is not Wind, grass should not sway.
+            float effectiveWind = GetWeatherWindStrength();
             if (_windGlobalsValid
                 && (dir - _lastWindDir).sqrMagnitude < 1e-8f
-                && Mathf.Abs(windStrength - _lastWindStrength) < 1e-5f
+                && Mathf.Abs(effectiveWind - _lastWindStrength) < 1e-5f
                 && Mathf.Abs(maxDrawDistance - _lastMaxDrawGlobal) < 1e-4f)
                 return;
 
             Shader.SetGlobalVector(WindDirId, dir);
-            Shader.SetGlobalFloat(WindStrengthId, windStrength);
+            Shader.SetGlobalFloat(WindStrengthId, effectiveWind);
             Shader.SetGlobalFloat(MaxDrawId, maxDrawDistance);
             _lastWindDir = dir;
-            _lastWindStrength = windStrength;
+            _lastWindStrength = effectiveWind;
             _lastMaxDrawGlobal = maxDrawDistance;
             _windGlobalsValid = true;
+        }
+
+        /// <summary>
+        /// Get wind strength based on current weather. When weather is not Wind type, returns 0
+        /// so grass doesn't sway without wind.
+        /// </summary>
+        float GetWeatherWindStrength()
+        {
+            var weather = WeatherService.Ensure();
+            if (weather.Kind != IslandWeatherKind.Wind)
+                return 0f;
+            // Map weather level (0-3) to wind strength (0-0.55)
+            float levelFactor = weather.Level / 3f;
+            return Mathf.Lerp(0f, windStrength, levelFactor);
         }
 
         static float HorizontalDistXZ(Vector3 a, Vector3 b)

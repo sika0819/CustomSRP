@@ -1,0 +1,49 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 842084822
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: c3b784a0aa5adcb3f1329381d1bc91a9
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1705e2841c1d1b90d1e968b05f621b4b
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 18571b069c2e022acadb688621db3324
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 108
+  Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: 11500000, guid: 7c04d95ddf33e414e91fdead077aecb5, type: 3}
+- Class: 115
+  Script: {instanceID: 0}
+- Class: 198
+  Script: {instanceID: 0}
+- Class: 199
+  Script: {instanceID: 0}
+- Class: 205
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers:
+- AssemblyName: UnityEngine.CoreModule
+  ClassName: UnityEngine.Color
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Other/Huodui.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_assets_gamemain_environment_fx_unityfire_materials.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_materials_season.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_models.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_gamemain_environment_other_scene_asset_synty_polygongeneric_materials_fx.bundle

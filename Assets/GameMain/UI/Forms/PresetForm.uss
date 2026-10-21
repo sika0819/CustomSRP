@@ -26,9 +26,8 @@
     -unity-slice-right: 140px;
     -unity-slice-top: 140px;
     -unity-slice-bottom: 140px;
-    /* chrome layer — let hit-testing fall through to the formBackdrop
-       so an empty tap on the dialog card dismisses the popup. */
-    picking-mode: Ignore;
+    /* CARD must eat hits so taps on chrome do not dismiss (F2 SCRIM only). */
+    picking-mode: Position;
 }
 
 .game-preset-form__title {
@@ -83,8 +82,8 @@
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: flex-start;
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-left: 60px;
+    padding-right: 60px;
     min-height: 100%;
 }
 

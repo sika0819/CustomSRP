@@ -19,6 +19,15 @@ namespace Game.BoluoApi
         /// <summary>闺蜜机渠道（创维 Neo / Ultra 等真机包）。</summary>
         public const string DefaultChannelGmj = "BOLUOCWGMJ";
 
+        /// <summary>
+        /// 创维闺蜜机：channel=BOLUOCWGMJ 或 originEnd=boluocwgmj（Editor 可经环境窗口覆盖）。
+        /// </summary>
+        public static bool IsSkyworthGmj()
+        {
+            return string.Equals(GetChannel(), DefaultChannelGmj, System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(GetOriginEnd(), DefaultOriginEndGmj, System.StringComparison.OrdinalIgnoreCase);
+        }
+
 #if UNITY_EDITOR
         /// <summary>Editor 测试覆盖 key（环境·渠道·版本窗口写入；仅 EditorPrefs）。</summary>
         public const string EditorChannelOverrideKey = "Boluo.EditorTest.ChannelOverride";

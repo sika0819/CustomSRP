@@ -62,6 +62,7 @@ Varyings TerrainOilBasemapVertex(Attributes input)
 half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
 {
     UNITY_SETUP_INSTANCE_ID(input);
+    OilBakeClipAboveWater(input.positionWS);
 
     half3 albedo = (half3)(SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv).rgb * _BaseColor.rgb);
     half3 geometricNormal = normalize((half3)input.normalWS);
@@ -95,7 +96,6 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
     half3 color = OilNPRLighting(
         surface,
         albedo,
-        OilPeriodAmbient((half3)_AmbientColor.rgb),
         half3(0.36h, 0.46h, 0.62h),
         half3(0.58h, 0.48h, 0.3h),
         half3(0.0h, 0.0h, 0.0h),
@@ -107,6 +107,7 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
         brush,
         (half)_ShadowWobble,
         0.2h,
+        0.0h,
         fragment.screenUV);
 
     half3 shadowFloor = albedo * half3(0.18h, 0.12h, 0.26h) + half3(0.015h, 0.01h, 0.03h);

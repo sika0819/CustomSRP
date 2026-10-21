@@ -211,17 +211,41 @@ float3 ApplyColorGradingLUT(float3 color)
         _ColorGradingLUTParameters.yz);
 }
 
+float2 _CanvasGrain;
+
+float CanvasHash(float2 p)
+{
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+float3 ApplyCanvasWeave(float3 color, float2 uv)
+{
+    if (_CanvasGrain.x <= 0.0001 && _CanvasGrain.y <= 0.0001)
+        return color;
+
+    float2 px = uv * _ScreenParams.xy;
+    float n = CanvasHash(floor(px)) - 0.5;
+    float2 cell = floor(px * (1.0 / 3.0));
+    float weave = (frac(cell.x * 0.5) - 0.5) + (frac(cell.y * 0.5) - 0.5);
+    float luma = dot(color, float3(0.299, 0.587, 0.114));
+    float mid = saturate(1.0 - abs(luma - 0.42) * 1.7);
+    float delta = (n * _CanvasGrain.x + weave * _CanvasGrain.y) * mid;
+    return saturate(color * (1.0 + delta));
+}
+
 float4 ApplyColorGradingPassFragment(Varyings input) : SV_TARGET
 {
     float4 color = GetSource(input.screenUV);
-    color.rgb = ApplyColorGradingLUT(color.rgb);
+    color.rgb = ApplyCanvasWeave(ApplyColorGradingLUT(color.rgb), input.screenUV);
     return color;
 }
 
 float4 ApplyColorGradingWithLumaPassFragment(Varyings input) : SV_TARGET
 {
     float4 color = GetSource(input.screenUV);
-    color.rgb = ApplyColorGradingLUT(color.rgb);
+    color.rgb = ApplyCanvasWeave(ApplyColorGradingLUT(color.rgb), input.screenUV);
     color.a = sqrt(Luminance(color.rgb));
     return color;
 }
@@ -230,14 +254,88 @@ bool _CopyBicubic;
 
 float4 FinalPassFragmentRescale(Varyings input) : SV_TARGET
 {
-    if (_CopyBicubic)
-    {
-        return GetSourceBicubic(input.screenUV);
-    }
-
-    return GetSource(input.screenUV);
+    float4 color = _CopyBicubic
+        ? GetSourceBicubic(input.screenUV)
+        : GetSource(input.screenUV);
+    color.rgb = ApplyCanvasWeave(ApplyColorGradingLUT(color.rgb), input.screenUV);
+    return color;
 }
 
 #include "OilFilterPass.hlsl"
+
+// =============================================================================
+// OilRainPassFragment — screen-space water surface ripple post-process.
+// Picks up world-space ripple events and renders expanding rings in screen space.
+// Cheap: ~2 multiply-adds per pixel, fades out at 3 seconds.
+// =============================================================================
+
+TEXTURE2D(_CameraDepthTexture_ForRain);
+SAMPLER(sampler_CameraDepthTexture_ForRain);
+float4 _CameraDepthTexture_TexelSize;
+float4x4 _InverseViewProjectionMatrix;
+float4x4 _ViewProjectionMatrix;
+
+#define OIL_RAIN_MAX_RIPPLES 8
+float4 _OilRainRipplePositions[OIL_RAIN_MAX_RIPPLES]; // xyz = world pos, w = birth time
+float  _OilRainRippleWorldSize;
+float  _OilRainRippleExpandSpeed;
+float  _OilRainRippleOpacity;
+float  _OilRainRippleCount;
+
+float OilRainRingAt(float2 uv, float4 ripple, float time)
+{
+    // Project world-space ripple centre to screen UV
+    float4 clip = mul(_ViewProjectionMatrix, float4(ripple.xyz, 1.0));
+    float2 rippleUV = (clip.xy / clip.w) * 0.5 + 0.5;
+
+    // Skip behind-the-camera ripples
+    if (clip.w <= 0.0)
+        return 0.0;
+
+    float dist = length(uv - rippleUV);
+    float age = time - ripple.w;
+    if (age < 0.0 || age > 3.0)
+        return 0.0;
+
+    // Ring radius grows over time, normalised to NDC space
+    float ringRadius = clamp(age * _OilRainRippleExpandSpeed / _OilRainRippleWorldSize, 0.0, 0.5);
+    float ringWidth = 0.012;
+
+    float ring = smoothstep(ringRadius - ringWidth, ringRadius, dist)
+               - smoothstep(ringRadius, ringRadius + ringWidth, dist);
+
+    float fade = saturate(1.0 - age / 3.0);
+    return ring * fade;
+}
+
+float4 OilRainPassFragment(Varyings input) : SV_TARGET
+{
+    float4 color = GetSource(input.screenUV);
+
+    // Sample depth — skip far plane (no water to ripple there)
+    float rawDepth = SAMPLE_TEXTURE2D_LOD(
+        _CameraDepthTexture_ForRain, sampler_CameraDepthTexture_ForRain, input.screenUV, 0).r;
+    if (rawDepth >= 0.9999)
+        return color;
+
+    float time = _Time.y;
+    float accum = 0.0;
+    int count = (int)_OilRainRippleCount;
+
+    [loop]
+    for (int i = 0; i < OIL_RAIN_MAX_RIPPLES; i++)
+    {
+        if (i >= count) break;
+        accum += OilRainRingAt(input.screenUV, _OilRainRipplePositions[i], time);
+    }
+
+    accum = saturate(accum) * _OilRainRippleOpacity;
+
+    // Add subtle bright ring and slight colour tint (water ambient)
+    color.rgb += accum * 0.18;
+    color.rgb = lerp(color.rgb, color.rgb * float3(0.85, 0.95, 1.05), accum * 0.6);
+
+    return color;
+}
 
 #endif

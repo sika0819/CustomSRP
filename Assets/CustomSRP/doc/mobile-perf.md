@@ -8,7 +8,7 @@
 
 | # | 改动 | 收益 | 文件 |
 |---|------|------|------|
-| 1 | **Memoryless Depth**（移动端） | -0.4 ~ -1.2 ms | `Passes/SetupPass.cs` |
+| 1 | ~~Memoryless Depth~~（已回滚） | — | 真机半透水面盖岛：Opaque→Copy→Transparent 跨 Pass 丢 depth |
 | 2 | **RenderScale 0.85**（移动端） | -28% 像素 | `CameraRenderer.cs` |
 | 3 | **Bloom maxIterations=2**（移动端） | -0.3 ~ -0.6 ms | `PostFXSettings.cs`, `Passes/BloomPass.cs` |
 | 4 | **Forward+ tile 128**（移动端） | -0.1 ms | `Passes/LightingPass.cs` |
@@ -27,8 +27,8 @@
 - **`Shadows.SetTileViewport` divide-by-zero 兜底**：`split < 1` 时强制 1，避免零方向光场景崩。
 - **`ShadowSettings.ClonedForMobile`**：`cascadeCount < 1` 强制 1（inspector `[Range(1,4)]` 仅在编辑器生效，运行时改可能被绕过）。
 
-### 1. Memoryless Depth
-`SetupPass` 创建 `TextureDesc.depthBufferBits = DepthBits.Depth32` 时，移动端追加 `memoryless = RenderTextureMemoryless.Depth`。在 Mali / Adreno 的 tile-based 架构上，depth 在 tile 阶段保留在 on-chip memory，不写回 system memory，**节省约 1/2 屏幕 R32 写带宽**。非移动端 Unity 静默忽略该字段，零回归。
+### 1. Memoryless Depth（已回滚）
+曾在移动端对 Depth Attachment 开 `RenderTextureMemoryless.Depth`。与当前 Pass 序（Opaque → CopyAttachments → Transparent）不兼容：depth 不写回系统内存时，Transparent 的 ZTest 失效，海水 / 河面盖在岛屿上；Depth Copy（岸沫）也会读到空缓冲。已在 `SetupPass` 去掉 memoryless。
 
 ### 2. RenderScale 0.85
 `CameraRenderer.cs` 在 `Application.isMobilePlatform` 且 `CameraSettings.renderScaleMode == Inherit`（用户没显式 override）时把 `renderScale` 强制设为 0.85。配合 `BicubicRescalingMode.UpAndDown` 走双三次，UI / 文字锐度靠 `BicubicRescale` 保留。
@@ -61,9 +61,8 @@
 
 ## 验证
 
-1. 编译：确保 `RenderTextureMemoryless`、`TextureDesc.memoryless` 在 Unity 6000.x 上可解析（已在 Unity 6 RG 1.x 提供）。
-2. Render Graph Viewer：检查 `Setup` 之后 depth 标注 "Memoryless" / "Tile"；Opaque Geometry 的 SetPass / Triangle 数下降 28%。
-3. 真机（Pixel 6 / iPhone 12）抓 GPU Frame Time P99，对比 baseline。
+1. 真机：海水 / 内陆水面不得盖在岛屿地形与建筑之上（ZTest 正常）。
+2. 真机抓 GPU Frame Time P99，对比 baseline（无 memoryless 后 depth 带宽略升属预期）。
 
 ## 回滚
 

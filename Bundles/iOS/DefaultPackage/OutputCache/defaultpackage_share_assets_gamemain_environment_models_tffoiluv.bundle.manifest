@@ -1,0 +1,38 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3658991033
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 7902014779f34d2b01d370fc3da6af87
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: fd81ad4dbb8db7477521c97fec51a8ca
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 6d5907d7338a95f1c66f5fe804f4f6bb
+HashAppended: 0
+ClassTypes:
+- Class: 43
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir5_LOD1.asset
+- Assets/GameMain/Environment/Models/TffOilUv/Spruce3_LOD0.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir6_LOD0.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir2_LOD1.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir7_LOD0.asset
+- Assets/GameMain/Environment/Models/TffOilUv/Spruce3_LOD1.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir3_LOD0.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir3_LOD1.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir4_LOD0.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir1_LOD0.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir6_LOD1.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir1_LOD1.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir5_LOD0.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir2_LOD0.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir8_LOD1.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir8_LOD0.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir4_LOD1.asset
+- Assets/GameMain/Environment/Models/TffOilUv/GrandFir7_LOD1.asset
+Dependencies: []

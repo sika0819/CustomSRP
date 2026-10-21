@@ -1,27 +1,30 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Game
 {
     /// <summary>
-    /// [Obsolete] 静态内陆水体的 collider 最近点采样器。每 tick 走 PhysX.ClosestPoint + 子节点枚举
-    /// 性能成本高（移动端 1.5–12ms/tick），已被 <see cref="StaticWaterStationIndex"/> 取代。
-    /// 保留文件仅作历史参考，不再被 AmbienceZoneService / RainWaterProximityService 调用。
+    /// 静态内陆水体 collider 最近点采样。主路径是 <see cref="StaticWaterStationIndex"/>；
+    /// 当 BakedWaterStations 未打包时，<see cref="AmbienceZoneService"/> 仍用本类沿河网采样。
     /// </summary>
-    [Obsolete("Replaced by StaticWaterStationIndex (editor-baked data). Do not call from runtime code.")]
     public static class InlandWaterSampler
     {
         /// <summary>
         /// 找距听者最近的水体三角面世界坐标点（通过 MeshCollider 路径）。
         /// 若水体无 collider（未挂载），fallback 到按子节点中心做粗略判定。
         /// </summary>
-        /// <param name="listener">听者世界坐标（通常取玩家相机）</param>
-        /// <param name="maxDistance">最大判定距离（超过则返回 false）</param>
-        /// <param name="closest">输出的最近点世界坐标</param>
-        /// <param name="dist3D">输出的 3D 距离</param>
-        /// <returns>是否在距离内命中了水体区域</returns>
         public static bool TrySample(Vector3 listener, float maxDistance,
+            out Vector3 closest, out float dist3D)
+        {
+            return TrySampleNamed(listener, maxDistance, nameHint: null, out closest, out dist3D);
+        }
+
+        /// <summary>
+        /// 按 <paramref name="nameHint"/>（如 River_01 / WaterfallSplash）过滤 InlandWater 子节点后再取最近点。
+        /// hint 为空时扫描全部 inland collider。
+        /// </summary>
+        public static bool TrySampleNamed(
+            Vector3 listener, float maxDistance, string nameHint,
             out Vector3 closest, out float dist3D)
         {
             closest = default;
@@ -39,15 +42,14 @@ namespace Game
                 var col = colliders[i];
                 if (col == null || col is TerrainCollider)
                     continue;
+                if (!NameMatchesHint(col.transform, nameHint))
+                    continue;
 
-                // 使用 collider 的 bounds 做快速预过滤
                 float boundDist = (col.bounds.center - listener).sqrMagnitude;
-                // bounds 对角线半径近似 collider 尺寸，展开一点安全余量
-                float expandedBoundSq = (boundDist - col.bounds.size.sqrMagnitude * 0.25f);
+                float expandedBoundSq = boundDist - col.bounds.size.sqrMagnitude * 0.25f;
                 if (expandedBoundSq > maxSq + col.bounds.size.sqrMagnitude)
                     continue;
 
-                // Physics.ClosestPoint 不需要 Mesh.isReadable
                 Vector3 p = Physics.ClosestPoint(listener, col, col.transform.position, col.transform.rotation);
                 float dSq = (p.x - listener.x) * (p.x - listener.x)
                           + (p.y - listener.y) * (p.y - listener.y)
@@ -64,14 +66,16 @@ namespace Game
                 }
             }
 
-            // Fallback：无 collider 时用子节点中心粗略判定（兜底，跳过也行）
             if (!anyHit)
             {
                 var transforms = root.GetComponentsInChildren<Transform>(true);
                 for (int i = 0; i < transforms.Length; i++)
                 {
                     var t = transforms[i];
-                    if (t == null) continue;
+                    if (t == null || t == root.transform)
+                        continue;
+                    if (!NameMatchesHint(t, nameHint))
+                        continue;
 
                     Vector3 center = t.position;
                     float dSq = (center.x - listener.x) * (center.x - listener.x)
@@ -91,6 +95,20 @@ namespace Game
             }
 
             return anyHit;
+        }
+
+        static bool NameMatchesHint(Transform t, string nameHint)
+        {
+            if (string.IsNullOrEmpty(nameHint))
+                return true;
+            for (Transform cur = t; cur != null; cur = cur.parent)
+            {
+                string n = cur.name;
+                if (!string.IsNullOrEmpty(n)
+                    && n.IndexOf(nameHint, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+            return false;
         }
     }
 }

@@ -52,6 +52,7 @@ namespace Game.BoluoApi
             _fatal = false;
             _catalogTcs = new UniTaskCompletionSource();
             _criticalTcs = new UniTaskCompletionSource();
+            AudioEnginePaths.ResetSession();
             PresetBankCatalog.Clear();
             BankDownloader.ResetSession();
         }
@@ -65,12 +66,12 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// Wait Critical wave (or timeout), then cue default music on main thread.
-        /// Download continues in background if timed out.
+        /// Cue default <c>Music1_1</c> as soon as bank + catalog are ready.
+        /// Does <b>not</b> wait for the full Critical wave (Wind/Rain/…) — that blocked
+        /// Editor BGM for tens of seconds while Music1_1 was already on disk.
         /// </summary>
         public static async UniTask<bool> WaitCriticalThenCueAsync(float timeoutSeconds = 45f)
         {
-            bool ok = await WaitCriticalWithTimeoutAsync(timeoutSeconds);
             await UniTask.SwitchToMainThread();
             if (_fatal)
             {
@@ -78,36 +79,54 @@ namespace Game.BoluoApi
                 return false;
             }
 
-            EnsureEssentialBanksLoaded();
-            if (!MusicCatalog.IsReady)
-                MusicCatalog.LoadAsync();
+            await EnsureLocalBanksReadyAsync();
+            await MusicCatalog.EnsureReadyAsync(8f);
 
-            // Music1_1 可能已在盘上但 Critical 波尚未 loadIntoEngine；给短窗口灌引擎 + 等播放设备。
             const string defaultBank = "Music1_1";
             float bankDeadline = UnityEngine.Time.realtimeSinceStartup + 8f;
             while (UnityEngine.Time.realtimeSinceStartup < bankDeadline)
             {
+                // Device open first, then DSP (macOS wrapper requires playback device).
                 if (!WanosAudio.WanosEngine.IsPlaybackEnabled)
                 {
-                    WanosAudio.WanosEngine.StartEngine("critical-cue-retry");
                     WanosAudio.WanosEngine.EnablePlayback("critical-cue-retry");
+                    WanosAudio.WanosEngine.StartEngine("critical-cue-retry");
                     WanosAudio.WanosEngine.Unmute("critical-cue-retry");
                 }
+                else
+                    WanosAudio.WanosEngine.StartEngine("critical-cue-dsp");
 
                 if (WanosAudio.WanosEngine.IsPlaybackEnabled
                     && (WanosAudio.WanosBankStore.IsLoaded(defaultBank)
-                        || WanosAudio.WanosBankStore.Load(defaultBank)))
+                        || WanosAudio.WanosBankStore.Load(defaultBank)
+                        || TryLoadBankFromDisk(defaultBank)))
                     break;
                 await UniTask.Delay(100, DelayType.UnscaledDeltaTime);
             }
 
             if (GameEntry.Music != null)
             {
-                GameEntry.Music.PlayIndex(0, restart: true);
+                if (!MusicCatalog.IsReady || MusicCatalog.AlbumCount == 0)
+                {
+                    Log.Warning(
+                        "[BankUpgradeBootstrap] critical cue skipped — MusicCatalog empty " +
+                        $"(ready={MusicCatalog.IsReady} albums={MusicCatalog.AlbumCount})");
+                }
+                else
+                {
+                    // 首装/揭罩默认必须播 Music1_1（勿用扁平索引：服务端专辑顺序可能不是本地归息）。
+                    if (MusicCatalog.TryFindByBankName(defaultBank, out int album, out int track))
+                        GameEntry.Music.PlayIndex(album, track, restart: true);
+                    else
+                        GameEntry.Music.PlayIndex(0, 0, restart: true);
+                }
+
+                bool criticalDone = _criticalTcs.Task.Status.IsCompleted();
                 Log.Info(
-                    $"[BankUpgradeBootstrap] critical cue ok={ok} " +
+                    $"[BankUpgradeBootstrap] critical cue criticalDone={criticalDone} " +
                     $"playback={WanosAudio.WanosEngine.IsPlaybackEnabled} " +
                     $"bankLoaded={WanosAudio.WanosBankStore.IsLoaded(defaultBank)} " +
+                    $"albums={MusicCatalog.AlbumCount} " +
                     $"playing={GameEntry.Music.IsPlaying}");
             }
             else
@@ -115,10 +134,18 @@ namespace Game.BoluoApi
                 Log.Warning("[BankUpgradeBootstrap] critical cue skipped — MusicPlaylist null");
             }
 
-            return ok;
+            // Optional: still observe Critical for callers; do not gate the cue on it.
+            return await WaitCriticalWithTimeoutAsync(timeoutSeconds);
         }
 
-        /// <summary>Load Common_Init / Common_Music from StreamingAssets when engine is up.</summary>
+        static bool TryLoadBankFromDisk(string bankName)
+        {
+            if (!AudioEnginePaths.TryFindLocalBank(bankName, out string path))
+                return false;
+            return WanosAudio.WanosBankStore.LoadFromPath(bankName, path);
+        }
+
+        /// <summary>Load Common_Init / Common_Music from disk when engine is up.</summary>
         public static void EnsureEssentialBanksLoaded()
         {
             if (!WanosAudio.WanosNative.Instance.IsCreated)
@@ -136,6 +163,18 @@ namespace Game.BoluoApi
                 else
                     Log.Warning($"[BankUpgradeBootstrap] essential bank missing: {name}");
             }
+        }
+
+        /// <summary>
+        /// Android：先把 StreamingAssets/WanosBank 解到 persistent，再灌 essential。
+        /// GuestLogin / Critical cue 前应 await。
+        /// </summary>
+        public static async UniTask EnsureLocalBanksReadyAsync()
+        {
+            await AudioEnginePaths.EnsureStreamingBanksExtractedAsync();
+            // productName 改名后复用旧 persistent 里已下完的 bank，避免进度卡在重下。
+            await AudioEnginePaths.EnsureLegacyBanksMigratedAsync();
+            EnsureEssentialBanksLoaded();
         }
 
         static async UniTask<bool> WaitCriticalWithTimeoutAsync(float timeoutSeconds)
@@ -165,6 +204,12 @@ namespace Game.BoluoApi
             {
                 SignatureLib.Init();
                 BoluoSession.LoadFromPrefs();
+
+                // 真机 jar 内 bank 须先落到 persistent；再迁入旧 product 目录已下完的 bank。
+                await AudioEnginePaths.EnsureStreamingBanksExtractedAsync();
+                await AudioEnginePaths.EnsureLegacyBanksMigratedAsync();
+                if (loadIntoEngine)
+                    EnsureEssentialBanksLoaded();
 
                 bool deviceOk = await BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true);
                 bool userOk = await BoluoDeviceLoginClient.EnsureUserTokenAsync(failFast: true);
@@ -258,6 +303,7 @@ namespace Game.BoluoApi
 
         static void ReleaseCriticalFromLocal(bool loadIntoEngine)
         {
+            // Extract already awaited at RunAsync start; load what we have on disk.
             if (loadIntoEngine)
             {
                 EnsureEssentialBanksLoaded();

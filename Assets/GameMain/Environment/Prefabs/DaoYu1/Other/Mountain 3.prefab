@@ -69,7 +69,7 @@ GameObject:
   - component: {fileID: 4041314969613040576}
   - component: {fileID: 456162845452797470}
   - component: {fileID: 9180253622907878096}
-  - component: {fileID: 4102781662127158467}
+  - component: {fileID: 5683726287368268188}
   m_Layer: 0
   m_Name: SM_Mountain_04_LOD1
   m_TagString: Untagged
@@ -149,7 +149,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!64 &4102781662127158467
+--- !u!64 &5683726287368268188
 MeshCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -170,7 +170,7 @@ MeshCollider:
   serializedVersion: 5
   m_Convex: 0
   m_CookingOptions: 22
-  m_Mesh: {fileID: 4300000, guid: f88629703c504412aa57332c3a992488, type: 2}
+  m_Mesh: {fileID: 4300000, guid: ea8027cdc12b249e1a430639f0f5995a, type: 2}
 --- !u!1 &5760389593313128134
 GameObject:
   m_ObjectHideFlags: 0

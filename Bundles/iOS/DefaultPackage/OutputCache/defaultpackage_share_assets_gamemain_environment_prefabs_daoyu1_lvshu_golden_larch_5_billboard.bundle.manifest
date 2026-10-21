@@ -1,0 +1,32 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 4261709651
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: e63324749e70e467d501bab00c04705e
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: f0374ecc39ba544ef3199a798fb47d87
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 28648965b30fe746b6ecda2fabd87ff4
+HashAppended: 0
+ClassTypes:
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 28
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Lvshu/Golden Larch 5_Billboard/Golden Larch 5_Billboard.mat
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Lvshu/Golden Larch 5_Billboard/Golden Larch 5_Billboard_Albedo.png
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Lvshu/Golden Larch 5_Billboard/Golden Larch 5_Billboard_Normal.png
+- Assets/GameMain/Environment/Prefabs/DaoYu1/Lvshu/Golden Larch 5_Billboard/Golden Larch 5_BillboardMesh.asset
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_share_assets_customsrp_textures.bundle
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_unityshaders.bundle

@@ -1,0 +1,21 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 2193877792
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: a0b94636b991803a9198cd1ee772ed41
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 1cfddeea06ce0ec573e0d0ec81ebe20e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 3569a6817b32d1dc184b75a8816c5b4d
+HashAppended: 0
+ClassTypes:
+- Class: 28
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/ThirdParty/StylizedWater2/Materials/Textures/Foam/OilFoamBrush.png
+Dependencies: []

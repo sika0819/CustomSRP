@@ -55,7 +55,7 @@ namespace CustomSRP
                     renderQueueRange = opaque
                         ? RenderQueueRange.opaque
                         : RenderQueueRange.transparent,
-                    layerMask = -1,
+                    layerMask = camera.cullingMask,
                     renderingLayerMask = renderingLayerMask
                 });
             builder.UseRendererList(pass._list);

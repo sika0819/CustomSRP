@@ -177,5 +177,16 @@ Shader "Hidden/CustomSRP/Post FX Stack"
             #pragma fragment OilFilterPassFragment
             ENDHLSL
         }
+
+        Pass
+        {
+            Name "Oil Rain Post"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilRainPassFragment
+            ENDHLSL
+        }
     }
 }

@@ -1,0 +1,26 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 3804883394
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 8e5bb00c9b61c6f5a34a3d39aae59e6e
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: fd81ad4dbb8db7477521c97fec51a8ca
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 4c682c522a3e8f05baf19c365bb2c7e1
+HashAppended: 0
+ClassTypes:
+- Class: 43
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/Models/LarchUv/Larch7_LOD0.asset
+- Assets/GameMain/Environment/Models/LarchUv/Larch7_LOD1.asset
+- Assets/GameMain/Environment/Models/LarchUv/Larch4_LOD0.asset
+- Assets/GameMain/Environment/Models/LarchUv/Larch4_LOD1.asset
+- Assets/GameMain/Environment/Models/LarchUv/Larch3_LOD0.asset
+- Assets/GameMain/Environment/Models/LarchUv/Larch3_LOD1.asset
+Dependencies: []

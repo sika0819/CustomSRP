@@ -1,0 +1,22 @@
+/* CommonDialogForm — card overrides (white card, bottom-centered on stage). */
+.common-dialog-form__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+/* White card background matching NoticeCard style. */
+#dialog #card {
+    background-image: url("../Textures/NoticeCard/panel.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+/* Icon uses the NoticeCard icon by default. */
+#dialog #icon {
+    background-image: url("../Textures/NoticeCard/icon.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}

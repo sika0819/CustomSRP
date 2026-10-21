@@ -7,15 +7,14 @@ using UnityEditor.Build.Reporting;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 using YooAsset.Editor;
-
-using Game; // for SceneAssets
+using Game.Editor.BuildTool;
 
 namespace Game.Editor
 {
     /// <summary>
-    /// 统一打包工具编辑器窗口。
-    /// 整合 YooAsset 资源打包 + APK/Xcode 项目构建，支持 Android 和 iOS 全量一键打包。
-    /// 
+    /// 独立 APK / Xcode 打包（非宿主）。宿主导出请用 Build/BoLuo发布工具。
+    /// YooAsset 构建走 <see cref="BoluoYooAssetBuildPipeline"/>。
+    ///
     /// 使用方式：
     /// - 菜单：Window/Game/Build Tool
     /// - 命令行：Unity -batchmode -quit -executeMethod Game.Editor.GameBuildWindow.BuildAndroid
@@ -26,7 +25,7 @@ namespace Game.Editor
         const string WindowTitle = "Game Build Tool";
         const string MenuPath = "Window/Game/Build Tool";
 
-        const string PackageName = "DefaultPackage";
+        const string PackageName = BoluoYooAssetBuildPipeline.PackageName;
 
         // 构建配置
         BuildTarget _targetPlatform = BuildTarget.Android;
@@ -121,8 +120,8 @@ namespace Game.Editor
             {
                 EditorGUILayout.LabelField("Game Build Tool", EditorStyles.boldLabel);
                 EditorGUILayout.HelpBox(
-                    "统一打包工具：整合 YooAsset 资源打包 + APK/Xcode 项目构建。\n" +
-                    "支持 Android 和 iOS 全量一键打包。",
+                    "独立 APK / Xcode（非宿主）。YooAsset + Player 构建。\n" +
+                    "混合宿主 UaaL 导出请用菜单 Build/BoLuo发布工具。",
                     MessageType.Info);
             }
             EditorGUILayout.EndVertical();
@@ -278,14 +277,10 @@ namespace Game.Editor
                 // 2. Build YooAsset resources
                 if (_buildResource)
                 {
-                    if (!BuildYooAssetResources())
+                    if (!BoluoYooAssetBuildPipeline.Run(
+                            _targetPlatform, _copyToStreamingAssets, AppendLog))
                     {
                         return;
-                    }
-
-                    if (_copyToStreamingAssets)
-                    {
-                        CopyPackageToStreamingAssets();
                     }
                 }
 
@@ -365,163 +360,6 @@ namespace Game.Editor
             }
 
             return true;
-        }
-
-        bool BuildYooAssetResources()
-        {
-            AppendLog("--- Building YooAsset Resources ---");
-
-            try
-            {
-                // 1. Setup YooAsset collector (ensures settings exist)
-                if (!HasYooAssetSettings())
-                {
-                    AppendLog("Setting up YooAsset collector...");
-                    YooAssetCollectorSetup.SetupAll();
-                }
-
-                // 2. Run preprocessing (InlandWater, MapItem, etc.)
-                AppendLog("Running preprocessing...");
-                RunPreBuildSteps();
-
-                // 3. Clean old build cache to ensure full rebuild
-                string outputRoot = AssetBundleBuilderHelper.GetDefaultBuildOutputRoot();
-                string platform = _targetPlatform.ToString();
-                string packageRoot = Path.Combine(outputRoot, platform, PackageName);
-
-                if (Directory.Exists(packageRoot))
-                {
-                    AppendLog($"Cleaning old build cache: {packageRoot}");
-                    Directory.Delete(packageRoot, true);
-                }
-
-                // 4. Execute fresh build
-                string packageVersion = DateTime.Now.ToString("yyyy-MM-dd-HHmmss");
-                UpdateSetting updateSetting = UpdateSetting.LoadOrDefault();
-
-                var builtin = new BuiltinBuildParameters();
-                var pipeline = new BuiltinBuildPipeline();
-                var buildParameters = builtin;
-
-                builtin.CompressOption = ECompressOption.LZ4;
-
-                buildParameters.BuildOutputRoot = outputRoot;
-                buildParameters.BuildinFileRoot = AssetBundleBuilderHelper.GetStreamingAssetsRoot();
-                buildParameters.BuildPipeline = EBuildPipeline.BuiltinBuildPipeline.ToString();
-                buildParameters.BuildTarget = _targetPlatform;
-                buildParameters.BuildBundleType = (int)YooAsset.EBuildBundleType.AssetBundle;
-                buildParameters.PackageName = PackageName;
-                buildParameters.PackageVersion = packageVersion;
-                buildParameters.VerifyBuildingResult = true;
-                buildParameters.EnableSharePackRule = true;
-                buildParameters.FileNameStyle = YooAsset.EFileNameStyle.BundleName_HashName;
-                buildParameters.BuildinFileCopyOption = EBuildinFileCopyOption.ClearAndCopyAll;
-                buildParameters.BuildinFileCopyParams = string.Empty;
-                buildParameters.ClearBuildCacheFiles = true; // Force clean for full rebuild
-                buildParameters.UseAssetDependencyDB = true;
-
-                AppendLog($"Building package: {PackageName} v{packageVersion}");
-                var buildResult = pipeline.Run(buildParameters, true);
-
-                if (buildResult.Success)
-                {
-                    AppendLog($"YooAsset build OK: {buildResult.OutputPackageDirectory}");
-                    return true;
-                }
-
-                AppendLog($"YooAsset build failed: {buildResult.ErrorInfo}");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"YooAsset build error: {ex.Message}");
-                Log.Error($"[GameBuild] YooAsset error: {ex}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Run preprocessing steps before building YooAsset resources.
-        /// This ensures InlandWater, MapItem, and other dynamic content is up to date.
-        /// </summary>
-        void RunPreBuildSteps()
-        {
-            // Build InlandWater prefab if needed
-            try
-            {
-                if (AssetDatabase.LoadAssetAtPath<GameObject>(SceneAssets.IslandInlandWaterPrefabPath) == null)
-                {
-                    AppendLog("Building InlandWater prefab...");
-                    IslandInlandWaterBuilder.Build();
-                }
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"InlandWater build skipped: {ex.Message}");
-            }
-
-            // Ensure MapItem foliage settings
-            try
-            {
-                MapItemEditorMenu.EnsureFoliageClipAndShadows();
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"MapItem foliage setup skipped: {ex.Message}");
-            }
-
-            AppendLog("Preprocessing complete.");
-        }
-
-        bool HasYooAssetSettings()
-        {
-            string[] guids = AssetDatabase.FindAssets("t:AssetBundleCollectorSetting");
-            return guids.Length > 0;
-        }
-
-        void CopyPackageToStreamingAssets()
-        {
-            AppendLog("--- Copying to StreamingAssets ---");
-
-            try
-            {
-                string outputRoot = AssetBundleBuilderHelper.GetDefaultBuildOutputRoot();
-                string platform = _targetPlatform.ToString();
-                string packageRoot = Path.Combine(outputRoot, platform, PackageName);
-
-                if (!Directory.Exists(packageRoot))
-                {
-                    AppendLog($"Warning: Package output not found: {packageRoot}");
-                    AppendLog("Skipping copy. (This is normal for iOS build first).");
-                    return;
-                }
-
-                string[] versions = Directory.GetDirectories(packageRoot);
-                if (versions.Length == 0)
-                {
-                    AppendLog($"Warning: No versions in {packageRoot}");
-                    return;
-                }
-
-                Array.Sort(versions);
-                string latest = versions[versions.Length - 1];
-
-                string streamingRoot = AssetBundleBuilderHelper.GetStreamingAssetsRoot();
-                string dest = Path.Combine(streamingRoot, PackageName);
-
-                if (Directory.Exists(dest))
-                    Directory.Delete(dest, true);
-
-                Directory.CreateDirectory(streamingRoot);
-                CopyDirectoryRecursive(latest, dest);
-
-                AssetDatabase.Refresh();
-                AppendLog($"Copied {latest} -> {dest}");
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"Copy error: {ex.Message}");
-            }
         }
 
         void BuildAndroidPlayer()
@@ -814,23 +652,6 @@ namespace Game.Editor
             _buildLog += message + "\n";
             Log.Info($"[GameBuild] {message}");
             Repaint();
-        }
-
-        static void CopyDirectoryRecursive(string sourceDir, string destDir)
-        {
-            Directory.CreateDirectory(destDir);
-
-            foreach (string file in Directory.GetFiles(sourceDir))
-            {
-                string name = Path.GetFileName(file);
-                File.Copy(file, Path.Combine(destDir, name), true);
-            }
-
-            foreach (string dir in Directory.GetDirectories(sourceDir))
-            {
-                string name = Path.GetFileName(dir);
-                CopyDirectoryRecursive(dir, Path.Combine(destDir, name));
-            }
         }
     }
 }

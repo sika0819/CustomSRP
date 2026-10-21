@@ -22,6 +22,7 @@ namespace Game
         AssetHandle _inlandWaterHandle;
         AssetHandle _mapItemHandle;
         AssetHandle _bakedWaterHandle;
+        AssetHandle _spawnPoseHandle;
         readonly List<AssetHandle> _inlandChildHandles = new List<AssetHandle>(8);
         readonly List<MapItemData> _extrasCache = new List<MapItemData>(64);
         bool _loaded;
@@ -41,6 +42,7 @@ namespace Game
         public bool IsLoaded => _loaded;
         public EnvMapItemSpawner MapItemSpawner => _mapItemSpawner;
         public GameObject TerrainInstance => _terrainInstance;
+        public GameObject OceanInstance => _oceanInstance;
         public GameObject InlandWaterInstance => _inlandWaterInstance;
 
         public static IslandWorldService Ensure()
@@ -68,6 +70,9 @@ namespace Game
         {
             if (_loaded)
                 yield break;
+
+            // 出生点配置最先加载：SpawnMapItems / ApplySpawnPose 都要读它。
+            yield return LoadSpawnPose();
 
             reportProgress?.Invoke(0.72f, "正在加载地形...");
             yield return YooResourceModule.InstantiateCoroutine(
@@ -115,6 +120,10 @@ namespace Game
             reportProgress?.Invoke(0.80f, "正在铺装环境...");
             yield return SpawnMapItems(reportProgress);
 
+            reportProgress?.Invoke(0.84f, "正在加载可行走区域...");
+            IslandNavMeshService nav = IslandNavMeshService.Ensure();
+            yield return nav.Load();
+
             reportProgress?.Invoke(0.86f, "正在铺装草地...");
             IslandGrassService grass = GameEntry.Grass ?? IslandGrassService.Ensure();
             yield return grass.Load();
@@ -161,6 +170,7 @@ namespace Game
         public void Release()
         {
             (GameEntry.Grass ?? IslandGrassService.Active)?.Release();
+            IslandNavMeshService.Instance?.Release();
 
             if (_mapItemSpawner != null)
             {
@@ -183,6 +193,13 @@ namespace Game
                 _bakedWaterHandle = null;
             }
             StaticWaterStationIndex.Unload();
+
+            if (_spawnPoseHandle != null)
+            {
+                _spawnPoseHandle.Release();
+                _spawnPoseHandle = null;
+            }
+            IslandSpawnPose.Unload();
 
             if (_inlandWaterInstance != null)
             {
@@ -217,6 +234,50 @@ namespace Game
             CampfireWeatherGate.ClearVisualIgnited();
             CampfireWeatherGate.SetSuppressIgnite(true);
             _loaded = false;
+        }
+
+        /// <summary>
+        /// Loads <see cref="IslandSpawnPoseAsset"/> so <see cref="IslandSpawnPose"/> serves
+        /// configured values instead of built-in defaults. Missing asset is not fatal:
+        /// <see cref="IslandSpawnPose"/> falls back to its hardcoded pose.
+        /// </summary>
+        IEnumerator LoadSpawnPose()
+        {
+            _spawnPoseHandle?.Release();
+            _spawnPoseHandle = null;
+
+            IslandSpawnPoseAsset asset = null;
+            if (YooResourceModule.DefaultPackage != null
+                && YooResourceModule.DefaultPackage.CheckLocationValid(
+                    SceneAssets.IslandSpawnPoseLocation))
+            {
+                yield return YooResourceModule.LoadAssetCoroutine<IslandSpawnPoseAsset>(
+                    SceneAssets.IslandSpawnPoseLocation,
+                    (loaded, handle) =>
+                    {
+                        asset = loaded;
+                        _spawnPoseHandle = handle;
+                    });
+            }
+
+#if UNITY_EDITOR
+            if (asset == null)
+            {
+                asset = UnityEditor.AssetDatabase.LoadAssetAtPath<IslandSpawnPoseAsset>(
+                    SceneAssets.IslandSpawnPoseAssetPath);
+            }
+#endif
+
+            if (asset != null)
+            {
+                IslandSpawnPose.Load(asset);
+            }
+            else
+            {
+                IslandSpawnPose.Load(null);
+                Log.Warning(
+                    "[IslandWorld] IslandSpawnPose config missing — using built-in default pose");
+            }
         }
 
         IEnumerator SpawnInlandWater()

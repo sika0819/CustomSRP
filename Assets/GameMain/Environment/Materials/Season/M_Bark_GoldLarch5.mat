@@ -32,6 +32,10 @@ Material:
         m_Texture: {fileID: 2800000, guid: b37d6870fe13e422a9e1021e5e359cf5, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _CanvasMap:
         m_Texture: {fileID: 2800000, guid: a7c8d9e0f1a20314253647586970b1c2, type: 3}
         m_Scale: {x: 1, y: 1}
@@ -69,9 +73,13 @@ Material:
     - _Cull: 2
     - _Cutoff: 0.5
     - _DstBlend: 0
+    - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
     - _EnvironmentReflections: 1
     - _InternalEdge: 0
+    - _NormalStrength: 0.85
+    - _OilCrossBillboard: 0
+    - _OilFoliage: 0
     - _Outline: 0
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5
@@ -98,7 +106,7 @@ Material:
     - _WindStrength: 1
     - _ZWrite: 1
     m_Colors:
-    - _AmbientColor: {r: 0.35, g: 0.4, b: 0.32, a: 1}
+    - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _BottomColor: {r: 0.4157, g: 0.3569, b: 0.2941, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
@@ -108,6 +116,7 @@ Material:
     - _OutlineColor: {r: 0.14, g: 0.1, b: 0.08, a: 1}
     - _ShadowTint: {r: 0.5, g: 0.49, b: 0.37, a: 1}
     - _ShadowWarm: {r: 1, g: 1, b: 1, a: 1}
+    - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
     - _SpecularColor: {r: 0.66, g: 0.63, b: 0.56, a: 1}
     - _TopColor: {r: 0.4157, g: 0.3569, b: 0.2941, a: 1}
   m_BuildTextureStacks: []

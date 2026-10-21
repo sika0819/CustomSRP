@@ -13,10 +13,20 @@ namespace Game
     {
         const string CrpTypeName = "CustomSRP.CustomRenderPipelineCamera, Assembly-CSharp";
 
-        /// <summary>Standing / idle clarity.</summary>
-        public const float DefaultRenderScale = 1f;
-        /// <summary>While walking — cheaper intermediate buffer.</summary>
-        public const float WalkingRenderScale = 0.75f;
+        /// <summary>
+        /// 站立。独立 APK 会把手机也标成闺蜜机，再叠 2640 宽屏时比例 1 会把非沉浸帧率打到十几帧。
+        /// 沉浸模式仍是 0.25。
+        /// </summary>
+        public static float DefaultRenderScale => 0.5f;
+
+        /// <summary>走路，比站立再低一档。</summary>
+        public static float WalkingRenderScale => 0.375f;
+
+        /// <summary>Panel / Dialog 打开时压到 0.25，省 fill 提帧率。</summary>
+        public const float PopupRenderScale = 0.25f;
+
+        /// <summary>Idle 沉浸模式（HUD 隐去）同样 0.25。</summary>
+        public const float ImmersiveRenderScale = 0.25f;
 
         static Type _crpType;
         static PropertyInfo _settingsProp;
@@ -33,13 +43,12 @@ namespace Game
                 return;
 
             camera.clearFlags = CameraClearFlags.Skybox;
-            camera.allowHDR = false;
+            camera.allowHDR = true;
             camera.allowMSAA = false;
             if (camera.nearClipPlane < 0.3f)
                 camera.nearClipPlane = 0.3f;
-            // Fog end≈250 softens distance; 750 cuts far cull/draw without empty sky wall.
-            if (camera.farClipPlane > 750f || camera.farClipPlane < 600f)
-                camera.farClipPlane = 750f;
+            // Island horizon. Fog still softens mid-distance.
+            camera.farClipPlane = 750f;
 
             EnsureCustomRenderPipelineCamera(camera.gameObject);
         }
@@ -75,7 +84,7 @@ namespace Game
         }
 
         /// <summary>
-        /// Override camera render scale (idle 1 / walking 0.75). No-op if unchanged path fails.
+        /// Override camera render scale（idle / walking，按是否闺蜜机取档）。No-op if reflection fails.
         /// </summary>
         public static void SetRenderScale(GameObject go, float renderScale)
         {
@@ -106,7 +115,7 @@ namespace Game
                 return;
 
             Type settingsType = settings.GetType();
-            // 河岸 Depth 拍岸白边需要 _CameraDepthTexture；Copy Color 仍关以省带宽。
+            // 河岸 Depth 拍岸白边需要 _CameraDepthTexture。倒影用烘焙立方体贴图，不拷颜色。
             SetField(settingsType, settings, "copyColor", false);
             SetField(settingsType, settings, "copyDepth", true);
 

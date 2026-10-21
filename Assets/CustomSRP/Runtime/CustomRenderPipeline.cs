@@ -37,11 +37,23 @@ namespace CustomSRP
 
         protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
         {
+            BeginContextRendering(context, cameras);
             try
             {
                 for (int i = 0; i < cameras.Count; i++)
                 {
-                    _cameraRenderer.Render(_renderGraph, context, cameras[i], _settings);
+                    Camera camera = cameras[i];
+                    OilPlanarReflection.RenderBefore(
+                        context, camera, _renderGraph, _cameraRenderer, _settings);
+                    BeginCameraRendering(context, camera);
+                    try
+                    {
+                        _cameraRenderer.Render(_renderGraph, context, camera, _settings);
+                    }
+                    finally
+                    {
+                        EndCameraRendering(context, camera);
+                    }
                 }
             }
             catch (Exception e)
@@ -50,6 +62,10 @@ namespace CustomSRP
                 {
                     throw;
                 }
+            }
+            finally
+            {
+                EndContextRendering(context, cameras);
             }
 
             _renderGraph.EndFrame();

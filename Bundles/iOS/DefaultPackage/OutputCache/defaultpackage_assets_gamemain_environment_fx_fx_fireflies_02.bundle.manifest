@@ -1,0 +1,30 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.6.4f1
+CRC: 4071056415
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: 9182e68f2b8b7e6b25c4b0dc6833bc07
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d18bfa1f26e9e10285ce9b0e490a15a5
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 8499a60f40647a7d3a45e2ec9b5213d9
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 198
+  Script: {instanceID: 0}
+- Class: 199
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/GameMain/Environment/FX/FX_Fireflies_02.prefab
+Dependencies:
+- /Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Bundles/iOS/DefaultPackage/OutputCache/defaultpackage_assets_gamemain_environment_fx_fx_mats.bundle
