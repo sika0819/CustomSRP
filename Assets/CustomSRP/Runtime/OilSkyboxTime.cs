@@ -72,6 +72,13 @@ namespace CustomSRP
 
         static OilSkyLookId s_activeLookId = OilSkyLookId.Canonical;
         static float s_clockHours = 12f;
+        static OilSkyLookId s_blendFrom = OilSkyLookId.Canonical;
+        static OilSkyLookId s_blendTo = OilSkyLookId.Canonical;
+        static float s_blendT = 1f;
+        static bool s_lookBlending;
+
+        static bool LookBlendOpen =>
+            s_lookBlending && s_blendT < 1f && s_blendFrom != s_blendTo;
 
         public static OilSkyLookId CurrentLookId => s_activeLookId;
         public static bool ColorOverrideActive => s_overrideColors;
@@ -163,6 +170,7 @@ namespace CustomSRP
         static readonly int OilSkyMoonParamsId = Shader.PropertyToID("_OilSkyMoonParams");
         static readonly int OilSkyStarIntensityId = Shader.PropertyToID("_OilSkyStarIntensity");
         static readonly int OilSkyLookReadyId = Shader.PropertyToID("_OilSkyLookReady");
+        static readonly int OilSkySunriseId = Shader.PropertyToID("_OilSkySunrise");
 
         static readonly Vector4[] s_zenithBuf = new Vector4[4];
         static readonly Vector4[] s_midBuf = new Vector4[4];
@@ -378,16 +386,59 @@ namespace CustomSRP
         /// </summary>
         public void SetLookId(OilSkyLookId lookId)
         {
-            if (ActiveLookId == lookId && s_activeLookId == lookId)
-            {
-                PushLookGlobals(lookId);
+            bool unchanged = !s_lookBlending && ActiveLookId == lookId && s_activeLookId == lookId;
+            FinishLookBlend(lookId);
+            PushLookGlobals(lookId);
+            if (unchanged)
                 return;
+            Apply(markDirty: true);
+        }
+
+        /// <summary>
+        /// Dial transition: mix the committed look toward <paramref name="to"/> by <paramref name="t"/>.
+        /// t = 1 commits. WeatherService owns the clock so this does not advance time itself.
+        /// </summary>
+        public void SetLookBlend(OilSkyLookId to, float t)
+        {
+            t = Mathf.Clamp01(t);
+            if (!s_lookBlending || s_blendTo != to)
+            {
+                s_blendFrom = s_activeLookId;
+                s_blendTo = to;
+                s_lookBlending = s_blendFrom != to;
             }
 
+            s_blendT = t;
+            if (t >= 1f || s_blendFrom == to)
+                FinishLookBlend(to);
+        }
+
+        void FinishLookBlend(OilSkyLookId lookId)
+        {
+            s_lookBlending = false;
+            s_blendT = 1f;
+            s_blendFrom = lookId;
+            s_blendTo = lookId;
             ActiveLookId = lookId;
             s_activeLookId = lookId;
-            PushLookGlobals(lookId);
-            Apply(markDirty: true);
+        }
+
+        /// <summary>
+        /// Sunrise weight shared by the skybox shader, main light, and ambient.
+        /// Look blends fade Canonical's weight with the same t as the palette.
+        /// </summary>
+        public static float CurrentSunriseWeight(float hours)
+        {
+            if (s_overrideColors)
+                return 0f;
+            if (LookBlendOpen)
+            {
+                float from = OilSkyLookTables.CanonicalSunriseWeight(s_blendFrom, hours);
+                float to = OilSkyLookTables.CanonicalSunriseWeight(s_blendTo, hours);
+                return Mathf.Lerp(from, to, s_blendT);
+            }
+
+            return OilSkyLookTables.CanonicalSunriseWeight(s_activeLookId, hours);
         }
 
         /// <summary>
@@ -1079,8 +1130,15 @@ namespace CustomSRP
         }
 #endif
 
-        public static SkyLookPreset EvaluateSkyLook(float period) =>
-            EvaluateSkyLook(s_activeLookId, period);
+        public static SkyLookPreset EvaluateSkyLook(float period)
+        {
+            if (!LookBlendOpen)
+                return EvaluateSkyLook(s_activeLookId, period);
+            return SkyLookPreset.Lerp(
+                EvaluateSkyLook(s_blendFrom, period),
+                EvaluateSkyLook(s_blendTo, period),
+                s_blendT);
+        }
 
         public static SkyLookPreset EvaluateSkyLook(OilSkyLookId lookId, float period)
         {
@@ -1161,9 +1219,13 @@ namespace CustomSRP
             Shader.SetGlobalVectorArray(OilSkyMoonParamsId, s_moonParamsBuf);
             Shader.SetGlobalFloatArray(OilSkyStarIntensityId, s_starBuf);
             Shader.SetGlobalFloat(OilSkyLookReadyId, 1f);
+            Shader.SetGlobalFloat(OilSkySunriseId, 0f);
         }
 
-        /// <summary>Push 4-anchor sky pigments to the OilSkyboxNPR shader.</summary>
+        /// <summary>
+        /// Push 4-anchor sky pigments. Sunrise is a separate <c>_OilSkySunrise</c> weight so the
+        /// shader fades it on the same curve as the main light, not across the whole dawn anchor.
+        /// </summary>
         public static void PushLookGlobals(OilSkyLookId lookId)
         {
             if (s_overrideColors)
@@ -1172,35 +1234,71 @@ namespace CustomSRP
                 return;
             }
 
+            if (LookBlendOpen)
+            {
+                WriteLookAnchors(s_blendFrom, 0f, overwrite: true);
+                // t = 0 must stay on the source look. lerpT 0 is a blend, not a replace.
+                WriteLookAnchors(s_blendTo, s_blendT, overwrite: false);
+            }
+            else
+            {
+                WriteLookAnchors(lookId, 0f, overwrite: true);
+            }
+
+            UploadLookAnchors();
+            Shader.SetGlobalFloat(OilSkySunriseId, CurrentSunriseWeight(s_clockHours));
+        }
+
+        /// <summary><paramref name="overwrite"/> replaces the buffers; otherwise lerps toward this look by <paramref name="lerpT"/>.</summary>
+        static void WriteLookAnchors(OilSkyLookId lookId, float lerpT, bool overwrite)
+        {
             var table = OilSkyLookTables.Get(lookId);
-            float sunrise = OilSkyLookTables.CanonicalSunriseWeight(lookId, s_clockHours);
             for (int i = 0; i < 4; i++)
             {
                 var sky = table.sky[i];
-                if (i == 0 && sunrise > 0.001f)
+                Vector4 zenith = sky.zenith;
+                Vector4 mid = sky.mid;
+                Vector4 horizon = sky.horizon;
+                Vector4 ground = sky.ground;
+                Vector4 sunDisc = sky.sunDisc;
+                Vector4 sunGlow = sky.sunGlow;
+                Vector4 moonDisc = sky.moonDisc;
+                Vector4 moonGlow = sky.moonGlow;
+                var sunParams = new Vector4(sky.sunSize, sky.sunIntensity, sky.sunGlowAmt, 0f);
+                var moonParams = new Vector4(sky.moonSize, sky.moonIntensity, sky.moonGlowAmt, 0f);
+                if (overwrite)
                 {
-                    sky.zenith = Color.Lerp(sky.zenith, OilSkyLookTables.SunriseSkyZenith, sunrise);
-                    sky.mid = Color.Lerp(sky.mid, OilSkyLookTables.SunriseSkyMid, sunrise);
-                    sky.horizon = Color.Lerp(sky.horizon, OilSkyLookTables.SunriseSkyHorizon, sunrise);
-                    sky.sunDisc = Color.Lerp(sky.sunDisc, OilSkyLookTables.SunriseSunDisc, sunrise);
-                    sky.sunGlow = Color.Lerp(sky.sunGlow, OilSkyLookTables.SunriseSun, sunrise);
-                    sky.sunIntensity = Mathf.Lerp(sky.sunIntensity, 1.05f, sunrise);
-                    sky.sunGlowAmt = Mathf.Lerp(sky.sunGlowAmt, 0.28f, sunrise);
+                    s_zenithBuf[i] = zenith;
+                    s_midBuf[i] = mid;
+                    s_horizonBuf[i] = horizon;
+                    s_groundBuf[i] = ground;
+                    s_sunDiscBuf[i] = sunDisc;
+                    s_sunGlowBuf[i] = sunGlow;
+                    s_moonDiscBuf[i] = moonDisc;
+                    s_moonGlowBuf[i] = moonGlow;
+                    s_sunParamsBuf[i] = sunParams;
+                    s_moonParamsBuf[i] = moonParams;
+                    s_starBuf[i] = sky.starIntensity;
                 }
-
-                s_zenithBuf[i] = sky.zenith;
-                s_midBuf[i] = sky.mid;
-                s_horizonBuf[i] = sky.horizon;
-                s_groundBuf[i] = sky.ground;
-                s_sunDiscBuf[i] = sky.sunDisc;
-                s_sunGlowBuf[i] = sky.sunGlow;
-                s_moonDiscBuf[i] = sky.moonDisc;
-                s_moonGlowBuf[i] = sky.moonGlow;
-                s_sunParamsBuf[i] = new Vector4(sky.sunSize, sky.sunIntensity, sky.sunGlowAmt, 0f);
-                s_moonParamsBuf[i] = new Vector4(sky.moonSize, sky.moonIntensity, sky.moonGlowAmt, 0f);
-                s_starBuf[i] = sky.starIntensity;
+                else
+                {
+                    s_zenithBuf[i] = Vector4.Lerp(s_zenithBuf[i], zenith, lerpT);
+                    s_midBuf[i] = Vector4.Lerp(s_midBuf[i], mid, lerpT);
+                    s_horizonBuf[i] = Vector4.Lerp(s_horizonBuf[i], horizon, lerpT);
+                    s_groundBuf[i] = Vector4.Lerp(s_groundBuf[i], ground, lerpT);
+                    s_sunDiscBuf[i] = Vector4.Lerp(s_sunDiscBuf[i], sunDisc, lerpT);
+                    s_sunGlowBuf[i] = Vector4.Lerp(s_sunGlowBuf[i], sunGlow, lerpT);
+                    s_moonDiscBuf[i] = Vector4.Lerp(s_moonDiscBuf[i], moonDisc, lerpT);
+                    s_moonGlowBuf[i] = Vector4.Lerp(s_moonGlowBuf[i], moonGlow, lerpT);
+                    s_sunParamsBuf[i] = Vector4.Lerp(s_sunParamsBuf[i], sunParams, lerpT);
+                    s_moonParamsBuf[i] = Vector4.Lerp(s_moonParamsBuf[i], moonParams, lerpT);
+                    s_starBuf[i] = Mathf.Lerp(s_starBuf[i], sky.starIntensity, lerpT);
+                }
             }
+        }
 
+        static void UploadLookAnchors()
+        {
             Shader.SetGlobalVectorArray(OilSkyZenithId, s_zenithBuf);
             Shader.SetGlobalVectorArray(OilSkyMidId, s_midBuf);
             Shader.SetGlobalVectorArray(OilSkyHorizonId, s_horizonBuf);
@@ -1357,6 +1455,19 @@ namespace CustomSRP
                 return;
             }
 
+            if (LookBlendOpen)
+            {
+                OilSkyLookTables.EvaluateAmbient(
+                    s_blendFrom, period, cumulus, out Color sky0, out Color eq0, out Color ground0, out Color fill0);
+                OilSkyLookTables.EvaluateAmbient(
+                    s_blendTo, period, cumulus, out sky, out equator, out ground, out oilFill);
+                sky = Color.Lerp(sky0, sky, s_blendT);
+                equator = Color.Lerp(eq0, equator, s_blendT);
+                ground = Color.Lerp(ground0, ground, s_blendT);
+                oilFill = Color.Lerp(fill0, oilFill, s_blendT);
+                return;
+            }
+
             OilSkyLookTables.EvaluateAmbient(
                 s_activeLookId, period, cumulus, out sky, out equator, out ground, out oilFill);
         }
@@ -1381,12 +1492,21 @@ namespace CustomSRP
                 return;
             }
 
+            if (LookBlendOpen)
+            {
+                OilSkyLookTables.EvaluateLight(s_blendFrom, period, out Color color0, out float intensity0);
+                OilSkyLookTables.EvaluateLight(s_blendTo, period, out color, out intensity);
+                color = Color.Lerp(color0, color, s_blendT);
+                intensity = Mathf.Lerp(intensity0, intensity, s_blendT);
+                return;
+            }
+
             OilSkyLookTables.EvaluateLight(s_activeLookId, period, out color, out intensity);
         }
 
         /// <summary>
         /// Distance fog tint from the active look table, softened like BoluoDistanceFog.
-        /// Night clock (21:00–06:00) uses that look's night fog.
+        /// Follows the same period blend as the main light (no 21:00 snap).
         /// </summary>
         public static void EvaluateFog(float period, out Color fogColor)
         {
@@ -1396,12 +1516,26 @@ namespace CustomSRP
                 return;
             }
 
+            if (LookBlendOpen)
+            {
+                OilSkyLookTables.EvaluateFog(s_blendFrom, period, out Color a, s_foggyBlend);
+                OilSkyLookTables.EvaluateFog(s_blendTo, period, out Color b, s_foggyBlend);
+                fogColor = Color.Lerp(a, b, s_blendT);
+                return;
+            }
+
             OilSkyLookTables.EvaluateFog(s_activeLookId, period, out fogColor, s_foggyBlend);
         }
 
         /// <summary>Cozy fogDensityMultiplier scale relative to noon (preset density × this).</summary>
-        public static float EvaluateFogDensityScale(float period) =>
-            OilSkyLookTables.EvaluateFogDensityScale(s_activeLookId, period);
+        public static float EvaluateFogDensityScale(float period)
+        {
+            if (!LookBlendOpen)
+                return OilSkyLookTables.EvaluateFogDensityScale(s_activeLookId, period);
+            float from = OilSkyLookTables.EvaluateFogDensityScale(s_blendFrom, period);
+            float to = OilSkyLookTables.EvaluateFogDensityScale(s_blendTo, period);
+            return Mathf.Lerp(from, to, s_blendT);
+        }
 
         /// <summary>
         /// Boluo SkyWeatherController.ApplyCelestialOrbits — Cozy sun pivot.

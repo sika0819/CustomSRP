@@ -36,6 +36,9 @@ namespace Game
 
         static List<MusicAlbum> _albums;
         static bool _loading;
+        // 当前数据是否来自服务器。服务器数据优先级高于本地 JSON：
+        // 启动时 GameEntry.Custom 会先 LoadAsync() 读本地兜底，等服务器数据到达后需要覆盖。
+        static bool _fromServer;
 
         // -----------------------------------------------------------------------
         // Public API
@@ -43,20 +46,23 @@ namespace Game
 
         /// <summary>
         /// Inject catalog data from the online upgrade/bank API.
-        /// Takes priority over any local JSON; subsequent calls are ignored.
+        /// Takes priority over any local JSON; repeated server calls are ignored.
         /// </summary>
         public static void SetServerData(List<MusicListServerData> serverData)
         {
-            if (_albums != null)
-                return; // Already populated — server data arrived earlier or local already loaded.
+            if (_fromServer)
+                return; // Server data already applied.
             if (serverData == null || serverData.Count == 0)
             {
                 Debug.LogWarning("[MusicCatalog] Server musicLists empty — will fall back to local JSON.");
                 LoadAsync();
                 return;
             }
+            bool overridingLocal = _albums != null;
             _albums = BuildAlbums(serverData);
-            Debug.Log($"[MusicCatalog] Set {AlbumCount} albums from server.");
+            _fromServer = true;
+            Debug.Log($"[MusicCatalog] Set {AlbumCount} albums from server." +
+                (overridingLocal ? " (replaced local JSON catalog)" : string.Empty));
             BroadcastReady();
         }
 
@@ -67,7 +73,7 @@ namespace Game
         /// </summary>
         public static void LoadAsync()
         {
-            if (_albums != null || _loading)
+            if (_albums != null || _loading || _fromServer)
                 return;
             LoadLocalAsync().Forget();
         }
@@ -92,7 +98,7 @@ namespace Game
 
         static async UniTaskVoid LoadLocalAsync()
         {
-            if (_albums != null || _loading)
+            if (_albums != null || _loading || _fromServer)
                 return;
             _loading = true;
 
@@ -171,6 +177,32 @@ namespace Game
             return false;
         }
 
+        /// <summary>
+        /// Finds a track by its engine event name (e.g. <c>Play_Music1_2</c>).
+        /// Used to adopt a track the native layer switched to while the app was backgrounded.
+        /// </summary>
+        public static bool TryFindByEventName(string eventName, out int albumIdx, out int trackIdx)
+        {
+            albumIdx = -1;
+            trackIdx = -1;
+            if (_albums == null || string.IsNullOrEmpty(eventName))
+                return false;
+            for (int a = 0; a < _albums.Count; a++)
+            {
+                var tracks = _albums[a].Tracks;
+                for (int t = 0; t < tracks.Length; t++)
+                {
+                    if (string.Equals(tracks[t].EventName, eventName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        albumIdx = a;
+                        trackIdx = t;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         // -----------------------------------------------------------------------
         // Internal helpers
         // -----------------------------------------------------------------------
@@ -210,6 +242,12 @@ namespace Game
         static void ParseJson(string text)
         {
             _loading = false;
+            if (_fromServer)
+            {
+                // 服务器数据在本地 JSON 读取期间到达 —— 线上优先，本地结果丢弃。
+                Debug.Log("[MusicCatalog] Local JSON ignored — server catalog already applied.");
+                return;
+            }
             if (string.IsNullOrWhiteSpace(text))
             {
                 Debug.LogWarning("[MusicCatalog] Local JSON is empty — catalog will stay empty.");

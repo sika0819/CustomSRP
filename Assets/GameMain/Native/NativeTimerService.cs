@@ -84,8 +84,9 @@ namespace Game.Native
 
         static void RefreshFill()
         {
-            float ring = LastTotal > 0 ? LastTotal : DefaultRingSeconds;
-            FillRatio = Mathf.Clamp01(_remaining / ring);
+            // 满圈固定 3600s（与旧 HudDownTimeBinder / 原生定时刻度一致）。
+            // 不能用本次定时总时长，否则任意短定时都会显示满圈。
+            FillRatio = Mathf.Clamp01(_remaining / DefaultRingSeconds);
         }
     }
 

@@ -10,6 +10,7 @@ namespace Game.Editor
     /// <summary>
     /// 环境·渠道·版本测试窗口：切换 API 环境 / 渠道号 / 版本号做联调。
     /// 覆盖值仅存 EditorPrefs（本机编辑器级）。
+    /// 渠道预设对齐 AndroidProject/Docs/渠道.md §3（<see cref="BoluoDeviceInfo.KnownAppChannels"/>）。
     /// </summary>
     public class BoluoEnvTestWindow : EditorWindow
     {
@@ -21,14 +22,24 @@ namespace Game.Editor
             ("product 生产", "product"),
         };
 
-        static readonly string[] ChannelPresets =
+        /// <summary>显示用标签（渠道号 · 市场说明）。</summary>
+        static readonly string[] ChannelPresetLabels =
         {
-            "BOLUOCWGMJ",
-            "BOLUOTESTANDROID",
-            "BOLUOTESTIOS",
-            "BOLUOANDROIDAPPSOTRE",
-            "BOLUOIOSAPPSTORE",
-            "BOLUOTESTHARMONY",
+            "BOLUOCWGMJ · 创维闺蜜机/一树",
+            "BOLUOANDROIDAPPSTORE · 应用宝",
+            "BOLUOBAIDU · 百度",
+            "BOLUO360 · 360",
+            "BOLUOXIAOMI · 小米",
+            "BOLUOOPPO · OPPO",
+            "BOLUOVIVO · VIVO",
+            "BOLUOHONOR · Honor",
+            "BOLUOGALLERY · 三星",
+            "BOLUOMEIZU · 魅族",
+            "BOLUOIOSAPPSTORE · iOS 正式",
+            "BOLUOAPPHARMONY · 鸿蒙",
+            "BOLUOTESTANDROID · 安卓测试",
+            "BOLUOTESTIOS · iOS 测试",
+            "BOLUOTESTHARMONY · 鸿蒙测试",
         };
 
         static readonly string[] OriginEndPresets =
@@ -49,24 +60,32 @@ namespace Game.Editor
         public static void Open()
         {
             var win = GetWindow<BoluoEnvTestWindow>(false, "环境·渠道·版本", true);
-            win.minSize = new Vector2(480, 420);
+            win.minSize = new Vector2(520, 460);
             win.Show();
         }
 
         void OnEnable()
         {
+            if (ChannelPresetLabels.Length != BoluoDeviceInfo.KnownAppChannels.Length)
+            {
+                Debug.LogError(
+                    $"[BoluoEnvTestWindow] ChannelPresetLabels({ChannelPresetLabels.Length}) " +
+                    $"≠ KnownAppChannels({BoluoDeviceInfo.KnownAppChannels.Length})，请同步渠道.md §3");
+            }
+
             string env = BoluoApiEnvironment.GetEditorOverride();
             if (string.IsNullOrEmpty(env))
                 env = BoluoApiEnvironment.GetEnvironmentType();
             _envIndex = Mathf.Max(0, Array.FindIndex(EnvOptions, o => o.Value == env));
 
-            string channel = EditorPrefs.GetString(BoluoDeviceInfo.EditorChannelOverrideKey, "");
-            _channelPresetIndex = Array.IndexOf(ChannelPresets, channel);
+            string channel = BoluoDeviceInfo.NormalizeChannel(
+                EditorPrefs.GetString(BoluoDeviceInfo.EditorChannelOverrideKey, ""));
+            _channelPresetIndex = Array.IndexOf(BoluoDeviceInfo.KnownAppChannels, channel);
             if (_channelPresetIndex < 0)
             {
                 _channelPresetIndex = string.IsNullOrEmpty(channel)
                     ? 0
-                    : ChannelPresets.Length;
+                    : BoluoDeviceInfo.KnownAppChannels.Length;
                 _customChannel = channel;
             }
 
@@ -116,6 +135,7 @@ namespace Game.Editor
                 EditorGUILayout.LabelField("User API Base", BoluoApiEnvironment.ResolveUserApiBase());
                 EditorGUILayout.LabelField("渠道号", $"{BoluoDeviceInfo.GetChannel()}  appId={BoluoDeviceInfo.GetAppId()}");
                 EditorGUILayout.LabelField("originEnd", BoluoDeviceInfo.GetOriginEnd());
+                EditorGUILayout.LabelField("healthChannel", BoluoDeviceInfo.GetHealthChannel());
                 EditorGUILayout.LabelField("版本号", BoluoDeviceInfo.GetVersion());
                 EditorGUILayout.LabelField("Build Target", EditorUserBuildSettings.activeBuildTarget.ToString());
 
@@ -148,15 +168,15 @@ namespace Game.Editor
                     envLabels[i] = EnvOptions[i].Label;
                 _envIndex = EditorGUILayout.Popup("API 环境", _envIndex, envLabels);
 
-                string[] channelLabels = new string[ChannelPresets.Length + 1];
-                for (int i = 0; i < ChannelPresets.Length; i++)
-                    channelLabels[i] = ChannelPresets[i];
-                channelLabels[ChannelPresets.Length] = "自定义…";
+                string[] channelLabels = new string[ChannelPresetLabels.Length + 1];
+                for (int i = 0; i < ChannelPresetLabels.Length; i++)
+                    channelLabels[i] = ChannelPresetLabels[i];
+                channelLabels[ChannelPresetLabels.Length] = "自定义…";
                 EditorGUI.BeginChangeCheck();
                 _channelPresetIndex = EditorGUILayout.Popup("渠道号", _channelPresetIndex, channelLabels);
                 if (EditorGUI.EndChangeCheck())
                     SuggestOriginEndForChannel(ResolveEditedChannel());
-                if (_channelPresetIndex >= ChannelPresets.Length)
+                if (_channelPresetIndex >= BoluoDeviceInfo.KnownAppChannels.Length)
                     _customChannel = EditorGUILayout.TextField("自定义渠道", _customChannel);
 
                 string[] originLabels = new string[OriginEndPresets.Length + 1];
@@ -168,7 +188,8 @@ namespace Game.Editor
                     _customOriginEnd = EditorGUILayout.TextField("自定义 originEnd", _customOriginEnd);
 
                 EditorGUILayout.HelpBox(
-                    "channel 与 originEnd 独立：闺蜜机常用 channel=BOLUOCWGMJ + originEnd=boluocwgmj。",
+                    "channel ≠ originEnd：闺蜜 BOLUOCWGMJ + boluocwgmj；手机 9 市场 + iOS → boluoapp。\n" +
+                    "禁止自造未登记渠道（易 20011 / 换票 400）。正写应用宝=BOLUOANDROIDAPPSTORE。",
                     MessageType.None);
 
                 _version = EditorGUILayout.TextField("版本号", _version);
@@ -275,7 +296,7 @@ namespace Game.Editor
             EditorPrefs.SetString(GuestLoginClient.ApiEnvKey, env);
             SignatureLib.ApplyEditorEnvironmentOverride(env);
 
-            string channel = ResolveEditedChannel();
+            string channel = BoluoDeviceInfo.NormalizeChannel(ResolveEditedChannel());
             if (string.IsNullOrEmpty(channel))
                 EditorPrefs.DeleteKey(BoluoDeviceInfo.EditorChannelOverrideKey);
             else
@@ -315,8 +336,8 @@ namespace Game.Editor
 
         string ResolveEditedChannel()
         {
-            if (_channelPresetIndex < ChannelPresets.Length)
-                return ChannelPresets[_channelPresetIndex];
+            if (_channelPresetIndex < BoluoDeviceInfo.KnownAppChannels.Length)
+                return BoluoDeviceInfo.KnownAppChannels[_channelPresetIndex];
             return (_customChannel ?? "").Trim();
         }
 
@@ -329,18 +350,10 @@ namespace Game.Editor
 
         void SuggestOriginEndForChannel(string channel)
         {
-            if (string.Equals(channel, "BOLUOCWGMJ", StringComparison.OrdinalIgnoreCase))
-            {
-                _originEndPresetIndex = Array.IndexOf(OriginEndPresets, BoluoDeviceInfo.DefaultOriginEndGmj);
-                if (_originEndPresetIndex < 0)
-                    _originEndPresetIndex = 1;
-            }
-            else if (_originEndPresetIndex < OriginEndPresets.Length)
-            {
-                _originEndPresetIndex = Array.IndexOf(OriginEndPresets, BoluoDeviceInfo.DefaultOriginEndApp);
-                if (_originEndPresetIndex < 0)
-                    _originEndPresetIndex = 0;
-            }
+            string suggested = BoluoDeviceInfo.SuggestOriginEndForChannel(channel);
+            int idx = Array.IndexOf(OriginEndPresets, suggested);
+            if (idx >= 0)
+                _originEndPresetIndex = idx;
         }
     }
 }

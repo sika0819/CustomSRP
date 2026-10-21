@@ -222,12 +222,7 @@
 #timerBackground #glyph {
     display: none;
 }
-#timerBackground #timerActive {
-    display: flex;
-}
-#timerBackground #timerIdle {
-    display: flex;
-}
+/* idle/active 由 HudTimerBinder 按原生定时进度互斥切换，勿在此强制双显 */
 .game-island-main-form__pause-hint {
     position: absolute;
     left: 50%;

@@ -1,3 +1,4 @@
+using Game;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
@@ -195,6 +196,12 @@ namespace CustomSRP
             {
                 bufferSize.x = camera.pixelWidth;
                 bufferSize.y = camera.pixelHeight;
+            }
+
+            if (!isReflection && camera.cameraType == CameraType.Game)
+            {
+                IslandLocomotionState.BufferWidth = bufferSize.x;
+                IslandLocomotionState.BufferHeight = bufferSize.y;
             }
 
             bufferSettings.fxaa.enabled &= cameraSettings.allowFXAA;

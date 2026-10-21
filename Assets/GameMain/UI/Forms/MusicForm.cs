@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Cysharp.Threading.Tasks;
 using Game.BoluoApi;
 using Game.BoluoApi.Music;
 using UnityEngine;
@@ -1305,12 +1306,7 @@ namespace Game
             if (PresetBankCatalog.TryGet(bankName, out var remote))
             {
                 IslandPlayerPosSave.PushSaveSuppress();
-                BankDownloader.DownloadBank(
-                    remote,
-                    loadIntoEngine: true,
-                    onDone: OnBankDownloadDone,
-                    prioritize: true,
-                    preempt: true);
+                DownloadBankAsync(remote).Forget();
             }
             else
             {
@@ -1319,10 +1315,36 @@ namespace Game
             }
         }
 
+        /// <summary>
+        /// Runs the bank download and guarantees the save-suppress counter is popped exactly once,
+        /// even if the download throws before the completion callback fires.
+        /// </summary>
+        async UniTaskVoid DownloadBankAsync(BankRemoteInfo remote)
+        {
+            try
+            {
+                await BankDownloader.DownloadBank(
+                    remote,
+                    loadIntoEngine: true,
+                    onDone: OnBankDownloadDone,
+                    prioritize: true,
+                    preempt: true);
+            }
+            catch (Exception e)
+            {
+                Log.Warning($"[MusicForm] Bank download failed: {e.Message}");
+                ClearPendingMusic();
+            }
+            finally
+            {
+                IslandPlayerPosSave.PopSaveSuppress();
+            }
+        }
+
         /// <summary>Called when the pending bank download completes (success or failure).</summary>
         void OnBankDownloadDone(BankDownloadItem item)
         {
-            IslandPlayerPosSave.PopSaveSuppress();
+            // 注意：保存抑制的出栈由 DownloadBankAsync 的 finally 统一负责，这里不要重复 Pop。
             if (item == null || string.IsNullOrEmpty(item.BankName))
             {
                 ClearPendingMusic();

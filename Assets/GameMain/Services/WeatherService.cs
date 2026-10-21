@@ -42,6 +42,8 @@ namespace Game
         float _timeLerpCommitHours;
         IslandTimePeriod _timeLerpPeriod;
         IAtmosphereVisualDriver _timeLerpDriver;
+        bool _lookBlendActive;
+        IslandLookKind _lookBlendTo;
 
         public static WeatherService Ensure()
         {
@@ -68,12 +70,16 @@ namespace Game
             _timeLerpElapsed += Time.deltaTime;
             float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_timeLerpElapsed / TimeSwitchLerpSeconds));
             Hours = Mathf.Repeat(Mathf.Lerp(_timeLerpFrom, _timeLerpToUnwrapped, t), 24f);
+            // Look blend and hours share this t so sky, light, and ambient move together.
+            if (_lookBlendActive)
+                PushLookBlend(t);
             PushTimeToDriver(_timeLerpDriver);
 
             if (t < 1f)
                 return;
 
             _timeLerpActive = false;
+            _lookBlendActive = false;
             _timeLerpDriver = null;
             Hours = Mathf.Repeat(_timeLerpCommitHours, 24f);
             Period = _timeLerpPeriod;
@@ -114,19 +120,36 @@ namespace Game
         public void SetPeriod(IslandTimePeriod period, bool animate)
         {
             // Boluo GameData: dial daytime → Camera_1, night → Atmosphere 10 (decoupled from preset).
-            SetLookKind(period == IslandTimePeriod.Night
+            IslandLookKind nextLook = period == IslandTimePeriod.Night
                 ? IslandLookKind.NightCold
-                : IslandLookKind.Canonical);
+                : IslandLookKind.Canonical;
 
             float commitHours = PeriodToAnchorHours(period);
             if (!animate || !isActiveAndEnabled)
             {
+                SetLookKind(nextLook);
                 SetTimeOfDay(commitHours);
                 return;
             }
 
             if (_timeLerpActive)
                 return;
+
+            bool lookChanges = LookKind != nextLook;
+            LookKind = nextLook;
+            if (lookChanges)
+            {
+                // Visual blend over the same 2s as Hours. t=0 keeps the current look.
+                _lookBlendActive = true;
+                _lookBlendTo = nextLook;
+                PushLookBlend(0f);
+            }
+            else
+            {
+                // Same palette (morning/noon/evening). Still drop a preset poster pin.
+                _lookBlendActive = false;
+                SetLookKind(nextLook);
+            }
 
             float from = Hours;
             float toUnwrapped = commitHours;
@@ -254,7 +277,10 @@ namespace Game
 
         void StopTimeLerp()
         {
+            if (_lookBlendActive)
+                PushLookBlend(1f);
             _timeLerpActive = false;
+            _lookBlendActive = false;
             _timeLerpDriver = null;
         }
 
@@ -269,7 +295,14 @@ namespace Game
         public void SetLookKind(IslandLookKind lookKind)
         {
             LookKind = lookKind;
+            _lookBlendActive = false;
             PushLookKind();
+        }
+
+        void PushLookBlend(float t)
+        {
+            foreach (IAtmosphereVisualDriver driver in FindDrivers())
+                driver.SetLookBlend(_lookBlendTo, t);
         }
 
         void PushLookKind()

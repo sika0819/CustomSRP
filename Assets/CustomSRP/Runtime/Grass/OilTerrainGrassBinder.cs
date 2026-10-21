@@ -839,10 +839,17 @@ namespace CustomSRP
                         cullCompute.SetBuffer(kernel, "_AllInstancesPosWSBuffer", _allPosV[v]);
                         cullCompute.SetInt("_VariantKind", v);
                         // One dispatch per band over the full packed window; CS does frustum + distance.
+                        // Mobile: near band only — far blades are tiny after renderScale.
+                        float bandMax = Application.isMobilePlatform
+                            ? maxDrawDistance
+                            : nearMax;
                         visibleSum += DispatchPackedBand(
                             v, nearMesh, renderBound, _visibleIdV[v], _argsV[v],
-                            0f, nearMax);
-                        if (farMesh != null && _visibleIdFarV[v] != null && _argsFarV[v] != null)
+                            0f, bandMax);
+                        if (!Application.isMobilePlatform
+                            && farMesh != null
+                            && _visibleIdFarV[v] != null
+                            && _argsFarV[v] != null)
                         {
                             visibleSum += DispatchPackedBand(
                                 v, farMesh, renderBound, _visibleIdFarV[v], _argsFarV[v],
@@ -851,9 +858,12 @@ namespace CustomSRP
                     }
                     else
                     {
+                        float bandMax = Application.isMobilePlatform
+                            ? maxDrawDistance
+                            : nearMax;
                         visibleSum += CpuCullAndDrawBand(
-                            v, nearMesh, renderBound, cam, vp, far: false, 0f, nearMax);
-                        if (farMesh != null)
+                            v, nearMesh, renderBound, cam, vp, far: false, 0f, bandMax);
+                        if (!Application.isMobilePlatform && farMesh != null)
                         {
                             visibleSum += CpuCullAndDrawBand(
                                 v, farMesh, renderBound, cam, vp, far: true,

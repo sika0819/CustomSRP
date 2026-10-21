@@ -99,6 +99,9 @@ namespace CustomSRP
             if (Application.isMobilePlatform)
             {
                 bloom.ClampForMobile();
+                // B6: walking — single bloom iteration (standing keeps mobile clamp = 2).
+                if (Game.IslandLocomotionState.IsWalking && bloom.maxIterations > 1)
+                    bloom.maxIterations = 1;
             }
             Vector2Int size = (bloom.ignoreRenderScale
                 ? new Vector2Int(stack.Camera.pixelWidth, stack.Camera.pixelHeight)

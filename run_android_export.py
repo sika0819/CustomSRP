@@ -46,6 +46,7 @@ cmd = [
     "-batchmode",
     "-nographics",
     "-projectPath", PROJECT,
+    "-buildTarget", "Android",
     "-executeMethod", "Game.Editor.BuildTool.CIBuild.ExportAndroidGradle",
     "-boluoPlatform", "android",
     "-boluoEnv", BOLUO_ENV,

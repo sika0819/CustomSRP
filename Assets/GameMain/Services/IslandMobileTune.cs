@@ -7,8 +7,8 @@ namespace Game
     /// <summary>进岛后移动端灯光 / 云 / 地形轻量调参（从 ProcedureIsland 抽出）。</summary>
     public static class IslandMobileTune
     {
-        /// <summary>对齐 Boluo HeavyContentTerrainPixelError：近处河岸仍用细高度网格。</summary>
-        const float HeavyContentTerrainPixelError = 12f;
+        /// <summary>B4：略抬于 Boluo Heavy(12)，少高度网格三角形；河岸仍可读。</summary>
+        const float HeavyContentTerrainPixelError = 18f;
 
         public static void ApplyAfterTerrainSpawn(GameObject terrainInstance)
         {

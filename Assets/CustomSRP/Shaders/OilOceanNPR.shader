@@ -79,6 +79,7 @@ Shader "CustomSRP/OilOceanNPR"
             #pragma shader_feature_local _OIL_NO_VIOLET_UMBRA
             #pragma vertex OilOceanNPRPassVertex
             #pragma fragment OilOceanNPRPassFragment
+            // Reflect path reads global _OilSkySunrise.
             #include "OilOceanNPRPass.hlsl"
             ENDHLSL
         }

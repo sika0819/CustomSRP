@@ -25,6 +25,7 @@ namespace Game.BoluoApi
         {
             "Music1_1",
             "Ocean_Calm_Quad",
+            "River_Quad",
             "River_ADD",
             "Boluodao_Forest",
             "Boluodao_Grassland",

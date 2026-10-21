@@ -22,6 +22,8 @@ float4 _OilSkySunParams[4];  // size, intensity, glow, unused
 float4 _OilSkyMoonParams[4]; // size, intensity, glow, unused
 float _OilSkyStarIntensity[4];
 float _OilSkyLookReady;
+// Canonical sunrise weight (0–1). Same curve as main light / ambient; not baked into anchor 0.
+float _OilSkySunrise;
 
 struct SkyPeriodLook
 {
@@ -270,6 +272,25 @@ SkyPeriodLook LerpPeriodLook(SkyPeriodLook a, SkyPeriodLook b, float t)
     return p;
 }
 
+// OilSkyLookTables sunrise pigments (byte/255). Weight matches CanonicalSunriseWeight.
+void ApplyOilSkySunrise(inout SkyPeriodLook p)
+{
+    float w = saturate(_OilSkySunrise);
+    if (w < 0.001)
+    {
+        return;
+    }
+
+    // 0x0128CD / 0xD48C68 / 0xF6C01F / 0xFF8A5F / 0xFFB42A
+    p.zenith = lerp(p.zenith, half3(1.0 / 255.0, 40.0 / 255.0, 205.0 / 255.0), w);
+    p.mid = lerp(p.mid, half3(212.0 / 255.0, 140.0 / 255.0, 104.0 / 255.0), w);
+    p.horizon = lerp(p.horizon, half3(246.0 / 255.0, 192.0 / 255.0, 31.0 / 255.0), w);
+    p.sunDisc = lerp(p.sunDisc, float3(255.0 / 255.0, 138.0 / 255.0, 95.0 / 255.0), w);
+    p.sunGlowColor = lerp(p.sunGlowColor, float3(255.0 / 255.0, 180.0 / 255.0, 42.0 / 255.0), w);
+    p.sunIntensity = lerp(p.sunIntensity, 1.05, w);
+    p.sunGlow = lerp(p.sunGlow, 0.28, w);
+}
+
 SkyPeriodLook EvaluatePeriodLook(float period)
 {
     period = period - floor(period * 0.25) * 4.0;
@@ -286,6 +307,7 @@ SkyPeriodLook EvaluatePeriodLook(float period)
     }
 
     SkyPeriodLook p = LerpPeriodLook(PeriodLookAt(i0), PeriodLookAt(i1), period - floor(period));
+    ApplyOilSkySunrise(p);
     // Disc directions: C# globals (Cozy orbit) or shader fallback.
     p.sunDir = ResolveSkySunDir(period);
     p.moonDir = ResolveSkyMoonDir(period);

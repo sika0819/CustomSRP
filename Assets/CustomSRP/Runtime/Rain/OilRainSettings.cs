@@ -63,7 +63,7 @@ namespace CustomSRP
         [Header("Wet Surface — NPR shader injection")]
         [Tooltip("Wet darkening + specular boost intensity (0=disabled, 1=full wet).")]
         [Range(0f, 1f)]
-        public float wetStrength = 0.5f;
+        public float wetStrength = 0f;
 
         [Tooltip("Extra smoothness [0~0.3] added to surfaces when wet.")]
         public float wetSmoothnessBoost = 0.15f;
@@ -76,8 +76,11 @@ namespace CustomSRP
         // Post-process ripples (screen-space, no objects)
         // =====================================================================
         [Header("Post-process Ripples — screen-space on water")]
-        [Tooltip("Enable screen-space water ripple post-process (zero CPU objects).")]
-        public bool postRippleEnabled = true;
+        // Off by default: needs Copy Depth to see water, and is invisible once
+        // Copy Depth / HDR are stripped for mobile. Water rain still uses the
+        // flipbook normals + splash quads below.
+        [Tooltip("Enable screen-space water ripple post-process. Needs Copy Depth; leave off on mobile.")]
+        public bool postRippleEnabled = false;
 
         [Tooltip("Screen-space ripple world size (m). Each ripple covers this radius in world space.")]
         public float postRippleWorldSize = 3f;
@@ -128,7 +131,7 @@ namespace CustomSRP
         // =====================================================================
         [Header("Rain Ripples — normal flipbook")]
         [Tooltip("Enable the rain-ripple flipbook on water surfaces.")]
-        public bool rippleFlipbookEnabled = true;
+        public bool rippleFlipbookEnabled = false;
 
         [Tooltip("Ripple flipbook atlas. Falls back to a generated placeholder if empty.")]
         public Texture2D rippleFlipbook;
@@ -162,7 +165,7 @@ namespace CustomSRP
         // =====================================================================
         [Header("Splashes — instanced flipbook quads")]
         [Tooltip("Enable splash flipbook quads on rain impact.")]
-        public bool splashFlipbookEnabled = true;
+        public bool splashFlipbookEnabled = false;
 
         [Tooltip("Splash flipbook atlas. Falls back to a generated placeholder if empty.")]
         public Texture2D splashFlipbook;

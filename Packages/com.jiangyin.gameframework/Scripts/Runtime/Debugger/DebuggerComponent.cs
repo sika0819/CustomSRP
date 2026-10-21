@@ -23,6 +23,7 @@ namespace UnityGameFramework.Runtime
         const string PrefOpen = "Debugger.ShowFull";
         const float PanelMargin = 8f;
         const float PanelMaxWidth = 720f;
+        const string DefaultPageTitle = "Memory";
 
         static StyleSheet s_CachedStyle = null;
         static MethodInfo s_PanelUpdate = null;
@@ -490,7 +491,7 @@ namespace UnityGameFramework.Runtime
                 m_TabButtons.Add(tab);
             }
 
-            int current = 0;
+            int current = DefaultPageIndex();
             if (m_Current != null)
             {
                 int found = m_Windows.IndexOf(m_Current);
@@ -504,6 +505,19 @@ namespace UnityGameFramework.Runtime
             {
                 SelectWindow(current);
             }
+        }
+
+        private int DefaultPageIndex()
+        {
+            for (int i = 0; i < m_Windows.Count; i++)
+            {
+                if (string.Equals(m_Windows[i].Title, DefaultPageTitle, System.StringComparison.Ordinal))
+                {
+                    return i;
+                }
+            }
+
+            return 0;
         }
 
         private void SelectWindow(int index)
@@ -548,10 +562,9 @@ namespace UnityGameFramework.Runtime
             m_ShowFull = true;
             PlayerPrefs.SetInt(PrefOpen, 1);
             ShowIconOrPanel();
-            int index = m_Current == null ? -1 : m_Windows.IndexOf(m_Current);
-            if (index >= 0)
+            if (m_Windows.Count > 0)
             {
-                SelectWindow(index);
+                SelectWindow(DefaultPageIndex());
             }
         }
 

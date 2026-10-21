@@ -136,19 +136,14 @@ namespace CustomSRP
         }
 
         /// <summary>
-        /// Raw + softened fog tint (BoluoDistanceFog). Night clock (21–06) snaps to night fog.
+        /// Raw + softened fog tint (BoluoDistanceFog). Same adjacent-anchor blend as the main light,
+        /// so dusk→night does not jump at 21:00.
         /// </summary>
         public static void EvaluateFog(OilSkyLookId id, float period, out Color fogColor, float foggyT = 0f)
         {
             float hours = OilSkyboxTime.PeriodToHours(period);
-            Color raw;
-            if (hours >= 21f || hours < 6f)
-                raw = Get(id).light[3].fogColor;
-            else
-            {
-                SampleLight(id, period, out LightAnchor a, out LightAnchor b, out float t);
-                raw = Color.Lerp(a.fogColor, b.fogColor, t);
-            }
+            SampleLight(id, period, out LightAnchor a, out LightAnchor b, out float t);
+            Color raw = Color.Lerp(a.fogColor, b.fogColor, t);
 
             fogColor = OilDistanceFog.Soften(raw, period, foggyT);
             float sunrise = CanonicalSunriseWeight(id, hours);

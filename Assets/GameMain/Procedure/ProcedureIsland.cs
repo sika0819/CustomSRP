@@ -77,6 +77,9 @@ namespace Game
             }
 
             IslandCameraSrpSetup.ApplyForIsland(main);
+            // Device perf overlay (FPS / CPU·GPU / mirror). 3-finger tap toggles.
+            if (Application.isMobilePlatform)
+                MobilePerfHud.Ensure();
 
             IslandJoystickCamera cam = main.GetComponent<IslandJoystickCamera>();
             if (cam == null)
@@ -228,6 +231,8 @@ namespace Game
             WanosAudio.WanosEngine.EnablePlayback("ProcedureIsland.Uncover");
             WanosAudio.WanosEngine.StartEngine("ProcedureIsland.Uncover");
             WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover");
+            // Volumes may have been applied before device open — re-push 0–100 RTPCs now.
+            GameEntry.Music?.ApplySavedVolumes();
             AudioInteractionBootstrap.StartAfterUncover();
             // Cue Music1_1 as soon as bank is ready (does not wait for full Critical wave).
             BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();

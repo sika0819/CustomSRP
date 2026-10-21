@@ -1,0 +1,75 @@
+---
+description: WIAEngine（WanosAudio）音频硬规则——RTPC 名白名单、音量量程 0–100 vs UI 0–1、PostEvent 起播必须配 AudioFocus+unmute、禁止直接调 WanosNative.SetParameter 写音量。
+globs: ["Assets/WanosAudio/**/*.cs", "Assets/GameMain/Sound/**/*.cs", "Assets/GameMain/Services/MusicPlaylist.cs", "Assets/GameMain/Services/Audio/**/*.cs"]
+---
+
+# WIAEngine 音频（WanosAudio）硬规则
+
+`Assets/WanosAudio/`（`WanosAudio.asmdef`，`namespace WanosAudio`）封装 WIAEngine。
+`Assets/GameMain/`（`namespace Game`）通过 `WanosEngine` 静态门面调它（`Game.asmdef` 已引用 `WanosAudio`）。
+
+详细说明见 `Assets/WanosAudio/README.md`。
+
+## 1. 音量 RTPC：名字白名单 + 量程 0–100
+
+引擎里**只有两个**音量 RTPC：
+
+| 用途 | 正确名字 | 引擎量程 | 备注 |
+|------|----------|----------|------|
+| 背景音乐 | `Music_Volume` | 0–100 | legacy `GameData.bgmVolume`（默认 80） |
+| 音效 | `Fx_Volume` | 0–100 | legacy `GameData.wFX`；**不是** `SFX_Volume` |
+
+- **禁止**写字面量 `"Music_Volume"` / `"Fx_Volume"`：用 `WanosEngine.MusicVolumeParam` / `WanosEngine.FxVolumeParam` 常量。
+- **禁止**写 `SFX_Volume`：引擎**静默丢弃**不认识的 RTPC 名——不报错、不打日志，音量永远停在默认值，
+  症状是「UI 音量条能拖、引擎里没变化」。已踩过一次。
+- **量纲是 0–100，不是 0–1。** UI / 存档层是 0–1（`BoluoGameSave.MusicVolume01` = `bgmVolume / 100f`），
+  引擎层是 0–100。把 0–1 原样透传 = 0.8% 音量 = **有播放但听不到**。已踩过一次。
+
+- **所有音量必须走** `WanosEngine.SetVolumeParameter(paramName, ui0to1)`：内部 `Clamp01` → `×100` →
+  `WanosNative.SetParameterEngineValue`。
+- **禁止**直接调 `WanosNative.Instance.SetParameter(...)` 写音量（那是 0–100 引擎量程的裸通道）。
+- 天气 / 业务 RTPC（非音量）走 `WanosEngine.SetGlobalParameter(name, value)`，量纲按业务自己定义
+  （天气用 0 / 30 / 60 / 90，**不要** clamp 到 0–1）。
+
+## 2. Unity 直发 PostEvent 起播，必须补 AudioFocus + unmute（Android）
+
+`MusicPlaylist.PlayTrack` 走 `GameEntry.Sound.PlaySound` → Unity 侧直接 `PostEvent`，
+**不经过** Android 原生的 `nativePlayTrackAt`，因此原生那道「抢 AudioFocus + unmute」门禁不会自动执行。
+
+- Android 真机上 Unity 直接起播后**必须**调 `BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback()`。
+- 起播后**必须**重新推一次音量（`PushVolumesToEngine`）：`PlaySound` 期间 `WanosSoundAgentHelper`
+  可能已写过 RTPC，把用户音量盖掉了。
+- 起播后调 `WanosEngine.Unmute("music-play")`；引擎在移动端默认是 mute 态。
+
+## 3. 静音 / 暂停语义
+
+- `WanosEngine.KeepSilent(reason)` = 发 `Pause_ALL` + 引擎 mute（**不是** 停止）。
+- `WanosEngine.Unmute(reason)` = 解除引擎 mute。
+- 引擎 `PostEvent` 在 `EnablePlayback` 之前被 `ShouldAllowPostEvent` 拦掉（只有控制类事件
+  `Pause_ALL` / `Stop_All` / `Resume_ALL` / `Pause_Music` / `Resume_Music` / `Stop_Music` / `Break_Music` 例外）。
+
+## 4. 排查「有播放但听不到」的标准顺序
+
+1. 日志里有没有 `SetVolumeParameter ... = 80.0 (ui=0.800)`？没有 → 音量根本没推。
+2. 有推但数值是 0.8 这种小数 → 量纲错，走 `SetVolumeParameter`。
+3. 参数名对但没效果 → 名字写错（`SFX_Volume`），引擎静默丢弃。
+4. 音量对、`PostEvent` 有日志，但真机没声 → 查 Android AudioFocus / mute 影子态，
+   调 `EnsureAudibleForUnityPlayback()`。
+5. 引擎 `PlaybackState` 不是 `Started` → 查 `WanosEngine.IsPlaybackEnabled` / `IsLoaded`。
+
+## 5. 后台传输计划（Android 负一屏）
+
+Unity 进后台会被宿主 pause，负一屏控播必须走原生。详见 `Assets/GameMain/Docs/05-audio.md`。
+
+- 前台每次发媒体卡片必须 `BackgroundTransportSync.PublishPlan()`（`NowPlayingService.PublishFromPlaylist` 已做）。
+- 回前台必须 `ResyncFromNative()`（`AdoptTrack`，**禁止再发 Play**）再发卡片。
+- 退岛必须 `ClearPlan()`。
+- JNI 通道：`AndroidBackgroundTransport`；原生执行：`WanosMusicPlayerNative.handleTransport*InBackground`。
+- iOS：三方法全部 no-op。
+
+## 6. 其他
+
+- `Assets/WanosAudio/Plugins/Android/*.java` 是 Android 原生层（AudioFocus、前台播放服务、通知栏、后台传输）。
+  改它必须真机验证，Editor 模拟不出 AudioFocus / 后台传输。
+- 回前台引擎层走 `WanosEngine.RestoreForeground(reason)`（解 mute + `ReapplyVolumes`）。
+- Editor 退出 / 退出 Play Mode 必须 `WanosEngine.Unload`（`WanosAudioEditorLifecycle` 已挂）。

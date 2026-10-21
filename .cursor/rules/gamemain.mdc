@@ -75,6 +75,16 @@ GameMain（`Assets/GameMain/`，`Game.asmdef`）是游戏侧程序集，与 `Cus
 - Entity 的视觉驱动走 `IAtmosphereVisualDriver`（`Services/IAtmosphereVisualDriver.cs`）—— SRP 侧的视觉模块实现这个接口，Service 只调不画。
 - 改绘制、Shader、阴影、后处理继续遵循 `.cursor/skills/custom-srp/SKILL.md`，不要把渲染逻辑搬进 Procedure 或 Service。
 
+## 音频（WanosAudio）
+
+- 与 `.cursor/rules/wanos-audio.mdc` 同效（也在 `Assets/WanosAudio/README.md` 有完整版）。
+- **音量 RTPC 只有两个名字**：`Music_Volume`（音乐）/ `Fx_Volume`（音效）。**不是** `SFX_Volume`。
+  引擎对不认识的 RTPC 名是静默丢弃——不报错、不打日志，音量永远不变。
+- **量纲是 0–100**，UI 是 0–1。所有音量必须走 `WanosEngine.SetVolumeParameter(name, ui0to1)`（内部 ×100）。
+  把 0–1 原样透传 = 0.8% 音量 = 有播放但听不到。
+- **禁止**直接调 `WanosNative.Instance.SetParameter(...)` 写音量。
+- 非音量的业务 RTPC（天气等）走 `WanosEngine.SetGlobalParameter(name, value)`，量纲按业务定义（天气 0/30/60/90）。
+
 ## Unity 6 EntityId
 
 - 与 `.cursor/rules/unity6-entity-id.mdc` 同效：

@@ -11,6 +11,10 @@
       {
         "command": ".cursor/hooks/check-entity-id.sh",
         "matcher": "git commit"
+      },
+      {
+        "command": ".cursor/hooks/check-audio-volume.sh",
+        "matcher": "git commit"
       }
     ],
     "afterShellExecution": [

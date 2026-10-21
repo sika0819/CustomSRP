@@ -22,6 +22,7 @@ Shader "Hidden/CustomSRP/Preset Iris"
             float _PresetIrisSoftness;
             float _PresetIrisTransition;
             float _PresetIrisSize;
+            float _PresetIrisAspect; // camera pixelWidth / pixelHeight (set by PresetIrisPass)
             float4 _PresetIrisColor;
 
             struct IrisVaryings
@@ -47,8 +48,12 @@ Shader "Hidden/CustomSRP/Preset Iris"
 
             float4 Frag(IrisVaryings input) : SV_TARGET
             {
-                // Boluo Custom/Vignette: centre hole, black rim.
-                float dis = distance(input.screenUV, float2(0.5, 0.5));
+                // Aspect-correct UV so the iris is circular in screen pixels
+                // (UV-space distance alone stretches into an ellipse on phones).
+                float2 d = input.screenUV - 0.5;
+                float aspect = max(_PresetIrisAspect, 1e-4);
+                d.x *= aspect;
+                float dis = length(d);
                 float currentRange = _PresetIrisSize * (1.0 - _PresetIrisTransition);
 
                 // Softness≈0 → hard full black (mobile GLES / peak teleport).

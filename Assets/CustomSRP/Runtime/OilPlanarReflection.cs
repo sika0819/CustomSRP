@@ -1,3 +1,4 @@
+using Game;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -25,13 +26,21 @@ namespace CustomSRP
         // most expensive things in the frame, and a planar reflection at 0.1x /
         // max 192px cannot show more than a few pixels of camera motion. Compare
         // the source camera against its PREVIOUS frame pose:
-        //   fast turn  (> SlowTurn degrees, or > SlowMove meters) -> render every frame
-        //   slow turn                                   -> render on even frames only
+        //   walking / fast move on mobile -> every WalkMirrorInterval frames
+        //   fast turn (desktop / standing)  -> every frame
+        //   slow turn                       -> even frames only
+        //   stationary (below Still*)       -> never (reuse RT)
         // Skipped frames reuse the previous RT, which the water shader still
         // samples through _OilPlanarReflectTex, so the surface stays stable
         // instead of flickering.
         const float SlowMoveThresholdSq = 0.0225f; // 0.15 m²
         const float SlowTurnAngle = 1f;              // degrees
+        // Below these: treat as fully still — do not re-render (even-frame path
+        // used to fire on zero delta and waste a mirror pass every other frame).
+        const float StillMoveThresholdSq = 1e-6f;    // ~1 mm²
+        const float StillTurnAngle = 0.05f;          // degrees
+        /// <summary>Walking on mobile: re-render mirror every N frames (reuse RT otherwise).</summary>
+        const int WalkMirrorInterval = 3;
 
         static readonly int ReflectTexId = Shader.PropertyToID("_OilPlanarReflectTex");
         static readonly int ReflectOnId = Shader.PropertyToID("_OilPlanarReflectOn");
@@ -132,6 +141,8 @@ namespace CustomSRP
             CameraRenderer renderer,
             CustomRenderPipelineSettings settings)
         {
+            IslandLocomotionState.MirrorRenderedThisFrame = false;
+
             if (_rendering || source == null || !source.enabled)
             {
                 return;
@@ -220,6 +231,7 @@ namespace CustomSRP
                 _rendering = false;
             }
 
+            IslandLocomotionState.MirrorRenderedThisFrame = true;
             _prevFramePos = source.transform.position;
             _prevFrameRot = source.transform.rotation;
             _hasPrevFramePose = true;
@@ -235,9 +247,9 @@ namespace CustomSRP
         /// Frame budget gate for the mirror render. First frame and any frame
         /// after the RT was (re)created must draw — a stale or empty RT would
         /// otherwise leak into the water. Afterwards the delta against the
-        /// previous frame decides: fast turn draws every frame, slow turn only
-        /// on even frames so the mirror costs half as much while the eye line
-        /// moves less than the reflection can resolve.
+        /// previous frame decides: walking on mobile every N frames; fast turn
+        /// every frame when standing; slow turn only on even frames; fully
+        /// stationary never (reuse last RT).
         /// </summary>
         bool ShouldRenderThisFrame(Camera source)
         {
@@ -253,17 +265,29 @@ namespace CustomSRP
                 return true;
             }
 
+            // B1: walking on mobile — mirror every WalkMirrorInterval frames.
+            // Cull+opaque of the mirror nearly doubles render-thread cost while
+            // the tiny RT cannot resolve per-frame locomotion anyway.
+            if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)
+                return (Time.frameCount % WalkMirrorInterval) == 0;
+
             Vector3 pos = source.transform.position;
             float dx = pos.x - _prevFramePos.x;
             float dy = pos.y - _prevFramePos.y;
             float dz = pos.z - _prevFramePos.z;
-            if (dx * dx + dy * dy + dz * dz > SlowMoveThresholdSq)
+            float moveSq = dx * dx + dy * dy + dz * dz;
+            if (moveSq > SlowMoveThresholdSq)
                 return true;
 
-            if (Quaternion.Angle(source.transform.rotation, _prevFrameRot) > SlowTurnAngle)
+            float turn = Quaternion.Angle(source.transform.rotation, _prevFrameRot);
+            if (turn > SlowTurnAngle)
                 return true;
 
-            // Slow turn: render on even frames only.
+            // Truly idle: reuse the previous mirror RT (no cull / opaque / skybox).
+            if (moveSq <= StillMoveThresholdSq && turn <= StillTurnAngle)
+                return false;
+
+            // Slow turn / creep: render on even frames only.
             return (Time.frameCount & 1) == 0;
         }
 

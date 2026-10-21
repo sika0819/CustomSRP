@@ -632,11 +632,70 @@ namespace WanosAudio
                 return;
             try
             {
+                WarnIfVolumeScaleMismatch(name, value);
                 SetGlobalParameter(name, value);
             }
             catch (Exception e)
             {
                 Debug.LogWarning($"[{LogTag}] SetParameter({name}): {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 写已经是 0–100 量纲的引擎值（供 <see cref="WanosEngine.SetVolumeParameter"/> 换算后调用）。
+        /// 走这里可以跳过 0–1 量纲护栏——护栏只针对「直接透传 UI 值」的误用。
+        /// </summary>
+        internal void SetParameterEngineValue(string name, float engineValue)
+        {
+            if (string.IsNullOrEmpty(name) || !_created)
+                return;
+            try
+            {
+                SetGlobalParameter(name, engineValue);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[{LogTag}] SetParameter({name}): {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 量纲 + 名字双护栏。
+        /// <para>
+        /// 量纲：音量 RTPC 在引擎里的量程是 0–100（bank: Range max = 100，Default = 80）。
+        /// 若有人把 0–1 的 UI 值直接透传进来，实际音量 = value%，表现为「有播放但听不到」。
+        /// 只在明显是 0–1 量纲时报警（0 &lt; value &lt; 1.5），不拦截合法的 0（静音）与 1.5–100。
+        /// </para>
+        /// <para>
+        /// 名字：引擎对不认识的 RTPC 名是**静默丢弃**（无报错、无日志），音量永远停在默认值。
+        /// 历史踩坑：写成 <c>SFX_Volume</c>，正确名是 <c>Fx_Volume</c>（legacy GameData.wFX）。
+        /// 所以凡是名字里带 "Volume" 的参数，都必须命中白名单，否则报错。
+        /// </para>
+        /// </summary>
+        static void WarnIfVolumeScaleMismatch(string name, float value)
+        {
+            bool isKnownVolume = name == WanosEngine.MusicVolumeParam || name == WanosEngine.FxVolumeParam;
+            if (!isKnownVolume)
+            {
+                // 只拦「看起来像音量」的名字，避免误伤天气等业务 RTPC。
+                if (name.IndexOf("Volume", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Debug.LogError($"[{LogTag}] SetParameter({name}) 未知音量 RTPC 名。" +
+                                   $"合法名只有 {WanosEngine.MusicVolumeParam} / {WanosEngine.FxVolumeParam}" +
+                                   "（注意不是 SFX_Volume）。引擎会静默丢弃不认识的 RTPC，音量不会变且无任何报错。");
+                }
+                return;
+            }
+
+            if (value > 0f && value < 1.5f)
+            {
+                Debug.LogError($"[{LogTag}] SetParameter({name}, {value}) 量纲错误：音量 RTPC 量程是 0–100，" +
+                               $"收到 0–1 的值（实际音量仅 {value:F2}% → 听不到）。" +
+                               "请改用 WanosEngine.SetVolumeParameter(name, ui0to1)（内部 ×100）。");
+            }
+            else if (value > 100f)
+            {
+                Debug.LogError($"[{LogTag}] SetParameter({name}, {value}) 超出 RTPC 量程 0–100，会被引擎钳制。");
             }
         }
 

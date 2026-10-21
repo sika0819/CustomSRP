@@ -33,12 +33,22 @@ namespace Game
             if (_started)
                 return;
             _started = true;
+            IslandWorldService.OnInlandWaterReady += OnInlandWaterReady;
             RunLoop().Forget();
+        }
+
+        /// <summary>内河加载完 → 重新取真实水面点（河 / 瀑）。</summary>
+        static void OnInlandWaterReady(bool hasWater)
+        {
+            if (!_started)
+                return;
+            RebuildWaterPoints();
         }
 
         public static void Shutdown()
         {
             _started = false;
+            IslandWorldService.OnInlandWaterReady -= OnInlandWaterReady;
             StopPlaying();
             ReleaseBank();
             _bankMissing = false;
@@ -65,6 +75,21 @@ namespace Game
         public static void ClearPlaying()
         {
             StopPlaying();
+        }
+
+        /// <summary>
+        /// 回前台 / 打断恢复：雨水的 voice 可能已被引擎掐掉，但本地态还认为在播
+        /// → 清本地态后按听者位置重新评估（近水才重起）。
+        /// </summary>
+        public static void RestorePlaying()
+        {
+            if (!_started)
+                return;
+            if (_contentAudioPaused)
+                return;
+
+            StopPlaying();
+            EvaluateNow();
         }
 
         public static void EvaluateNow()
@@ -148,15 +173,11 @@ namespace Game
         static void RebuildWaterPoints()
         {
             WaterPoints.Clear();
-            // 优先使用烘焙静态数据（O(1) 查表）—— 覆盖 Ocean / Lake / River / Waterfall。
-            if (StaticWaterStationIndex.IsReady)
-            {
-                StaticWaterStationIndex.GetAllWaterPoints(WaterPoints);
-                if (WaterPoints.Count > 0)
-                    return;
-            }
 
-            // 降级路径：SO 未烘焙时回退到 catalog 扫描。
+            // 真实水面采样点（河 / 瀑）：运行期直接从场景网格取，跟场景一致。
+            WaterSurfaceProbe.GetAllPoints(WaterPoints);
+
+            // 岸线 / 湖面锚点。
             var statics = AmbienceZoneCatalog.StaticEmitters;
             for (int i = 0; i < statics.Length; i++)
             {

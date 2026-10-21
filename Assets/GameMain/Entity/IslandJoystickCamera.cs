@@ -130,6 +130,7 @@ namespace Game
 
         void OnDisable()
         {
+            IslandLocomotionState.IsWalking = false;
             ApplyRenderScale(false);
             if (Current == this)
                 Current = null;
@@ -358,6 +359,7 @@ namespace Game
             if (_transitionDriven)
             {
                 // Form owns world position during iris exit / enter.
+                IslandLocomotionState.IsWalking = false;
                 transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
                 ApplyRenderScale(false);
                 return;
@@ -367,6 +369,7 @@ namespace Game
             ConsumeMoveInput(dt);
 
             bool walking = IsWalking;
+            IslandLocomotionState.IsWalking = walking;
 
             if (_holdPresetFraming)
             {
@@ -375,6 +378,7 @@ namespace Game
                     ReleasePresetFraming();
                 else
                 {
+                    IslandLocomotionState.IsWalking = false;
                     ApplyStickYaw(dt);
                     ApplyRenderScale(false);
                     transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
@@ -694,8 +698,7 @@ namespace Game
             }
 
             // 河：水平近河道且竖直也在河面容差内；已站在桥/码头甲板（明显高于河面）则放行。
-            if (StaticWaterStationIndex.IsReady
-                && StaticWaterStationIndex.TryNearestRiver(
+            if (WaterSurfaceProbe.TryNearestRiver(
                     foot, RiverQueryRadius, out Vector3 nearest, out _))
             {
                 float dx = foot.x - nearest.x;

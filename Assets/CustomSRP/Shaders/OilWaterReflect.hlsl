@@ -21,6 +21,7 @@ float4 _OilSkyMoonDisc[4];
 float4 _OilSkyMoonGlow[4];
 float4 _OilSkySunParams[4];
 float4 _OilSkyMoonParams[4];
+float _OilSkySunrise;
 
 half OilWaterNightWeight(float period)
 {
@@ -96,6 +97,19 @@ void OilWaterSkyAnchors(
     moonSize = lerp((half)_OilSkyMoonParams[i0].x, (half)_OilSkyMoonParams[i1].x, t);
     moonIntensity = lerp((half)_OilSkyMoonParams[i0].y, (half)_OilSkyMoonParams[i1].y, t);
     moonGlowAmt = lerp((half)_OilSkyMoonParams[i0].z, (half)_OilSkyMoonParams[i1].z, t);
+
+    // Same sunrise weight as the skybox, so reflections don't keep the old dawn-anchor fade.
+    half sunrise = (half)saturate(_OilSkySunrise);
+    if (sunrise > 0.001h)
+    {
+        zenith = lerp(zenith, half3(1.0 / 255.0, 40.0 / 255.0, 205.0 / 255.0), sunrise);
+        mid = lerp(mid, half3(212.0 / 255.0, 140.0 / 255.0, 104.0 / 255.0), sunrise);
+        horizon = lerp(horizon, half3(246.0 / 255.0, 192.0 / 255.0, 31.0 / 255.0), sunrise);
+        sunDisc = lerp(sunDisc, half3(1.0, 138.0 / 255.0, 95.0 / 255.0), sunrise);
+        sunGlow = lerp(sunGlow, half3(1.0, 180.0 / 255.0, 42.0 / 255.0), sunrise);
+        sunIntensity = lerp(sunIntensity, 1.05h, sunrise);
+        sunGlowAmt = lerp(sunGlowAmt, 0.28h, sunrise);
+    }
 }
 
 half3 OilWaterSkyColor(float y, half stroke, half3 zenith, half3 mid, half3 horizon, half3 ground)

@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #import <MediaPlayer/MediaPlayer.h>
 #import <QuartzCore/QuartzCore.h>
 #include <string>
@@ -146,6 +147,45 @@ static BOOL WanosMusicPlayer_IsAudioDeviceRecoveryInFlight(void) {
 
 static NSString* g_persistentDataPath = nil;
 static NSString* g_streamingAssetsPath = nil;
+
+/// 负一屏封面：优先 streamingAssets，失败则回退 App/Data/Raw（hybrid 宿主落包位置）。
+static NSString* ResolveBoluoArtworkPath(void) {
+    NSFileManager* fm = [NSFileManager defaultManager];
+    if (g_streamingAssetsPath.length > 0) {
+        NSString* p = [[[g_streamingAssetsPath
+            stringByAppendingPathComponent:@"WanosAudio"]
+            stringByAppendingPathComponent:@"Artwork"]
+            stringByAppendingPathComponent:@"boluo.png"];
+        if ([fm fileExistsAtPath:p]) return p;
+    }
+    NSString* fallback = [[[[[[NSBundle mainBundle] bundlePath]
+        stringByAppendingPathComponent:@"Data"]
+        stringByAppendingPathComponent:@"Raw"]
+        stringByAppendingPathComponent:@"WanosAudio"]
+        stringByAppendingPathComponent:@"Artwork"]
+        stringByAppendingPathComponent:@"boluo.png"];
+    if ([fm fileExistsAtPath:fallback]) return fallback;
+    return nil;
+}
+
+static void AttachBoluoArtwork(NSMutableDictionary* info, NSString* artworkPath) {
+    if (info == nil || artworkPath.length == 0) return;
+    UIImage* image = [UIImage imageWithContentsOfFile:artworkPath];
+    if (!image) return;
+    MPMediaItemArtwork* artwork = [[MPMediaItemArtwork alloc]
+        initWithBoundsSize:image.size
+        requestHandler:^UIImage* _Nonnull(CGSize size) {
+            if (size.width <= 0 || size.height <= 0) return image;
+            if (size.width >= image.size.width && size.height >= image.size.height) return image;
+            UIGraphicsBeginImageContextWithOptions(size, YES, 1.0);
+            [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+            UIImage* scaled = UIGraphicsGetImageFromCurrentImageContext();
+            UIGraphicsEndImageContext();
+            return scaled ?: image;
+        }];
+    info[MPMediaItemPropertyArtwork] = artwork;
+}
+
 static unsigned long long g_objectId = 0;
 static NSString* g_unityObjectName = @"WanosMusicPlayer";
 static NSString* g_stopEventName = @"Stop_Music";
@@ -679,14 +719,8 @@ static void nativePlayTrackAt(int listIdx, int musicIdx, uint64_t generation) {
 
     NSString* listName = [NSString stringWithUTF8String:list.musicsName.c_str()];
     NSString* musicName = [NSString stringWithUTF8String:nextMusic.musicName.c_str()];
-    NSString* artworkPath = nil;
-    if (g_streamingAssetsPath.length > 0) {
-        artworkPath = [[[g_streamingAssetsPath stringByAppendingPathComponent:@"WanosAudio"] stringByAppendingPathComponent:@"Artwork"] stringByAppendingPathComponent:@"boluo.png"];
-        if (![[NSFileManager defaultManager] fileExistsAtPath:artworkPath]) {
-            artworkPath = nil;
-        }
-    }
-    NSString* artworkPathForBlock = artworkPath;  // 供 block 捕获
+    // hybrid 宿主封面在 App/Data/Raw；Unity streamingAssetsPath 可能指到 Framework 内不存在的路径。
+    NSString* artworkPathForBlock = ResolveBoluoArtworkPath();
     dispatch_async(dispatch_get_main_queue(), ^{
         NSMutableDictionary* info = [NSMutableDictionary dictionary];
         info[MPMediaItemPropertyTitle] = musicName ?: @"";
@@ -696,13 +730,7 @@ static void nativePlayTrackAt(int listIdx, int musicIdx, uint64_t generation) {
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(0.0);
         info[MPNowPlayingInfoPropertyIsLiveStream] = @(YES);
         info[MPMediaItemPropertyPlaybackDuration] = @(0.0);
-        if (artworkPathForBlock.length > 0) {
-            UIImage* image = [UIImage imageWithContentsOfFile:artworkPathForBlock];
-            if (image) {
-                MPMediaItemArtwork* artwork = [[MPMediaItemArtwork alloc] initWithBoundsSize:image.size requestHandler:^UIImage* _Nonnull(CGSize size) { return image; }];
-                info[MPMediaItemPropertyArtwork] = artwork;
-            }
-        }
+        AttachBoluoArtwork(info, artworkPathForBlock);
         [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = info;
         if (g_unityObjectName.length > 0) {
             UnitySendMessage([g_unityObjectName UTF8String], "OnNativeTrackChanged", [[NSString stringWithFormat:@"%d,%d", listIdx, musicIdx] UTF8String]);
@@ -718,13 +746,7 @@ static void nativePlayTrackAt(int listIdx, int musicIdx, uint64_t generation) {
             info2[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(0.0);
             info2[MPNowPlayingInfoPropertyIsLiveStream] = @(YES);
             info2[MPMediaItemPropertyPlaybackDuration] = @(0.0);
-            if (artworkPathForBlock.length > 0) {
-                UIImage* img = [UIImage imageWithContentsOfFile:artworkPathForBlock];
-                if (img) {
-                    MPMediaItemArtwork* aw = [[MPMediaItemArtwork alloc] initWithBoundsSize:img.size requestHandler:^UIImage* _Nonnull(CGSize size) { return img; }];
-                    info2[MPMediaItemPropertyArtwork] = aw;
-                }
-            }
+            AttachBoluoArtwork(info2, artworkPathForBlock);
             [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = info2;
         });
     });
@@ -1022,6 +1044,7 @@ void WanosMusicPlayer_PostGlobalResumeMusic(void) {
 }
 
 void WanosMusicPlayer_SetNowPlayingInfo(const char* title, const char* artist, const char* album) {
+    NSString* artworkPath = ResolveBoluoArtworkPath();
     dispatch_async(dispatch_get_main_queue(), ^{
         NSMutableDictionary* info = [NSMutableDictionary dictionary];
         info[MPMediaItemPropertyTitle] = title ? [NSString stringWithUTF8String:title] : @"";
@@ -1031,6 +1054,7 @@ void WanosMusicPlayer_SetNowPlayingInfo(const char* title, const char* artist, c
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(0.0);
         info[MPNowPlayingInfoPropertyIsLiveStream] = @(YES);
         info[MPMediaItemPropertyPlaybackDuration] = @(0.0);
+        AttachBoluoArtwork(info, artworkPath);
         [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = info;
     });
 }

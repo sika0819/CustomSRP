@@ -14,14 +14,46 @@ namespace WanosAudio
         static bool _playbackEnabled;
         static bool _eventPostAllowed;
 
+        /// <summary>最后一次写入引擎的音量（0–1 UI 量纲），用于回前台重推。</summary>
+        static float _lastMusicVolume01 = 1f;
+        static float _lastFxVolume01 = 1f;
+
+        /// <summary>
+        /// 音频被打断标记：系统 / 其它 App 抢焦点、原生 muted 回调置位。
+        /// 回前台或玩家点场景时用它决定是否要跑一次恢复。
+        /// </summary>
+        static bool _interrupted;
+
         public static bool IsLoaded => WanosNative.Instance.IsCreated;
         public static bool IsPlaybackEnabled => _playbackEnabled;
         public static bool IsEventPostAllowed => _eventPostAllowed;
+
+        /// <summary>音频是否处于「被打断」状态（mute / 焦点丢失 / 系统静音回调）。</summary>
+        public static bool IsInterrupted => _interrupted;
+
+        /// <summary>标记音频被打断（原生 muted / 焦点失败回调）。</summary>
+        public static void MarkInterrupted(string reason)
+        {
+            if (_interrupted)
+                return;
+            _interrupted = true;
+            Debug.Log($"[{LogTag}] interrupted ({reason})");
+        }
+
+        /// <summary>清除打断标记（恢复流程走完）。</summary>
+        public static void ClearInterrupted(string reason)
+        {
+            if (!_interrupted)
+                return;
+            _interrupted = false;
+            Debug.Log($"[{LogTag}] interrupted cleared ({reason})");
+        }
 
         public static void ResetSession()
         {
             _playbackEnabled = false;
             _eventPostAllowed = false;
+            _interrupted = false;
             WanosInteraction.ResetSession();
             WanosBankStore.ResetSession();
         }
@@ -180,6 +212,33 @@ namespace WanosAudio
             Debug.Log($"[{LogTag}] unmute ({reason})");
         }
 
+        /// <summary>
+        /// 回前台的引擎层恢复：解 mute + 重推音量 + 清打断标记。
+        /// 不做业务判断（曲目 / 内容声由 GameMain 决定）。
+        /// </summary>
+        public static bool RestoreForeground(string reason)
+        {
+            if (!WanosNative.Instance.IsCreated)
+                return false;
+
+            Unmute(reason);
+            ReapplyVolumes();
+            ClearInterrupted(reason);
+            return true;
+        }
+
+        /// <summary>
+        /// 重推上次写入的音量 RTPC。引擎 mute/unmute、设备重建后 RTPC 可能回到默认值，
+        /// 回前台必须补一次，否则「有播放但音量不对 / 听不到」。
+        /// </summary>
+        public static void ReapplyVolumes()
+        {
+            if (!WanosNative.Instance.IsCreated)
+                return;
+            SetVolumeParameter(MusicVolumeParam, _lastMusicVolume01);
+            SetVolumeParameter(FxVolumeParam, _lastFxVolume01);
+        }
+
         public static bool ShouldAllowPostEvent(string eventName)
         {
             if (!WanosNative.Instance.IsCreated)
@@ -206,9 +265,40 @@ namespace WanosAudio
         public static void ResumeAll() => WanosNative.Instance.PostEvent(0, "Resume_ALL");
         public static void StopAll() => WanosNative.Instance.PostEvent(0, "Stop_All");
 
+        /// <summary>
+        /// 音量 RTPC 名白名单。引擎侧 RTPC 量程是 0–100（bank 定义：
+        /// <c>Music_Volume</c> / <c>Fx_Volume</c> 的 Range max = 100，Default = 80）。
+        /// 写错名字会被引擎静默丢弃 → 音量恒为默认/无效，且没有任何报错。
+        /// </summary>
+        public const string MusicVolumeParam = "Music_Volume";
+        public const string FxVolumeParam = "Fx_Volume";
+
+        /// <summary>
+        /// Volume RTPCs (<c>Music_Volume</c> / <c>Fx_Volume</c>) are authored 0–100
+        /// (legacy GameData.bgmVolume default 80). UI stores 0–1; multiply here.
+        /// <para>
+        /// 量纲是硬约定：引擎 RTPC 量程 0–100，把 0–1 的 UI 值原样透传过去 = 0.8% 音量 = 听不到。
+        /// 所有音量必须走本方法，不要直接调 <see cref="WanosNative.SetParameter"/>。
+        /// </para>
+        /// </summary>
         public static void SetVolumeParameter(string paramName, float normalized01)
         {
-            WanosNative.Instance.SetParameter(paramName, Mathf.Clamp01(normalized01));
+            if (paramName != MusicVolumeParam && paramName != FxVolumeParam)
+            {
+                Debug.LogError($"[{LogTag}] SetVolumeParameter 未知音量 RTPC 名 '{paramName}'" +
+                               $"（合法：{MusicVolumeParam} / {FxVolumeParam}）。写错名字引擎会静默丢弃，音量不会变。");
+                return;
+            }
+
+            float engineValue = Mathf.Clamp01(normalized01) * 100f;
+            // 缓存 UI 量纲：回前台恢复时按缓存重推（引擎侧 RTPC 可能被重置回默认值）。
+            if (paramName == MusicVolumeParam)
+                _lastMusicVolume01 = Mathf.Clamp01(normalized01);
+            else if (paramName == FxVolumeParam)
+                _lastFxVolume01 = Mathf.Clamp01(normalized01);
+            // 走 SetParameterEngineValue：这里已经是 0–100 引擎量纲，不该再被 0–1 量纲护栏判定。
+            WanosNative.Instance.SetParameterEngineValue(paramName, engineValue);
+            Debug.Log($"[{LogTag}] SetVolumeParameter {paramName}={engineValue:F1} (ui={normalized01:F3})");
         }
 
         /// <summary>

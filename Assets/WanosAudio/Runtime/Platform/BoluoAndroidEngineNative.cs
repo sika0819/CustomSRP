@@ -81,6 +81,27 @@ namespace WanosAudio
 #endif
         }
 
+        /// <summary>
+        /// Unity PostEvent 起播后补抢 AudioFocus + unmute（对齐旧 nativePlayTrackAt 门禁）。
+        /// </summary>
+        public static void EnsureAudibleForUnityPlayback()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("ensureAudibleForUnityPlayback");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] ensureAudibleForUnityPlayback failed: {ex.Message}");
+            }
+#endif
+        }
+
         public static void NotifyAppLifecycle(bool inBackground, bool backgroundPlayDisabled)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -113,6 +134,28 @@ namespace WanosAudio
             catch (System.Exception ex)
             {
                 Debug.LogWarning($"[BoluoAndroidEngineNative] restoreAudibleAfterUnityPause failed: {ex.Message}");
+            }
+#endif
+        }
+
+        /// <summary>
+        /// 回前台抢回 AudioFocus（对齐 iOS becomeActive reclaim）。
+        /// 原生内部会尊重 userPaused / 后台续播态，必要时做 reset + 重播。
+        /// </summary>
+        public static void ReclaimFocusOnForeground()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("reclaimFocusOnForeground");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] reclaimFocusOnForeground failed: {ex.Message}");
             }
 #endif
         }

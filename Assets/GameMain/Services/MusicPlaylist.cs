@@ -40,6 +40,41 @@ namespace Game
 
         int _musicSerialId = -1;
 
+        /// <summary>
+        /// 用户主动停过曲目（Stop）。回前台恢复时不能把停掉的曲目重新拉起来，
+        /// 但「暂停」要恢复（需求：不管什么暂停状态，回前台都恢复音乐）。
+        /// </summary>
+        bool _stoppedByUser;
+
+        /// <summary>当前有可恢复的曲目（选过曲且没被用户主动停掉）。</summary>
+        public bool HasRestorableTrack =>
+            !_stoppedByUser && CurrentAlbumIndex >= 0 && CurrentTrackIndex >= 0;
+
+        /// <summary>
+        /// 当前曲的引擎事件名（与原生传输计划里的 event 对齐）。
+        /// </summary>
+        public string CurrentEventName
+        {
+            get
+            {
+                var track = MusicCatalog.GetTrack(CurrentAlbumIndex, CurrentTrackIndex);
+                return track?.EventName ?? "";
+            }
+        }
+
+        /// <summary>
+        /// 采用原生已经在播的曲目（后台负一屏切歌后回前台对账）。
+        /// 只更新索引与播放态：引擎里已经是原生起播的那一轨，不能再发一次 Play 事件。
+        /// </summary>
+        public void AdoptTrack(int albumIndex, int trackIndex)
+        {
+            if (albumIndex < 0 || trackIndex < 0)
+                return;
+            CurrentAlbumIndex = albumIndex;
+            CurrentTrackIndex = trackIndex;
+            IsPlaying = true;
+        }
+
         // -----------------------------------------------------------------------
         // Session reset (called on island leave / re-enter)
         // -----------------------------------------------------------------------
@@ -50,6 +85,7 @@ namespace Game
             {
                 _instance._musicSerialId = -1;
                 _instance.IsPlaying = false;
+                _instance._stoppedByUser = false;
             }
             NowPlayingService.CleanupAfterLeaveIsland();
         }
@@ -134,6 +170,7 @@ namespace Game
         public void Stop(bool publish = true)
         {
             StopCurrentMusic();
+            _stoppedByUser = true;
             // Always post even if serialId was lost — prevents overlapping Play_Music* voices.
             try
             {
@@ -307,6 +344,52 @@ namespace Game
             NowPlayingService.PublishFromPlaylist();
         }
 
+        /// <summary>
+        /// 回前台 / 打断后恢复音乐：
+        /// <para>
+        /// GF agent 还在 → 只发 <c>Resume_Music</c>（续进度，不 Stop+Play）；
+        /// agent 已丢（serial &lt; 0）→ 重起当前曲目。
+        /// </para>
+        /// 不要用原生 <c>PlaybackState</c> 决定是否硬重启：该状态在 Editor/macOS 上
+        /// 经常与真实发声不同步，会把正在播的曲反复掐掉重开。
+        /// 用户主动「停止」过的曲目不恢复；用户主动「暂停」的会恢复。
+        /// </summary>
+        public void EnsureMusicRestored(string reason)
+        {
+            if (!HasRestorableTrack)
+                return;
+            if (!WanosEngine.IsPlaybackEnabled)
+                return;
+
+            if (_musicSerialId < 0)
+            {
+                if (GameEntry.Sound == null)
+                    return;
+                // GF 侧 sound 已不在 → 没有任何可 Resume 的 voice → 重起当前曲目。
+                Log.Info($"[MusicPlaylist] restore ({reason}): serial lost → replay track");
+                PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
+                return;
+            }
+
+            // agent 还在 → 续播当前进度（即便原生 PlaybackState 暂时不是 Started）。
+            try
+            {
+                if (WanosNative.Instance != null)
+                    WanosNative.Instance.PostEvent(0, "Resume_Music");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[MusicPlaylist] Resume_Music failed: {ex.Message}");
+            }
+            IsPlaying = true;
+            WanosEngine.Unmute("music-restore");
+            PushVolumesToEngine();
+#if UNITY_ANDROID && !UNITY_EDITOR
+            BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
+#endif
+            Log.Info($"[MusicPlaylist] restore ({reason}): resumed track {CurrentAlbumIndex}/{CurrentTrackIndex}");
+        }
+
         // -----------------------------------------------------------------------
         // Internal helpers
         // -----------------------------------------------------------------------
@@ -323,6 +406,8 @@ namespace Game
 
         bool TryStartTrack(MusicTrack track)
         {
+            // 起播新曲目 = 用户不再处于「主动停止」状态（回前台恢复可以拉回来）。
+            _stoppedByUser = false;
             string bankName = track.BankName;
             string eventName = track.EventName;
             if (string.IsNullOrEmpty(bankName))
@@ -353,15 +438,22 @@ namespace Game
             _musicSerialId = GameEntry.Sound.PlaySound(asset, MusicGroup);
             IsPlaying = _musicSerialId >= 0;
             if (IsPlaying)
+            {
                 WanosEngine.Unmute("music-play");
+                // Push user volume again after PlaySound (agent may have written RTPC too).
+                PushVolumesToEngine();
+#if UNITY_ANDROID && !UNITY_EDITOR
+                BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
+#endif
+            }
             PublishNowPlaying();
             return IsPlaying;
         }
 
-        void PushVolumesToEngine()
+        public void PushVolumesToEngine()
         {
-            WanosEngine.SetVolumeParameter("Music_Volume", MusicVolume);
-            WanosEngine.SetVolumeParameter("SFX_Volume", EffectVolume);
+            WanosEngine.SetVolumeParameter(WanosEngine.MusicVolumeParam, MusicVolume);
+            WanosEngine.SetVolumeParameter(WanosEngine.FxVolumeParam, EffectVolume);
         }
 
         void ApplyGroupVolumes()

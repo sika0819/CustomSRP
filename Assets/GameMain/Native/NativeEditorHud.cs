@@ -12,10 +12,12 @@ namespace Game.Native
 
         static Page _page;
         static int _draftMinutes = 15;
+        static int _lastArmedMinutes = 15;
         static int _remaining;
         static DateTime _endUtc;
         static bool _timerRunning;
         static Vector2 _scroll;
+        static int _lastPushedRemaining = -1;
 
         public static bool IsShowing => _page != Page.None;
 
@@ -45,12 +47,20 @@ namespace Game.Native
             {
                 _timerRunning = false;
                 _remaining = 0;
+                _lastPushedRemaining = 0;
+                // 与真机一致：到点推 0,-1，由 NativeTimerService 停播。
                 NativePushReceiver.SimulatePush(MsgType.TimerProgress, 0, -1, 0);
                 Open(Page.TimerEnd);
                 return;
             }
 
             _remaining = left;
+            // 每秒重推一次，HUD 进度跟「原生」通道走（不只依赖 Unity 本地 Tick）。
+            if (left != _lastPushedRemaining)
+            {
+                _lastPushedRemaining = left;
+                NativePushReceiver.SimulatePush(MsgType.TimerProgress, left, MsgType.TimerRingSeconds, 0);
+            }
         }
 
         public static void OnGUI()
@@ -65,16 +75,20 @@ namespace Game.Native
             GUI.color = prev;
 
             float w = Mathf.Min(520f, Screen.width - 40f);
-            float h = _page == Page.Timer ? 340f : 280f;
+            float h = _page == Page.Timer ? 340f : _page == Page.TimerEnd ? 300f : 280f;
             var box = new Rect((Screen.width - w) * 0.5f, Screen.height - h - 24f, w, h);
             if (Event.current.type == EventType.MouseDown && !box.Contains(Event.current.mousePosition))
             {
-                Close();
-                Event.current.Use();
+                // 定时结束页必须点按钮（重复/取消），点空白不关。
+                if (_page != Page.TimerEnd)
+                {
+                    Close();
+                    Event.current.Use();
+                }
                 return;
             }
             GUI.Box(box, GUIContent.none);
-            GUILayout.BeginArea(new Rect(box.x + 16f, box.y + 12f, box.width - 32f, box.height - 24f));
+            GUILayout.BeginArea(new Rect(box.x + 12f, box.y + 12f, box.width - 24f, box.height - 24f));
             _scroll = GUILayout.BeginScrollView(_scroll);
 
             switch (_page)
@@ -144,9 +158,9 @@ namespace Game.Native
             GUILayout.Label("定时（Editor 模拟原生页）");
             GUILayout.Space(6);
             if (_timerRunning)
-                GUILayout.Label($"剩余 {_remaining / 60}:{_remaining % 60:D2}");
+                GUILayout.Label($"剩余 {_remaining / 60}:{_remaining % 60:D2}  ·  满圈基准 {MsgType.TimerRingSeconds}s");
             else
-                GUILayout.Label("选择时长后开始");
+                GUILayout.Label("选择时长后开始（HUD 进度 = 剩余/3600）");
 
             GUILayout.Label($"将定时 {_draftMinutes} 分钟");
             GUILayout.BeginHorizontal();
@@ -179,18 +193,32 @@ namespace Game.Native
             GUILayout.Label("定时结束");
             GUILayout.Space(8);
             GUILayout.Label("时间到了，岛内音乐已暂停。");
+            GUILayout.Label($"上次定时 {_lastArmedMinutes} 分钟。");
             GUILayout.Space(12);
-            if (GUILayout.Button("知道了", GUILayout.Height(36)))
+            if (GUILayout.Button("重复定时", GUILayout.Height(36)))
+            {
+                Game.GameEntry.Music?.Resume();
+                StartTimer(_lastArmedMinutes);
                 Close();
+            }
+
+            if (GUILayout.Button("取消", GUILayout.Height(32)))
+            {
+                // 只恢复播放，不再武装定时（对齐旧 Hybrid 结束弹窗「取消」）。
+                Game.GameEntry.Music?.Resume();
+                Close();
+            }
         }
 
         static void StartTimer(int minutes)
         {
             var m = Mathf.Max(1, minutes);
             _draftMinutes = m;
+            _lastArmedMinutes = m;
             _remaining = m * 60;
             _endUtc = DateTime.UtcNow.AddSeconds(_remaining);
             _timerRunning = true;
+            _lastPushedRemaining = _remaining;
             NativePushReceiver.SimulatePush(MsgType.TimerProgress, _remaining, MsgType.TimerRingSeconds, 0);
         }
 
@@ -198,6 +226,7 @@ namespace Game.Native
         {
             _timerRunning = false;
             _remaining = 0;
+            _lastPushedRemaining = 0;
             NativePushReceiver.SimulatePush(MsgType.TimerProgress, 0, 0, 0);
         }
     }

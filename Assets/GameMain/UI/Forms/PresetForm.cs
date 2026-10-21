@@ -667,17 +667,43 @@ namespace Game
             int presetId = item.PresetId;
             IslandPlayerPosSave.PushSaveSuppress();
             // Fire-and-forget: UniTask continues on main thread via BankDownloader.
-            BankDownloader.DownloadBanks(
-                remotes,
-                loadIntoEngine: true,
-                onComplete: list => OnPresetBanksDone(presetId, list),
-                prioritize: false,
-                preempt: true).Forget();
+            DownloadBanksAsync(presetId, remotes).Forget();
+        }
+
+        /// <summary>
+        /// Runs the preset bank download and guarantees the save-suppress counter is popped exactly once,
+        /// even if the download throws before the completion callback fires
+        /// (otherwise the player position would stay permanently unsaved).
+        /// </summary>
+        async UniTaskVoid DownloadBanksAsync(int presetId, List<BankRemoteInfo> remotes)
+        {
+            try
+            {
+                await BankDownloader.DownloadBanks(
+                    remotes,
+                    loadIntoEngine: true,
+                    onComplete: list => OnPresetBanksDone(presetId, list),
+                    prioritize: false,
+                    preempt: true);
+            }
+            catch (Exception e)
+            {
+                Log.Warning($"[PresetForm] Bank download failed: {e.Message}");
+                _userTriggered.Remove(presetId);
+                if (PendingDownloadIntent.IsPresetMatch(presetId))
+                    PendingDownloadIntent.Clear();
+                if (Root != null)
+                    RefreshAllStates();
+            }
+            finally
+            {
+                IslandPlayerPosSave.PopSaveSuppress();
+            }
         }
 
         void OnPresetBanksDone(int presetId, IReadOnlyList<BankDownloadItem> _)
         {
-            IslandPlayerPosSave.PopSaveSuppress();
+            // 注意：保存抑制的出栈由 DownloadBanksAsync 的 finally 统一负责，这里不要重复 Pop。
             IslandPresetAsset preset = GameEntry.Presets?.GetById(presetId);
             string[] banks = preset != null ? preset.BankNames : null;
 

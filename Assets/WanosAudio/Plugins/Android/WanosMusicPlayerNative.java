@@ -145,6 +145,34 @@ public class WanosMusicPlayerNative {
     /** 护栏 mute/unmute 世代：新决策作废已排队的 dip/爬坡。 */
     private volatile long guardedMuteGeneration = 0;
 
+    // ---------------------------------------------------------------------------
+    // 后台传输计划（Unity 在后台被 pause，UnitySendMessage 无法被处理）
+    //
+    // 宿主 MainActivity.onStop 会 UnityPlayer.onPause → Unity 脚本循环停摆，
+    // 负一屏/通知栏的播放控制若只转发给 Unity，后台点了没反应。
+    // 因此由 C# 前台把「当前曲 + 上下曲 + bank 路径」推给原生，
+    // 后台由原生直接驱动 WIAEngine（Pause/Resume/Stop_Music + Play_* 事件）。
+    // ---------------------------------------------------------------------------
+
+    /** 传输计划里的一首曲目。 */
+    private static final class TransportTrack {
+        String name = "";
+        String eventName = "";
+        String bankName = "";
+        String bankGuid = "";
+        String bankPath = "";
+        boolean loaded;
+    }
+
+    /** C# 推送的曲目列表（当前专辑内、bank 已就绪的曲目，按播放顺序）。 */
+    private volatile List<TransportTrack> transportTracks = Collections.emptyList();
+    /** 播放模式：1=单曲循环 2=列表循环 3=随机（与 C# MusicPlayMode 对齐）。 */
+    private volatile int transportMode = 1;
+    /** 当前曲目在 <see cref="transportTracks"/> 中的下标，-1=未知。 */
+    private volatile int transportCurrent = -1;
+    /** 计划是否可用（列表非空且当前下标合法）。 */
+    private volatile boolean transportPlanValid = false;
+
     /** 音频焦点管理器：其它 App 抢占/释放焦点时暂停并自动恢复（对齐 iOS PA-904 声音失焦未恢复）。 */
     private final WanosAudioFocusManager audioFocusManager =
             new WanosAudioFocusManager(new WanosAudioFocusManager.Callback() {
@@ -275,26 +303,32 @@ public class WanosMusicPlayerNative {
             @Override
             public void onTransportPlay() {
                 // CustomSRP：曲目权威在 Unity MusicPlaylist；原生只转发 + coalesce。
+                // 后台（Unity 已 pause）走原生：UnitySendMessage 不会被处理。
+                if (handleTransportInBackground(false)) return;
                 scheduleMediaPlayPause(false);
             }
 
             @Override
             public void onTransportPause() {
+                if (handleTransportInBackground(true)) return;
                 scheduleMediaPlayPause(true);
             }
 
             @Override
             public void onTransportStop() {
+                if (handleTransportInBackground(true)) return;
                 scheduleMediaPlayPause(true);
             }
 
             @Override
             public void onTransportSkipToNext() {
+                if (handleTransportSkipInBackground(+1)) return;
                 skipToUnity(+1);
             }
 
             @Override
             public void onTransportSkipToPrevious() {
+                if (handleTransportSkipInBackground(-1)) return;
                 skipToUnity(-1);
             }
         });
@@ -653,6 +687,24 @@ public class WanosMusicPlayerNative {
      */
     public void resumeFromUserAction() {
         resumeFromMediaControl();
+    }
+
+    /**
+     * Unity {@code MusicPlaylist} 直发 PostEvent 起播时调用：补 AudioFocus + unmute。
+     * CustomSRP 不再走 {@link #play(int, int)}，否则真机无焦点/mute 影子态会导致有 PostEvent 无听感。
+     */
+    public void ensureAudibleForUnityPlayback() {
+        userPaused = false;
+        shouldStop = false;
+        playbackExecutor.execute(() -> {
+            if (!ensureFocusBeforeAudible("unity_play")) {
+                Log.w(TAG, "ensureAudibleForUnityPlayback: focus failed — stay muted");
+                return;
+            }
+            runGuardedUnmuteOnCurrentThread("unity_play");
+            startMediaPlaybackForegroundService();
+            Log.i(TAG, "ensureAudibleForUnityPlayback: focus+unmute done");
+        });
     }
 
     /**
@@ -1089,7 +1141,7 @@ public class WanosMusicPlayerNative {
         return null;
     }
 
-    /** 获取封面路径，用于 NowPlaying */
+    /** 获取封面路径，用于 NowPlaying。Android jar StreamingAssets 不可 File 访问，改传 asset 相对路径。 */
     private String getCoverPathForNowPlaying() {
         if (isStreamingPathUsable()) {
             String artPath = streamingAssetsPath + "/WanosAudio/Artwork/boluo.png";
@@ -1099,7 +1151,8 @@ public class WanosMusicPlayerNative {
             String artPath = persistentDataPath + "/WanosAudio/Artwork/boluo.png";
             if (new File(artPath).exists()) return artPath;
         }
-        return null;
+        // jar:file://...!/assets — decodeCoverBitmap 走 AssetManager
+        return "WanosAudio/Artwork/boluo.png";
     }
 
     /** 根据 playlist 当前索引更新 NowPlaying（主线程调用，如 Playing 回调时） */
@@ -1313,16 +1366,10 @@ public class WanosMusicPlayerNative {
         // Update NowPlaying
         String listName = list.musicsName != null ? list.musicsName : "";
         String musicName = music.musicName != null ? music.musicName : "";
-        String coverPath = null;
-        if (isStreamingPathUsable()) {
-            String artPath = streamingAssetsPath + "/WanosAudio/Artwork/boluo.png";
-            if (new File(artPath).exists()) coverPath = artPath;
-        }
-        if (coverPath == null && !persistentDataPath.isEmpty()) {
-            String artPath = persistentDataPath + "/WanosAudio/Artwork/boluo.png";
-            if (new File(artPath).exists()) coverPath = artPath;
-        }
-        WIAEngineJNI.updateNowPlayingInfo(musicName.isEmpty() ? listName : musicName, coverPath, true);
+        WIAEngineJNI.updateNowPlayingInfo(
+                musicName.isEmpty() ? listName : musicName,
+                getCoverPathForNowPlaying(),
+                true);
 
         // Notify Unity（lambda 只能捕获 final /  effectively final，故用拷贝）
         final int notifyListIdx = listIdx;
@@ -1877,6 +1924,310 @@ public class WanosMusicPlayerNative {
         boolean sameDir = lastSkipDirection != 0 && lastSkipDirection == direction;
         if (skipInFlight && elapsed < SKIP_IN_FLIGHT_TIMEOUT_MS) return true;
         return sameDir && elapsed < SKIP_DEBOUNCE_MS;
+    }
+
+    // ---------------------------------------------------------------------------
+    // 后台传输：Unity 被 pause 时由原生直接驱动引擎
+    // ---------------------------------------------------------------------------
+
+    /**
+     * C#（前台）推送后台传输计划。
+     * <p>JSON: {@code {"mode":2,"current":0,"tracks":[{"name":"曲名","event":"Play_Music1_2",
+     * "bank":"Music1_2","guid":"...","path":"/abs/Music1_2.wsbk","loaded":false}]}}
+     * <p>只有 bank 文件已就绪的曲目才会进列表，保证后台切歌有东西可播。
+     */
+    public void setBackgroundTransportPlan(String json) {
+        if (json == null || json.isEmpty()) {
+            clearBackgroundTransportPlan();
+            return;
+        }
+        try {
+            JSONObject root = new JSONObject(json);
+            int mode = root.optInt("mode", 1);
+            JSONArray arr = root.optJSONArray("tracks");
+            List<TransportTrack> list = new ArrayList<>();
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.optJSONObject(i);
+                    if (o == null) continue;
+                    TransportTrack t = new TransportTrack();
+                    t.name = o.optString("name", "");
+                    t.eventName = o.optString("event", "");
+                    t.bankName = o.optString("bank", "");
+                    t.bankGuid = o.optString("guid", "");
+                    t.bankPath = o.optString("path", "");
+                    t.loaded = o.optBoolean("loaded", false);
+                    if (t.eventName.isEmpty()) continue;
+                    list.add(t);
+                }
+            }
+            int current = root.optInt("current", -1);
+            transportTracks = list;
+            transportMode = mode;
+            transportCurrent = current;
+            transportPlanValid = !list.isEmpty() && current >= 0 && current < list.size();
+            Log.i(TAG, "setBackgroundTransportPlan tracks=" + list.size()
+                    + " current=" + current + " mode=" + mode
+                    + " valid=" + transportPlanValid);
+        } catch (Exception e) {
+            Log.w(TAG, "setBackgroundTransportPlan failed: " + e.getMessage());
+            clearBackgroundTransportPlan();
+        }
+    }
+
+    /** 退岛/退登：清掉后台传输计划，避免原生继续切已经失效的曲目。 */
+    public void clearBackgroundTransportPlan() {
+        transportTracks = Collections.emptyList();
+        transportCurrent = -1;
+        transportPlanValid = false;
+        Log.i(TAG, "clearBackgroundTransportPlan");
+    }
+
+    /**
+     * 回前台时 C# 用来对账：当前曲（事件名）+ 播放态 + 计划是否有效。
+     * JSON: {@code {"event":"Play_Music1_2","paused":false,"index":1,"valid":true}}
+     */
+    public String getBackgroundTransportState() {
+        JSONObject o = new JSONObject();
+        TransportTrack cur = currentTransportTrack();
+        try {
+            o.put("event", cur != null ? cur.eventName : "");
+            o.put("name", cur != null ? cur.name : "");
+            o.put("paused", userPaused);
+            o.put("index", transportCurrent);
+            o.put("valid", transportPlanValid);
+            o.put("inBackground", appInBackground);
+        } catch (Exception e) {
+            Log.w(TAG, "getBackgroundTransportState failed: " + e.getMessage());
+        }
+        return o.toString();
+    }
+
+    private TransportTrack currentTransportTrack() {
+        List<TransportTrack> list = transportTracks;
+        int idx = transportCurrent;
+        if (list == null || list.isEmpty()) return null;
+        if (idx < 0 || idx >= list.size()) return null;
+        return list.get(idx);
+    }
+
+    /** 当前曲的引擎事件名（回前台对账用）。 */
+    public String getBackgroundTransportCurrentEvent() {
+        TransportTrack cur = currentTransportTrack();
+        return cur != null ? cur.eventName : "";
+    }
+
+    /** 当前曲名（回前台对账用）。 */
+    public String getBackgroundTransportCurrentName() {
+        TransportTrack cur = currentTransportTrack();
+        return cur != null ? cur.name : "";
+    }
+
+    /** 原生侧的用户暂停态。 */
+    public boolean isBackgroundTransportPaused() {
+        return userPaused;
+    }
+
+    /** 当前曲在计划列表里的下标，-1 = 未知。 */
+    public int getBackgroundTransportCurrentIndex() {
+        return transportCurrent;
+    }
+
+    /** 传输计划是否可用。 */
+    public boolean isBackgroundTransportPlanValid() {
+        return transportPlanValid;
+    }
+
+    /**
+     * 后台播放/暂停：Unity 已被 pause，走原生直接控制引擎。
+     * @return true 表示已由原生处理（调用方不要再转发给 Unity）。
+     */
+    private boolean handleTransportInBackground(boolean pause) {
+        if (!appInBackground) return false;           // 前台：交给 Unity
+        TransportTrack cur = currentTransportTrack();
+        if (cur == null) {
+            Log.w(TAG, "bg transport " + (pause ? "pause" : "play")
+                    + " ignored: no transport plan");
+            return false;                              // 没有计划：仍转发 Unity
+        }
+        if (pause == userPaused) {
+            // 状态已一致，只刷新卡片，避免重复发控制事件。
+            updateTransportNowPlaying(!pause);
+            return true;
+        }
+        userPaused = pause;
+        if (pause) {
+            // 与 C# WanosSoundAgentHelper.Pause 一致：音乐走 Pause_Music 控制事件。
+            postMusicControlEvent("Pause_Music");
+        } else {
+            postMusicControlEvent("Resume_Music");
+            if (musicEngineMuted) {
+                playbackExecutor.execute(() -> runGuardedUnmuteOnCurrentThread("bg_resume"));
+            }
+        }
+        updateTransportNowPlaying(!pause);
+        notifyUnityPlaybackState(!pause);
+        Log.i(TAG, "bg transport " + (pause ? "pause" : "resume")
+                + " event=" + cur.eventName + " muted=" + musicEngineMuted);
+        return true;
+    }
+
+    /**
+     * 后台切歌：原生直接 Stop_Music + Play_* 事件。
+     * @return true 表示已由原生处理（调用方不要再转发给 Unity）。
+     */
+    private boolean handleTransportSkipInBackground(int direction) {
+        if (!appInBackground) return false;
+        if (!transportPlanValid) {
+            Log.w(TAG, "bg skip ignored: no transport plan dir=" + direction);
+            return false;
+        }
+        long now = SystemClock.elapsedRealtime();
+        if (shouldIgnoreRemoteSkip(direction, now)) {
+            Log.i(TAG, "bg skip debounce dir=" + direction);
+            return true;
+        }
+        lastSkipElapsedMs = now;
+        lastSkipDirection = direction;
+
+        int target = resolveTransportTargetIndex(direction);
+        if (target < 0) {
+            Log.w(TAG, "bg skip no target dir=" + direction + " current=" + transportCurrent);
+            return true;
+        }
+        TransportTrack t = transportTracks.get(target);
+        if (!ensureTransportBankLoaded(t)) {
+            Log.w(TAG, "bg skip bank not ready, keep current dir=" + direction
+                    + " bank=" + t.bankName);
+            return true;
+        }
+
+        userPaused = false;
+        postMusicControlEvent("Stop_Music");
+        long instance = WIAEngineJNI.postEvent(0, t.eventName);
+        transportCurrent = target;
+        updateTransportNowPlaying(true);
+        notifyUnityPlaybackState(true);
+        notifyUnityTrackChanged(-1, target);
+        Log.i(TAG, "bg skip dir=" + direction + " -> index=" + target
+                + " event=" + t.eventName + " instance=" + instance);
+        return true;
+    }
+
+    /**
+     * 下一曲/上一曲下标，规则与 C# MusicPlaylist.Next()/Prev() 对齐：
+     * 单曲循环(1) 到边界停在边界，列表循环(2) 环绕，随机(3) 随机取另一首。
+     */
+    private int resolveTransportTargetIndex(int direction) {
+        List<TransportTrack> list = transportTracks;
+        int n = list == null ? 0 : list.size();
+        if (n == 0) return -1;
+        int cur = transportCurrent;
+        if (cur < 0 || cur >= n) return direction > 0 ? 0 : n - 1;
+        if (transportMode == 3) {
+            if (n == 1) return cur;
+            int pick = cur;
+            while (pick == cur) {
+                pick = (int) (Math.random() * n);
+                if (pick >= n) pick = n - 1;
+            }
+            return pick;
+        }
+        if (transportMode == 2) {
+            return ((cur + direction) % n + n) % n;
+        }
+        // 单曲循环：与 C# 一致，越界时停在边界曲。
+        int next = cur + direction;
+        if (next < 0) next = 0;
+        if (next >= n) next = n - 1;
+        return next;
+    }
+
+    /** 后台切歌前确保目标 bank 已在引擎里。 */
+    private boolean ensureTransportBankLoaded(TransportTrack t) {
+        if (t == null) return false;
+        if (t.loaded) return true;
+        if (t.bankPath == null || t.bankPath.isEmpty()) return false;
+        File f = new File(t.bankPath);
+        if (!f.exists() || f.length() < 256) {
+            Log.w(TAG, "bg skip bank file missing/short: " + t.bankPath);
+            return false;
+        }
+        if (!looksLikeWanosBank(f)) {
+            Log.w(TAG, "bg skip bank header rejected: " + t.bankPath);
+            return false;
+        }
+        try {
+            int r = WIAEngineJNI.loadBankFromPath(t.bankPath);
+            if (r != kEF_SUCCESS) {
+                Log.w(TAG, "bg skip loadBankFromPath failed bank=" + t.bankName + " r=" + r);
+                return false;
+            }
+            if (t.bankName != null && !t.bankName.isEmpty()) {
+                loadedBanks.add(t.bankName);
+            }
+            Log.i(TAG, "bg skip loaded bank=" + t.bankName + " path=" + t.bankPath);
+            return true;
+        } catch (Throwable e) {
+            Log.w(TAG, "bg skip loadBank threw: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 与 C# WanosBankStore.IsLikelyValidBankFile 同规则：
+     * 必须是 Wanos BankHeader 归档；legacy BKHD / 文本 / 半截文件一律拒绝
+     * （native loadBankHeader 遇到坏头会 C++ throw → SIGABRT）。
+     */
+    private boolean looksLikeWanosBank(File f) {
+        FileInputStream fis = null;
+        try {
+            fis = new FileInputStream(f);
+            byte[] head = new byte[256];
+            int n = fis.read(head);
+            if (n < 4) return false;
+            if (head[0] == 'B' && head[1] == 'K' && head[2] == 'H' && head[3] == 'D') return false;
+            if (head[0] == '<' || head[0] == '{' || head[0] == '['
+                    || head[0] == '#' || head[0] == '/') return false;
+            byte[] marker = "BankHeader".getBytes("US-ASCII");
+            outer:
+            for (int i = 0; i + marker.length <= n; i++) {
+                for (int j = 0; j < marker.length; j++) {
+                    if (head[i + j] != marker[j]) continue outer;
+                }
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            Log.w(TAG, "looksLikeWanosBank failed: " + e.getMessage());
+            return false;
+        } finally {
+            if (fis != null) {
+                try { fis.close(); } catch (Exception ignored) { }
+            }
+        }
+    }
+
+    /** 音乐控制事件统一走 objId 0，与 C# WanosNative.PostEvent(0, ...) 一致。 */
+    private void postMusicControlEvent(String eventName) {
+        try {
+            WIAEngineJNI.postEvent(0, eventName);
+            Log.i(TAG, "post control event=" + eventName);
+        } catch (Throwable e) {
+            Log.w(TAG, "post control event failed " + eventName + ": " + e.getMessage());
+        }
+    }
+
+    /** 用传输计划里的曲名刷新负一屏卡片（Java 侧 playlist 在 CustomSRP 是空的）。 */
+    private void updateTransportNowPlaying(boolean playing) {
+        TransportTrack cur = currentTransportTrack();
+        // 曲名为空时不能传空串：updateNowPlayingInfo 会把 MediaSession 整个释放掉。
+        String name = cur != null && cur.name != null && !cur.name.isEmpty() ? cur.name : "波萝";
+        try {
+            WIAEngineJNI.updateNowPlayingInfo(name, getCoverPathForNowPlaying(), playing);
+        } catch (Throwable e) {
+            Log.w(TAG, "updateTransportNowPlaying failed: " + e.getMessage());
+        }
     }
 
     private void scheduleMediaPlayPause(boolean pause) {

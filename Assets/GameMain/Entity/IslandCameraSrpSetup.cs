@@ -14,13 +14,13 @@ namespace Game
         const string CrpTypeName = "CustomSRP.CustomRenderPipelineCamera, Assembly-CSharp";
 
         /// <summary>
-        /// 站立。独立 APK 会把手机也标成闺蜜机，再叠 2640 宽屏时比例 1 会把非沉浸帧率打到十几帧。
-        /// 沉浸模式仍是 0.25。
+        /// 站立 / 走路共用一档，避免起停走时 bufferSize 抖动触发中间 RT 重建。
+        /// 沉浸 / 弹窗仍压到 0.25。
         /// </summary>
         public static float DefaultRenderScale => 0.5f;
 
-        /// <summary>走路，比站立再低一档。</summary>
-        public static float WalkingRenderScale => 0.375f;
+        /// <summary>走路与站立同档（B5：消 RT 抖动）。</summary>
+        public static float WalkingRenderScale => DefaultRenderScale;
 
         /// <summary>Panel / Dialog 打开时压到 0.25，省 fill 提帧率。</summary>
         public const float PopupRenderScale = 0.25f;
@@ -32,6 +32,10 @@ namespace Game
         static PropertyInfo _settingsProp;
         static FieldInfo _renderScaleField;
         static bool _reflectionReady;
+        // B7: cache CRP + Settings for the active island camera (avoid per-frame GetComponent).
+        static EntityId _cachedEntityId;
+        static Component _cachedCrp;
+        static object _cachedSettings;
 
         /// <summary>
         /// Skybox clear flags + CustomRenderPipelineCamera (copy color/depth, mobile scale).
@@ -84,23 +88,29 @@ namespace Game
         }
 
         /// <summary>
-        /// Override camera render scale（idle / walking，按是否闺蜜机取档）。No-op if reflection fails.
+        /// Override camera render scale（idle / walking）。No-op if reflection fails.
         /// </summary>
         public static void SetRenderScale(GameObject go, float renderScale)
         {
             if (go == null || !EnsureReflection())
                 return;
 
-            Component crp = go.GetComponent(_crpType);
-            if (crp == null)
-                return;
-
-            object settings = _settingsProp.GetValue(crp);
-            if (settings == null)
-                return;
+            EntityId eid = go.GetEntityId();
+            if (_cachedCrp == null || _cachedEntityId != eid || _cachedSettings == null)
+            {
+                Component crp = go.GetComponent(_crpType);
+                if (crp == null)
+                    return;
+                object settings = _settingsProp.GetValue(crp);
+                if (settings == null)
+                    return;
+                _cachedEntityId = eid;
+                _cachedCrp = crp;
+                _cachedSettings = settings;
+            }
 
             // CameraSettings is a class; mutate in place (Settings has no setter).
-            _renderScaleField.SetValue(settings, renderScale);
+            _renderScaleField.SetValue(_cachedSettings, renderScale);
         }
 
         static void ApplyDefaultSettings(Component crp)

@@ -23,8 +23,40 @@ namespace Game.Editor.BuildTool
         const string PrefInstallApk = "BoluoPublish_InstallApk";
 
         static readonly string[] EnvLabels = { "dev", "test", "prerelease", "product" };
-        static readonly string[] FlavorLabels = { "skyworthUltra (Boluo_Android)", "yishu (YiShu)" };
-        static readonly string[] FlavorValues = { "skyworthUltra", "yishu" };
+
+        // 对齐 AndroidProject/Docs/渠道.md §4（12 flavor）；Unity 导出：yishu→YiShu，其余→Boluo_Android
+        static readonly string[] FlavorLabels =
+        {
+            "skyworthUltra · 创维默认 (Boluo_Android)",
+            "skyworthNeo · 旧变体 (Boluo_Android)",
+            "yishu · 一树投影 (YiShu)",
+            "phoneAppstore · 应用宝",
+            "phoneBaidu · 百度",
+            "phone360 · 360",
+            "phoneXiaomi · 小米",
+            "phoneOppo · OPPO",
+            "phoneVivo · VIVO",
+            "phoneHonor · Honor",
+            "phoneSamsung · 三星",
+            "phoneMeizu · 魅族",
+        };
+
+        static readonly string[] FlavorValues =
+        {
+            "skyworthUltra",
+            "skyworthNeo",
+            "yishu",
+            "phoneAppstore",
+            "phoneBaidu",
+            "phone360",
+            "phoneXiaomi",
+            "phoneOppo",
+            "phoneVivo",
+            "phoneHonor",
+            "phoneSamsung",
+            "phoneMeizu",
+        };
+
         static readonly string[] OrientationLabels = { "sensor", "landscape", "portrait" };
 
         int _envIndex;

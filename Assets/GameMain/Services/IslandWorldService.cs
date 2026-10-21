@@ -21,7 +21,6 @@ namespace Game
         AssetHandle _oceanHandle;
         AssetHandle _inlandWaterHandle;
         AssetHandle _mapItemHandle;
-        AssetHandle _bakedWaterHandle;
         AssetHandle _spawnPoseHandle;
         readonly List<AssetHandle> _inlandChildHandles = new List<AssetHandle>(8);
         readonly List<MapItemData> _extrasCache = new List<MapItemData>(64);
@@ -36,7 +35,7 @@ namespace Game
         /// </summary>
         public static bool InlandWaterReady { get; private set; }
 
-        /// <summary>单例入口，供 <see cref="InlandWaterSampler"/> 等 static 类访问。</summary>
+        /// <summary>单例入口，供 <see cref="WaterSurfaceProbe"/> 等 static 类访问。</summary>
         public static IslandWorldService Instance { get; private set; }
 
         public bool IsLoaded => _loaded;
@@ -128,25 +127,8 @@ namespace Game
             IslandGrassService grass = GameEntry.Grass ?? IslandGrassService.Ensure();
             yield return grass.Load();
 
-            // 加载烘焙的静态水域数据（River / Waterfall / Ocean / Lake 代表点）。
-            // 这是音频服务的主数据源：不再每 tick 走 PhysX.ClosestPoint。
-            // 失败时 StaticWaterStationIndex.IsReady = false → 调用方回退到 catalog 硬编码点。
-            if (YooResourceModule.DefaultPackage != null
-                && YooResourceModule.DefaultPackage.CheckLocationValid(SceneAssets.BakedWaterStationsLocation))
-            {
-                yield return YooResourceModule.LoadAssetCoroutine<BakedWaterStationDatabase>(
-                    SceneAssets.BakedWaterStationsLocation,
-                    (asset, handle) =>
-                    {
-                        if (asset != null)
-                            StaticWaterStationIndex.Load(asset);
-                        _bakedWaterHandle = handle;
-                    });
-            }
-            else
-            {
-                Log.Warning("[IslandWorld] BakedWaterStations not packaged — audio will use legacy fallback path");
-            }
+            // 水体最近点改成运行期直接从场景采样（见 WaterSurfaceProbe），
+            // 不再加载任何烘焙的水域资源。
 
             InlandWaterReady = _inlandWaterInstance != null;
             _loaded = true;
@@ -187,12 +169,8 @@ namespace Game
             _mapItemHandle?.Release();
             _mapItemHandle = null;
 
-            if (_bakedWaterHandle != null)
-            {
-                _bakedWaterHandle.Release();
-                _bakedWaterHandle = null;
-            }
-            StaticWaterStationIndex.Unload();
+            // 水体最近点改成运行期采样，场景卸载时清掉缓存。
+            WaterSurfaceProbe.Clear();
 
             if (_spawnPoseHandle != null)
             {
@@ -233,6 +211,15 @@ namespace Game
             AtmospherePropRegistry.Clear();
             CampfireWeatherGate.ClearVisualIgnited();
             CampfireWeatherGate.SetSuppressIgnite(true);
+
+            // 离岛时必须把静态标志复位：否则下一次进岛时，音频侧会误判“水体已就绪”，
+            // 直接沿用上一次场景的过期探针。
+            if (InlandWaterReady)
+            {
+                InlandWaterReady = false;
+                OnInlandWaterReady?.Invoke(false);
+            }
+
             _loaded = false;
         }
 

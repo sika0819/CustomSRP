@@ -45,6 +45,7 @@ Shader "CustomSRP/OilSkyboxNPR"
             #pragma multi_compile _ OIL_MOBILE_PERF
             #pragma vertex OilSkyboxNPRVertex
             #pragma fragment OilSkyboxNPRFragment
+            // _OilSkySunrise is a global, same fade as the main light.
             #include "OilSkyboxNPRPass.hlsl"
             ENDHLSL
         }

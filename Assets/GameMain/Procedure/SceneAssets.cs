@@ -24,11 +24,6 @@ namespace Game
         public const string AllMapItemLocation = "AllMapItem";
         public const string AllMapItemAssetPath = "Assets/AssetRaw/Configs/AllMapItem.bytes";
 
-        /// <summary>Baked water station database (AddressByFileName under AssetRaw/Configs).</summary>
-        public const string BakedWaterStationsLocation = "BakedWaterStations";
-        public const string BakedWaterStationsAssetPath =
-            "Assets/AssetRaw/Configs/BakedWaterStations.asset";
-
         /// <summary>Default island spawn pose (AddressByFileName under AssetRaw/Configs).</summary>
         public const string IslandSpawnPoseLocation = "IslandSpawnPose";
         public const string IslandSpawnPoseAssetPath =

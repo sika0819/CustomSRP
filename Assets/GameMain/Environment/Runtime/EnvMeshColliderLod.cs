@@ -12,6 +12,8 @@ namespace Game
     public sealed class EnvMeshColliderLod : MonoBehaviour
     {
         readonly List<MeshCollider> _colliders = new List<MeshCollider>(512);
+        // 与 _colliders 同步的集合：Register 去重、Unregister O(1) 移除，避免同一实例重复登记。
+        readonly HashSet<MeshCollider> _colliderSet = new HashSet<MeshCollider>();
         Transform _focus;
         float _enableSq;
         float _disableSq;
@@ -49,6 +51,9 @@ namespace Game
                 if (mc == null || mc.isTrigger)
                     continue;
 
+                // 同一实例可能被重复登记（重生成 / 预填充与流式重叠），去重后再加。
+                if (!_colliderSet.Add(mc))
+                    continue;
                 _colliders.Add(mc);
 
                 if (alwaysOn)
@@ -70,10 +75,13 @@ namespace Game
             for (int i = _colliders.Count - 1; i >= 0; i--)
             {
                 MeshCollider c = _colliders[i];
-                if (c == null || c.transform.root == go.transform.root || c.gameObject == go
-                    || IsChildOf(c.transform, go.transform))
+                // 注意：所有 MapItem 都挂在同一个 root 下，不能用 transform.root 比较，
+                // 否则卸载任一实例会把整张碰撞体表清空，距离 LOD 随之失效。
+                if (c == null || c.gameObject == go || IsChildOf(c.transform, go.transform))
                 {
                     _colliders.RemoveAt(i);
+                    if (c != null)
+                        _colliderSet.Remove(c);
                 }
             }
         }
@@ -94,6 +102,7 @@ namespace Game
                 if (mc == null)
                 {
                     _colliders.RemoveAt(i);
+                    _colliderSet.Remove(mc);
                     continue;
                 }
 
@@ -134,6 +143,7 @@ namespace Game
                 if (mc == null)
                 {
                     _colliders.RemoveAt(i);
+                    _colliderSet.Remove(mc);
                     continue;
                 }
 

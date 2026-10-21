@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.graphics.Bitmap;
 import android.media.session.MediaSession;
 import android.os.Build;
 import android.os.IBinder;
@@ -146,6 +147,7 @@ public class WanosMediaPlaybackForegroundService extends Service {
         String title = WIAEngineJNI.getLastTrackTitle();
         if (title == null || title.isEmpty()) title = "波萝";
         boolean playing = WIAEngineJNI.getLastIsPlaying();
+        Bitmap art = WIAEngineJNI.getLastArtBitmap();
         b.setContentTitle(title)
                 .setContentText(playing ? "正在播放" : "已暂停")
                 .setSmallIcon(android.R.drawable.ic_media_play)
@@ -158,6 +160,10 @@ public class WanosMediaPlaybackForegroundService extends Service {
                         ? transportAction(android.R.drawable.ic_media_pause, "暂停", ACTION_TRANSPORT_PAUSE)
                         : transportAction(android.R.drawable.ic_media_play, "播放", ACTION_TRANSPORT_PLAY))
                 .addAction(transportAction(android.R.drawable.ic_media_next, "下一曲", ACTION_TRANSPORT_NEXT));
+        // 华为等 OEM 负一屏常读通知 largeIcon；缺省会显示 App 图标（菠萝头像）而非 boluo.png。
+        if (art != null) {
+            b.setLargeIcon(art);
+        }
 
         Notification.MediaStyle style = new Notification.MediaStyle()
                 .setShowActionsInCompactView(0, 1, 2);

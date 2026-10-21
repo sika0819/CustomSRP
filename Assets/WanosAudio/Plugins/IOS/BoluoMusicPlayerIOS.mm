@@ -2903,13 +2903,16 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     if (self.nowPlayingArtworkPath.length > 0) {
         BoluoAudioLog(@"[BoluoMusicPlayerIOS] artwork path not found, trying bundle fallback: %@", self.nowPlayingArtworkPath);
     }
-    NSString *streamingArtwork = [[[[[NSBundle mainBundle] bundlePath]
+    NSString *streamingArtwork = [[[[[[NSBundle mainBundle] bundlePath]
         stringByAppendingPathComponent:@"Data"]
         stringByAppendingPathComponent:@"Raw"]
-        stringByAppendingPathComponent:@"WanosAudio/Artwork/boluo.png"];
+        stringByAppendingPathComponent:@"WanosAudio"]
+        stringByAppendingPathComponent:@"Artwork"]
+        stringByAppendingPathComponent:@"boluo.png"];
     if ([fm fileExistsAtPath:streamingArtwork]) {
         return streamingArtwork;
     }
+    BoluoAudioLog(@"[BoluoMusicPlayerIOS] artwork fallback missing at %@", streamingArtwork);
     return nil;
 }
 
@@ -2975,7 +2978,13 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         if (self.cachedArtworkImage) {
             UIImage *image = self.cachedArtworkImage;
             MPMediaItemArtwork *artwork = [[MPMediaItemArtwork alloc] initWithBoundsSize:image.size requestHandler:^UIImage * _Nonnull(CGSize size) {
-                return image;
+                if (size.width <= 0 || size.height <= 0) return image;
+                if (size.width >= image.size.width && size.height >= image.size.height) return image;
+                UIGraphicsBeginImageContextWithOptions(size, YES, 1.0);
+                [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+                UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext();
+                UIGraphicsEndImageContext();
+                return scaled ?: image;
             }];
             info[MPMediaItemPropertyArtwork] = artwork;
         }

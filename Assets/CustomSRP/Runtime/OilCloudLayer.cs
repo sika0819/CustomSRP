@@ -403,8 +403,7 @@ namespace CustomSRP
             body = Color.Lerp(look.horizon, look.mid, 0.45f);
             body = Color.Lerp(body, new Color(0.93f, 0.94f, 0.96f), 0.28f * day);
             // boluo-main Camera_1 @ 清晨起床：云 #BC7273。
-            float sunrise = OilSkyLookTables.CanonicalSunriseWeight(
-                OilSkyboxTime.CurrentLookId, hours);
+            float sunrise = OilSkyboxTime.CurrentSunriseWeight(hours);
             if (!OilSkyboxTime.ColorOverrideActive && sunrise > 0.001f)
                 body = Color.Lerp(body, OilSkyLookTables.SunriseCloud, sunrise);
             // 云高光 #FBF3E9 — pale cream, keep impasto readable under fog.

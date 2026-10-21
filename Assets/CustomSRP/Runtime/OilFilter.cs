@@ -1,3 +1,4 @@
+using Game;
 using UnityEngine;
 
 namespace CustomSRP
@@ -34,6 +35,10 @@ namespace CustomSRP
 
         public static bool IsEnabled(PostFXSettings settings)
         {
+            // B6: walking on mobile skips the full-screen oil edge pass.
+            if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)
+                return false;
+
             EnsureInit();
             if (_hasOverride)
                 return _overrideEnabled;

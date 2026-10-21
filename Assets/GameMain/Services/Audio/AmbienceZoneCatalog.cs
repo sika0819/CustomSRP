@@ -39,7 +39,8 @@ namespace Game
         public const float LakeMaxPlayerY = 50f;
 
         // 可听 / 进出半径：对齐「3D区域声景」听感常量（催加载体积本工程合并进 Enter）。
-        public const float RiverAttenuationMeters = 20f;
+        /// <summary>河开播半径（贴着河岸约几米必进区；原 20 偏紧）。</summary>
+        public const float RiverAttenuationMeters = 30f;
         public const float OceanAttenuationMeters = 60f;
         /// <summary>近岸海已播后再加约 12m 宽限（河不加）。</summary>
         public const float OceanNearSurfaceMeters = 12f;
@@ -90,6 +91,9 @@ namespace Game
             Ocean("ocean_shore_8", 603.174f, 5.7f, 650.0313f),
             ForestBed("Forest_Audio", 561.7f, 46.78f, 517.84f),
             Lake("Lake_Audio", 461.1f, 32.77f, 461.12f),
+            // 湖在岛 preset 7 那一侧（出生点 504.67 / 463.85），补一个锚点，
+            // 玩家走到湖边才听得到湖面声。
+            Lake("Lake_Audio_Preset7", 504.6723f, 38.82f, 463.8487f),
             Grassland("GrassLand_Audio", 419.46387f, 41.16188f, 362.95004f, GrasslandEnterMeters),
             Grassland("GrassLand_S_Audio", 503.9f, 17.36f, 667.1f, GrasslandSecondaryEnterMeters),
             Plateau("Plateau_Audio", 171.5f, 50.5f, 583.7f),
@@ -124,11 +128,12 @@ namespace Game
 
             if (prefab.StartsWith("River_", System.StringComparison.Ordinal))
             {
+                // Boluo 原工程用 River_Quad（L/Ls/R/Rs 四轨），不是一次性的 River_ADD。
                 spec = Point(
                     $"river_{catalogIndex}_{prefab}",
                     AmbienceEmitterKind.River,
-                    "River_ADD",
-                    "Play_River_ADD",
+                    "River_Quad",
+                    "Play_River_L",
                     "Stop_River",
                     item.Pos,
                     RiverAttenuationMeters);
@@ -182,8 +187,8 @@ namespace Game
                 : Point(
                     $"river_native_{name}",
                     kind,
-                    "River_ADD",
-                    "Play_River_ADD",
+                    "River_Quad",
+                    "Play_River_L",
                     "Stop_River",
                     pos,
                     RiverAttenuationMeters);

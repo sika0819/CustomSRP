@@ -213,6 +213,10 @@ namespace Game.Editor.BuildTool
             return true;
         }
 
+        /// <summary>
+        /// 对齐 AndroidProject/Docs/渠道.md §4：创维 / 一树 / 手机 9 市场。
+        /// 短名别名（gmj/pad/xiaomi…）映射到正式 productFlavor。
+        /// </summary>
         public static bool TryNormalizeAndroidFlavor(string raw, out string flavor, out string error)
         {
             flavor = "skyworthUltra";
@@ -227,23 +231,70 @@ namespace Game.Editor.BuildTool
                 case "ultra":
                 case "sks32":
                 case "4k":
-                case "skyworthneo":
-                case "neo":
                 case "gmj":
                 case "guimiji":
+                case "cwgmj":
                 case "pad":
                     flavor = "skyworthUltra";
+                    return true;
+                case "skyworthneo":
+                case "neo":
+                    flavor = "skyworthNeo";
                     return true;
                 case "yishu":
                 case "yishuprojection":
                     flavor = "yishu";
                     return true;
+                case "phoneappstore":
+                case "appstore":
+                case "yingyongbao":
+                case "yyb":
+                    flavor = "phoneAppstore";
+                    return true;
+                case "phonebaidu":
+                case "baidu":
+                    flavor = "phoneBaidu";
+                    return true;
+                case "phone360":
+                case "qihoo360":
+                case "360":
+                    flavor = "phone360";
+                    return true;
+                case "phonexiaomi":
+                case "xiaomi":
+                    flavor = "phoneXiaomi";
+                    return true;
+                case "phoneoppo":
+                case "oppo":
+                    flavor = "phoneOppo";
+                    return true;
+                case "phonevivo":
+                case "vivo":
+                    flavor = "phoneVivo";
+                    return true;
+                case "phonehonor":
+                case "honor":
+                    flavor = "phoneHonor";
+                    return true;
+                case "phonesamsung":
+                case "samsung":
+                case "gallery":
+                case "phonegallery":
+                    flavor = "phoneSamsung";
+                    return true;
+                case "phonemeizu":
+                case "meizu":
+                    flavor = "phoneMeizu";
+                    return true;
                 default:
-                    error = $"flavor 无效，可用: skyworthUltra | yishu，当前: {raw}";
+                    error =
+                        "flavor 无效，可用: skyworthUltra | skyworthNeo | yishu | " +
+                        "phoneAppstore|Baidu|360|Xiaomi|Oppo|Vivo|Honor|Samsung|Meizu，当前: " + raw;
                     return false;
             }
         }
 
+        /// <summary>yishu → YiShu；其余（创维 + 手机 9 市场）→ Boluo_Android。</summary>
         public static string ResolveAndroidGradleExportFolderName(string flavor)
         {
             if (!TryNormalizeAndroidFlavor(flavor, out string normalized, out _))
@@ -251,6 +302,14 @@ namespace Game.Editor.BuildTool
             return normalized == "yishu"
                 ? AndroidGradleExportFolderYishu
                 : AndroidGradleExportFolderNeo;
+        }
+
+        /// <summary>productFlavor → Gradle 任务 Pascal：phoneXiaomi → PhoneXiaomi。</summary>
+        public static string ToGradleFlavorPascal(string flavor)
+        {
+            if (!TryNormalizeAndroidFlavor(flavor, out string norm, out _) || string.IsNullOrEmpty(norm))
+                norm = "skyworthUltra";
+            return char.ToUpperInvariant(norm[0]) + norm.Substring(1);
         }
 
         public static string ResolveAndroidGradleRoot(string outputDir, string flavor = null)
@@ -349,7 +408,14 @@ namespace Game.Editor.BuildTool
         /// <summary>导出 Android Gradle 工程到 UnityExport/{Boluo_Android|YiShu}。</summary>
         public static int ExportAndroidGradle(CIConfig config)
         {
-            SwitchBuildTarget(BuildTarget.Android);
+            // 构建目标必须是 Android：Unity 不允许在活动目标不是 Android 时构建 Android 目标
+            //（报错 "build target was unsupported"）。已开着 Editor 时切换目标会触发域重载，
+            // 所以这里返回 3（需重试），由调用方在域重载后再跑一次。
+            if (!EnsureBuildTarget(BuildTarget.Android, out string targetError))
+            {
+                LogCiFailure(targetError);
+                return 3;
+            }
             if (string.IsNullOrEmpty(config.ScreenOrientation))
                 config.ScreenOrientation = "sensor";
 
@@ -452,7 +518,11 @@ namespace Game.Editor.BuildTool
         /// <summary>独立 APK（非宿主），默认 Builds/Android/Game.apk。</summary>
         public static int BuildAndroidApk(CIConfig config)
         {
-            SwitchBuildTarget(BuildTarget.Android);
+            if (!EnsureBuildTarget(BuildTarget.Android, out string apkTargetError))
+            {
+                LogCiFailure(apkTargetError);
+                return 3;
+            }
             if (string.IsNullOrEmpty(config.ScreenOrientation))
                 config.ScreenOrientation = "sensor";
 
@@ -659,16 +729,37 @@ namespace Game.Editor.BuildTool
             return scenes;
         }
 
-        static void SwitchBuildTarget(BuildTarget target)
+        /// <summary>
+        /// 确保活动构建目标就是 target。
+        /// 返回 true = 可以直接构建；false = 需要切换（已发起切换 / batchmode 无法切换），调用方应重试。
+        /// </summary>
+        static bool EnsureBuildTarget(BuildTarget target, out string error)
         {
+            if (EditorUserBuildSettings.activeBuildTarget == target)
+            {
+                error = null;
+                return true;
+            }
+
             BuildTargetGroup group = target == BuildTarget.iOS
                 ? BuildTargetGroup.iOS
                 : BuildTargetGroup.Android;
-            if (EditorUserBuildSettings.activeBuildTarget != target)
+
+            if (Application.isBatchMode)
             {
-                Debug.Log($"[BoluoCI] Switching platform → {target}");
-                EditorUserBuildSettings.SwitchActiveBuildTarget(group, target);
+                error = $"batchmode 下无法切换构建目标，请用 -buildTarget {target} 启动 Unity 后重试";
+                return false;
             }
+
+            Debug.Log($"[BoluoCI] Switching platform → {target}（切换完成（域重载）后需重试导出）");
+            EditorUserBuildSettings.SwitchActiveBuildTarget(group, target);
+            error = $"构建目标正在切换到 {target}，请在切换完成后重试导出（exit=3）";
+            return false;
+        }
+
+        static void SwitchBuildTarget(BuildTarget target)
+        {
+            EnsureBuildTarget(target, out _);
         }
 
         static void LogBuildReportErrors(BuildReport report)

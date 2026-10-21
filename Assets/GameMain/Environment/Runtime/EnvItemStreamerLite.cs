@@ -292,17 +292,30 @@ namespace Game
             if (count < 2)
                 return;
 
-            // 按距离升序：近→远。每帧只对当前帧入队的若干项排序，开销可忽略。
-            _spawnQueue.Sort((a, b) =>
+            // B7: insertion sort, no Sort(Comparison) closure allocation each frame.
+            for (int i = 1; i < count; i++)
             {
-                Item ia = _items[a];
-                Item ib = _items[b];
-                float dax = ia.Pos.x - p.x;
-                float daz = ia.Pos.z - p.z;
-                float dbx = ib.Pos.x - p.x;
-                float dbz = ib.Pos.z - p.z;
-                return (dax * dax + daz * daz).CompareTo(dbx * dbx + dbz * dbz);
-            });
+                int key = _spawnQueue[i];
+                float keyDist = DistSqXZ(_items[key].Pos, p);
+                int j = i - 1;
+                while (j >= 0)
+                {
+                    float d = DistSqXZ(_items[_spawnQueue[j]].Pos, p);
+                    if (d <= keyDist)
+                        break;
+                    _spawnQueue[j + 1] = _spawnQueue[j];
+                    j--;
+                }
+
+                _spawnQueue[j + 1] = key;
+            }
+        }
+
+        static float DistSqXZ(Vector3 a, Vector3 p)
+        {
+            float dx = a.x - p.x;
+            float dz = a.z - p.z;
+            return dx * dx + dz * dz;
         }
 
         IEnumerator SpawnItem(int index)

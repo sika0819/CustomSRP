@@ -427,15 +427,15 @@ namespace Game
             Ring1EnterRadius = 130f;
             Ring1ExitRadius = 160f;
 
-            // Boluo Non4K：TreeRing0 不缩；TreeRing1 = Base * 0.65。
+            // B2：树 keep 180→130，远景更稀但少 DrawMeshInstanced / 阴影 caster。
             TreeRing0EnterRadius = 70f;
             TreeRing0ExitRadius = 90f;
-            TreeRing1EnterRadius = 180f * 0.65f; // 117
-            TreeRing1ExitRadius = 220f * 0.65f;  // 143
-            TreeBillboardKeepRadius = 180f;
-            FillBoundFarTreeSilhouetteMinDistance = 120f;
-            FillBoundFarTreeSilhouetteStride = 6;
-            PrefillTreeBoostRadius = 180f;
+            TreeRing1EnterRadius = 130f * 0.65f; // ~85
+            TreeRing1ExitRadius = 160f * 0.65f;  // ~104
+            TreeBillboardKeepRadius = 130f;
+            FillBoundFarTreeSilhouetteMinDistance = 90f;
+            FillBoundFarTreeSilhouetteStride = 5;
+            PrefillTreeBoostRadius = 130f;
 
             // Boluo FillBoundGuanmu*（标准版不收灌木）
             GuanmuHideDistance = 90f;
@@ -459,7 +459,7 @@ namespace Game
             Ring1ExitRadius = Mathf.Max(Ring1ExitRadius, TreeRing1ExitRadius);
 
             NativeInstancingEnabled = true;
-            NativeInstancingMaxDist = Mathf.Max(150f, TreeBillboardKeepRadius);
+            NativeInstancingMaxDist = Mathf.Max(130f, TreeBillboardKeepRadius);
             SpawnPerFrameBudget = 8;
             DespawnPerFrameBudget = 8;
             FinalizePerFrameBudgetMs = 2.5f;

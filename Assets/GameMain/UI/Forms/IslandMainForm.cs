@@ -66,6 +66,7 @@ namespace Game
         readonly IslandLocomotionInput _locomotion = new IslandLocomotionInput();
         readonly IslandIdleImmersive _idle = new IslandIdleImmersive();
         readonly IslandMainHudLayout _hudLayout = new IslandMainHudLayout();
+        readonly HudTimerBinder _timerBinder = new HudTimerBinder();
         bool _layoutHooked;
 
         VisualElement _presetVeil;
@@ -143,6 +144,8 @@ namespace Game
             _joystick = IslandVirtualJoystick.Attach(formRoot);
             _locomotion.Bind(_joystick);
             _hudLayout.Bind(formRoot);
+            _timerBinder.Bind(Root.Q("timerBackground"));
+            SyncTimerIcon();
 
             _hudHeader = Root.Q("hudHeader");
             _hudIcons = Root.Q("hudIcons");
@@ -163,6 +166,7 @@ namespace Game
                 GameEntry.Event.Subscribe(TimeOfDayChangedEventArgs.EventId, OnTimeChanged);
                 GameEntry.Event.Subscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
                 GameEntry.Event.Subscribe(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest);
+                GameEntry.Event.Subscribe(NativeTimerEventArgs.EventId, OnNativeTimer);
             }
 
             // Cold-start: wall clock → Period → four cardinal dial snaps (Boluo InitClockHandFromTimeType).
@@ -185,6 +189,7 @@ namespace Game
             _presetLabelHide?.Pause();
             _presetLabelHide = null;
             _idle.Dispose();
+            _timerBinder.Unbind();
             AbortPresetTransitionCleanup();
             _locomotion.ForceEnd();
             _joystick?.Dispose();
@@ -195,6 +200,7 @@ namespace Game
                 GameEntry.Event.Unsubscribe(TimeOfDayChangedEventArgs.EventId, OnTimeChanged);
                 GameEntry.Event.Unsubscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
                 GameEntry.Event.Unsubscribe(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest);
+                GameEntry.Event.Unsubscribe(NativeTimerEventArgs.EventId, OnNativeTimer);
             }
 
             base.OnClose(isShutdown, userData);
@@ -206,11 +212,19 @@ namespace Game
             SyncDial();
             SyncMusicPlaying(realElapseSeconds);
             SyncVolumeIcon();
+            SyncTimerIcon();
             TickTimeToastFade(elapseSeconds);
             TickPresetIris(elapseSeconds);
             TickPresetLabelFade(elapseSeconds);
             _locomotion.Tick();
-            _idle.Tick(WasPointerPressedThisFrame(), _locomotion.IsMoveInputActive);
+            bool pointerPressed = WasPointerPressedThisFrame();
+            _idle.Tick(pointerPressed, _locomotion.IsMoveInputActive);
+            if (pointerPressed)
+            {
+                // 点场景 = 可靠的「我回前台了」信号：宿主壳里 OnApplicationFocus 可能不触发，
+                // 音频被打断时靠这一下把音乐 / 音效拉回来。
+                AudioAppLifecycle.OnSceneInteraction();
+            }
         }
 
         void CycleTimePeriod()
@@ -335,6 +349,16 @@ namespace Game
 
         void OnWeatherChanged(object sender, GameEventArgs e) => SyncWeatherIcon();
 
+        void OnNativeTimer(object sender, GameEventArgs e) => SyncTimerIcon();
+
+        /// <summary>
+        /// 跟 NativeTimerService（原生 TimerProgress / Editor NativeEditorHud 推送）画定时环。
+        /// </summary>
+        void SyncTimerIcon()
+        {
+            _timerBinder.Apply(NativeTimerService.LastRemaining, NativeTimerService.FillRatio);
+        }
+
         /// <summary>
         /// Boluo HudWeatherBinder.Refresh: level 0 → 晴天；否则按 Kind 取 小/中/大 图标。
         /// </summary>
@@ -379,11 +403,13 @@ namespace Game
                 return;
 
             _texWeatherClear = Resources.Load<Texture2D>("UI/WeatherIcons/qingtian");
+            // 档位按“强度从小到大”排列，idx = level - 1。
+            // 云层资源里没有“大云”贴图，3 级复用中云。
             _texWeatherCloud = new[]
             {
-                Resources.Load<Texture2D>("UI/WeatherIcons/qingtian"),
-                Resources.Load<Texture2D>("UI/WeatherIcons/zhongyun"),
                 Resources.Load<Texture2D>("UI/WeatherIcons/xiaoyun"),
+                Resources.Load<Texture2D>("UI/WeatherIcons/zhongyun"),
+                Resources.Load<Texture2D>("UI/WeatherIcons/zhongyun"),
             };
             _texWeatherRain = new[]
             {

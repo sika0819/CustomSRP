@@ -90,6 +90,21 @@ namespace Game
 
         public static void Refresh() => ApplyFromWeather();
 
+        /// <summary>
+        /// 回前台 / 打断恢复：风 / 雨循环的 voice 可能已被引擎掐掉，但本地态还认为在播
+        /// （StartLoop 会因 <c>playing == true</c> 直接 return）→ 清本地态后按当前天气重起。
+        /// </summary>
+        public static void RestorePlaying()
+        {
+            if (!_started)
+                return;
+            if (_contentAudioPaused)
+                return;
+
+            ClearPlaying();
+            ApplyFromWeather();
+        }
+
         static void Subscribe()
         {
             if (_subscribed || GameEntry.Event == null)

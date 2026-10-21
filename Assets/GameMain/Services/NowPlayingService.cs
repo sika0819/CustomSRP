@@ -28,8 +28,21 @@ namespace Game
 
         public static void NoteUserPaused(bool paused) => _userManuallyPaused = paused;
 
-        public static string ArtworkPath =>
-            Path.Combine(Application.streamingAssetsPath, ArtworkRelative);
+        /// <summary>
+        /// Android StreamingAssets 是 jar: URL，传相对 asset 路径给 MediaSession 解码；
+        /// iOS 传 Data/Raw 绝对路径（原生还有 bundle fallback）。
+        /// </summary>
+        public static string ArtworkPath
+        {
+            get
+            {
+#if UNITY_ANDROID && !UNITY_EDITOR
+                return ArtworkRelative;
+#else
+                return Path.Combine(Application.streamingAssetsPath, ArtworkRelative);
+#endif
+            }
+        }
 
         public static void Init()
         {
@@ -127,6 +140,8 @@ namespace Game
             music?.Stop(publish: false);
             _userManuallyPaused = false;
             ClearCard();
+            // 原生侧的后台传输计划也作废：曲子已经停了，别让原生再切。
+            BackgroundTransportSync.ClearPlan();
 
 #if UNITY_IOS && !UNITY_EDITOR
             BoluoMusicPlayerIOS.CleanupAfterLogout();
@@ -159,6 +174,10 @@ namespace Game
                 title = "波萝";
 
             Publish(title, album, playing);
+
+            // 后台传输计划：Unity 在后台会被宿主 pause，负一屏的暂停/切歌要靠原生执行，
+            // 所以每次发布卡片都把当前列表同步给原生。
+            BackgroundTransportSync.PublishPlan();
         }
 
         public static void Publish(string title, string album, bool isPlaying)
@@ -232,6 +251,9 @@ namespace Game
             _userManuallyPaused = false;
             _skipCancelPending = true;
             _pendingPlayPauseAt = -1f;
+            // 原生在后台切过歌时也会走这里（Unity 恢复后补投递的消息）：
+            // 先对账把当前曲同步过来，再发卡片，避免把旧曲名写回负一屏。
+            BackgroundTransportSync.ResyncFromNative();
             PublishFromPlaylist();
         }
 

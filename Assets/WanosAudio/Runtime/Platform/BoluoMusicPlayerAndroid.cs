@@ -1,5 +1,4 @@
 #if UNITY_ANDROID
-using System.IO;
 using UnityEngine;
 
 namespace WanosAudio
@@ -33,8 +32,8 @@ namespace WanosAudio
             }
             Instance = this;
             DontDestroyOnLoad(gameObject);
-            ArtworkDefault = Path.Combine(
-                Application.streamingAssetsPath, "WanosAudio", "Artwork", "boluo.png");
+            // jar StreamingAssets 不能 File 打开；传 AssetManager 相对路径。
+            ArtworkDefault = "WanosAudio/Artwork/boluo.png";
         }
 
         public void InitializeAfterLogin()
@@ -42,8 +41,7 @@ namespace WanosAudio
             if (sIsInitialized)
                 return;
             sIsInitialized = true;
-            ArtworkDefault = Path.Combine(
-                Application.streamingAssetsPath, "WanosAudio", "Artwork", "boluo.png");
+            ArtworkDefault = "WanosAudio/Artwork/boluo.png";
 
             bool bgDisable = BackgroundPlayPolicyCallback.GetBackgroundPlayDisable();
             BoluoAndroidEngineNative.NotifyAppLifecycle(false, bgDisable);
@@ -131,17 +129,22 @@ namespace WanosAudio
 
         public void OnSystemAudioMuted(string empty)
         {
+            WanosEngine.MarkInterrupted("android-system-mute");
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.TransientInterrupt);
         }
 
         public void OnCompetingAudioMuted(string empty)
         {
+            WanosEngine.MarkInterrupted("android-competing-mute");
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.CompetingLong);
         }
 
         public void OnAudioFocusDuck(string factorStr) { }
         public void OnAudioFocusUnduck(string empty) { }
-        public void OnAudioFocusRequestFailed(string empty) { }
+        public void OnAudioFocusRequestFailed(string empty)
+        {
+            WanosEngine.MarkInterrupted("android-focus-request-failed");
+        }
         public void SetUserAudioSettings(string payload) { }
 
         public void OnNativeTrackChanged(string payload)

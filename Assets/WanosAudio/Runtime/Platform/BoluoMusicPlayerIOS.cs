@@ -203,17 +203,22 @@ namespace WanosAudio
 
         public void OnSystemAudioMuted(string empty)
         {
+            WanosEngine.MarkInterrupted("ios-system-mute");
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.TransientInterrupt);
         }
 
         public void OnCompetingAudioMuted(string empty)
         {
+            WanosEngine.MarkInterrupted("ios-competing-mute");
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.CompetingLong);
         }
 
         public void OnAudioFocusDuck(string factorStr) { }
         public void OnAudioFocusUnduck(string empty) { }
-        public void OnAudioFocusRequestFailed(string empty) { }
+        public void OnAudioFocusRequestFailed(string empty)
+        {
+            WanosEngine.MarkInterrupted("ios-focus-request-failed");
+        }
         public void SetUserAudioSettings(string payload) { }
         public void OnAudioRouteChanged(string message) { }
 

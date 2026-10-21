@@ -166,6 +166,17 @@ namespace CustomSRP
             ApplyFogSettings();
         }
 
+        public void SetLookBlend(IslandLookKind to, float t)
+        {
+            if (SkyboxTime == null)
+                ResolveRefs();
+            if (SkyboxTime == null)
+                return;
+            // Capture blend before clearing a poster pin so that Apply stays on the blended table.
+            SkyboxTime.SetLookBlend((OilSkyLookId)(int)to, t);
+            SkyboxTime.ClearColorOverride();
+        }
+
         void BindPresetEvent()
         {
             if (_presetEventBound || GameEntry.Event == null)

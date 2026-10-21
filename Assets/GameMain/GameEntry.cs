@@ -23,6 +23,8 @@ namespace Game
             WanosSoundSetup.ResetSession();
             MusicPlaylist.ResetSession();
             AudioInteractionBootstrap.ResetSession();
+            AudioAppLifecycle.ResetSession();
+            AudioAppLifecycle.EnsureExists();
             // Before SoundComponent.Start: swap helper type names to Wanos implementations.
             WanosSoundSetup.ConfigureHelpersBeforeSoundStart();
             ApplyDeviceGraphicsPolicy();

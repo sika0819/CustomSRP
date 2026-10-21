@@ -256,10 +256,12 @@ namespace Game
         void ApplyVolumeToEngine()
         {
             float v = _mute ? 0f : _volume;
+            // Bank RTPC is Fx_Volume (legacy GameData.wFX), not SFX_Volume.
+            // 用 WanosEngine 的常量，别写字面量：引擎对不认识的 RTPC 名是静默丢弃的。
             if (_asset != null && _asset.EventName.IndexOf("Music", StringComparison.OrdinalIgnoreCase) >= 0)
-                WanosEngine.SetVolumeParameter("Music_Volume", v);
+                WanosEngine.SetVolumeParameter(WanosEngine.MusicVolumeParam, v);
             else
-                WanosEngine.SetVolumeParameter("SFX_Volume", v);
+                WanosEngine.SetVolumeParameter(WanosEngine.FxVolumeParam, v);
         }
     }
 }

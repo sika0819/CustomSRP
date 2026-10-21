@@ -20,23 +20,20 @@ namespace Game.Editor.BuildTool
 
         /// <summary>
         /// skyworthUltra → :app:assembleSkyworthUltraDebug
+        /// phoneXiaomi → :app:assemblePhoneXiaomiDebug
         /// yishu → :app:assembleYishuDebug
         /// </summary>
         public static string ResolveAssembleTask(string flavor, bool release)
         {
             string suffix = release ? "Release" : "Debug";
-            if (!BoluoCIBuildSupport.TryNormalizeAndroidFlavor(flavor, out string norm, out _))
-                norm = "skyworthUltra";
-            string flavorPascal = norm == "yishu" ? "Yishu" : "SkyworthUltra";
+            string flavorPascal = BoluoCIBuildSupport.ToGradleFlavorPascal(flavor);
             return $":app:assemble{flavorPascal}{suffix}";
         }
 
         public static string ResolveInstallTask(string flavor, bool release)
         {
             string suffix = release ? "Release" : "Debug";
-            if (!BoluoCIBuildSupport.TryNormalizeAndroidFlavor(flavor, out string norm, out _))
-                norm = "skyworthUltra";
-            string flavorPascal = norm == "yishu" ? "Yishu" : "SkyworthUltra";
+            string flavorPascal = BoluoCIBuildSupport.ToGradleFlavorPascal(flavor);
             return $":app:install{flavorPascal}{suffix}";
         }
 
@@ -288,7 +285,7 @@ namespace Game.Editor.BuildTool
             apkPath = null;
             if (!BoluoCIBuildSupport.TryNormalizeAndroidFlavor(flavor, out string norm, out _))
                 norm = "skyworthUltra";
-            string flavorDir = norm == "yishu" ? "yishu" : "skyworthUltra";
+            string flavorDir = norm;
             string buildType = release ? "release" : "debug";
             string apkDir = Path.Combine(projectRoot, "app", "build", "outputs", "apk", flavorDir, buildType);
             if (!Directory.Exists(apkDir))

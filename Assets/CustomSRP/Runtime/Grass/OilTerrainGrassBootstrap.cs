@@ -85,7 +85,8 @@ namespace CustomSRP
                 return;
 
 #if UNITY_ANDROID || UNITY_IOS
-            binder.ApplyBudget(24000, 90f, bladeSegments: 3);
+            // B3：缩短绘制距离并减可见上限；远 band 在 CullAndDraw 里移动端跳过。
+            binder.ApplyBudget(16000, 70f, bladeSegments: 2);
 #else
             binder.ApplyBudget(48000, 180f, bladeSegments: 4);
 #endif

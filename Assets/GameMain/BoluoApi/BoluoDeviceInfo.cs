@@ -19,6 +19,35 @@ namespace Game.BoluoApi
         /// <summary>闺蜜机渠道（创维 Neo / Ultra 等真机包）。</summary>
         public const string DefaultChannelGmj = "BOLUOCWGMJ";
 
+        /// <summary>应用宝（服务端正写；旧串少一个 P 见 <see cref="NormalizeChannel"/>）。</summary>
+        public const string ChannelAndroidAppStore = "BOLUOANDROIDAPPSTORE";
+
+        /// <summary>历史拼写（少一个 P），读到时归一为正写。</summary>
+        public const string ChannelAndroidAppStoreLegacyTypo = "BOLUOANDROIDAPPSOTRE";
+
+        /// <summary>
+        /// 服务端「应用渠道号」全表（对齐 AndroidProject/Docs/渠道.md §3）。
+        /// Editor 环境窗口预设与此同源；勿自造占位值。
+        /// </summary>
+        public static readonly string[] KnownAppChannels =
+        {
+            DefaultChannelGmj,           // 创维闺蜜机 / 一树（当前）
+            ChannelAndroidAppStore,      // 应用宝
+            "BOLUOBAIDU",
+            "BOLUO360",
+            "BOLUOXIAOMI",
+            "BOLUOOPPO",
+            "BOLUOVIVO",
+            "BOLUOHONOR",
+            "BOLUOGALLERY",              // 三星（编码是 GALLERY，不是 SAMSUNG）
+            "BOLUOMEIZU",
+            "BOLUOIOSAPPSTORE",
+            "BOLUOAPPHARMONY",
+            "BOLUOTESTANDROID",
+            "BOLUOTESTIOS",
+            "BOLUOTESTHARMONY",
+        };
+
         /// <summary>
         /// 创维闺蜜机：channel=BOLUOCWGMJ 或 originEnd=boluocwgmj（Editor 可经环境窗口覆盖）。
         /// </summary>
@@ -26,6 +55,24 @@ namespace Game.BoluoApi
         {
             return string.Equals(GetChannel(), DefaultChannelGmj, System.StringComparison.OrdinalIgnoreCase)
                 || string.Equals(GetOriginEnd(), DefaultOriginEndGmj, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>把历史错拼归一成服务端正写；其它原样返回。</summary>
+        public static string NormalizeChannel(string channel)
+        {
+            if (string.IsNullOrEmpty(channel))
+                return channel;
+            if (string.Equals(channel, ChannelAndroidAppStoreLegacyTypo, System.StringComparison.OrdinalIgnoreCase))
+                return ChannelAndroidAppStore;
+            return channel;
+        }
+
+        /// <summary>按 channel 建议 originEnd（闺蜜 → boluocwgmj，其余 → boluoapp）。</summary>
+        public static string SuggestOriginEndForChannel(string channel)
+        {
+            if (string.Equals(NormalizeChannel(channel), DefaultChannelGmj, System.StringComparison.OrdinalIgnoreCase))
+                return DefaultOriginEndGmj;
+            return DefaultOriginEndApp;
         }
 
 #if UNITY_EDITOR
@@ -36,7 +83,7 @@ namespace Game.BoluoApi
 #endif
 
         // 渠道 / appId 映射（与原生对齐）：
-        //   1101 BOLUOANDROIDAPPSOTRE · 1107 BOLUOIOSAPPSTORE
+        //   1101 BOLUOANDROIDAPPSTORE · 1107 BOLUOIOSAPPSTORE
         //   1001 BOLUOTESTANDROID · 1002 BOLUOTESTIOS · 1003 BOLUOTESTHARMONY
 
         public static string GetIdentifier()
@@ -60,12 +107,12 @@ namespace Game.BoluoApi
 #if UNITY_EDITOR
             var channelOverride = UnityEditor.EditorPrefs.GetString(EditorChannelOverrideKey, "");
             if (!string.IsNullOrEmpty(channelOverride))
-                return channelOverride;
+                return NormalizeChannel(channelOverride);
             return EditorSimulatedChannel();
 #else
 #if UNITY_IOS || UNITY_ANDROID
             if (NativeSession.TryGetHostChannel(out var native) && !string.IsNullOrEmpty(native))
-                return native;
+                return NormalizeChannel(native);
 #endif
 #if UNITY_IOS
             return IsReleaseLike() ? "BOLUOIOSAPPSTORE" : "BOLUOTESTIOS";
@@ -73,7 +120,7 @@ namespace Game.BoluoApi
             // 独立宿主 APK 真机默认闺蜜渠道（对齐 SkyworthPlatformImpl）
             return DefaultChannelGmj;
 #else
-            return IsReleaseLike() ? "BOLUOANDROIDAPPSOTRE" : "BOLUOTESTANDROID";
+            return IsReleaseLike() ? ChannelAndroidAppStore : "BOLUOTESTANDROID";
 #endif
 #endif
         }
@@ -188,8 +235,23 @@ namespace Game.BoluoApi
         public static float GetLongitude() => 116f;
         public static float GetAccuracy() => 1f;
 
+        /// <summary>
+        /// 健康渠道号（≠ 应用渠道）。对齐渠道.md §3.1；无对应则空串。
+        /// </summary>
         public static string GetHealthChannel()
         {
+            string channel = GetChannel();
+            if (string.Equals(channel, "BOLUOIOSAPPSTORE", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(channel, "BOLUOTESTIOS", System.StringComparison.OrdinalIgnoreCase))
+                return "APPLE_HEALTH";
+            if (string.Equals(channel, "BOLUOXIAOMI", System.StringComparison.OrdinalIgnoreCase))
+                return "XIAOMI_HEALTH";
+            if (string.Equals(channel, "BOLUOOPPO", System.StringComparison.OrdinalIgnoreCase))
+                return "OPPO_HEALTH";
+            if (string.Equals(channel, "BOLUOVIVO", System.StringComparison.OrdinalIgnoreCase))
+                return "VIVO_HEALTH";
+            if (string.Equals(channel, "BOLUOHONOR", System.StringComparison.OrdinalIgnoreCase))
+                return "HONOR_HEALTH";
 #if UNITY_IOS
             return "APPLE_HEALTH";
 #else
@@ -241,9 +303,10 @@ namespace Game.BoluoApi
 #if UNITY_IOS
             return IsReleaseLike() ? "BOLUOIOSAPPSTORE" : "BOLUOTESTIOS";
 #elif UNITY_ANDROID
-            return IsReleaseLike() ? "BOLUOANDROIDAPPSOTRE" : "BOLUOTESTANDROID";
+            // Editor 兜底用测试渠道；完整壳真机默认是闺蜜（见非 Editor Android 分支）。
+            return IsReleaseLike() ? ChannelAndroidAppStore : "BOLUOTESTANDROID";
 #else
-            return IsReleaseLike() ? "BOLUOANDROIDAPPSOTRE" : "BOLUOTESTANDROID";
+            return IsReleaseLike() ? ChannelAndroidAppStore : "BOLUOTESTANDROID";
 #endif
         }
 

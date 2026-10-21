@@ -129,6 +129,10 @@ public class WIAEngineJNI {
     /** 最近一次推到 MediaSession 的曲名 / 播放态，供 FGS MediaStyle 通知读取。 */
     private static volatile String sLastTrackTitle = "";
     private static volatile boolean sLastIsPlaying;
+    /** 降采样后的封面，供 MediaStyle setLargeIcon（部分 OEM 负一屏读通知大图而非 Metadata）。 */
+    private static volatile Bitmap sLastArtBitmap;
+    private static final int ARTWORK_MAX_EDGE = 512;
+    private static final String DEFAULT_ARTWORK_ASSET = "WanosAudio/Artwork/boluo.png";
 
     private static final Handler sMainHandler = new Handler(Looper.getMainLooper());
 
@@ -172,6 +176,11 @@ public class WIAEngineJNI {
 
     public static boolean getLastIsPlaying() {
         return sLastIsPlaying;
+    }
+
+    /** FGS / 负一屏大图；可能为 null（解码失败时系统会回退 App 图标）。 */
+    public static Bitmap getLastArtBitmap() {
+        return sLastArtBitmap;
     }
 
     public static void dispatchTransportPlay() {
@@ -291,6 +300,7 @@ public class WIAEngineJNI {
             if (allEmpty) {
                 sLastTrackTitle = "";
                 sLastIsPlaying = false;
+                sLastArtBitmap = null;
                 if (sMediaSession != null) {
                     sMediaSession.setActive(false);
                     sMediaSession.release();
@@ -369,12 +379,16 @@ public class WIAEngineJNI {
                     .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE, title)
                     .putLong(MediaMetadata.METADATA_KEY_DURATION, -1);
 
-            Bitmap art = decodeCoverBitmap(ctx, coverUrl);
+            Bitmap art = scaleArtwork(decodeCoverBitmap(ctx, coverUrl));
+            sLastArtBitmap = art;
             if (art != null) {
                 // 部分 OEM 负一屏读 ART，部分读 ALBUM_ART；两份都写避免默认系统图标。
+                // 必须降采样：2000² ARGB 约 16MB，跨进程 Binder 会被丢弃，负一屏就回退 App 图标。
                 metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_ART, art);
                 metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art);
                 metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON, art);
+            } else {
+                Log.w(TAG, "updateNowPlayingInfo: artwork decode failed coverUrl=" + coverUrl);
             }
             sMediaSession.setMetadata(metaBuilder.build());
 
@@ -407,6 +421,12 @@ public class WIAEngineJNI {
      */
     private static Bitmap decodeCoverBitmap(Context ctx, String coverUrl) {
         if (coverUrl != null && !coverUrl.isEmpty()) {
+            // 直接相对 asset 路径（Unity 侧推荐传这个，避开 jar Path.Combine）
+            if (!coverUrl.contains("://") && !coverUrl.startsWith("/")
+                    && coverUrl.contains("WanosAudio/")) {
+                Bitmap direct = decodeAssetBitmap(ctx, coverUrl.replace('\\', '/'));
+                if (direct != null) return direct;
+            }
             if (!coverUrl.contains("jar:") && !coverUrl.contains("!/")) {
                 String filePath = coverUrl.startsWith("file://") ? coverUrl.substring(7) : coverUrl;
                 Bitmap fromFile = BitmapFactory.decodeFile(filePath);
@@ -418,21 +438,25 @@ public class WIAEngineJNI {
                 if (fromAsset != null) return fromAsset;
             }
         }
-        return decodeAssetBitmap(ctx, "WanosAudio/Artwork/boluo.png");
+        return decodeAssetBitmap(ctx, DEFAULT_ARTWORK_ASSET);
     }
 
     /** jar:...!/assets/WanosAudio/... → WanosAudio/...；已是相对路径则原样返回。 */
     private static String assetRelativePathFromCoverUrl(String coverUrl) {
         if (coverUrl == null || coverUrl.isEmpty()) return null;
-        int bang = coverUrl.indexOf("!/");
+        String normalized = coverUrl.replace('\\', '/');
+        int bang = normalized.indexOf("!/");
         if (bang >= 0) {
-            String after = coverUrl.substring(bang + 2);
+            String after = normalized.substring(bang + 2);
             if (after.startsWith("assets/")) after = after.substring("assets/".length());
             return after.isEmpty() ? null : after;
         }
-        if (coverUrl.contains("WanosAudio/Artwork/")) {
-            int idx = coverUrl.indexOf("WanosAudio/Artwork/");
-            return coverUrl.substring(idx);
+        if (normalized.contains("WanosAudio/Artwork/")) {
+            int idx = normalized.indexOf("WanosAudio/Artwork/");
+            return normalized.substring(idx);
+        }
+        if (normalized.equals(DEFAULT_ARTWORK_ASSET) || normalized.endsWith("/" + DEFAULT_ARTWORK_ASSET)) {
+            return DEFAULT_ARTWORK_ASSET;
         }
         return null;
     }
@@ -444,6 +468,26 @@ public class WIAEngineJNI {
         } catch (Exception e) {
             Log.d(TAG, "decodeAssetBitmap failed path=" + assetPath + " msg=" + e.getMessage());
             return null;
+        }
+    }
+
+    /** 锁屏 / MediaSession 封面边长上限，避免 Binder 丢图。 */
+    private static Bitmap scaleArtwork(Bitmap src) {
+        if (src == null) return null;
+        int w = src.getWidth();
+        int h = src.getHeight();
+        int edge = Math.max(w, h);
+        if (edge <= ARTWORK_MAX_EDGE) return src;
+        float scale = ARTWORK_MAX_EDGE / (float) edge;
+        int nw = Math.max(1, Math.round(w * scale));
+        int nh = Math.max(1, Math.round(h * scale));
+        try {
+            Bitmap scaled = Bitmap.createScaledBitmap(src, nw, nh, true);
+            if (scaled != src) src.recycle();
+            return scaled;
+        } catch (Exception e) {
+            Log.w(TAG, "scaleArtwork failed: " + e.getMessage());
+            return src;
         }
     }
 }
