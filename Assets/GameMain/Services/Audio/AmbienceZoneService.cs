@@ -27,6 +27,15 @@ namespace Game
     {
         const float EvalIntervalSeconds = 0.25f;
         const int VoiceStopFadeMs = 250;
+        /// <summary>Preset / hard clear under black veil — longer fade if anything still audible.</summary>
+        const int VoiceStopFadeClearMs = 800;
+        /// <summary>
+        /// Shared-bank bed switch: keep the playing bed until another is nearer by this much.
+        /// Without hysteresis, midpoint walk flip-flops every Eval → emitter teleport crackle.
+        /// </summary>
+        const float ExclusiveShareHysteresisMeters = 12f;
+        /// <summary>Cap per-eval emitter teleport (water nearest-point jitter).</summary>
+        const float MaxEmitterJumpMetersPerEval = 10f;
 
         /// <summary>
         /// Boluo <c>WanosCurveForGain</c> 编辑器 Y 是「显示 dB」；远端点统一约 -17.25。
@@ -185,8 +194,8 @@ namespace Game
             if (_presetTransitionHeld == held)
                 return;
             _presetTransitionHeld = held;
-            if (held)
-                StopAllPlaying(forceReleaseBank: true);
+            // Hold only blocks Evaluate / StartSource. Hard stop is deferred to
+            // ClearAllPlaying at iris Peak so cuts happen under black, not mid-fade.
         }
 
         /// <summary>
@@ -196,7 +205,7 @@ namespace Game
         /// </summary>
         public static void ClearAllPlaying()
         {
-            StopAllPlaying(forceReleaseBank: true);
+            StopAllPlaying(forceReleaseBank: true, keepBank: false, fadeMs: VoiceStopFadeClearMs);
         }
 
         /// <summary>
@@ -662,6 +671,7 @@ namespace Game
 
         /// <summary>
         /// Forest / Grassland / Plateau 多床位共用一个 bank + 一个 Play_*：只留最近床位 want=true。
+        /// Sticky hysteresis: keep the currently playing bed until another is clearly nearer.
         /// </summary>
         static void CollapseExclusiveSharedPlayWants(int n)
         {
@@ -675,17 +685,31 @@ namespace Game
 
                 int best = i;
                 float bestDist = _distScratch[i];
-                for (int j = i + 1; j < n; j++)
+                int playing = -1;
+                float playingDist = float.MaxValue;
+                for (int j = i; j < n; j++)
                 {
-                    if (!_wantScratch[j])
-                        continue;
                     if (!string.Equals(Sources[j].Spec.Bank, bank, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (Sources[j].Playing)
+                    {
+                        playing = j;
+                        playingDist = _distScratch[j];
+                    }
+                    if (!_wantScratch[j])
                         continue;
                     if (_distScratch[j] < bestDist)
                     {
                         bestDist = _distScratch[j];
                         best = j;
                     }
+                }
+
+                // Midpoint walk without sticky → Transfer every Eval → crackle.
+                if (playing >= 0 && _wantScratch[playing] && playing != best
+                    && playingDist <= bestDist + ExclusiveShareHysteresisMeters)
+                {
+                    best = playing;
                 }
 
                 for (int j = i; j < n; j++)
@@ -721,6 +745,7 @@ namespace Game
 
         /// <summary>
         /// Lake ↔ Waterfall mutual exclusion: only the nearer side keeps want=true.
+        /// Sticky hysteresis so the lake/fall boundary does not flip-flop Stop↔Play.
         /// Stop path KeepBank so exclusivity never unloads the suppressed side's bank.
         /// </summary>
         static void ApplyLakeWaterfallExclusion(int n)
@@ -729,21 +754,33 @@ namespace Game
             float bestLakeDist = float.MaxValue;
             int bestFall = -1;
             float bestFallDist = float.MaxValue;
+            bool lakePlaying = false;
+            bool fallPlaying = false;
             for (int i = 0; i < n; i++)
             {
                 if (!_wantScratch[i])
                     continue;
                 AmbienceEmitterKind kind = Sources[i].Spec.Kind;
                 float d = _distScratch[i];
-                if (kind == AmbienceEmitterKind.Lake && d < bestLakeDist)
+                if (kind == AmbienceEmitterKind.Lake)
                 {
-                    bestLakeDist = d;
-                    bestLake = i;
+                    if (Sources[i].Playing)
+                        lakePlaying = true;
+                    if (d < bestLakeDist)
+                    {
+                        bestLakeDist = d;
+                        bestLake = i;
+                    }
                 }
-                else if (kind == AmbienceEmitterKind.Waterfall && d < bestFallDist)
+                else if (kind == AmbienceEmitterKind.Waterfall)
                 {
-                    bestFallDist = d;
-                    bestFall = i;
+                    if (Sources[i].Playing)
+                        fallPlaying = true;
+                    if (d < bestFallDist)
+                    {
+                        bestFallDist = d;
+                        bestFall = i;
+                    }
                 }
             }
 
@@ -751,6 +788,13 @@ namespace Game
                 return;
 
             bool preferLake = bestLakeDist <= bestFallDist;
+            if (lakePlaying && !fallPlaying
+                && bestLakeDist <= bestFallDist + ExclusiveShareHysteresisMeters)
+                preferLake = true;
+            else if (fallPlaying && !lakePlaying
+                && bestFallDist <= bestLakeDist + ExclusiveShareHysteresisMeters)
+                preferLake = false;
+
             for (int i = 0; i < n; i++)
             {
                 if (!_wantScratch[i])
@@ -791,11 +835,12 @@ namespace Game
 
                 Log.Info(
                     $"[AmbienceZone] transfer bank={bank} from={Sources[playing].Spec.Id} to={Sources[winner].Spec.Id}");
-                TransferPlayOwnership(Sources[playing], Sources[winner], _posScratch[winner]);
+                TransferPlayOwnership(
+                    Sources[playing], Sources[winner], _posScratch[winner], _distScratch[winner]);
             }
         }
 
-        static void TransferPlayOwnership(RuntimeSource from, RuntimeSource to, Vector3 toPos)
+        static void TransferPlayOwnership(RuntimeSource from, RuntimeSource to, Vector3 toPos, float toDist)
         {
             // 胜出床位接管 emitter / voice；from 只清本地态，不 Stop、不 Release bank。
             GameObject emitter = from.Emitter;
@@ -822,7 +867,6 @@ namespace Game
                 to.VoiceIds.Add(from.VoiceIds[i]);
             to.Playing = true;
             to.NeedsRepost = true;
-            to.LastPostedDistance = float.NaN;
             to.BankHeld = from.BankHeld;
 
             for (int i = 0; i < to.VoiceIds.Count; i++)
@@ -837,9 +881,26 @@ namespace Game
 
             if (to.Emitter != null)
             {
-                to.Emitter.transform.position = toPos;
-                WanosInteraction.EnsureEmitter(to.Emitter, toPos, to.Spec.EnterRadius);
+                // Clamp first transfer jump so Distance RTPC / spatializer do not zipper.
+                Vector3 cur = to.Emitter.transform.position;
+                Vector3 clamped = ClampEmitterStep(cur, toPos);
+                to.Emitter.transform.position = clamped;
+                WanosInteraction.EnsureEmitter(to.Emitter, clamped, to.Spec.EnterRadius);
+                float gainDb = GainDbForDistance(to.Spec, toDist);
+                WanosInteraction.ApplyEmitterDistanceAttenuation(to.Emitter, toDist, gainDb);
+                to.LastPostedDistance = toDist;
             }
+            else
+                to.LastPostedDistance = float.NaN;
+        }
+
+        static Vector3 ClampEmitterStep(Vector3 from, Vector3 to)
+        {
+            Vector3 delta = to - from;
+            float mag = delta.magnitude;
+            if (mag <= MaxEmitterJumpMetersPerEval || mag < 1e-4f)
+                return to;
+            return from + delta * (MaxEmitterJumpMetersPerEval / mag);
         }
 
         /// <summary>
@@ -1034,6 +1095,8 @@ namespace Game
             {
                 if (src.Emitter != null)
                 {
+                    // Water nearest-point / catalog handoff can jump tens of meters per Eval.
+                    pos = ClampEmitterStep(src.Emitter.transform.position, pos);
                     src.Emitter.transform.position = pos;
                     WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
 
@@ -1328,7 +1391,11 @@ namespace Game
         /// 3. 释放 emitter
         /// 4. 按策略 Release bank（或 KeepBank）
         /// </summary>
-        static void StopSource(RuntimeSource src, bool forceReleaseBank = false, bool keepBank = false)
+        static void StopSource(
+            RuntimeSource src,
+            bool forceReleaseBank = false,
+            bool keepBank = false,
+            int fadeMs = VoiceStopFadeMs)
         {
             var spec = src.Spec;
             src.Playing = false;
@@ -1343,7 +1410,7 @@ namespace Game
             {
                 ulong voiceId = src.VoiceIds[i];
                 VoiceToSource.Remove(voiceId);
-                WanosInteraction.StopVoice(voiceId, VoiceStopFadeMs);
+                WanosInteraction.StopVoice(voiceId, fadeMs);
             }
             src.VoiceIds.Clear();
 
@@ -1372,13 +1439,16 @@ namespace Game
             Log.Info($"[AmbienceZone] stop id={spec.Id} keepBank={keep}");
         }
 
-        static void StopAllPlaying(bool forceReleaseBank = false, bool keepBank = false)
+        static void StopAllPlaying(
+            bool forceReleaseBank = false,
+            bool keepBank = false,
+            int fadeMs = VoiceStopFadeMs)
         {
             for (int i = 0; i < Sources.Count; i++)
             {
                 var src = Sources[i];
                 if (src.Playing || (forceReleaseBank && src.BankHeld))
-                    StopSource(src, forceReleaseBank, keepBank);
+                    StopSource(src, forceReleaseBank, keepBank, fadeMs);
             }
         }
 

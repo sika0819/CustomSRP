@@ -18,8 +18,9 @@ namespace Game
                 return;
             IsHeld = true;
             // Inhibit zone StartSource for the whole iris window (doc: 禁止走路新加载).
+            // Do NOT ClearPlaying here — iris is still open; hard-stop/RTPC-zero causes
+            // audible crackle. Peak Apply → ClearContent3D runs under black.
             AmbienceZoneService.SetPresetTransitionHeld(true);
-            WeatherAudioBridge.ClearPlaying();
             HeldChanged?.Invoke();
         }
 

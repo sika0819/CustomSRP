@@ -62,7 +62,7 @@ namespace CustomSRP
             if (_camera != null)
             {
                 buffer.SetViewport(_camera.pixelRect);
-                // Match iris circle to camera pixels (not UV square) — landscape phones.
+                // w/h: shader normalizes by min(aspect,1) so portrait + landscape stay round.
                 aspect = _camera.pixelWidth / (float)Mathf.Max(1, _camera.pixelHeight);
             }
             buffer.SetGlobalFloat(AspectId, aspect);

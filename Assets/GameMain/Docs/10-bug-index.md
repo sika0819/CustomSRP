@@ -54,7 +54,7 @@
 | F | `Services/NowPlayingService.cs` | `Tick()` 依赖 `Native/BoluoNativeBridge` 泵送 | 非原生宿主下远程播放/暂停不生效 | 需自行泵送 |
 | G | `Services/PresetService.cs` | 用 `Resources.LoadAll` / `Resources.Load` 读预设与封面 | 违反「运行时资源走 YooAsset」规则 | 现存例外 |
 | H | `Services/IslandMobileTune.cs` | `TuneTerrainShadowReceive` 实例化材质但不销毁 | 每次重进岛多一份实例 | 内存缓慢增长 |
-| I | `Environment/Runtime/EnvNativeInstancing.cs` | `RenderParams.worldBounds` 用局部 bounds，矩阵是世界矩阵 | 整批可能被剔除 | 仅 Android 生效 |
+| I | `Environment/Runtime/EnvNativeInstancing.cs` | ~~`RenderParams.worldBounds` 用局部 bounds~~ → 已改为批次世界 AABB 并集 | 真机树/灌木整批不可见 | 已修 |
 | J | `Environment/Runtime/EnvItemStreamerLite.cs` | `EvaluateQueues` 用结构体副本，仅在 `UpdateShadowRange` 返回 true 时写回 | 后续任何「改了但不返回 true」的修改会丢失 | 扩展时注意 |
 | K | `Environment/Runtime/EnvStreamingConfig.cs` | 所有半径是 `public static` 可变字段 | 任何运行时修改都可能被 `ApplyMobileTierDefaults()` 覆盖 | 建议改成只读 + 显式 setter |
 | L | `Environment/Runtime/EnvBridgePillarFit.cs` | 地形高度按顶点聚类中心采样 | 斜坡上桥墩一端悬空 | 已知限制 |

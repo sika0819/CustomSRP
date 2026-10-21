@@ -130,6 +130,6 @@ static void ClearVisualIgnited();
 | 篝火没有火焰（粉红） | 材质 shader 名必须是 `CustomSRP/NoiseFire`；设备上没有烘焙材质 | 日志 `[FireController] No valid CustomSRP/NoiseFire material` |
 | 篝火一直不点燃 | `CampfireWeatherGate.SuppressIgnite` 默认 true；大雨会压制 | 看 `AtmospherePropService.Refresh` |
 | 原生合批物体不显示 | 仅 Android 生效；`TryExtractLod0` 只支持单网格单材质 prefab | 多材质 prefab 会退回 MeshRenderer |
-| 合批物体被整批剔除 | `RenderParams.worldBounds` 用的是局部 bounds，矩阵是世界矩阵 | 已知问题，需要时可改 |
+| 合批物体被整批剔除 | `RenderParams.worldBounds` 曾误用局部 bounds | 已改为批次世界 AABB 并集 |
 | 编辑器和真机表现不一致 | `ApplyMobileTierDefaults()` 是 `#if !UNITY_EDITOR`；Editor 不开原生合批 | 预期行为 |
 | MapItem 数据加载失败 | 三级回退：YooAsset → AssetDatabase → `StreamingAssets/AllMapItem.bytes`（Android 走 `UnityWebRequest`） | 看 `[MapItem] AllMapItem empty or failed to load` |

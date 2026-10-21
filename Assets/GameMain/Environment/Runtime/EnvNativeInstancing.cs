@@ -319,15 +319,27 @@ namespace Game
             Camera cam, Prototype proto, Matrix4x4[] batch, int count,
             ShadowCastingMode shadowCastingMode)
         {
+            if (count <= 0)
+                return;
+
             // Bind to the main camera so the planar mirror probe never picks up
             // these instances. Graphics.DrawMeshInstanced (legacy overload) draws
             // for every camera rendering that frame including reflection probes,
             // which is exactly what we don't want for grass / clutter / small veg.
             // RenderMeshInstanced takes a RenderParams.camera that scopes the draw.
+            //
+            // worldBounds MUST be the union of instance world AABBs. Passing
+            // proto.LocalBounds (mesh-space, near origin) makes Unity cull the
+            // whole batch whenever the camera isn't looking at the origin —
+            // MeshRenderers are already disabled, so trees vanish on device.
+            Bounds worldBounds = TransformBounds(proto.LocalBounds, batch[0]);
+            for (int i = 1; i < count; i++)
+                worldBounds.Encapsulate(TransformBounds(proto.LocalBounds, batch[i]));
+
             var rp = new RenderParams(proto.Material)
             {
                 camera = cam,
-                worldBounds = proto.LocalBounds,
+                worldBounds = worldBounds,
                 shadowCastingMode = shadowCastingMode,
                 receiveShadows = false,
                 renderingLayerMask = 1,

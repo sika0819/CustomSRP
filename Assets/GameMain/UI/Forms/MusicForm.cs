@@ -278,9 +278,7 @@ namespace Game
             if (existing is TextElement te && existing is not Label)
             {
                 _title = te;
-                _title.pickingMode = PickingMode.Ignore;
-                _title.AddToClassList("game-music-form__title");
-                _title.style.color = TitleTextColor;
+                ApplyTitleChrome(_title);
                 return;
             }
 
@@ -292,10 +290,25 @@ namespace Game
             existing?.RemoveFromHierarchy();
 
             _title = new TextElement { name = "title" };
-            _title.AddToClassList("game-music-form__title");
-            _title.pickingMode = PickingMode.Ignore;
-            _title.style.color = TitleTextColor;
+            ApplyTitleChrome(_title);
             parent.Insert(Mathf.Clamp(index, 0, parent.childCount), _title);
+        }
+
+        /// <summary>
+        /// Lock InGameYinYueView title look (42px grey PingFang, no letter-spacing)
+        /// after pooled reopen / hover wash.
+        /// </summary>
+        void ApplyTitleChrome(TextElement title)
+        {
+            if (title == null)
+                return;
+            title.AddToClassList("game-music-form__title");
+            title.pickingMode = PickingMode.Ignore;
+            title.style.color = TitleTextColor;
+            title.style.fontSize = 42f;
+            title.style.letterSpacing = 0f;
+            title.style.unityTextAlign = TextAnchor.MiddleLeft;
+            title.style.whiteSpace = WhiteSpace.NoWrap;
         }
 
         void RefreshTitle()
@@ -305,8 +318,7 @@ namespace Game
             if (_title == null)
                 return;
 
-            _title.pickingMode = PickingMode.Ignore;
-            _title.style.color = TitleTextColor;
+            ApplyTitleChrome(_title);
 
             if (!MusicCatalog.IsReady)
             {
@@ -989,15 +1001,14 @@ namespace Game
 
             // TextElement (not Label): ListView rows under the cursor on reopen
             // would otherwise get .unity-label:hover → white on the white card.
+            // Typography matches Musicitem Text_0 (45px + TMP characterSpacing 4.5
+            // → 4.5/100 em ≈ 2.025px letter-spacing).
             var label = new TextElement();
             label.name = "label0";
-            label.style.position = Position.Absolute;
-            label.style.left = 0; label.style.top = 0; label.style.bottom = 0; label.style.right = 0;
-            label.style.unityTextAlign = TextAnchor.MiddleLeft;
-            label.style.fontSize = 45;
+            label.AddToClassList("game-music-form__track-title");
+            label.style.fontSize = 45f;
+            label.style.letterSpacing = 45f * 4.5f / 100f;
             label.style.color = TrackTextColor;
-            label.style.whiteSpace = WhiteSpace.NoWrap;
-            label.style.overflow = Overflow.Hidden;
             label.pickingMode = PickingMode.Ignore;
             panel.Add(label);
 

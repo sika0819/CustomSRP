@@ -470,7 +470,8 @@ namespace Game
 
             PresetWeatherHold.Begin();
             PresetIrisOverlay.Clear();
-            AudioInteractionBootstrap.ClearContent3D();
+            // Do not ClearContent3D here — screen is still fully audible for ~0.5–2s.
+            // PresetService.Apply (iris Peak / black) clears under veil; Release retriggers.
 
             IslandJoystickCamera.Current?.BeginExitDolly();
             _irisPhase = IrisPhase.Exiting;

@@ -180,7 +180,8 @@
     -unity-background-scale-mode: scale-to-fit;
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
 }
-/* TextElement (not Label) — same hover-wash fix as album strip labels. */
+/* TextElement (not Label) — same hover-wash fix as album strip labels.
+   Match InGameYinYueView title TMP: size 42, characterSpacing 0. */
 .game-music-form__title {
     position: absolute;
     left: 86px;
@@ -193,8 +194,27 @@
     height: 59px;
     -unity-text-align: middle-left;
     font-size: 42px;
+    letter-spacing: 0;
     color: rgba(135, 135, 145, 1.000) !important;
-    white-space: normal;
+    white-space: nowrap;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+    picking-mode: Ignore;
+}
+
+/* Track row title — Musicitem Text_0: fontSize 45, characterSpacing 4.5
+   (TMP 1/100 em → 4.5% of 45px ≈ 2.025px). TextElement avoids hover-wash. */
+.game-music-form__track-title {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    -unity-text-align: middle-left;
+    font-size: 45px;
+    letter-spacing: 2px;
+    color: rgba(24, 24, 25, 1.000);
+    white-space: nowrap;
+    overflow: hidden;
     -unity-font: url("../Fonts/pingfangsc-medium.ttf");
     picking-mode: Ignore;
 }

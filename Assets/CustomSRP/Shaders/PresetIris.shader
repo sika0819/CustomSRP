@@ -48,12 +48,12 @@ Shader "Hidden/CustomSRP/Preset Iris"
 
             float4 Frag(IrisVaryings input) : SV_TARGET
             {
-                // Aspect-correct UV so the iris is circular in screen pixels
-                // (UV-space distance alone stretches into an ellipse on phones).
+                // Pixel-aspect circle; normalize by the shorter axis so landscape
+                // and portrait both touch short edges at dis≈0.5 (same wipe pace).
                 float2 d = input.screenUV - 0.5;
                 float aspect = max(_PresetIrisAspect, 1e-4);
                 d.x *= aspect;
-                float dis = length(d);
+                float dis = length(d) / min(aspect, 1.0);
                 float currentRange = _PresetIrisSize * (1.0 - _PresetIrisTransition);
 
                 // Softness≈0 → hard full black (mobile GLES / peak teleport).
