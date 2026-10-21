@@ -173,6 +173,19 @@ namespace Game
             _albumClicks.Clear();
         }
 
+        /// <summary>
+        /// Drop pooled strip visuals so a reopen cannot keep detached TextElements
+        /// or a wrong content host (labels off-screen → "专辑名看不到").
+        /// </summary>
+        void ClearAlbumStripVisuals()
+        {
+            ClearAlbumClicks();
+            for (int i = 0; i < _albumLabels.Count; i++)
+                _albumLabels[i]?.RemoveFromHierarchy();
+            _albumLabels.Clear();
+            _albumContent?.Clear();
+        }
+
         static void MarkHeard(string albumName, string musicName) =>
             DownloadedUnplayedManager.MarkPlayed(DownloadedUnplayedManager.MusicKey(albumName, musicName));
 
@@ -227,11 +240,12 @@ namespace Game
                 _centerAlbum = ((_centerAlbum % count) + count) % count;
             else
                 _centerAlbum = 0;
-            RefreshAlbumStrip();
-            // Place strip on middle copy immediately so labels are under the indicator.
+            // Place strip BEFORE highlight — never highlight from a stale
+            // resolvedStyle.left (pooled reopen left the visible centre at
+            // opacity 0.3, which reads as "white" on the card).
             if (_albumContent != null && count > 0)
                 _albumContent.style.left = TargetLeftForAlbum(_centerAlbum, count);
-            RefreshAlbumStrip(); // re-apply selected highlight for middle copy
+            RefreshAlbumStrip();
             RefreshTrackList();
             RefreshTitle();
         }
@@ -358,17 +372,22 @@ namespace Game
                 _albumClicks.Add(click);
             }
 
-            // Highlight: during drag use live slot under center; otherwise committed album.
-            float left = _albumContent.resolvedStyle.left;
-            int highlightSlot = Mathf.RoundToInt(-left / AlbumStep);
-            if (_isDragging && highlightSlot >= 0 && highlightSlot < slotCount)
+            // Highlight: while dragging, follow the pointer; otherwise ALWAYS the
+            // middle-copy slot for _centerAlbum. Using resolvedStyle.left here was
+            // the reopen bug — layout had not resolved yet, so the selected class
+            // landed on an off-screen copy and the visible name stayed at opacity
+            // 0.3 (dark×0.3 on white ≈ washed / "white").
+            int highlightSlot;
+            if (_isDragging)
             {
-                // live visual only
+                float left = ReadAlbumContentLeft();
+                highlightSlot = Mathf.RoundToInt(-left / AlbumStep);
+                if (highlightSlot < 0 || highlightSlot >= slotCount)
+                    highlightSlot = albumCount + _centerAlbum;
             }
-            else if (highlightSlot < 0 || highlightSlot >= slotCount
-                     || highlightSlot % albumCount != _centerAlbum)
+            else
             {
-                highlightSlot = albumCount + _centerAlbum; // middle copy
+                highlightSlot = albumCount + _centerAlbum;
             }
 
             for (int i = 0; i < _albumLabels.Count; i++)
@@ -379,12 +398,26 @@ namespace Game
                 int logical = i % albumCount;
                 label.text = names[logical];
                 label.userData = logical;
-                // Inline color beats any leftover theme wash.
                 label.style.color = AlbumTextColor;
                 bool isSelected = i == highlightSlot;
+                // Inline opacity/size so a missed USS class cannot leave the
+                // centred name washed out after a pooled reopen.
+                label.style.opacity = isSelected ? 1f : 0.3f;
+                label.style.fontSize = isSelected ? 72f : 48f;
                 label.EnableInClassList(AlbumLabelSelectedModifier, isSelected);
                 label.EnableInClassList(AlbumLabelUnselectedModifier, !isSelected);
             }
+        }
+
+        /// <summary>Prefer written style.left; fall back to resolved when unset.</summary>
+        float ReadAlbumContentLeft()
+        {
+            if (_albumContent == null)
+                return 0f;
+            StyleLength left = _albumContent.style.left;
+            if (left.keyword == StyleKeyword.Null || left.keyword == StyleKeyword.Auto)
+                return _albumContent.resolvedStyle.left;
+            return left.value.value;
         }
 
         void OnAlbumClicked(int albumIndex)
@@ -495,24 +528,25 @@ namespace Game
             if (_albumContainer == null)
                 return;
 
-            // Locate the existing content container (kept as a non-Label
-            // child of _albumContainer so its `left` is independent from the
-            // viewport clip). If UXML ever ships without one, create it on the
-            // fly so we don't drag the viewport itself.
-            _albumContent = null;
-            foreach (var child in _albumContainer.Children())
+            // Must be the named host — NEVER the first non-Label child.
+            // TextElement album labels are not Label; picking the first child
+            // after a bad pool state made style.left move an empty node while
+            // real labels sat off-screen (overflow:hidden → invisible).
+            _albumContent = _albumContainer.Q("albumContent");
+            if (_albumContent == null || _albumContent is TextElement)
             {
-                if (child is Label)
-                    continue;
-                _albumContent = child;
-                break;
-            }
-            if (_albumContent == null)
-            {
-                _albumContent = new VisualElement();
-                _albumContent.name = "albumContent";
+                _albumContainer.Clear();
+                _albumContent = new VisualElement { name = "albumContent" };
                 _albumContainer.Add(_albumContent);
             }
+
+            // Match .game-music-form__huadong > VisualElement even if USS lags.
+            _albumContent.style.flexDirection = FlexDirection.Row;
+            _albumContent.style.flexWrap = Wrap.NoWrap;
+            _albumContent.pickingMode = PickingMode.Ignore;
+
+            // Pooled reopen: rebuild labels into this host every open.
+            ClearAlbumStripVisuals();
 
             _albumContainer.pickingMode = PickingMode.Position;
             // Listen on the strip itself with BubbleUp so we don't intercept
@@ -527,14 +561,23 @@ namespace Game
             _albumContainer.RegisterCallback<PointerCancelEvent>(OnAlbumPointerCancel);
             _albumContainer.RegisterCallback<PointerCaptureOutEvent>(OnAlbumPointerCaptureOut);
 
+            // Layout may not have resolved on the first frame after slide-up.
+            Root.schedule.Execute(RefreshAlbumLayout).StartingIn(0);
             Root.schedule.Execute(RefreshAlbumLayout).StartingIn(16);
+            Root.schedule.Execute(RefreshAlbumLayout).StartingIn(50);
         }
 
         void UnbindAlbumDrag()
         {
             if (_albumContainer == null)
                 return;
-            EndAlbumPointerGesture(commit: false);
+            // Do NOT SnapAlbumContent on close — that leaves an in-flight left
+            // animation on a pooled tree and the next open starts off-screen.
+            _albumSnapSchedule?.Pause();
+            _albumSnapSchedule = null;
+            _pointerDownInStrip = false;
+            _isDragging = false;
+            _dragPointerId = -1;
             _albumContainer.UnregisterCallback<PointerDownEvent>(OnAlbumPointerDown);
             _albumContainer.UnregisterCallback<PointerMoveEvent>(OnAlbumPointerMove);
             _albumContainer.UnregisterCallback<PointerUpEvent>(OnAlbumPointerUp);
@@ -558,7 +601,7 @@ namespace Game
             _dragStartX = evt.position.x;
             _dragStartY = evt.position.y;
             _dragStartLeft = _albumContent != null
-                ? _albumContent.resolvedStyle.left
+                ? ReadAlbumContentLeft()
                 : TargetLeftForAlbum(_centerAlbum, MusicCatalog.AlbumCount);
             // Do NOT CapturePointer here — capturing on every Down steals
             // subsequent list clicks/scrolls if Up is missed. Capture only
@@ -652,7 +695,7 @@ namespace Game
                 return;
             }
 
-            float left = _albumContent.resolvedStyle.left;
+            float left = ReadAlbumContentLeft();
             NormalizeAlbumLoop(ref left, albumCount);
             int targetIndex = LogicalAlbumFromLeft(left, albumCount);
 
@@ -692,7 +735,7 @@ namespace Game
 
             albumIndex = ((albumIndex % albumCount) + albumCount) % albumCount;
             float to = TargetLeftForAlbum(albumIndex, albumCount);
-            float startLeft = _albumContent.resolvedStyle.left;
+            float startLeft = ReadAlbumContentLeft();
             NormalizeAlbumLoop(ref startLeft, albumCount);
 
             // Shortest path within the middle-copy neighbourhood.

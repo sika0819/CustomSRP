@@ -401,6 +401,9 @@ namespace Game.Editor.BuildTool
                     return 1;
                 }
 
+                // 导出会覆盖 Gradle/CMake；对齐宿主 :unityLibraryNeo|:unityLibraryYishu + CMake≥3.22.1
+                BoluoAndroidUnityExportHostPatch.Apply(gradleRoot);
+
                 Debug.Log($"[BoluoCI] Android unityLibrary 导出成功: {unityLibrary}");
                 return 0;
             }

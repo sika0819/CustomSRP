@@ -96,4 +96,17 @@ if not os.path.isdir(UNITY_LIBRARY):
     print(f"[runner] 导出目录不存在: {UNITY_LIBRARY}", flush=True)
     sys.exit(1)
 
+# 导出覆盖 Gradle/CMake → 对齐宿主模块名 + CMake≥3.22.1（幂等；Unity 侧也会打）
+_patch = os.path.join(
+    os.path.dirname(OUTPUT_DIR), "scripts", "patch_unity_export_for_host.py"
+)
+if os.path.isfile(_patch):
+    print(f"[runner] patch host: {_patch}", flush=True)
+    patch_rc = subprocess.call([sys.executable, _patch, UNITY_LIBRARY], env=clean_env)
+    if patch_rc != 0:
+        print(f"[runner] host patch 失败 exit={patch_rc}", flush=True)
+        sys.exit(patch_rc)
+else:
+    print(f"[runner] warn: 缺少 host patch 脚本: {_patch}", flush=True)
+
 print(f"[runner] OK: {UNITY_LIBRARY}", flush=True)
