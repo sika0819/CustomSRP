@@ -61,7 +61,14 @@ namespace Game
             if (_still != null)
                 _still.pickingMode = PickingMode.Ignore;
             if (_video != null)
+            {
                 _video.pickingMode = PickingMode.Ignore;
+                // Before player/RT setup: empty video layer must not paint black over still.
+                HideVideoLayer();
+            }
+
+            // Apply still as early as possible so first UITK paint is orientation 底图.
+            ApplyStillForCurrentOrientation();
 
             VisualElement loading = Root.Q("uiloading");
             if (loading != null)
@@ -92,11 +99,13 @@ namespace Game
                 _player = gameObject.AddComponent<VideoPlayer>();
             _player.playOnAwake = false;
             _player.isLooping = true;
+            _player.waitForFirstFrame = true;
             _player.renderMode = VideoRenderMode.RenderTexture;
             // Stretch into RT — never letterbox; UI stretch-to-fill maps RT → screen.
             _player.aspectRatio = VideoAspectRatio.Stretch;
             _player.audioOutputMode = VideoAudioOutputMode.None;
             _player.prepareCompleted += OnPrepared;
+            _player.started += OnVideoStarted;
 
             ScreenLayout.Changed += ApplyOrientation;
             ApplyOrientation();
@@ -220,8 +229,8 @@ namespace Game
 
             if (_still != null)
                 _still.style.display = DisplayStyle.Flex;
-            if (_video != null)
-                _video.style.display = DisplayStyle.Flex;
+            // Do not show video until Prepare/first frame — black RT would flash over still.
+            HideVideoLayer();
             VisualElement loading = Root != null ? Root.Q("uiloading") : null;
             if (loading != null)
             {
@@ -233,6 +242,7 @@ namespace Game
                 _titleLabel.style.display = DisplayStyle.Flex;
 
             SetCoverAlpha(1f);
+            ApplyOrientation();
         }
 
         public override void OnClose(bool isShutdown, object userData)
@@ -241,6 +251,7 @@ namespace Game
             if (_player != null)
             {
                 _player.prepareCompleted -= OnPrepared;
+                _player.started -= OnVideoStarted;
                 _player.Stop();
                 _player.targetTexture = null;
             }
@@ -256,28 +267,40 @@ namespace Game
             base.OnClose(isShutdown, userData);
         }
 
+        void ApplyStillForCurrentOrientation()
+        {
+            bool landscape = ScreenLayout.IsLandscapeForAssets;
+            if (_still == null)
+                return;
+            Texture2D still = landscape ? LandscapeStill : PortraitStill;
+            if (still != null)
+                _still.style.backgroundImage = new StyleBackground(still);
+            _still.style.display = DisplayStyle.Flex;
+        }
+
         void ApplyOrientation()
         {
             bool landscape = ScreenLayout.IsLandscapeForAssets;
-            if (_still != null)
-            {
-                Texture2D still = landscape ? LandscapeStill : PortraitStill;
-                if (still != null)
-                    _still.style.backgroundImage = new StyleBackground(still);
-            }
+            // Still first: host tear-splash / first UITK frame must show 横竖屏底图, not black RT.
+            ApplyStillForCurrentOrientation();
+            BringProgressChromeFront();
 
             if (_player == null)
                 return;
 
             VideoClip clip = landscape ? LandscapeClip : PortraitClip;
             if (clip == null)
+            {
+                HideVideoLayer();
                 return;
+            }
 
             // RT follows clip / design (2436×1125 landscape, 1125×2436 portrait).
             // Old 1920×1080 RT letterboxed the 2436×1124 landscape clip → top/bottom gaps.
             ResolveTargetSize(clip, landscape, out int tw, out int th);
-            if (_texture == null || _landscape != landscape
-                || _texture.width != tw || _texture.height != th)
+            bool rebuildRt = _texture == null || _landscape != landscape
+                || _texture.width != tw || _texture.height != th;
+            if (rebuildRt)
             {
                 if (_texture != null)
                 {
@@ -288,25 +311,68 @@ namespace Game
                 _landscape = landscape;
                 _texture = new RenderTexture(tw, th, 0);
                 _player.targetTexture = _texture;
+                // Bind RT but keep layer hidden — new RT clears black over still.
                 if (_video != null)
                     _video.style.backgroundImage = Background.FromRenderTexture(_texture);
             }
 
-            if (_player.clip != clip)
+            // New RT or new clip: always re-Prepare; never unhide until first frame.
+            if (rebuildRt || _player.clip != clip)
             {
+                HideVideoLayer();
                 _player.Stop();
                 _player.clip = clip;
                 _player.Prepare();
             }
-            else if (!_player.isPlaying && _player.isPrepared)
+            else if (_player.isPrepared)
             {
-                _player.Play();
+                if (!_player.isPlaying)
+                    _player.Play();
+                ShowVideoLayer();
+            }
+            else
+            {
+                HideVideoLayer();
+                _player.Prepare();
             }
         }
 
         void OnPrepared(VideoPlayer player)
         {
+            if (player == null)
+                return;
             player.Play();
+            // waitForFirstFrame: started fires when RT has content; avoid premature unhide.
+            if (!player.waitForFirstFrame)
+                ShowVideoLayer();
+        }
+
+        void OnVideoStarted(VideoPlayer player)
+        {
+            ShowVideoLayer();
+        }
+
+        void HideVideoLayer()
+        {
+            if (_video != null)
+                _video.style.display = DisplayStyle.None;
+        }
+
+        void ShowVideoLayer()
+        {
+            if (_video == null)
+                return;
+            if (_texture != null)
+                _video.style.backgroundImage = Background.FromRenderTexture(_texture);
+            _video.style.display = DisplayStyle.Flex;
+            BringProgressChromeFront();
+        }
+
+        void BringProgressChromeFront()
+        {
+            VisualElement loading = Root != null ? Root.Q("uiloading") : null;
+            if (loading != null)
+                loading.BringToFront();
         }
 
         /// <summary>

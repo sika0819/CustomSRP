@@ -24,6 +24,9 @@ Shader "CustomSRP/OilNPR"
         _TriplanarTiling ("Triplanar Tiling", Float) = 0.25
 
         [Toggle] _OilFoliage ("Foliage (ambient × albedo)", Float) = 0
+        // Billboard only: keep _OilFoliage on, but disable the foliage path around noon
+        // (period≈1). Near leaves leave this off so they stay foliage all day.
+        [Toggle] _OilFoliageSkipDay ("Foliage Off At Noon", Float) = 0
         // Cross-card LOD billboards: yaw kept card to camera, drop the orthogonal card.
         [Toggle] _OilCrossBillboard ("Tree Cross Billboard", Float) = 0
         [NoScaleOffset] _BumpMap ("Billboard Baked Normal (RGB)", 2D) = "bump" {}

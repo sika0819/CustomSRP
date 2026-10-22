@@ -1,3 +1,4 @@
+using Game.Native;
 using UnityEngine;
 
 namespace Game
@@ -858,7 +859,9 @@ namespace Game
 
         void ApplyRenderScale(bool walking)
         {
-            float scale = HudOverlayGate.HasPopup()
+            // Unity 弹窗 / 原生半层 / 闲置沉浸：同一档 0.25（与沉浸降载策略一致）。
+            // 定时窗只抬 BottomIconsHidden、不抬 OverlayPresent，保持场景正常分辨率。
+            float scale = HudOverlayGate.HasPopup() || NativeOverlayGate.OverlayPresent
                 ? IslandCameraSrpSetup.PopupRenderScale
                 : IslandIdleImmersive.IsActive
                     ? IslandCameraSrpSetup.ImmersiveRenderScale

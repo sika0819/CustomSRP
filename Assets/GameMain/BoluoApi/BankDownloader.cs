@@ -66,6 +66,16 @@ namespace Game.BoluoApi
         static readonly Dictionary<string, QueueEntry> Entries =
             new Dictionary<string, QueueEntry>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// <see cref="LocalSatisfiesCatalog"/> 磁盘结果缓存。PresetForm 进度 tick 会高频调用；
+        /// 未缓存时每张卡每 bank 反复 File.Exists/FileInfo，闺蜜机开预设面板会掉帧。
+        /// </summary>
+        static readonly Dictionary<string, LocalReadyCacheEntry> LocalReadyCache =
+            new Dictionary<string, LocalReadyCacheEntry>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>未就绪结果短 TTL，便于下载完成后尽快翻牌；已就绪结果靠显式 Invalidate。</summary>
+        const float LocalReadyNegativeTtlSeconds = 1f;
+
         static readonly List<string> UserQueue = new List<string>();
         static readonly List<string> StartupQueue = new List<string>();
         static readonly List<string> NormalQueue = new List<string>();
@@ -73,16 +83,48 @@ namespace Game.BoluoApi
 
         static bool _runnerActive;
 
+        struct LocalReadyCacheEntry
+        {
+            public bool Ready;
+            public float ExpireUnscaled;
+        }
+
+        /// <summary>
+        /// 进度 / 状态变更单调计数；PresetForm 用它跳过无变化的全卡扫描。
+        /// </summary>
+        public static int ProgressEpoch { get; private set; }
+
+        /// <summary>队列或活跃槽非空 —— 有下载在跑或排队。</summary>
+        public static bool HasBusyWork =>
+            Actives.Count > 0
+            || UserQueue.Count > 0
+            || StartupQueue.Count > 0
+            || NormalQueue.Count > 0;
+
         public static void ResetSession()
         {
             _runnerActive = false;
             _startupParallelSlots = MaxStartupSlots;
             Entries.Clear();
+            LocalReadyCache.Clear();
             UserQueue.Clear();
             StartupQueue.Clear();
             NormalQueue.Clear();
             Actives.Clear();
+            ProgressEpoch = 0;
         }
+
+        /// <summary>下载完成 / 落盘变更后清缓存；bankName 空则全清。</summary>
+        public static void InvalidateLocalReadyCache(string bankName = null)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                LocalReadyCache.Clear();
+            else
+                LocalReadyCache.Remove(bankName);
+            BumpProgressEpoch();
+        }
+
+        static void BumpProgressEpoch() => ProgressEpoch++;
 
         sealed class ActiveSlot
         {
@@ -156,6 +198,26 @@ namespace Game.BoluoApi
                     return false;
             }
 
+            float now = Time.unscaledTime;
+            if (LocalReadyCache.TryGetValue(bankName, out var cached))
+            {
+                if (cached.Ready || now < cached.ExpireUnscaled)
+                    return cached.Ready;
+            }
+
+            bool ready = ProbeLocalSatisfiesCatalog(bankName);
+            LocalReadyCache[bankName] = new LocalReadyCacheEntry
+            {
+                Ready = ready,
+                ExpireUnscaled = ready
+                    ? float.PositiveInfinity
+                    : now + LocalReadyNegativeTtlSeconds,
+            };
+            return ready;
+        }
+
+        static bool ProbeLocalSatisfiesCatalog(string bankName)
+        {
             string stem = AudioEnginePaths.StripBankExtension(bankName);
             string path = Path.Combine(PersistentBankPath, stem + AudioEnginePaths.BankExtension);
             if (!File.Exists(path))
@@ -862,7 +924,7 @@ namespace Game.BoluoApi
 
         static void NotifyBankReady(string bankName)
         {
-            // Preset hooks deferred — download path only.
+            InvalidateLocalReadyCache(bankName);
         }
 
         static bool TryRequeueFailed()
@@ -905,6 +967,7 @@ namespace Game.BoluoApi
         {
             if (entry == null)
                 return;
+            BumpProgressEpoch();
             for (int i = 0; i < entry.OnProgress.Count; i++)
             {
                 try
@@ -916,14 +979,13 @@ namespace Game.BoluoApi
                     Log.Warning($"[BankDownloader] onProgress threw: {e.Message}");
                 }
             }
-
-            // Preset progress hook deferred.
         }
 
         static void FireDone(QueueEntry entry)
         {
             if (entry == null)
                 return;
+            BumpProgressEpoch();
             // 拷贝列表，避免回调里再 Enqueue 改集合
             var done = entry.OnDone.ToArray();
             entry.OnDone.Clear();

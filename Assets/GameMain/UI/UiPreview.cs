@@ -213,6 +213,8 @@ namespace Game
             list.contentContainer.style.flexWrap = Wrap.NoWrap;
             list.contentContainer.style.alignItems = Align.FlexStart;
             list.contentContainer.Clear();
+            // Static Cover on IslandPresetAsset (UI/Textures/PresetItem) — no Resources/PresetCovers.
+            IslandPresetAsset[] presets = Resources.LoadAll<IslandPresetAsset>("IslandPresets");
             for (int i = 0; i < labels.Length; i++)
             {
                 TemplateContainer element = item.Instantiate();
@@ -226,7 +228,18 @@ namespace Game
                 VisualElement cover = element.Q("cover");
                 if (cover != null)
                 {
-                    Texture2D tex = Resources.Load<Texture2D>($"PresetCovers/zhanweitu{i + 1}");
+                    Texture2D tex = null;
+                    if (presets != null)
+                    {
+                        for (int p = 0; p < presets.Length; p++)
+                        {
+                            if (presets[p] != null && presets[p].Id == i + 1)
+                            {
+                                tex = presets[p].Cover;
+                                break;
+                            }
+                        }
+                    }
                     if (tex != null)
                         cover.style.backgroundImage = new StyleBackground(tex);
                 }

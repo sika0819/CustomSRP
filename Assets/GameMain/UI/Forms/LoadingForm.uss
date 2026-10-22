@@ -579,4 +579,6 @@
 }
 .game-loading-form__campfire-video {
     picking-mode: Ignore;
+    /* Default off: empty RT is black and paints above still until VideoPlayer first frame. */
+    display: none;
 }

@@ -100,10 +100,10 @@ namespace Game.Native
                 }
 
                 // 不 UnityPause：pause 清 GL，关页会闪相机蓝。隔帧提交，Surface 留最后一帧。
-                // Android 禁止 1fps / interval=60，Push 消费会被拖死。
+                // Android 禁止 1fps / interval=60，Push 消费会被拖死；按 60 基准隔 4 帧 ≈ 15fps。
 #if UNITY_ANDROID
-                const int overlayFps = 10;
-                const int overlayInterval = 6;
+                const int overlayFps = 15;
+                const int overlayInterval = 4;
 #else
                 const int overlayFps = 1;
                 const int overlayInterval = 60;

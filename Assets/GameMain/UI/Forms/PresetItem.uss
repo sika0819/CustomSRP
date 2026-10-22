@@ -142,7 +142,7 @@
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
     picking-mode: Ignore;
 }
-/* Boluo state_Playing: 78×78, bars pivot bottom-center at y=-20 from mid. */
+/* Boluo state_Playing: 78×78; bars drawn by PresetEqualizerBars (mesh, no layout style). */
 .game-preset-item__stateplaying {
     position: absolute;
     left: 0;
@@ -156,52 +156,12 @@
     display: none;
     picking-mode: Ignore;
 }
-.game-preset-item__bar-left {
+.game-preset-item__equalizer {
     position: absolute;
-    left: 16px;
-    top: 39px;
-    width: 10px;
-    height: 20px;
-    margin: 0;
-    background-image: url("../Textures/HudIcon/bar-left.png");
-    -unity-background-scale-mode: stretch-to-fill;
-    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
-    -unity-slice-left: 0px;
-    -unity-slice-right: 0px;
-    -unity-slice-top: 4px;
-    -unity-slice-bottom: 4px;
-    picking-mode: Ignore;
-}
-.game-preset-item__bar-center {
-    position: absolute;
-    left: 34px;
-    top: 14px;
-    width: 10px;
-    height: 45px;
-    margin: 0;
-    background-image: url("../Textures/HudIcon/bar-center.png");
-    -unity-background-scale-mode: stretch-to-fill;
-    -unity-background-image-tint-color: rgba(166, 255, 0, 1.000);
-    -unity-slice-left: 0px;
-    -unity-slice-right: 0px;
-    -unity-slice-top: 4px;
-    -unity-slice-bottom: 4px;
-    picking-mode: Ignore;
-}
-.game-preset-item__bar-right {
-    position: absolute;
-    left: 52px;
-    top: 29px;
-    width: 10px;
-    height: 30px;
-    margin: 0;
-    background-image: url("../Textures/HudIcon/bar-right.png");
-    -unity-background-scale-mode: stretch-to-fill;
-    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
-    -unity-slice-left: 0px;
-    -unity-slice-right: 0px;
-    -unity-slice-top: 4px;
-    -unity-slice-bottom: 4px;
+    left: 0;
+    top: 0;
+    width: 78px;
+    height: 78px;
     picking-mode: Ignore;
 }
 .game-preset-item__presetitem {

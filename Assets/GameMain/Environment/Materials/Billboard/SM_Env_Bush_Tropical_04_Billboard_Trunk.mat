@@ -17,6 +17,8 @@ Material:
   - _SHADOWS_CLIP
   m_InvalidKeywords:
   - _CANVAS_ON
+  - _OILFOLIAGESKIPDAY_ON
+  - _OILFOLIAGE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -73,7 +75,8 @@ Material:
     - _LeafTexBlend: 0
     - _NormalStrength: 0.85
     - _OilCrossBillboard: 0
-    - _OilFoliage: 0
+    - _OilFoliage: 1
+    - _OilFoliageSkipDay: 1
     - _PaintThickness: 0.18
     - _ReceiveShadows: 1
     - _ShadeLift: 0.42
@@ -85,6 +88,8 @@ Material:
     - _Smoothness: 0
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
+    - _TriplanarTiling: 0.25
+    - _WorldTriplanar: 0
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}

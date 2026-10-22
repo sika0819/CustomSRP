@@ -22,7 +22,7 @@ namespace Game
         /// <summary>走路与站立同档（B5：消 RT 抖动）。</summary>
         public static float WalkingRenderScale => DefaultRenderScale;
 
-        /// <summary>Panel / Dialog 打开时压到 0.25，省 fill 提帧率。</summary>
+        /// <summary>Unity Panel/Dialog 或原生半层（OverlayPresent）打开时压到 0.25，与沉浸同档。</summary>
         public const float PopupRenderScale = 0.25f;
 
         /// <summary>Idle 沉浸模式（HUD 隐去）同样 0.25。</summary>

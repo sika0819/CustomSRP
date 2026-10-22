@@ -48,7 +48,7 @@ namespace Game
                 _presets = loaded;
             }
 
-            EnsureCovers();
+            WarnMissingCovers();
         }
 
         /// <summary>Boluo YuShe list shows schemeInfos[0..9] only.</summary>
@@ -175,17 +175,15 @@ namespace Game
             Apply(preset.Id, teleportPlayer);
         }
 
-        void EnsureCovers()
+        /// <summary>Cover must be assigned on the asset (UI/Textures/PresetItem) — no Resources.Load fill-in.</summary>
+        void WarnMissingCovers()
         {
             for (int i = 0; i < _presets.Length; i++)
             {
                 IslandPresetAsset preset = _presets[i];
                 if (preset == null || preset.Cover != null)
                     continue;
-                int coverId = preset.Id;
-                if (coverId < 1 || coverId > UiPresetCount)
-                    coverId = ((preset.Id - 1) % UiPresetCount) + 1;
-                preset.Cover = Resources.Load<Texture2D>($"PresetCovers/zhanweitu{coverId}");
+                Debug.LogWarning($"[PresetService] Preset id={preset.Id} missing Cover (assign UI/Textures/PresetItem)");
             }
         }
     }

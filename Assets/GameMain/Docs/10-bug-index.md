@@ -93,8 +93,9 @@
 
 1. Profiler 看 `LateUpdate`：`EnvNativeInstancing.DrawAll` 与 `IslandJoystickCamera` 是常驻热点。
 2. 看 `EnvMeshColliderLod.Refresh`（0.25s 全表扫描）与 `EnvItemStreamerLite.EvaluateQueues`（每帧 256 个）。
-3. 看 `HudOverlayGate.GroupHasForms`（每帧分配数组）。
-4. 编辑器与真机差异：真机走 `ApplyMobileTierDefaults()`，半径更小、预算更低。
+3. 看 `HudOverlayGate.HasPopup`（已改 `UIFormCount`；旧版 `GetAllUIForms` 每帧分配）。
+4. 开预设面板掉帧：查 `PresetForm` 进度 tick + `BankDownloader.LocalSatisfiesCatalog` 磁盘探测。
+5. 编辑器与真机差异：真机走 `ApplyMobileTierDefaults()`，半径更小、预算更低。
 
 ### 4.4 状态残留类（第二次进游戏异常）
 

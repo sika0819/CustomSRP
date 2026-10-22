@@ -331,13 +331,9 @@ namespace Game
                     Debug.LogWarning($"[MusicPlaylist] Pause_Music failed: {ex.Message}");
                 }
             }
-            // BGM 不在播就别动内容声闸 —— SetContentAudioPaused(true) 会让 AmbienceZone /
-            // WeatherAudio 立刻 StopAllPlaying() 并停 ticker；只在 BGM 真在播时才有意义。
+            // 定时到点 / 用户暂停：音乐与音效一起停（AmbienceZone / Weather / 雨水 ticker）。
             IsPlaying = false;
-            if (_musicSerialId >= 0)
-            {
-                AudioInteractionBootstrap.SetContentAudioPaused(true);
-            }
+            AudioInteractionBootstrap.SetContentAudioPaused(true);
             // 同步原生 userPaused，否则定时到点后焦点回归/后台续播会把歌又拉起来。
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.MarkUserPausedFromUnity(true);
@@ -371,6 +367,10 @@ namespace Game
             IsPlaying = CurrentAlbumIndex >= 0 && CurrentTrackIndex >= 0 && !_stoppedByUser;
             WanosEngine.Unmute("music-resume");
             AudioInteractionBootstrap.SetContentAudioPaused(false);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // 定时取消依赖此路径出声：原生 pauseForTimerEnd 已 mute，须补抢焦点 + unmute。
+            BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
+#endif
             NowPlayingService.PublishFromPlaylist();
         }
 

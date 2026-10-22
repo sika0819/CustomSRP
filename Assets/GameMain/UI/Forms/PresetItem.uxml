@@ -11,11 +11,7 @@
                 <ui:VisualElement name="fill" class="game-preset-item__fill" />
             </ui:VisualElement>
             <ui:VisualElement name="stateready" class="game-preset-item__stateready" />
-            <ui:VisualElement name="stateplaying" class="game-preset-item__stateplaying">
-                <ui:VisualElement name="barLeft" class="game-preset-item__bar-left" />
-                <ui:VisualElement name="barCenter" class="game-preset-item__bar-center" />
-                <ui:VisualElement name="barRight" class="game-preset-item__bar-right" />
-            </ui:VisualElement>
+            <ui:VisualElement name="stateplaying" class="game-preset-item__stateplaying" />
         </ui:VisualElement>
         <ui:Label name="presetitem" class="game-preset-item__presetitem" text="焦虑袭来" />
     </ui:VisualElement>

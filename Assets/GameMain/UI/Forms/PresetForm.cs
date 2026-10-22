@@ -49,6 +49,19 @@ namespace Game
             public string DisplayName;
             public string[] BankNames;
             public bool UserTriggered;
+            public BankUiState AppliedState;
+            public float AppliedProgress;
+            public bool HasAppliedState;
+            // Cached chrome — avoid root.Q every progress / playing tick.
+            public VisualElement IconWait;
+            public VisualElement IconError;
+            public VisualElement IconSuccess;
+            public VisualElement IconDownloading;
+            public VisualElement IconReady;
+            public VisualElement IconPlaying;
+            public ArcProgressRing ProgressRing;
+            public PresetEqualizerBars Equalizer;
+            public Label Title;
         }
 
         readonly List<ItemBinding> _items = new();
@@ -70,6 +83,10 @@ namespace Game
         float _dragStartX;
         float _scrollStartX;
         int _pressIndex = -1;
+        int _lastProgressEpoch = -1;
+        int _lastSeenCurrentId = -1;
+        int _lastSeenSchemeState = -1;
+        bool _anyPlaying;
 
         public override void OnOpen(object userData)
         {
@@ -186,7 +203,7 @@ namespace Game
                 _list.Add(element);
             }
 
-            RefreshAllStates();
+            RefreshAllStates(force: true);
             SyncScrollTrack();
         }
 
@@ -221,7 +238,7 @@ namespace Game
                 title.text = name;
 
             VisualElement cover = element.Q("cover") ?? element.Q("zhanweitu2Button");
-            ApplyCover(cover, preset, index);
+            ApplyCover(cover, preset);
 
             VisualElement vip = element.Q("vip");
             if (vip != null)
@@ -233,7 +250,7 @@ namespace Game
             element.pickingMode = PickingMode.Position;
             EnsureDownloadRing(element);
 
-            _items.Add(new ItemBinding
+            var binding = new ItemBinding
             {
                 Root = element,
                 Index = index,
@@ -241,7 +258,45 @@ namespace Game
                 DisplayName = name,
                 BankNames = preset != null ? preset.BankNames : null,
                 UserTriggered = _userTriggered.Contains(preset != null ? preset.Id : index + 1),
-            });
+                Title = title,
+            };
+            CacheItemChrome(ref binding);
+            _items.Add(binding);
+        }
+
+        static void CacheItemChrome(ref ItemBinding item)
+        {
+            VisualElement root = item.Root;
+            if (root == null)
+                return;
+
+            item.IconWait = root.Q("statewaitdownload");
+            item.IconError = root.Q("stateerror");
+            item.IconSuccess = root.Q("statedownloadsuccess");
+            item.IconDownloading = root.Q("statedownloading");
+            item.IconReady = root.Q("stateready");
+            item.IconPlaying = root.Q("stateplaying");
+            item.ProgressRing = item.IconDownloading != null
+                ? item.IconDownloading.Q<ArcProgressRing>("fill")
+                : null;
+            item.Equalizer = EnsureEqualizer(item.IconPlaying);
+        }
+
+        /// <summary>Replace legacy barLeft/Center/Right with mesh equalizer (no layout style anim).</summary>
+        static PresetEqualizerBars EnsureEqualizer(VisualElement host)
+        {
+            if (host == null)
+                return null;
+
+            PresetEqualizerBars existing = host.Q<PresetEqualizerBars>("equalizer");
+            if (existing != null)
+                return existing;
+
+            host.Clear();
+            var eq = new PresetEqualizerBars { name = "equalizer" };
+            eq.AddToClassList("game-preset-item__equalizer");
+            host.Add(eq);
+            return eq;
         }
 
         /// <summary>
@@ -273,7 +328,7 @@ namespace Game
                 title.text = name;
 
             VisualElement cover = element.Q("cover") ?? element.Q("zhanweitu2Button");
-            ApplyCover(cover, null, index);
+            ApplyCover(cover, null);
             VisualElement vip = element.Q("vip");
             if (vip != null)
                 vip.style.display = DisplayStyle.None;
@@ -284,7 +339,7 @@ namespace Game
             element.pickingMode = PickingMode.Position;
             EnsureDownloadRing(element);
 
-            _items.Add(new ItemBinding
+            var binding = new ItemBinding
             {
                 Root = element,
                 Index = index,
@@ -292,10 +347,14 @@ namespace Game
                 DisplayName = name,
                 BankNames = null,
                 UserTriggered = false,
-            });
+                Title = title,
+            };
+            CacheItemChrome(ref binding);
+            _items.Add(binding);
         }
 
-        static void ApplyCover(VisualElement cover, IslandPresetAsset preset, int index)
+        /// <summary>Bind-once cover from <see cref="IslandPresetAsset.Cover"/> — no Resources.Load.</summary>
+        static void ApplyCover(VisualElement cover, IslandPresetAsset preset)
         {
             if (cover == null)
                 return;
@@ -303,22 +362,67 @@ namespace Game
             Texture2D tex = preset != null ? preset.Cover : null;
             if (tex == null)
             {
-                int coverId = Mathf.Clamp(index + 1, 1, PresetService.UiPresetCount);
-                tex = Resources.Load<Texture2D>($"PresetCovers/zhanweitu{coverId}");
+                if (preset != null)
+                    Log.Warning($"[PresetForm] Preset id={preset.Id} has no Cover assigned");
+                return;
             }
 
-            if (tex != null)
-                cover.style.backgroundImage = new StyleBackground(tex);
+            cover.style.backgroundImage = new StyleBackground(tex);
         }
 
         // -----------------------------------------------------------------------
         // Card state machine
         // -----------------------------------------------------------------------
 
-        void RefreshAllStates()
+        void RefreshAllStates(bool force = false)
         {
+            int epoch = BankDownloader.ProgressEpoch;
+            int currentId = GameEntry.Presets != null ? GameEntry.Presets.CurrentId : 0;
+            int schemeState = GameEntry.Presets != null ? GameEntry.Presets.SchemeState : 0;
+            bool busy = BankDownloader.HasBusyWork;
+            bool hasUser = _userTriggered.Count > 0;
+
+            if (!force
+                && epoch == _lastProgressEpoch
+                && currentId == _lastSeenCurrentId
+                && schemeState == _lastSeenSchemeState
+                && !hasUser
+                && !busy)
+            {
+                return;
+            }
+
+            // Epoch + ids unchanged, no download: only sync Playing chrome for current / was-playing cards.
+            bool playingOnly = !force
+                && epoch == _lastProgressEpoch
+                && !busy
+                && !hasUser;
+
+            // Download active: narrow to cards that can change bank/progress chrome.
+            bool narrowBusy = !force && !playingOnly && (busy || hasUser);
+
+            _lastProgressEpoch = epoch;
+            _lastSeenCurrentId = currentId;
+            _lastSeenSchemeState = schemeState;
+
             for (int i = 0; i < _items.Count; i++)
-                ApplyItemState(i);
+            {
+                if (playingOnly || narrowBusy)
+                {
+                    ItemBinding item = _items[i];
+                    bool relevant = !item.HasAppliedState
+                        || item.PresetId == currentId
+                        || (item.HasAppliedState && item.AppliedState == BankUiState.Playing)
+                        || (item.HasAppliedState && item.AppliedState == BankUiState.Downloading)
+                        || _userTriggered.Contains(item.PresetId);
+                    if (!relevant)
+                        continue;
+                }
+
+                ApplyItemState(i, force);
+            }
+
+            SyncPlayingAnimTick();
         }
 
         BankUiState ComputeState(in ItemBinding item)
@@ -423,80 +527,100 @@ namespace Game
             return BankUiState.NotDownloaded;
         }
 
-        void ApplyItemState(int index)
+        void ApplyItemState(int index, bool force)
         {
             if (index < 0 || index >= _items.Count)
                 return;
 
             ItemBinding item = _items[index];
             item.UserTriggered = _userTriggered.Contains(item.PresetId);
-            _items[index] = item;
 
             BankUiState state = ComputeState(item);
+            float progress = state == BankUiState.Downloading
+                ? GetBanksProgress(item.BankNames)
+                : item.AppliedProgress;
+
+            // Progress-only: update ring mesh, never touch display/opacity (avoids cover repaint).
+            if (!force
+                && item.HasAppliedState
+                && item.AppliedState == state)
+            {
+                if (state == BankUiState.Downloading
+                    && Mathf.Abs(item.AppliedProgress - progress) >= 0.005f)
+                {
+                    if (item.ProgressRing != null)
+                        item.ProgressRing.FillAmount = progress;
+                    item.AppliedProgress = progress;
+                    _items[index] = item;
+                }
+                else
+                {
+                    _items[index] = item;
+                }
+
+                return;
+            }
+
             VisualElement root = item.Root;
             if (root == null)
+            {
+                _items[index] = item;
                 return;
+            }
 
-            ShowIcon(root, "statewaitdownload", false);
-            ShowIcon(root, "stateerror", false);
-            ShowIcon(root, "statedownloadsuccess", false);
-            ShowIcon(root, "statedownloading", false);
-            ShowIcon(root, "stateready", false);
-            ShowIcon(root, "stateplaying", false);
+            SetIconVisible(item.IconWait, false);
+            SetIconVisible(item.IconError, false);
+            SetIconVisible(item.IconSuccess, false);
+            SetIconVisible(item.IconDownloading, false);
+            SetIconVisible(item.IconReady, false);
+            SetIconVisible(item.IconPlaying, false);
 
-            Label title = root.Q<Label>("presetitem");
-            if (title != null)
-                title.style.color = new Color(25f / 255f, 25f / 255f, 26f / 255f, 1f);
+            if (item.Title != null)
+                item.Title.style.color = new Color(25f / 255f, 25f / 255f, 26f / 255f, 1f);
 
             // Boluo YusheItem: cover Image stays white; select/unselect is Ready/Playing chrome only
             // (no root opacity / cover multiply). Phone card size stays 264 for both.
             root.style.opacity = 1f;
-            VisualElement cover = root.Q("cover") ?? root.Q("zhanweitu2Button");
-            if (cover != null)
-                cover.style.unityBackgroundImageTintColor = Color.white;
 
             switch (state)
             {
                 case BankUiState.Playing:
-                    // Boluo InGameYuSheItemPlaying — three equalizer bars, not ready icon.
-                    ShowIcon(root, "stateplaying", true);
+                    SetIconVisible(item.IconPlaying, true);
                     break;
                 case BankUiState.RedDot:
-                    ShowIcon(root, "statedownloadsuccess", true);
+                    SetIconVisible(item.IconSuccess, true);
                     break;
                 case BankUiState.AllReady:
-                    ShowIcon(root, "stateready", true);
+                    SetIconVisible(item.IconReady, true);
                     break;
                 case BankUiState.NotDownloaded:
-                    ShowIcon(root, "statewaitdownload", true);
+                    SetIconVisible(item.IconWait, true);
                     break;
                 case BankUiState.Downloading:
-                    ShowIcon(root, "statedownloading", true);
-                    UpdateDownloadProgress(root, item);
+                    SetIconVisible(item.IconDownloading, true);
+                    if (item.ProgressRing != null)
+                    {
+                        if (!item.HasAppliedState || item.AppliedState != BankUiState.Downloading)
+                            item.ProgressRing.ResetProgress();
+                        item.ProgressRing.FillAmount = progress;
+                    }
                     break;
                 case BankUiState.Failed:
-                    ShowIcon(root, "stateerror", true);
+                    SetIconVisible(item.IconError, true);
                     break;
             }
+
+            item.AppliedState = state;
+            item.AppliedProgress = progress;
+            item.HasAppliedState = true;
+            _items[index] = item;
         }
 
-        static void ShowIcon(VisualElement root, string name, bool show)
+        static void SetIconVisible(VisualElement icon, bool show)
         {
-            VisualElement icon = root.Q(name);
             if (icon == null)
                 return;
             icon.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
-        }
-
-        void UpdateDownloadProgress(VisualElement root, in ItemBinding item)
-        {
-            ArcProgressRing ring = root.Q<ArcProgressRing>("fill")
-                ?? root.Q("statedownloading")?.Q<ArcProgressRing>("fill");
-            if (ring == null)
-                return;
-
-            // Boluo ArcProgressBar FillAmount 0~1 (InGameYuSheItemDownloading).
-            ring.FillAmount = GetBanksProgress(item.BankNames);
         }
 
         static float GetBanksProgress(string[] banks)
@@ -654,13 +778,13 @@ namespace Game
 
             _userTriggered.Add(item.PresetId);
             PendingDownloadIntent.SetPreset(item.PresetId);
-            ApplyItemState(item.Index);
+            ApplyItemState(item.Index, force: true);
 
             var remotes = PresetBankCatalog.ResolveRemotes(banks);
             if (remotes == null || remotes.Count == 0)
             {
                 Log.Warning($"[PresetForm] No catalog remotes for preset {item.PresetId}");
-                ApplyItemState(item.Index);
+                ApplyItemState(item.Index, force: true);
                 return;
             }
 
@@ -947,8 +1071,9 @@ namespace Game
             StopProgressTick();
             if (Root == null)
                 return;
-            // ≤10Hz — Boluo BankProgressVersion throttle.
-            _progressTick = Root.schedule.Execute(RefreshAllStates).Every(100);
+            // ≤10Hz — Boluo BankProgressVersion throttle. ApplyItemState skips unchanged chrome.
+            // RefreshAllStates(bool force=false) 不能当 method group 传给 Action<TimerState>
+            _progressTick = Root.schedule.Execute(_ => RefreshAllStates()).Every(100);
         }
 
         void StopProgressTick()
@@ -959,67 +1084,74 @@ namespace Game
 
         // Boluo InGameYuSheItemPlaying / state_Playing.prefab (cycleDuration=1).
         const float PlayingCycleDuration = 1f;
-        const float PlayingBarBaseline = 59f;
-        const float PlayingBarLeftBaseH = 20f;
-        const float PlayingBarCenterBaseH = 45f;
-        const float PlayingBarRightBaseH = 30f;
-        const float PlayingLeftPhase = 0f;
-        const float PlayingCenterPhase = 2.094395f;
-        const float PlayingRightPhase = 4.18879f;
-        const float PlayingLeftMin = 0.28f;
-        const float PlayingLeftMax = 1f;
-        const float PlayingCenterMin = 0.16f;
-        const float PlayingCenterMax = 0.95f;
-        const float PlayingRightMin = 0.24f;
-        const float PlayingRightMax = 1f;
 
         void StartPlayingAnimTick()
         {
-            StopPlayingAnimTick();
-            if (Root == null)
-                return;
-            _playingAnimTick = Root.schedule.Execute(TickPlayingBars).Every(33);
+            SyncPlayingAnimTick();
         }
 
         void StopPlayingAnimTick()
         {
             _playingAnimTick?.Pause();
             _playingAnimTick = null;
+            _anyPlaying = false;
+        }
+
+        void SyncPlayingAnimTick()
+        {
+            bool any = false;
+            for (int i = 0; i < _items.Count; i++)
+            {
+                ItemBinding item = _items[i];
+                if (item.HasAppliedState && item.AppliedState == BankUiState.Playing)
+                {
+                    any = true;
+                    break;
+                }
+            }
+
+            _anyPlaying = any;
+            if (!any)
+            {
+                _playingAnimTick?.Pause();
+                _playingAnimTick = null;
+                return;
+            }
+
+            if (Root == null || _playingAnimTick != null)
+                return;
+
+            _playingAnimTick = Root.schedule.Execute(TickPlayingBars).Every(50);
         }
 
         void TickPlayingBars()
         {
-            if (_items.Count == 0 || PlayingCycleDuration <= 0f)
+            if (!_anyPlaying || _items.Count == 0 || PlayingCycleDuration <= 0f)
                 return;
 
             float t = Time.unscaledTime * (Mathf.PI * 2f / PlayingCycleDuration);
+            bool any = false;
             for (int i = 0; i < _items.Count; i++)
             {
-                VisualElement root = _items[i].Root;
-                VisualElement host = root?.Q("stateplaying");
-                if (host == null || host.resolvedStyle.display == DisplayStyle.None)
+                ItemBinding item = _items[i];
+                if (!item.HasAppliedState || item.AppliedState != BankUiState.Playing)
+                    continue;
+                if (item.Equalizer == null)
+                    continue;
+                if (item.IconPlaying != null
+                    && item.IconPlaying.resolvedStyle.display == DisplayStyle.None)
                     continue;
 
-                PlacePlayingBar(host.Q("barLeft"), t, PlayingLeftPhase,
-                    PlayingLeftMin, PlayingLeftMax, PlayingBarLeftBaseH);
-                PlacePlayingBar(host.Q("barCenter"), t, PlayingCenterPhase,
-                    PlayingCenterMin, PlayingCenterMax, PlayingBarCenterBaseH);
-                PlacePlayingBar(host.Q("barRight"), t, PlayingRightPhase,
-                    PlayingRightMin, PlayingRightMax, PlayingBarRightBaseH);
+                item.Equalizer.Tick(t);
+                any = true;
             }
-        }
 
-        static void PlacePlayingBar(
-            VisualElement bar, float time, float phase, float minScale, float maxScale, float baseHeight)
-        {
-            if (bar == null)
-                return;
-
-            float wave = (Mathf.Sin(time + phase) + 1f) * 0.5f;
-            float scaleY = Mathf.Lerp(minScale, maxScale, wave);
-            float h = baseHeight * scaleY;
-            bar.style.height = h;
-            bar.style.top = PlayingBarBaseline - h;
+            if (!any)
+            {
+                _anyPlaying = false;
+                _playingAnimTick?.Pause();
+                _playingAnimTick = null;
+            }
         }
 
         void EnsureToast()

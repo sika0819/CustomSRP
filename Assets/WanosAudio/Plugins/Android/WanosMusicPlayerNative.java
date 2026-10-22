@@ -732,7 +732,9 @@ public class WanosMusicPlayerNative {
 
     /**
      * 定时到点停播（前后台均可）。不依赖 Unity Update 消费 Push。
-     * 发 Pause_Music 保留实例便于弹窗「取消/重复」续播；置 userPaused 防焦点回归/后台续播擅自出声。
+     * Pause_Music 停 BGM（保留实例便于弹窗「取消/重复」续播）；
+     * Pause_ALL 停环境/天气等音效（对齐负一屏 pause + 产品「到点停音乐和音效」）；
+     * mute + userPaused 防焦点回归/后台续播擅自出声。
      */
     public void pauseForTimerEnd() {
         playbackExecutor.execute(() -> {
@@ -740,7 +742,8 @@ public class WanosMusicPlayerNative {
             musicEngineMuted = true;
             probeSetMute(true);
             postMusicControlEvent("Pause_Music");
-            Log.i(TAG, "pauseForTimerEnd: userPaused=true");
+            postMusicControlEvent("Pause_ALL");
+            Log.i(TAG, "pauseForTimerEnd: Pause_Music+Pause_ALL userPaused=true");
             mainHandler.post(() -> updateNowPlayingPlayingState(false));
             notifyUnityPlaybackState(false);
         });
@@ -1807,22 +1810,25 @@ public class WanosMusicPlayerNative {
     }
 
     /**
-     * 续播当前曲：BGM 实例还在只 unmute；实例已没则按 playlist 索引重新 PostEvent。
-     * 负一屏 play、岛内点按 resumeFromUserAction 共用。焦点失败返回 false，调用方不得 RequestResumeAll。
+     * 用户明确续播：Resume_ALL + Resume_Music + unmute。
+     * 负一屏 play、岛内点按、定时结束弹窗「取消/重复」resumeFromUserAction 共用。
+     * 焦点失败返回 false，调用方不得 RequestResumeAll。
+     * <p>
+     * CustomSRP 起播走 Unity {@code PostEvent}，{@link #currentInstanceId} 常为 0
+     * （仅 {@link #nativePlayTrackAt} 会写入）。{@link #pauseForTimerEnd()} 仍发全局
+     * Pause_Music + mute，故续播不能按「有无 native instance」分支去
+     * {@code nativePlayTrackAt}（playlist 空/资源未齐时静默 return，且不 unmute → 取消无声）。
      */
     private boolean resumeAudibleMusic(String reason) {
         if (!ensureFocusBeforeAudible(reason)) {
             return false;
         }
-        if (hasLiveMusicInstance()) {
-            Log.i(TAG, reason + ": music instance live, unmute only");
-            runGuardedUnmuteOnCurrentThread(reason);
-            mainHandler.post(this::updateNowPlayingForCurrentTrack);
-            return true;
-        }
-        Log.i(TAG, reason + ": no music instance, replay current track");
-        resetAndSetPlaybackDevice(false);
-        nativePlayTrackAt(playlist.currentListIndex, playlist.currentMusicIndex);
+        Log.i(TAG, reason + ": Resume_Music + unmute liveInstance=" + hasLiveMusicInstance());
+        // 对齐 handleTransportInBackground：先内容声再 BGM，再 unmute 爬坡。
+        postMusicControlEvent("Resume_ALL");
+        postMusicControlEvent("Resume_Music");
+        runGuardedUnmuteOnCurrentThread(reason);
+        mainHandler.post(this::updateNowPlayingForCurrentTrack);
         return true;
     }
 
@@ -2458,7 +2464,10 @@ public class WanosMusicPlayerNative {
         final String value = playing ? "1" : "0";
         mainHandler.post(() -> {
             try {
-                UnityPlayer.UnitySendMessage(unityObjectName, "OnNativePlaybackStateChanged", value);
+                // 必须发到 BoluoMusicPlayerAndroid（与 OnNowPlayingPlay 等一致）。
+                // unityObjectName 默认是 WanosMusicPlayer，那边没有 OnNativePlaybackStateChanged，
+                // 定时结束弹窗续播时 Unity 侧 RequestResumeAll 会静默丢单。
+                UnityPlayer.UnitySendMessage("BoluoMusicPlayerAndroid", "OnNativePlaybackStateChanged", value);
             } catch (Exception e) {
                 Log.w(TAG, "notifyUnityPlaybackState failed: " + e.getMessage());
             }

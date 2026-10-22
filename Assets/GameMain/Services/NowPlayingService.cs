@@ -294,7 +294,13 @@ namespace Game
                     SchedulePlayPause(wantMute: true);
                     break;
                 case MsgType.MediaPlay:
-                    SchedulePlayPause(wantMute: false);
+                    // 定时结束弹窗「取消/重复」：立刻 ResumeAfterTimerEnd（音乐+音效闸+EnsureAudible），
+                    // 跳过 coalesce/skip，与原生 resumeFromUserAction 双保险。
+                    _userManuallyPaused = false;
+                    _pendingPlayPauseAt = -1f;
+                    _skipCancelPending = false;
+                    music.ResumeAfterTimerEnd("media-play");
+                    PublishFromPlaylist();
                     break;
                 case MsgType.MediaNext:
                     AcceptSkip(() => music.Next());

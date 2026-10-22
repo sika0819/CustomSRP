@@ -6,7 +6,7 @@ namespace Game
     /// <summary>Panel/Dialog open → block joystick and idle immersive.</summary>
     public static class HudOverlayGate
     {
-        /// <summary>Unity Panel/Dialog only（相机 renderScale 等仍只认这一层）。</summary>
+        /// <summary>Unity Panel/Dialog only。相机 renderScale 另认 NativeOverlayGate.OverlayPresent（同档 0.25）。</summary>
         public static bool HasPopup()
         {
             return GroupHasForms("Panel") || GroupHasForms("Dialog");
@@ -29,10 +29,8 @@ namespace Game
             if (GameEntry.UI == null)
                 return false;
             IUIGroup group = GameEntry.UI.GetUIGroup(groupName);
-            if (group == null)
-                return false;
-            IUIForm[] forms = group.GetAllUIForms();
-            return forms != null && forms.Length > 0;
+            // UIFormCount — 勿 GetAllUIForms()：相机每帧 HasPopup 会分配 IUIForm[]。
+            return group != null && group.UIFormCount > 0;
         }
     }
 }

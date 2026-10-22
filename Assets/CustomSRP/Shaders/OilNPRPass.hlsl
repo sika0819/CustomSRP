@@ -51,9 +51,9 @@ Varyings OilNPRPassVertex(Attributes input)
     float3 normalOS = input.normalOS;
     float3 normalWS;
     float keep = 1.0;
-    // Metal stage-split: both flags must be read in vertex or fragment-only
+    // Metal stage-split: flags must be read in vertex or fragment-only
     // CBUFFER members are stripped while this file is still parsed.
-    float foliageFlag = _OilFoliage;
+    float foliageFlag = OilEffectiveFoliageFlag(_OilFoliage, _OilFoliageSkipDay);
     float crossBb = _OilCrossBillboard;
     if (crossBb > 0.5)
     {
@@ -152,7 +152,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     half brush = SampleShadowBrush(input.positionWS, config.baseUV);
 
     // Keep material flags live on Metal fragment stage (vertex-only reads get stripped).
-    float foliageFlagFrag = _OilFoliage;
+    float foliageFlagFrag = OilEffectiveFoliageFlag(_OilFoliage, _OilFoliageSkipDay);
     float crossBbFrag = _OilCrossBillboard;
 
     // Far cross-card: same OilFoliageLighting as near leaves (BoluoUnity LitAlbedoObject).
@@ -175,8 +175,11 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         return half4(bb, alpha);
     }
 
-    // Near leaves: live albedo × (N·L * sun * shadow + SH), then distance fog.
-    if (foliageFlagFrag > 0.5)
+    // Foliage weight 0..1 (billboard SkipDay follows period; near leaves stay 0/1).
+    // Steady 0/1 = single path; mid values lerp foliage↔NPR across the 2s dial blend.
+    half foliageW = (half)saturate(foliageFlagFrag);
+
+    if (foliageW >= 0.999h)
     {
         half3 foliage = OilFoliageLighting(
             surface, albedo, (half)_ShadeSteps, config.fragment.screenUV);
@@ -190,7 +193,6 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     }
 
 #if defined(OIL_MOBILE_PERF)
-    // Quantize bands only — no dither / rim / weave / fog-canvas.
     half3 color = OilNPRLighting(
         surface,
         albedo,
@@ -228,6 +230,20 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     color = OilWeaveTint(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);
 #endif
+
+    if (foliageW > 0.001h)
+    {
+        half3 foliage = OilFoliageLighting(
+            surface, albedo, (half)_ShadeSteps, config.fragment.screenUV);
+#if defined(OIL_MOBILE_PERF)
+        foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush);
+#else
+        foliage = OilWeaveTint(foliage, input.positionWS.xz * 0.15);
+        foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush, input.positionWS);
+#endif
+        color = lerp(color, foliage, foliageW);
+    }
+
     return half4(color, alpha);
 }
 

@@ -50,11 +50,13 @@ namespace WanosAudio
         /// <summary>
         /// play/pause flush 时状态已一致则只补 NowPlaying UI，不碰设备。
         /// mute 方向须同时 userManuallyPaused：冷启动 isMuted 初值 YES 不能当成已暂停。
+        /// play 方向也须 !userManuallyPaused：定时到点原生已 Pause_Music 但 Unity 尚未 Drain
+        /// 时 IsPlaying 仍可能为 true，若只看 !isMuted 会把 MediaPlay 续播吞掉。
         /// </summary>
         public static bool ShouldSkipFlushBecauseAlreadyConsistent(
             bool wantMute,
             bool isMuted,
             bool userManuallyPaused)
-            => wantMute ? (isMuted && userManuallyPaused) : !isMuted;
+            => wantMute ? (isMuted && userManuallyPaused) : (!isMuted && !userManuallyPaused);
     }
 }

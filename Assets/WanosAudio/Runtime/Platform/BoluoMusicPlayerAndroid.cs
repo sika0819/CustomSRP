@@ -167,18 +167,14 @@ namespace WanosAudio
         {
             if (!sIsInitialized)
                 return;
-            bool playing = value == "1";
-            if (playing)
-            {
-                OnNowPlayingPlay("");
-                return;
-            }
 
-            // 后台负一屏 / 锁屏暂停由原生直接 Pause_Music，并排队这条消息。
-            // Unity 解 pause 后若再走 OnNowPlayingPause → RequestPauseAll，
-            // 会把 AudioAppLifecycle 刚恢复的播放又掐掉，且 _needsRestore 已清、
-            // 点场景也无法再恢复。暂停态回前台由 ResyncFromNative + RestoreForegroundAudio
-            //（覆盖暂停）处理，这里对 pause 通知 no-op。
+            // 原生已落地控播（resumeFromMediaControl / pauseForTimerEnd 等）后的状态回传。
+            // 禁止再进 OnNowPlayingPlay / OnNowPlayingPause：
+            // play → ResumeFromUserAction 会重入 unmute 爬坡（bump generation）→ 音量一顿一顿甚至卡死；
+            // pause → RequestPauseAll 会把刚恢复的播放再掐掉。
+            // Unity 播放态由 MediaCommand / MusicPlaylist 对账；此处只收起暂停 tip。
+            if (value == "1")
+                MusicPauseUICallback.Hide();
         }
 
         public void OnMediaSkipNext(string empty)

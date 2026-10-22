@@ -30,6 +30,7 @@ CBUFFER_START(UnityPerMaterial)
     float _WorldTriplanar;
     float _TriplanarTiling;
     float _OilFoliage;
+    float _OilFoliageSkipDay;
     float _OilCrossBillboard;
     float _NormalStrength;
     float _EdgeFade;
@@ -38,6 +39,42 @@ CBUFFER_END
 
 // 风力参数：与草风力系统共享全局 uniform。
 float3 _OilGrassWindDir;
+
+// OilSkyboxTime: 0 dawn / 1 day / 2 dusk / 3 night (wraps to 4).
+#ifndef OIL_SKY_PERIOD_DECLARED
+#define OIL_SKY_PERIOD_DECLARED
+float _OilSkyPeriod;
+#endif
+
+// Billboard SkipDay: foliage weight 1 at dawn/dusk/night, 0 at noon.
+// Spans the full morning↔noon and noon↔evening arcs so WeatherService's
+// 2s Hours lerp (SmoothStep) drives a continuous blend — not a 0.5 snap.
+float OilFoliagePeriodWeight(float period)
+{
+    if (period < 0.0 || period > 4.0)
+        period = 1.0;
+    period = period - floor(period * 0.25) * 4.0;
+
+    // 0→1 morning→noon: 1→0
+    if (period < 1.0)
+        return 1.0 - saturate(period);
+    // 1→2 noon→evening: 0→1
+    if (period < 2.0)
+        return saturate(period - 1.0);
+    // evening / night
+    return 1.0;
+}
+
+// Near leaves (skipDay=0): returns material _OilFoliage as 0/1.
+// Billboards (skipDay=1): returns 0..1 period weight for lighting lerp.
+float OilEffectiveFoliageFlag(float foliageFlag, float skipDay)
+{
+    if (foliageFlag < 0.5)
+        return 0.0;
+    if (skipDay < 0.5)
+        return foliageFlag;
+    return OilFoliagePeriodWeight(_OilSkyPeriod);
+}
 
 #include "OilShadowBrush.hlsl"
 #include "OilTreeCrossBillboard.hlsl"

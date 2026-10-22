@@ -147,7 +147,7 @@ static void ApplyAfterTerrainSpawn(GameObject terrainInstance);
 | 出生位姿 | `IslandSpawnPose` |
 | 草地 sidecar | `Island_GrassBake`（编辑器 `Assets/AssetRaw/Configs/Island_GrassBake.bytes`，也可在 `StreamingAssets/Island_GrassBake.bytes`） |
 | MapItem | `MapItem` + `AllMapItem` + `MapItemExtras` |
-| 预设 | `Assets/GameMain/Environment/IslandPresets`（采集组 `IslandPresets`）、封面 `Resources/PresetCovers/zhanweitu{1..10}.png` |
+| 预设 | `Assets/GameMain/Environment/IslandPresets`（采集组 `IslandPresets`）、封面 `IslandPresetAsset.Cover` → `UI/Textures/PresetItem/zhanweitu{1..10}.png` |
 
 ## 日志 tag
 
