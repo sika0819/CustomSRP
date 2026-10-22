@@ -93,6 +93,8 @@ namespace Game
             _player.playOnAwake = false;
             _player.isLooping = true;
             _player.renderMode = VideoRenderMode.RenderTexture;
+            // Stretch into RT — never letterbox; UI stretch-to-fill maps RT → screen.
+            _player.aspectRatio = VideoAspectRatio.Stretch;
             _player.audioOutputMode = VideoAudioOutputMode.None;
             _player.prepareCompleted += OnPrepared;
 
@@ -152,6 +154,87 @@ namespace Game
                 _coverRoot.style.opacity = _coverAlpha;
         }
 
+        /// <summary>
+        /// 退登重登：UIManager Close 后 UITK 偶发仍挡全屏黑罩。进岛前强制拆视觉。
+        /// </summary>
+        public void ForceVeilOff()
+        {
+            _coverAlpha = 0f;
+            if (_coverRoot != null)
+            {
+                _coverRoot.style.opacity = 0f;
+                _coverRoot.style.display = DisplayStyle.None;
+                _coverRoot.pickingMode = PickingMode.Ignore;
+            }
+
+            if (Root != null)
+            {
+                Root.style.display = DisplayStyle.None;
+                Root.pickingMode = PickingMode.Ignore;
+            }
+
+            UIDocument document = GetComponent<UIDocument>();
+            if (document != null)
+            {
+                if (document.rootVisualElement != null)
+                {
+                    document.rootVisualElement.style.display = DisplayStyle.None;
+                    document.rootVisualElement.pickingMode = PickingMode.Ignore;
+                }
+
+                document.enabled = false;
+            }
+
+            gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// 撤销 <see cref="ForceVeilOff"/> / PrepareBlackFade，供退登后再 Show 加载罩。
+        /// </summary>
+        public void RestoreCover()
+        {
+            gameObject.SetActive(true);
+            UIDocument document = GetComponent<UIDocument>();
+            if (document != null)
+            {
+                document.enabled = true;
+                if (document.rootVisualElement != null)
+                {
+                    document.rootVisualElement.style.display = DisplayStyle.Flex;
+                    document.rootVisualElement.pickingMode = PickingMode.Position;
+                }
+            }
+
+            if (Root != null)
+            {
+                Root.style.display = DisplayStyle.Flex;
+                Root.pickingMode = PickingMode.Position;
+            }
+
+            if (_coverRoot != null)
+            {
+                _coverRoot.style.display = DisplayStyle.Flex;
+                _coverRoot.style.backgroundColor = StyleKeyword.Null;
+                _coverRoot.pickingMode = PickingMode.Position;
+            }
+
+            if (_still != null)
+                _still.style.display = DisplayStyle.Flex;
+            if (_video != null)
+                _video.style.display = DisplayStyle.Flex;
+            VisualElement loading = Root != null ? Root.Q("uiloading") : null;
+            if (loading != null)
+            {
+                loading.style.display = DisplayStyle.Flex;
+                loading.BringToFront();
+            }
+
+            if (_titleLabel != null)
+                _titleLabel.style.display = DisplayStyle.Flex;
+
+            SetCoverAlpha(1f);
+        }
+
         public override void OnClose(bool isShutdown, object userData)
         {
             ScreenLayout.Changed -= ApplyOrientation;
@@ -169,6 +252,7 @@ namespace Game
                 _texture = null;
             }
 
+            ForceVeilOff();
             base.OnClose(isShutdown, userData);
         }
 
@@ -189,7 +273,11 @@ namespace Game
             if (clip == null)
                 return;
 
-            if (_texture == null || _landscape != landscape)
+            // RT follows clip / design (2436×1125 landscape, 1125×2436 portrait).
+            // Old 1920×1080 RT letterboxed the 2436×1124 landscape clip → top/bottom gaps.
+            ResolveTargetSize(clip, landscape, out int tw, out int th);
+            if (_texture == null || _landscape != landscape
+                || _texture.width != tw || _texture.height != th)
             {
                 if (_texture != null)
                 {
@@ -198,7 +286,7 @@ namespace Game
                 }
 
                 _landscape = landscape;
-                _texture = new RenderTexture(landscape ? 1920 : 1080, landscape ? 1080 : 1920, 0);
+                _texture = new RenderTexture(tw, th, 0);
                 _player.targetTexture = _texture;
                 if (_video != null)
                     _video.style.backgroundImage = Background.FromRenderTexture(_texture);
@@ -219,6 +307,23 @@ namespace Game
         void OnPrepared(VideoPlayer player)
         {
             player.Play();
+        }
+
+        /// <summary>
+        /// Design landscape d = 2436/1125. Prefer clip pixels when available so Stretch
+        /// into RT is 1:1; screen aspect then only stretches at the UITK layer.
+        /// </summary>
+        static void ResolveTargetSize(VideoClip clip, bool landscape, out int width, out int height)
+        {
+            if (clip != null && clip.width > 0 && clip.height > 0)
+            {
+                width = (int)clip.width;
+                height = (int)clip.height;
+                return;
+            }
+
+            width = landscape ? 2436 : 1125;
+            height = landscape ? 1125 : 2436;
         }
     }
 }

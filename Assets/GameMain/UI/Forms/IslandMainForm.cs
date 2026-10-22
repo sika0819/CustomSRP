@@ -1,3 +1,4 @@
+using System;
 using Game.Native;
 using GameFramework.Event;
 using UnityEngine;
@@ -94,9 +95,16 @@ namespace Game
             OnClick("volumeBackground", () => UiAssets.OpenPanel(UiAssets.VolumeForm));
             OnClick("presetIcon", TryOpenPresetPanel);
             // Hybrid HUD：原生个人中心 / 定时 / 健康；Editor 走 NativeEditorHud 模拟。
+            // 健康入口仅 iOS（及 Editor）展示；Android 真机隐藏。
             OnClick("profile", () => NativeBridgeFacade.HudProfile());
             OnClick("timerBackground", () => NativeBridgeFacade.HudTimer());
+            VisualElement healthIcon = Root.Q("defaultState2");
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (healthIcon != null)
+                healthIcon.style.display = DisplayStyle.None;
+#else
             OnClick("defaultState2", () => NativeBridgeFacade.HudHealth());
+#endif
             OnClick("timeBackground2", CycleTimePeriod);
 
             _timeHand = Root.Q("timeHand");
@@ -114,8 +122,6 @@ namespace Game
             EnsureTimeDialTextures();
             EnsureTimeLabelText();
             HideTimeToastImmediate();
-            EnsurePresetChrome();
-            ResetPresetChrome();
 
             VisualElement weatherIcon = Root.Q("weatherBackground");
             _weatherGlyph = weatherIcon?.Q("glyph");
@@ -139,6 +145,7 @@ namespace Game
             if (pauseHint != null)
                 pauseHint.style.opacity = 0;
 
+            // 摇杆必须先于 ResetPresetChrome：Abort 若抛错会导致 OnOpen 半截、无摇杆。
             VisualElement formRoot = Root.Q("root") ?? Root;
             _joystick?.Dispose();
             _joystick = IslandVirtualJoystick.Attach(formRoot);
@@ -151,6 +158,9 @@ namespace Game
             _hudIcons = Root.Q("hudIcons");
             _idle.Bind(_hudHeader, _hudIcons, Root.Q("breathHint"));
 
+            EnsurePresetChrome();
+            ResetPresetChrome();
+
             if (!_layoutHooked)
             {
                 ScreenLayout.Changed += OnScreenLayoutChanged;
@@ -161,13 +171,9 @@ namespace Game
             Root.schedule.Execute(ApplyInputLayout).StartingIn(0);
             Root.schedule.Execute(ApplyInputLayout).StartingIn(50);
 
-            if (GameEntry.Event != null)
-            {
-                GameEntry.Event.Subscribe(TimeOfDayChangedEventArgs.EventId, OnTimeChanged);
-                GameEntry.Event.Subscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
-                GameEntry.Event.Subscribe(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest);
-                GameEntry.Event.Subscribe(NativeTimerEventArgs.EventId, OnNativeTimer);
-            }
+            // Check 后再退订：未订阅时 Unsubscribe 会抛。
+            ResubscribeHudEvents();
+            IslandJoystickCamera.Current?.ForceUnlockLocomotion();
 
             // Cold-start: wall clock → Period → four cardinal dial snaps (Boluo InitClockHandFromTimeType).
             GameEntry.Weather?.ApplyLocalClockIfNeeded();
@@ -195,15 +201,34 @@ namespace Game
             _joystick?.Dispose();
             _joystick = null;
 
-            if (GameEntry.Event != null)
-            {
-                GameEntry.Event.Unsubscribe(TimeOfDayChangedEventArgs.EventId, OnTimeChanged);
-                GameEntry.Event.Unsubscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
-                GameEntry.Event.Unsubscribe(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest);
-                GameEntry.Event.Unsubscribe(NativeTimerEventArgs.EventId, OnNativeTimer);
-            }
-
+            UnsubscribeHudEvents();
             base.OnClose(isShutdown, userData);
+        }
+
+        void ResubscribeHudEvents()
+        {
+            UnsubscribeHudEvents();
+            if (GameEntry.Event == null)
+                return;
+            GameEntry.Event.Subscribe(TimeOfDayChangedEventArgs.EventId, OnTimeChanged);
+            GameEntry.Event.Subscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
+            GameEntry.Event.Subscribe(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest);
+            GameEntry.Event.Subscribe(NativeTimerEventArgs.EventId, OnNativeTimer);
+        }
+
+        void UnsubscribeHudEvents()
+        {
+            if (GameEntry.Event == null)
+                return;
+            // Check 后再退：未订阅时 Unsubscribe 会抛 GameFrameworkException。
+            if (GameEntry.Event.Check(TimeOfDayChangedEventArgs.EventId, OnTimeChanged))
+                GameEntry.Event.Unsubscribe(TimeOfDayChangedEventArgs.EventId, OnTimeChanged);
+            if (GameEntry.Event.Check(WeatherChangedEventArgs.EventId, OnWeatherChanged))
+                GameEntry.Event.Unsubscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
+            if (GameEntry.Event.Check(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest))
+                GameEntry.Event.Unsubscribe(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest);
+            if (GameEntry.Event.Check(NativeTimerEventArgs.EventId, OnNativeTimer))
+                GameEntry.Event.Unsubscribe(NativeTimerEventArgs.EventId, OnNativeTimer);
         }
 
         public override void OnUpdate(float elapseSeconds, float realElapseSeconds)
@@ -514,13 +539,21 @@ namespace Game
 
         void AbortPresetTransitionCleanup()
         {
-            PresetIrisOverlay.Clear();
-            PresetWeatherHold.Abort();
-            IslandJoystickCamera.Current?.EndTransitionDrive();
-            ShowInputBlocker(false);
-            SetHudVisible(true);
-            _locomotion.ForceEnd();
-            GameEntry.Presets?.AbortTransition();
+            // 二次进岛相机/音频可能半销毁：任一步抛错都不得打断 OnOpen（否则无摇杆）。
+            try { PresetIrisOverlay.Clear(); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] iris Clear: " + e.Message); }
+            try { PresetWeatherHold.Abort(); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] weather Abort: " + e.Message); }
+            try { IslandJoystickCamera.Current?.ForceUnlockLocomotion(); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] camera unlock: " + e.Message); }
+            try { ShowInputBlocker(false); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] veil: " + e.Message); }
+            try { SetHudVisible(true); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] hud: " + e.Message); }
+            try { _locomotion?.ForceEnd(); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] loco: " + e.Message); }
+            try { GameEntry.Presets?.AbortTransition(); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] preset Abort: " + e.Message); }
             _irisPhase = IrisPhase.None;
             _phaseElapsed = 0f;
             _presetTransitionBusy = false;
@@ -545,10 +578,11 @@ namespace Game
                 if (_phaseElapsed < OutlensSeconds)
                     return;
 
-                PresetIrisOverlay.Peak();
-                GameEntry.Presets?.Apply(_transitionPresetId, teleportPlayer: true);
+                // 先切 Holding，避免 Apply 重/抛错时每帧重复 Apply 钉死 SchemeState=1。
                 _irisPhase = IrisPhase.Holding;
                 _phaseElapsed = 0f;
+                PresetIrisOverlay.Peak();
+                GameEntry.Presets?.Apply(_transitionPresetId, teleportPlayer: true);
                 return;
             }
 
@@ -561,6 +595,8 @@ namespace Game
 
                 _irisPhase = IrisPhase.Entering;
                 _phaseElapsed = 0f;
+                // Unduck while iris opens — Peak already Cleared/Retargeted under silence.
+                ContentAudioDuck.BeginFull();
                 SchedulePresetLabelAfterReveal();
                 return;
             }
@@ -600,24 +636,25 @@ namespace Game
 
         void FinishPresetReveal()
         {
+            // 先清相位，避免 Release/音频路径抛错时每帧重入 Finish 钉死行走。
+            if (_irisPhase == IrisPhase.None && !_presetTransitionBusy)
+                return;
+            _irisPhase = IrisPhase.None;
+            _phaseElapsed = 0f;
+            _presetTransitionBusy = false;
+            int queued = _queuedPresetId;
+            _queuedPresetId = 0;
+
             PresetIrisOverlay.Clear();
             IslandJoystickCamera.Current?.EndTransitionDrive();
             PresetWeatherHold.Release();
             ShowInputBlocker(false);
             SetHudVisible(true);
             _locomotion.ForceEnd();
-
-            _irisPhase = IrisPhase.None;
-            _phaseElapsed = 0f;
-            _presetTransitionBusy = false;
             GameEntry.Presets?.MarkPlaying();
 
-            if (_queuedPresetId > 0)
-            {
-                int next = _queuedPresetId;
-                _queuedPresetId = 0;
-                BeginPresetTransition(next);
-            }
+            if (queued > 0)
+                BeginPresetTransition(queued);
         }
 
         void ShowInputBlocker(bool on)

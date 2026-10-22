@@ -158,6 +158,8 @@ static void ApplyAfterTerrainSpawn(GameObject terrainInstance);
 | 现象 | 原因 | 处理 |
 |---|---|---|
 | 天气改了但画面不变 | `WeatherService` 的 driver 缓存 2s，新挂载的 `OilAtmosphereDriver` 收不到推送 | 世界加载完成后 `WeatherService.PushVisuals()` 会补推；其它时机需手动调 |
+| 真机已是「雨」仍无雨丝 | Runtime `Shader.Find` / Yoo 双份 Settings / 缺 `streakMaterial` | 见 [11-rain-device-visual.md](11-rain-device-visual.md)；须重打 Yoo + 真机包 |
+| 真机完全没云 | `TuneCloudsForMobile`（`#if !UNITY_EDITOR`）Disable `OilCloudLayer` | **有意为之**，不是丢资源；与雨无关 |
 | 预设切换后一直「切换中」 | `SchemeState` 卡在 1：虹膜流程没调 `MarkPlaying()` | 中断路径必须调 `AbortTransition()` |
 | 切预设后环境音没了 | `Apply` 里 `ClearContent3D()` 掐音，只有 `SchemeState != 1` 才 `RetriggerContentAtListener()` | 检查状态机分支 |
 | 切换预设雾浓度被覆盖 | 任何 `SetWeather` 都会重乘 `WeatherFogScale`，覆盖预设里的绝对 `FogDensity` | 先设 weather 再设 fog |

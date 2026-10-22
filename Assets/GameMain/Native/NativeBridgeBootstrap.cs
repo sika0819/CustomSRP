@@ -45,6 +45,15 @@ namespace Game.Native
                     Game.GameEntry.Event.Fire(null, NativeProfileBadgeEventArgs.Create(visible != 0));
             });
 
+            MessageRouter.Register(MsgType.HostArmIslandEntry, (_, __, ___) =>
+            {
+                HostIslandEntryGate.Arm();
+            });
+            MessageRouter.Register(MsgType.HostLeaveIsland, (_, __, ___) =>
+            {
+                HostIslandEntryGate.Leave();
+            });
+
             Log.Info("[IMP] NativeBridgeBootstrap handlers registered");
         }
     }

@@ -18,6 +18,7 @@ namespace Game
         bool _started;
         bool _finished;
         bool _success;
+        bool _postLoginDone;
         Coroutine _routine;
 
         protected override void OnEnter(ProcedureOwner procedureOwner)
@@ -26,14 +27,25 @@ namespace Game
             _started = false;
             _finished = false;
             _success = false;
+            _postLoginDone = false;
             BootLoadingService.ReportProgress(0.28f, "登录中");
         }
 
         protected override void OnUpdate(ProcedureOwner procedureOwner, float elapseSeconds, float realElapseSeconds)
         {
             base.OnUpdate(procedureOwner, elapseSeconds, realElapseSeconds);
+
+            // Hybrid：必须先等宿主 Arm 再换票。否则退登 Leave→GuestLogin 时宿主已无 token，
+            // 会锁成 Unity 游客票；再登录只 Arm 进岛，表现为二次登录无法正常进岛/无声。
             if (!_started)
             {
+                if (HostIslandEntryGate.ShouldWaitForHost() && !HostIslandEntryGate.IsArmed)
+                {
+                    // 上一轮 Uncover Hide 可能已 _visible=false；ReportProgress 会空转。
+                    EnsureLoadingCoverWhileWaitingHost();
+                    return;
+                }
+
                 _started = true;
                 MonoBehaviour host = GameEntry.Base;
                 if (host != null)
@@ -49,21 +61,42 @@ namespace Game
             if (!_finished)
                 return;
 
-            if (!_success)
-                GuestSession.ApplyLocalEditorGuest();
+            if (!_postLoginDone)
+            {
+                _postLoginDone = true;
+                if (!_success)
+                    GuestSession.ApplyLocalEditorGuest();
 
-            WanosAudio.WanosBankStore.SetPaths(WanosBankPaths.Instance);
-            bool engineOk = WanosAudio.WanosEngine.Load("ProcedureGuestLogin");
-            // Android：StreamingAssets bank 在 jar 内，EnsureLocalBanksReadyAsync 会先解压再灌引擎。
-            // Start() 内部也会 await 解压；此处异步启动，不挡进岛流程。
-            if (engineOk)
-                BankUpgradeBootstrap.EnsureLocalBanksReadyAsync().Forget();
-            Log.Info(
-                $"[ProcedureGuestLogin] Wanos engine load result={engineOk} " +
-                $"isCreated={WanosAudio.WanosNative.Instance.IsCreated} " +
-                $"loadIntoEngine={engineOk} platform={Application.platform}");
-            BankUpgradeBootstrap.Start(loadIntoEngine: engineOk);
+                WanosAudio.WanosBankStore.SetPaths(WanosBankPaths.Instance);
+                bool engineOk = WanosAudio.WanosEngine.Load("ProcedureGuestLogin");
+                // Android：StreamingAssets bank 在 jar 内，EnsureLocalBanksReadyAsync 会先解压再灌引擎。
+                // Start() 内部也会 await 解压；此处异步启动，不挡进岛流程。
+                if (engineOk)
+                    BankUpgradeBootstrap.EnsureLocalBanksReadyAsync().Forget();
+                Log.Info(
+                    $"[ProcedureGuestLogin] Wanos engine load result={engineOk} " +
+                    $"isCreated={WanosAudio.WanosNative.Instance.IsCreated} " +
+                    $"loadIntoEngine={engineOk} platform={Application.platform}");
+                BankUpgradeBootstrap.Start(loadIntoEngine: engineOk);
+            }
+
+            // 换票期间若被 Leave 拆掉 Arm，仍停住等下一次交权。
+            if (HostIslandEntryGate.ShouldWaitForHost() && !HostIslandEntryGate.IsArmed)
+            {
+                EnsureLoadingCoverWhileWaitingHost();
+                return;
+            }
+
             ChangeState<ProcedureIsland>(procedureOwner);
+        }
+
+        static void EnsureLoadingCoverWhileWaitingHost()
+        {
+            if (!BootLoadingService.IsVisible)
+                BootLoadingService.Show("正在进入世界...", BootLoadingService.VisualPrepareMin);
+            else
+                BootLoadingService.ReportProgress(
+                    BootLoadingService.VisualPrepareMin, "正在进入世界...");
         }
 
         protected override void OnLeave(ProcedureOwner procedureOwner, bool isShutdown)

@@ -157,10 +157,10 @@ namespace Game.Editor
                 var serialized = new SerializedObject(ui);
                 SerializedProperty groups = serialized.FindProperty("m_UIGroups");
                 groups.arraySize = 4;
-                WriteGroup(groups, 0, "Loading", 0);
-                WriteGroup(groups, 1, "Main", 1);
-                WriteGroup(groups, 2, "Panel", 2);
-                WriteGroup(groups, 3, "Dialog", 3);
+                WriteGroup(groups, 0, "Main", 1);
+                WriteGroup(groups, 1, "Panel", 2);
+                WriteGroup(groups, 2, "Dialog", 3);
+                WriteGroup(groups, 3, "Loading", 10);
                 serialized.ApplyModifiedPropertiesWithoutUndo();
             }
 

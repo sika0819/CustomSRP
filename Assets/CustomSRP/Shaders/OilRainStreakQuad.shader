@@ -10,13 +10,15 @@ Shader "CustomSRP/OilRainStreakQuad"
         _Wind ("Wind", Range(-2, 2)) = 0.1
         _Quality ("Quality", Range(0.25, 1)) = 1
         _Mist ("Mist", Range(0, 1)) = 0.3
+        _StreakLength ("Streak Length", Range(0.05, 1)) = 0.8
     }
 
     SubShader
     {
+        // Do NOT set RenderPipeline=CustomSRP: CustomRenderPipelineAsset has no
+        // pipeline tag, so Unity strips every SubShader and the curtain draws magenta.
         Tags
         {
-            "RenderPipeline" = "CustomSRP"
             "Queue" = "Transparent+50"
             "RenderType" = "Transparent"
             "IgnoreProjector" = "True"
@@ -65,9 +67,10 @@ Shader "CustomSRP/OilRainStreakQuad"
                 float3 positionWS = TransformObjectToWorld(pos);
                 o.positionCS = TransformWorldToHClip(positionWS);
 
+                // Wind only — Y scroll is per-column/per-layer in the fragment
+                // so large streaks can fall faster than small ones.
                 float2 uv = input.uv;
                 uv.x += _Wind * 0.045 * input.uv.y;
-                uv.y += _RainTime;
                 o.uvScroll = uv;
                 o.uvMesh = input.uv;
                 return o;

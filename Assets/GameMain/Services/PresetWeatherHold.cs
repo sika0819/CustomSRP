@@ -18,8 +18,9 @@ namespace Game
                 return;
             IsHeld = true;
             // Inhibit zone StartSource for the whole iris window (doc: 禁止走路新加载).
-            // Do NOT ClearPlaying here — iris is still open; hard-stop/RTPC-zero causes
-            // audible crackle. Peak Apply → ClearContent3D runs under black.
+            // Duck to silence during Exit (~1.5s) so Peak Clear/Retarget is already inaudible.
+            // Do NOT ClearPlaying here — hard-stop while unducked = crackle.
+            ContentAudioDuck.BeginSilent();
             AmbienceZoneService.SetPresetTransitionHeld(true);
             HeldChanged?.Invoke();
         }
@@ -42,6 +43,7 @@ namespace Game
                 return;
             IsHeld = false;
             AmbienceZoneService.SetPresetTransitionHeld(false);
+            ContentAudioDuck.SnapFull();
             HeldChanged?.Invoke();
         }
     }

@@ -20,6 +20,7 @@ namespace Game.Editor.BuildTool
     ///   mode=export|export+assemble  只导出（默认给 CLI）／导出后顺手 assemble
     ///   release=true|false            assemble 时是否 release 变体
     ///   version=1.1.60               版本号，缺省用 PlayerSettings.bundleVersion
+    ///   skip_yoo=true|false           跳过 YooAsset 前置（默认 false：打 Yoo → 拷 StreamingAssets）
     ///
     /// 兼容：flag 内容为空或无法解析时按旧行为 = skyworthUltra + 导出后直接 assemble
     ///（.host_export_monitor.sh 依赖 "[HostShell] APK ready" 日志）。
@@ -29,7 +30,7 @@ namespace Game.Editor.BuildTool
     ///   apk=<apk 路径>   仅 export+assemble 时有
     ///   message=<说明>
     ///
-    /// status=retry：Unity 活动构建目标不是 Android，已发起切换（会触发域重载）。
+    /// status=retry：构建目标切换或 BOLUO_* 宏变更（都会触发域重载）。
     /// 此时请求被存到 Temp/host_shell_export.pending，域重载后由 ResumePending 自动重跑导出，
     /// CLI（pack.sh / pack.ps1）看到 retry 应继续等待而不是报错。
     /// </summary>
@@ -136,6 +137,8 @@ namespace Game.Editor.BuildTool
             public bool Assemble = true;
             public bool Release;
             public string Version;
+            /// <summary>true = 跳过 YooAsset；默认 false（打 Yoo → 拷 StreamingAssets → 再导出）。</summary>
+            public bool SkipYooAsset;
         }
 
         static ExportRequest ParseRequest(string content)
@@ -181,6 +184,15 @@ namespace Game.Editor.BuildTool
             if (values.TryGetValue("version", out string version) && !string.IsNullOrWhiteSpace(version))
                 request.Version = version;
 
+            if (values.TryGetValue("skip_yoo", out string skipYoo) ||
+                values.TryGetValue("skipYoo", out skipYoo) ||
+                values.TryGetValue("skipYooAsset", out skipYoo))
+            {
+                request.SkipYooAsset =
+                    skipYoo.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                    skipYoo.Equals("1", StringComparison.Ordinal);
+            }
+
             return request;
         }
 
@@ -220,16 +232,18 @@ namespace Game.Editor.BuildTool
                 AndroidFlavor = request.Flavor,
                 ScreenOrientation = "sensor",
                 OutputDir = BoluoCIBuildSupport.GetDefaultAndroidUnityExportRoot(),
-                SkipYooAsset = false,
+                SkipYooAsset = request.SkipYooAsset,
             };
 
-            Debug.Log($"[HostShell] export unityLibrary start (flavor={request.Flavor}, env={request.Environment})");
+            Debug.Log(
+                $"[HostShell] export unityLibrary start (flavor={request.Flavor}, env={request.Environment}, " +
+                $"skipYoo={request.SkipYooAsset}; 默认流程: Yoo→StreamingAssets→导出)");
             int code = BoluoCIBuildSupport.ExportAndroidGradle(config);
             if (code == 3)
             {
-                // 构建目标正在切换（会触发域重载）：存下请求，域重载后自动重跑
+                // 构建目标切换或宏变更（会触发域重载）：存下请求，域重载后自动重跑
                 WritePending(request);
-                WriteDone("retry", null, "构建目标切换中，切换完成后自动重试导出");
+                WriteDone("retry", null, "Unity 正在准备导出环境（域重载），完成后自动重试");
                 return;
             }
             if (code != 0)
@@ -273,6 +287,7 @@ namespace Game.Editor.BuildTool
                 sb.Append("env=").Append(request.Environment).Append('\n');
                 sb.Append("mode=").Append(request.Assemble ? "export+assemble" : "export").Append('\n');
                 sb.Append("release=").Append(request.Release ? "true" : "false").Append('\n');
+                sb.Append("skip_yoo=").Append(request.SkipYooAsset ? "true" : "false").Append('\n');
                 if (!string.IsNullOrEmpty(request.Version))
                     sb.Append("version=").Append(request.Version).Append('\n');
                 File.WriteAllText(pending, sb.ToString());

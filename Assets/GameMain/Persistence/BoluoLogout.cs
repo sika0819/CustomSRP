@@ -12,6 +12,11 @@ namespace Game
             BoluoGameSave.ResetSession();
             DownloadedUnplayedManager.ResetSession();
             GuestSession.Clear();
+            // 退登后 bank 回调仍可能命中旧 Pending → RequestTransition，二次进岛 iris 钉死行走。
+            PendingDownloadIntent.Clear();
+            GameEntry.Presets?.AbortTransition();
+            PresetWeatherHold.Abort();
+            IslandJoystickCamera.Current?.ForceUnlockLocomotion();
             NowPlayingService.CleanupAfterLeaveIsland();
             Log.Info("[BoluoLogout] session cleared, next island uses default spawn");
         }

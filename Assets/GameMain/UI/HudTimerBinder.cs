@@ -11,8 +11,8 @@ namespace Game
     {
         // UITK Painter2D：0°=+X；从 -90° 顺时针 = 顶点，对齐 uGUI FillOrigin=Top + Clockwise。
         const float StartAngleDeg = -90f;
-        // timer-fill.png 在 108px 上约 3~4px 环宽。
-        const float RingThickness = 0.04f;
+        // 对齐旧 dingShiProgress / timer-fill.png：108px 上约 7px 环宽（≈0.065）。
+        const float RingThickness = 7f / 108f;
         static readonly Color RingColor = new Color(0.62f, 0.62f, 0.62f, 1f);
 
         VisualElement _idle;
@@ -129,7 +129,8 @@ namespace Game
                 return;
 
             float lineWidth = Mathf.Max(1f, RingThickness * size);
-            float radius = size * 0.5f - lineWidth * 0.5f - 1f;
+            // 外沿贴齐 contentRect（与 dingShiProgress 贴边环一致），不要再内缩 1px。
+            float radius = size * 0.5f - lineWidth * 0.5f;
             if (radius < 1f)
                 return;
 

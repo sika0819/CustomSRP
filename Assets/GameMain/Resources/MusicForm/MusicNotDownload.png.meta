@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: 5708744078c84f0aa44a7f6063144ad3
+guid: ee0ed7bbc4f346578b813cc016f73756
 TextureImporter:
   internalIDToNameTable: []
   externalObjects: {}
@@ -140,6 +140,6 @@ TextureImporter:
     nameFileIdTable: {}
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
-  userData: oilMountainAlbedo=1
+  userData: 
   assetBundleName: 
   assetBundleVariant: 

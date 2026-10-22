@@ -18,6 +18,10 @@ namespace Game.Native
         public const int MediaCommand = 104;
         /// <summary>U→N Query 正在播放：a=playing 0/1，b=专辑，c=曲目，inBlob=title\talbum。</summary>
         public const int NowPlaying = 105;
+        /// <summary>N→U：宿主交权进岛（早挂后 GuestLogin 停 LoadingForm，收到本 Push 再进 ProcedureIsland）。</summary>
+        public const int HostArmIslandEntry = 106;
+        /// <summary>N→U：宿主退岛（退登/注销）。复位 Arm / IslandReady，ProcedureIsland → GuestLogin，供再次 Arm。</summary>
+        public const int HostLeaveIsland = 107;
 
         public const int MediaPause = 0;
         public const int MediaPlay = 1;

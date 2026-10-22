@@ -19,6 +19,9 @@
 | BGM 播了但环境音没了 | 预设切换 `ClearContent3D()`，或音频交互没启动 | [04](04-services.md) [05](05-audio.md) |
 | 进岛没 HUD | `EnsureUiGroups` / `IslandMainForm` 加载超时（10s） | [06](06-ui.md) [01](01-boot-procedure.md) |
 | 天气改了画面不变 | SRP driver 缓存 / `IAtmosphereVisualDriver` 未实现 | [04](04-services.md) |
+| 真机已是「雨」仍无雨丝 | `Shader.Find` strip / Yoo 双份 Settings / 缺 `streakMaterial` | [11](11-rain-device-visual.md) |
+| 雨预设（如委屈泛滥）雨丝粉/洋红 | SubShader `RenderPipeline=CustomSRP` 与管线 tag 不匹配被整包 strip | [11](11-rain-device-visual.md) §3.1b |
+| 真机完全没云 | **有意为之**：`IslandMobileTune.TuneCloudsForMobile` | [11](11-rain-device-visual.md) [04](04-services.md) |
 | 天气图标档位错 | 图标数组顺序 | [06](06-ui.md) |
 | 走远后物体穿模 / 掉出地面 | 碰撞体 LOD 误清空 | [07](07-environment.md) |
 | 走动时帧率抖 | 流式生成预算 / 碰撞体全表刷新 | [07](07-environment.md) |
@@ -41,13 +44,14 @@
 | 4 | `Services/MusicCatalog.cs` | `SetServerData` 遇 `_albums != null` 直接 return；启动时本地 JSON 先加载 → 服务器歌单永远不生效 | 新增 `_fromServer` 标记：服务器数据覆盖本地并重新广播；本地解析时若服务器已到则丢弃本地结果 |
 | 5 | `UI/Forms/MusicForm.cs`、`UI/Forms/PresetForm.cs` | 下载用 `.Forget()`，抛异常时 `onComplete` 不触发 → `PushSaveSuppress()` 永不出栈 → 坐标永久不落盘 | 改为 `async UniTaskVoid` 包装，`finally` 中保证出栈一次；回调里不再重复 Pop |
 | 6 | `ProjectSettings/GraphicsSettings.asset`、`PresetIrisPass.cs` | 真机切预设无黑场：`Shader.Find("Hidden/CustomSRP/Preset Iris")` 无 Always Included 时被 strip → Pass 静默跳过；UI `presetVeil` 透明 | Always Included 加入 Preset Iris（及同批 rain shaders）；缺 shader 时打 `[PresetIris] ... not found`；**须重打真机包** |
+| 7 | `OilRainStreakQuad` / `OilRainSettings` | 真机已是雨仍无雨丝：Runtime `Shader.Find` 不可靠；Yoo 可能复制第二份 Settings，天气写 Current、帘子读 prefab SO；L1=`level/3` 过淡 | 预烘焙 `OilRainCurtain.mat` → `streakMaterial`；强度读 `Current`；L1/L2/L3→0.4/0.7/1.0；相机优先 `IslandJoystickCamera`。详见 [11](11-rain-device-visual.md)。**须重打 Yoo + 真机包** |
 
 ## 3. 仍在库里的已知问题 ⚠
 
 | # | 位置 | 问题 | 影响 | 备注 |
 |---|---|---|---|---|
 | A | `Sound/WanosSoundAgentHelper.cs` | 非音乐资源 `Pause`/`Resume` 调 `PauseAll`/`ResumeAll` | 一个音效暂停会静音整个引擎 | 设计取舍，注意调用 |
-| B | `Services/Audio/RainWaterProximityService.cs` | `_bankMissing` 一次性熔断，bank 加载失败后整个雨季不恢复 | 雨声消失直到雨停 | 与 `WeatherAudioBridge` 的重试行为不一致 |
+| B | `Services/Audio/RainWaterProximityService.cs` / `WeatherAudioBridge.cs` | ~~首装切风雨 miss bank 后不重试~~ → 已订 `WanosBankStore.OnBankLoaded` 重试 | 首装切雨无雨声 | 已修 |
 | C | `Services/Audio/WaterSurfaceProbe.cs` | 只采样内陆水的**直接子节点** | 单 prefab 路径下采不到水面点，河声退化 | 见 [05](05-audio.md) |
 | D | `Services/Audio/AmbienceZoneService.cs` | `TransferPlayOwnership` 里 emitter 池存在同 GO 双槽的可能 | 活跃 emitter 被误回收 | 距离边界快速切换时可能复现 |
 | E | `Services/Audio/AmbienceZoneService.cs` | 池长度在构建时锁定，新增 source 会整体重分配 | 已发放的 emitter 不回收 | MapItem extras 迟到时可能触发 |

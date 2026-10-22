@@ -28,6 +28,8 @@ namespace Game.BoluoApi
         public string Md5;
         public string SizeKb;
         public string Guid;
+        /// <summary>服务端 bank 内容版本（与 StreamingAssets ProjectMetadata.Version 比对）。</summary>
+        public string Version;
         public string LocalPath;
         public BankDownloadState State = BankDownloadState.Pending;
         public float Progress;
@@ -180,6 +182,10 @@ namespace Game.BoluoApi
 
                 if (remote == null)
                     return true;
+                // 首包版本与 catalog 一致时 UI 也视为已就绪（不必等 MD5）。
+                if (!string.IsNullOrEmpty(remote.version)
+                    && StreamingBankCatalog.IsSameVersionAsStreaming(bankName, remote.version))
+                    return true;
                 return FileMatchesRemoteSize(fi.Length, remote);
             }
             catch
@@ -307,6 +313,7 @@ namespace Game.BoluoApi
                     Md5 = b.md5 ?? "",
                     SizeKb = b.size ?? "",
                     Guid = b.guid ?? "",
+                    Version = b.version ?? "",
                     LocalPath = PersistentDestPath(b.bankName),
                 };
 
@@ -349,9 +356,10 @@ namespace Game.BoluoApi
                 $"loadIntoEngine={loadIntoEngine} prioritize={prioritize} preempt={preempt}");
 
             var all = BuildQueue(banks);
+            await StreamingBankCatalog.EnsureLoadedAsync();
             await VerifyLocalReadyAsync(all);
 
-            // 是否下载只看本地 MD5 / 是否存在（对齐老工程 WanosAssets.LoadAsync）。
+            // 跳过条件：首包 ProjectMetadata.version 与服务端一致（已解压到盘），或本地 MD5 命中。
             // bank.version 是 bank 内容版本（如 1.0.0），不能和 Application.version 比。
 
             for (int i = 0; i < all.Count; i++)
@@ -947,7 +955,9 @@ namespace Game.BoluoApi
 
             var toHash = new List<Md5Job>(list.Count);
             int cacheHits = 0;
+            int versionHits = 0;
             int missing = 0;
+            bool cacheDirty = false;
 
             for (int i = 0; i < list.Count; i++)
             {
@@ -967,14 +977,6 @@ namespace Game.BoluoApi
                     continue;
                 }
 
-                if (string.IsNullOrEmpty(item.Md5))
-                {
-                    item.State = BankDownloadState.Ready;
-                    item.Progress = 1f;
-                    item.LocalPath = verifyPath;
-                    continue;
-                }
-
                 long size;
                 long mtimeTicks;
                 try
@@ -982,10 +984,43 @@ namespace Game.BoluoApi
                     var fi = new FileInfo(verifyPath);
                     size = fi.Length;
                     mtimeTicks = fi.LastWriteTimeUtc.Ticks;
+                    if (size <= 0)
+                    {
+                        missing++;
+                        continue;
+                    }
                 }
                 catch
                 {
                     missing++;
+                    continue;
+                }
+
+                // 首包已解压且 ProjectMetadata 版本 == 服务端 version → 跳过重下。
+                if (StreamingBankCatalog.IsSameVersionAsStreaming(item.BankName, item.Version))
+                {
+                    item.State = BankDownloadState.Ready;
+                    item.Progress = 1f;
+                    item.LocalPath = verifyPath;
+                    item.SkipReason = $"streaming version match {item.Version}";
+                    string seedMd5 = item.Md5;
+                    if (string.IsNullOrEmpty(seedMd5))
+                        StreamingBankCatalog.TryGetMd5(item.BankName, out seedMd5);
+                    if (!string.IsNullOrEmpty(seedMd5))
+                    {
+                        cache.Set(item.BankName, size, mtimeTicks, seedMd5);
+                        cacheDirty = true;
+                    }
+
+                    versionHits++;
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(item.Md5))
+                {
+                    item.State = BankDownloadState.Ready;
+                    item.Progress = 1f;
+                    item.LocalPath = verifyPath;
                     continue;
                 }
 
@@ -1019,7 +1054,6 @@ namespace Game.BoluoApi
                 hashMs = results.ElapsedMs;
                 hashed = results.Jobs.Count;
 
-                bool cacheDirty = false;
                 for (int i = 0; i < results.Jobs.Count; i++)
                 {
                     var job = results.Jobs[i];
@@ -1040,16 +1074,17 @@ namespace Game.BoluoApi
                             $"expect={job.ExpectedMd5} actual={job.ActualMd5} path={job.Path} — will re-download");
                     }
                 }
-
-                if (cacheDirty)
-                    cache.Save();
             }
+
+            if (cacheDirty)
+                cache.Save();
 
             Log.Info(
                 $"[BankDownloader] VerifyLocal END frameDelta={Time.frameCount - frameBegin} " +
                 $"wallMs={(Time.realtimeSinceStartup - t0) * 1000f:F0} " +
-                $"cacheHits={cacheHits} hashed={hashed} matched={matched} missing={missing} " +
-                $"hashThreadMs={hashMs:F0} ready={CountState(list, BankDownloadState.Ready)}");
+                $"versionHits={versionHits} cacheHits={cacheHits} hashed={hashed} matched={matched} " +
+                $"missing={missing} hashThreadMs={hashMs:F0} " +
+                $"ready={CountState(list, BankDownloadState.Ready)}");
             return true;
         }
 
@@ -1174,24 +1209,35 @@ namespace Game.BoluoApi
                 }
 
                 TryPromoteCompleteTemp(item.LocalPath, sizeHint);
-                if (File.Exists(item.LocalPath))
+                string localPath = item.LocalPath;
+                if (!File.Exists(localPath)
+                    && AudioEnginePaths.TryFindLocalBank(item.BankName, out string found)
+                    && File.Exists(found))
+                    localPath = found;
+                if (File.Exists(localPath))
                 {
                     long len = 0;
-                    try { len = new FileInfo(item.LocalPath).Length; } catch { /* ignore */ }
+                    try { len = new FileInfo(localPath).Length; } catch { /* ignore */ }
+                    bool versionOk = StreamingBankCatalog.IsSameVersionAsStreaming(
+                        item.BankName, item.Version);
                     bool sizeOk = sizeHint == null
                                   || string.IsNullOrEmpty(sizeHint.size)
                                   || FileMatchesRemoteSize(len, sizeHint);
-                    if (sizeOk
-                        && (string.IsNullOrEmpty(item.Md5)
-                            || await LocalFileMd5MatchesAsync(item.LocalPath, item.Md5)))
+                    if (versionOk
+                        || (sizeOk
+                            && (string.IsNullOrEmpty(item.Md5)
+                                || await LocalFileMd5MatchesAsync(localPath, item.Md5))))
                     {
                         TryDelete(item.LocalPath + ".tmp");
+                        item.LocalPath = localPath;
                         RememberLocalMd5(item);
                         item.State = BankDownloadState.Ready;
                         item.Progress = 1f;
                         item.Error = null;
                         onProgress?.Invoke(item);
-                        Log.Info($"[BankDownloader] skip HTTP, local ready {item.BankName}");
+                        Log.Info(
+                            $"[BankDownloader] skip HTTP, local ready {item.BankName}" +
+                            (versionOk ? $" version={item.Version}" : ""));
                         return false;
                     }
                 }

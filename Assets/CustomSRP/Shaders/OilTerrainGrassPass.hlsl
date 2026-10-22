@@ -6,25 +6,7 @@
 #include "../ShaderLibrary/Light.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
 #include "OilTerrainGrassWind.hlsl"
-
-float4 _OilPeriodAmbient;
-
-// Directional SH9 ambient sampled by world normal (zenith→ground gradient).
-// UnityOutput the SH coefficients from RenderSettings (Trilight) are flat, so the
-// gradient only appears when OilSkyboxTime publishes via DynamicGI + ambient probe.
-// We keep this inline so the grass pass doesn't have to drag in the full NPR lighting.
-half3 OilTerrainGrassSampleAmbient(float3 normalWS)
-{
-    float4 coefficients[7];
-    coefficients[0] = unity_SHAr;
-    coefficients[1] = unity_SHAg;
-    coefficients[2] = unity_SHAb;
-    coefficients[3] = unity_SHBr;
-    coefficients[4] = unity_SHBg;
-    coefficients[5] = unity_SHBb;
-    coefficients[6] = unity_SHC;
-    return (half3)max(0.0, SampleSH9(coefficients, normalWS));
-}
+#include "OilVegetationLighting.hlsl"
 
 StructuredBuffer<float4> _AllInstancesPosWSBuffer;
 StructuredBuffer<uint> _VisibleInstanceOnlyTransformIDBuffer;
@@ -48,43 +30,48 @@ CBUFFER_END
 
 half3 OilTerrainGrassVertexLit(half3 albedo, half3 normalWS, float3 positionWS)
 {
-    half3 ambient = OilTerrainGrassSampleAmbient(normalWS);
+    half3 N = normalize((half3)normalWS);
+    half3 lightColor = 0.0h;
+    half3 L = half3(0.0h, 1.0h, 0.0h);
+    half attenuation = 0.0h;
+    half lightLum = 0.0h;
 
-    if (GetDirectionalLightCount() <= 0)
-        return ambient * albedo;
-
-    DirectionalLightData lightData = _DirectionalLightData[0];
-    half3 lightColor = (half3)lightData.color.rgb;
-    half3 L = (half3)lightData.directionAndMask.xyz;
+    if (GetDirectionalLightCount() > 0)
+    {
+        DirectionalLightData lightData = _DirectionalLightData[0];
+        lightColor = (half3)lightData.color.rgb;
+        L = (half3)lightData.directionAndMask.xyz;
+        lightLum = OilVegMainLightLuma(lightColor);
 
 #if defined(OIL_MOBILE_PERF)
-    half attenuation = 1.0h;
+        attenuation = 1.0h;
 #else
-    Surface surface;
-    surface.position = positionWS;
-    surface.normal = (float3)normalWS;
-    surface.interpolatedNormal = (float3)normalWS;
-    surface.viewDirection = normalize(_WorldSpaceCameraPos - positionWS);
-    surface.depth = -TransformWorldToView(positionWS).z;
-    surface.color = (float3)albedo;
-    surface.alpha = 1.0;
-    surface.metallic = 0.0;
-    surface.occlusion = 1.0;
-    surface.smoothness = 0.0;
-    surface.fresnelStrength = 0.0;
-    surface.dither = 0.5;
-    surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
-    ShadowData shadowData = GetShadowData(surface);
-    Light light = GetDirectionalLight(0, surface, shadowData);
-    lightColor = (half3)light.color;
-    L = (half3)light.direction;
-    half attenuation = (half)light.attenuation;
+        Surface surface;
+        surface.position = positionWS;
+        surface.normal = (float3)N;
+        surface.interpolatedNormal = (float3)N;
+        surface.viewDirection = normalize(_WorldSpaceCameraPos - positionWS);
+        surface.depth = -TransformWorldToView(positionWS).z;
+        surface.color = (float3)albedo;
+        surface.alpha = 1.0;
+        surface.metallic = 0.0;
+        surface.occlusion = 1.0;
+        surface.smoothness = 0.0;
+        surface.fresnelStrength = 0.0;
+        surface.dither = 0.5;
+        surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
+        ShadowData shadowData = GetShadowData(surface);
+        Light light = GetDirectionalLight(0, surface, shadowData);
+        lightColor = (half3)light.color;
+        L = (half3)light.direction;
+        attenuation = (half)light.attenuation;
+        lightLum = OilVegMainLightLuma(lightColor);
 #endif
+    }
 
-    // Same term as OilFoliageLighting / Boluo EnvGrass: albedo * (N·L * sun * shadow + ambient).
-    half ndotl = saturate(dot(normalWS, L));
-    half att = saturate(attenuation);
-    return albedo * (lightColor * ndotl * att + ambient);
+    // Same OilVegetationDirect + NightKeep as near leaves / far tree cross-cards.
+    half3 lit = OilVegetationDirect(albedo, N, lightColor, L, attenuation, lightLum);
+    return OilVegetationNightKeep(lit, albedo, N, lightLum);
 }
 
 struct Attributes

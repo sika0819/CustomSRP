@@ -110,8 +110,8 @@ namespace CustomSRP
         [Range(0.05f, 2f)]
         public float streakDensity = 0.9f;
 
-        [Tooltip("Fraction of each column lit, i.e. how long the streaks are.")]
-        [Range(0.05f, 1f)]
+        [Tooltip("Max dash length in a rain cell (min is 0.58). 0.8 = longest authored look.")]
+        [Range(0.58f, 1f)]
         public float streakLength = 0.8f;
 
         [Tooltip("Fraction of a column width that is solid, i.e. streak thickness.")]
@@ -125,6 +125,10 @@ namespace CustomSRP
         [Tooltip("Render rain with the single camera-following Quad (OilRainStreakQuad). " +
                  "When off, the legacy 30k-instance OilRainGPUParticles path runs instead.")]
         public bool useSingleQuadStreaks = true;
+
+        [Tooltip("Pre-baked rain-curtain material (Boluo RainMaterial pattern). " +
+                 "Required on device — do not rely on Shader.Find alone.")]
+        public Material streakMaterial;
 
         // =====================================================================
         // Rain Ripples — baked normal flipbook sampled into the water normal

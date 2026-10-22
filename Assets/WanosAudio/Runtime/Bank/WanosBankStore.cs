@@ -309,6 +309,8 @@ namespace WanosAudio
         /// <summary>
         /// Ref-counted load for shared ambience/weather banks.
         /// First retain loads; subsequent retains only bump the count.
+        /// Re-retain always cancels a pending delayed UnLoad (Boluo bridge/shore flicker:
+        /// Exit→Release schedules UnLoad, Enter within grace must not UnLoad↔Load).
         /// </summary>
         public static bool Retain(string bankName)
         {
@@ -318,9 +320,19 @@ namespace WanosAudio
 
             lock (Gate)
             {
+                // Cancel deferred UnLoad before any Load path — bank may still be Loaded.
+                PendingUnloads.Remove(stem);
+
                 if (Refs.TryGetValue(stem, out int n) && n > 0)
                 {
                     Refs[stem] = n + 1;
+                    return true;
+                }
+
+                // Refs hit 0 and UnLoad was pending but not fired — still in engine.
+                if (Loaded.Contains(stem))
+                {
+                    Refs[stem] = 1;
                     return true;
                 }
             }
@@ -329,7 +341,10 @@ namespace WanosAudio
                 return false;
 
             lock (Gate)
+            {
+                PendingUnloads.Remove(stem);
                 Refs[stem] = 1;
+            }
             return true;
         }
 
@@ -393,12 +408,24 @@ namespace WanosAudio
         /// <summary>
         /// Immediate native UnloadBank without any delay. Used by Update() after grace period
         /// or by ClearAfterEngineUnload().
+        /// Aborts if a Retain raced in after the pending entry was dequeued (refs &gt; 0).
         /// </summary>
         static void ImmediateUnload(string bankName)
         {
             string stem = Strip(bankName);
             if (string.IsNullOrEmpty(stem))
                 return;
+
+            lock (Gate)
+            {
+                if (Refs.TryGetValue(stem, out int n) && n > 0)
+                {
+                    Debug.Log($"[{LogTag}] ImmediateUnload({stem}) aborted — refs={n}");
+                    return;
+                }
+
+                Loaded.Remove(stem);
+            }
 
             try
             {
@@ -407,11 +434,6 @@ namespace WanosAudio
             catch (Exception e)
             {
                 Debug.LogWarning($"[{LogTag}] ImmediateUnload({stem}): {e.Message}");
-            }
-
-            lock (Gate)
-            {
-                Loaded.Remove(stem);
             }
         }
 

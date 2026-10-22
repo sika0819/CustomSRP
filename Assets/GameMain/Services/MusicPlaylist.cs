@@ -318,30 +318,78 @@ namespace Game
             {
                 GameEntry.Sound.PauseSound(_musicSerialId);
             }
-            // BGM 不在播就别动 Wanos 引擎 —— 否则会把 AmbientZone / Weather / SFX
-            // 一起锁死,而工程内没有自动 Resume 路径。
-            // 同样,SetContentAudioPaused(true) 会让 AmbienceZone / WeatherAudio
-            // 立刻 StopAllPlaying() 并停 ticker;只在 BGM 真在播时才有意义。
+            else
+            {
+                // serial 已丢时 PauseSound 走不到；仍发 Pause_Music，覆盖原生直控/后台传输仍在出声。
+                try
+                {
+                    if (WanosNative.Instance != null)
+                        WanosNative.Instance.PostEvent(0, "Pause_Music");
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[MusicPlaylist] Pause_Music failed: {ex.Message}");
+                }
+            }
+            // BGM 不在播就别动内容声闸 —— SetContentAudioPaused(true) 会让 AmbienceZone /
+            // WeatherAudio 立刻 StopAllPlaying() 并停 ticker；只在 BGM 真在播时才有意义。
             IsPlaying = false;
             if (_musicSerialId >= 0)
             {
                 AudioInteractionBootstrap.SetContentAudioPaused(true);
             }
+            // 同步原生 userPaused，否则定时到点后焦点回归/后台续播会把歌又拉起来。
+#if UNITY_ANDROID && !UNITY_EDITOR
+            BoluoAndroidEngineNative.MarkUserPausedFromUnity(true);
+#endif
             NowPlayingService.NoteUserPaused(true);
             NowPlayingService.PublishFromPlaylist();
         }
 
         public void Resume()
         {
+            // 与 EnsureMusicRestored 对齐：GF ResumeSound + 显式 Resume_Music，
+            // 覆盖定时到点 PauseSound / 负一屏 Pause_Music 两条停播路径。
             NowPlayingService.NoteUserPaused(false);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
+#endif
             if (_musicSerialId >= 0 && GameEntry.Sound != null)
                 GameEntry.Sound.ResumeSound(_musicSerialId);
-            else
+            try
+            {
+                if (WanosNative.Instance != null)
+                    WanosNative.Instance.PostEvent(0, "Resume_Music");
+                else
+                    WanosEngine.ResumeAll();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[MusicPlaylist] Resume_Music failed: {ex.Message}");
                 WanosEngine.ResumeAll();
-            IsPlaying = true;
+            }
+            IsPlaying = CurrentAlbumIndex >= 0 && CurrentTrackIndex >= 0 && !_stoppedByUser;
             WanosEngine.Unmute("music-resume");
             AudioInteractionBootstrap.SetContentAudioPaused(false);
             NowPlayingService.PublishFromPlaylist();
+        }
+
+        /// <summary>
+        /// 定时结束弹窗「取消」/「重复定时」：续播当前曲（不 Stop+Play）。
+        /// </summary>
+        public void ResumeAfterTimerEnd(string reason = "timer-end")
+        {
+            if (!HasRestorableTrack)
+            {
+                // 没选过曲也要把程序化暂停旗标清掉，避免点场景误判。
+                NowPlayingService.NoteUserPaused(false);
+                AudioInteractionBootstrap.SetContentAudioPaused(false);
+                return;
+            }
+
+            if (!WanosEngine.IsPlaybackEnabled)
+                WanosEngine.EnablePlayback(reason);
+            EnsureMusicRestored(reason);
         }
 
         /// <summary>
@@ -371,7 +419,10 @@ namespace Game
                 return;
             }
 
-            // agent 还在 → 续播当前进度（即便原生 PlaybackState 暂时不是 Started）。
+            // agent 还在 → 优先走 GF ResumeSound（前台 PauseSound 路径）；
+            // 再补 Resume_Music（后台负一屏原生 Pause_Music 路径）。
+            if (GameEntry.Sound != null)
+                GameEntry.Sound.ResumeSound(_musicSerialId);
             try
             {
                 if (WanosNative.Instance != null)
@@ -382,7 +433,9 @@ namespace Game
                 Debug.LogWarning($"[MusicPlaylist] Resume_Music failed: {ex.Message}");
             }
             IsPlaying = true;
+            NowPlayingService.NoteUserPaused(false);
             WanosEngine.Unmute("music-restore");
+            AudioInteractionBootstrap.SetContentAudioPaused(false);
             PushVolumesToEngine();
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
@@ -445,14 +498,21 @@ namespace Game
 #if UNITY_ANDROID && !UNITY_EDITOR
                 BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
 #endif
+                // 首播/切歌成功同一帧强制 isPlaying=true，并确保已 Arm，避免负一屏空白。
+                NowPlayingService.PublishPlayingForced();
             }
-            PublishNowPlaying();
+            else
+            {
+                PublishNowPlaying();
+            }
             return IsPlaying;
         }
 
         public void PushVolumesToEngine()
         {
-            WanosEngine.SetVolumeParameter(WanosEngine.MusicVolumeParam, MusicVolume);
+            // Preset iris ducks Music_Volume to 0 before Stop_Music/Play_* so retarget is silent.
+            float music = MusicVolume * ContentAudioDuck.Level01;
+            WanosEngine.SetVolumeParameter(WanosEngine.MusicVolumeParam, music);
             WanosEngine.SetVolumeParameter(WanosEngine.FxVolumeParam, EffectVolume);
         }
 

@@ -45,6 +45,9 @@ namespace CustomSRP
             if (onSky != null)
             {
                 onSky.ResolveRefs();
+                // Terrain re-enabled / OilSkyboxTime.OnEnable: pull WeatherService before
+                // the prefab noon default (timeOfDay=12) paints day into planar RT.
+                onSky.SyncFromWeatherService();
                 return onSky;
             }
 
@@ -64,11 +67,15 @@ namespace CustomSRP
             ResolveRefs();
             ResolveRainSettings();
             ClearCelestialLookOverride();
-            // Sync rain/cloud from default weather so a stale OilRainSettings.intensity
-            // (asset default) does not leave the curtain on before WeatherService pushes.
-            ApplyWeatherVisuals();
-            ApplyFogSettings();
-            Shader.SetGlobalFloat(FogDensityId, FoggyShaderWeight());
+            // Prefer WeatherService clock/look/weather before local defaults. IslandTerrain
+            // serializes timeOfDay=12; without this, OnEnable Apply paints noon sun + day-blue
+            // water reflection until ProcedureIsland.PushVisuals (one-frame cyan flash).
+            if (!SyncFromWeatherService())
+            {
+                ApplyWeatherVisuals();
+                ApplyFogSettings();
+                Shader.SetGlobalFloat(FogDensityId, FoggyShaderWeight());
+            }
         }
 
         void OnEnable()
@@ -76,6 +83,21 @@ namespace CustomSRP
             BindPresetEvent();
             ClearCelestialLookOverride();
             PresetWeatherHold.HeldChanged += OnWeatherHoldChanged;
+            SyncFromWeatherService();
+        }
+
+        /// <summary>
+        /// Push WeatherService state into OilSkyboxTime / rain / fog before the first
+        /// camera frame. Returns false when WeatherService is not up yet.
+        /// </summary>
+        bool SyncFromWeatherService()
+        {
+            WeatherService weather = GameEntry.Weather;
+            if (weather == null)
+                return false;
+
+            weather.PushVisuals();
+            return true;
         }
 
         void OnDisable()
@@ -239,16 +261,23 @@ namespace CustomSRP
             var settings = OilRainSettings.Current;
             if (settings == null) return;
 
-            // Map weather level 0–3 → rain intensity 0–1.
-            // Level 0 (Clear / Cloud) = no rain, level 1 = light, level 2 = medium, level 3 = heavy.
-            float rainIntensity = _kind == IslandWeatherKind.Rain ? (_level / 3f) : 0f;
+            // Map weather level → rain intensity (L1/L2/L3 → 0.4 / 0.7 / 1.0).
+            // level/3 made L1 too faint on mobile quality scale.
+            float rainIntensity = 0f;
+            if (_kind == IslandWeatherKind.Rain && _level > 0)
+            {
+                rainIntensity = _level switch
+                {
+                    1 => 0.4f,
+                    2 => 0.7f,
+                    _ => 1f,
+                };
+            }
             // Preset iris close / black / half-open: force dry so rain never punches through.
             if (PresetWeatherHold.IsHeld)
                 rainIntensity = 0f;
             if (Mathf.Abs(settings.intensity - rainIntensity) > 0.001f)
-            {
                 settings.intensity = rainIntensity;
-            }
         }
 
         void ApplyFogSettings()

@@ -566,6 +566,8 @@
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
 }
 
+/* Stretch vs design landscape d≈2436/1125：铺满、不裁 UV、不留黑边。
+   r≈d 几乎无感；r<d 左右压扁；r>d 左右拉长。 */
 .game-loading-form__campfire-still,
 .game-loading-form__campfire-video {
     position: absolute;
@@ -573,7 +575,7 @@
     right: 0;
     top: 0;
     bottom: 0;
-    -unity-background-scale-mode: scale-and-crop;
+    -unity-background-scale-mode: stretch-to-fill;
 }
 .game-loading-form__campfire-video {
     picking-mode: Ignore;

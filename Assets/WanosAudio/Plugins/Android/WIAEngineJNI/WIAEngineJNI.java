@@ -7,8 +7,10 @@ import android.graphics.BitmapFactory;
 import android.media.MediaMetadata;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
+import android.app.PendingIntent;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -137,6 +139,18 @@ public class WIAEngineJNI {
     private static final Handler sMainHandler = new Handler(Looper.getMainLooper());
 
     /**
+     * MediaSession 回调专用线程。禁止用主线程：华为等 OEM 后台会 throttle 主 Looper，
+     * 负一屏/媒体键 post 到 main 后迟迟不跑，表现为「点了没反应」。
+     */
+    private static final Handler sSessionCallbackHandler;
+
+    static {
+        HandlerThread t = new HandlerThread("BoluoMediaSessionCb");
+        t.start();
+        sSessionCallbackHandler = new Handler(t.getLooper());
+    }
+
+    /**
      * 通知栏/锁屏/负一屏媒体传输控制回调（play/pause/stop/skip）。
      * 与 iOS MPRemoteCommandCenter（含 next/previous）语义对齐：由 WanosMusicPlayerNative
      * 实现并驱动 WIAEngine 静音/续播/切歌。
@@ -181,6 +195,72 @@ public class WIAEngineJNI {
     /** FGS / 负一屏大图；可能为 null（解码失败时系统会回退 App 图标）。 */
     public static Bitmap getLastArtBitmap() {
         return sLastArtBitmap;
+    }
+
+    /**
+     * 解析 ACTION_MEDIA_BUTTON / MediaSession onMediaButtonEvent 的 KeyEvent。
+     * @return true 表示已消费。
+     */
+    public static boolean dispatchFromMediaButtonIntent(Intent mediaButtonIntent) {
+        if (mediaButtonIntent == null) return false;
+        KeyEvent ke;
+        try {
+            if (Build.VERSION.SDK_INT >= 33) {
+                ke = mediaButtonIntent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent.class);
+            } else {
+                ke = mediaButtonIntent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "dispatchFromMediaButtonIntent extra failed: " + e.getMessage());
+            return false;
+        }
+        if (ke == null || ke.getAction() != KeyEvent.ACTION_DOWN) return false;
+        int code = ke.getKeyCode();
+        Log.i(TAG, "MediaButton keyCode=" + KeyEvent.keyCodeToString(code));
+        switch (code) {
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+                dispatchTransportPlay();
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                dispatchTransportPause();
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+                if (sLastIsPlaying) dispatchTransportPause();
+                else dispatchTransportPlay();
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_NEXT:
+                dispatchTransportSkipToNext();
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+                dispatchTransportSkipToPrevious();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Session 未 active / OEM 丢 Callback 时的兜底：媒体键进 FGS 再回传。 */
+    private static void installMediaButtonReceiver(Context ctx) {
+        try {
+            Intent i = new Intent(ctx, WanosMediaPlaybackForegroundService.class);
+            i.setAction(Intent.ACTION_MEDIA_BUTTON);
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                flags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pi;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                pi = PendingIntent.getForegroundService(ctx, /*requestCode*/ 9102, i, flags);
+            } else {
+                pi = PendingIntent.getService(ctx, 9102, i, flags);
+            }
+            sMediaSession.setMediaButtonReceiver(pi);
+            Log.i(TAG, "MediaSession mediaButtonReceiver installed → FGS");
+        } catch (Exception e) {
+            Log.w(TAG, "installMediaButtonReceiver failed: " + e.getMessage());
+        }
     }
 
     public static void dispatchTransportPlay() {
@@ -315,6 +395,7 @@ public class WIAEngineJNI {
                 sMediaSession = new MediaSession(ctx, TAG);
                 sMediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
                 // 注册传输控制回调。没有 Callback 时通知栏/锁屏/负一屏按钮会被系统丢弃。
+                // 必须用独立 Handler：后台主线程被 OEM throttle 时 media key 会「送到 session 名但业务不跑」。
                 sMediaSession.setCallback(new MediaSession.Callback() {
                     @Override
                     public void onPlay() {
@@ -348,26 +429,14 @@ public class WIAEngineJNI {
 
                     @Override
                     public boolean onMediaButtonEvent(Intent mediaButtonIntent) {
-                        // 部分 OEM 负一屏只发 KEYCODE_MEDIA_NEXT/PREVIOUS，不走 onSkipToNext。
-                        if (mediaButtonIntent != null) {
-                            KeyEvent ke = mediaButtonIntent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
-                            if (ke != null && ke.getAction() == KeyEvent.ACTION_DOWN) {
-                                int code = ke.getKeyCode();
-                                if (code == KeyEvent.KEYCODE_MEDIA_NEXT) {
-                                    Log.i(TAG, "MediaSession onMediaButtonEvent KEYCODE_MEDIA_NEXT");
-                                    dispatchTransportSkipToNext();
-                                    return true;
-                                }
-                                if (code == KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
-                                    Log.i(TAG, "MediaSession onMediaButtonEvent KEYCODE_MEDIA_PREVIOUS");
-                                    dispatchTransportSkipToPrevious();
-                                    return true;
-                                }
-                            }
+                        // OEM 负一屏常只走 KEYCODE_MEDIA_*，不保证拆成 onPlay/onSkipToNext。
+                        if (dispatchFromMediaButtonIntent(mediaButtonIntent)) {
+                            return true;
                         }
                         return super.onMediaButtonEvent(mediaButtonIntent);
                     }
-                }, sMainHandler);
+                }, sSessionCallbackHandler);
+                installMediaButtonReceiver(ctx);
             }
 
             String title = (trackName == null || trackName.isEmpty()) ? "波萝" : trackName;

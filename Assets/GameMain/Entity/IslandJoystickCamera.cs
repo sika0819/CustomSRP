@@ -101,6 +101,7 @@ namespace Game
 
         Vector3 _exitDollyFrom;
         Vector3 _exitDollyTo;
+        float _exitDollyT;
         Vector3 _enterDollyFrom;
         Vector3 _enterDollyTo;
         float _enterDollyYawFrom;
@@ -168,8 +169,7 @@ namespace Game
             _holdPresetFraming = true;
             _enterDollyActive = false;
 
-            EnsureBody();
-            SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f));
+            SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
             RefreshNearbyColliders();
         }
 
@@ -179,7 +179,9 @@ namespace Game
             _transitionDriven = true;
             _heightTransitioning = false;
             _verticalSpeed = 0f;
+            SetBodyCollisionEnabled(false);
             _exitDollyFrom = transform.position;
+            _exitDollyT = 0f;
             Vector3 forward = Quaternion.Euler(0f, _yaw, 0f) * Vector3.forward;
             Vector3 near = _exitDollyFrom + forward * ExitPullMeters;
             Vector3 ground = SampleGround(near);
@@ -189,11 +191,15 @@ namespace Game
         public void SampleExitDolly(float t01)
         {
             t01 = Mathf.Clamp01(t01);
+            _exitDollyT = t01;
             Vector3 pos = Vector3.Lerp(_exitDollyFrom, _exitDollyTo, t01);
-            SetPose(pos, Quaternion.Euler(Pitch, _yaw, 0f));
+            SetPose(pos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
         }
 
-        /// <summary>Non-low-end exit: small forward walk baked into the dolly path.</summary>
+        /// <summary>
+        /// Non-low-end exit: small forward walk baked into the dolly path.
+        /// Free cinematic motion — no CharacterController / NavMesh.
+        /// </summary>
         public void NudgeExitWalk(float dt)
         {
             if (dt <= 0f)
@@ -202,8 +208,8 @@ namespace Game
             Vector3 delta = forward * (MoveSpeed * ExitWalkSpeedScale * dt);
             _exitDollyFrom += delta;
             _exitDollyTo += delta;
-            EnsureBody();
-            MoveBody(delta);
+            Vector3 pos = Vector3.Lerp(_exitDollyFrom, _exitDollyTo, _exitDollyT);
+            SetPose(pos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
         }
 
         /// <summary>
@@ -222,6 +228,7 @@ namespace Game
             _heightTransitioning = false;
             _holdPresetFraming = true;
             _transitionDriven = true;
+            SetBodyCollisionEnabled(false);
 
             float finalDist = preset.CameraToTargetDis;
             if (finalDist <= 0f)
@@ -229,8 +236,7 @@ namespace Game
                 ComputePresetPose(preset, finalDist, out Vector3 camPos, out float yaw);
                 _yaw = yaw;
                 _enterDollyActive = false;
-                EnsureBody();
-                SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f));
+                SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
                 RefreshNearbyColliders();
                 return;
             }
@@ -245,8 +251,7 @@ namespace Game
             _enterDollyYawTo = nearYaw;
             _enterDollyActive = true;
 
-            EnsureBody();
-            SetPose(farPos, Quaternion.Euler(Pitch, _yaw, 0f));
+            SetPose(farPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
             RefreshNearbyColliders();
         }
 
@@ -257,21 +262,36 @@ namespace Game
                 return;
             Vector3 pos = Vector3.Lerp(_enterDollyFrom, _enterDollyTo, t01);
             _yaw = Mathf.LerpAngle(_enterDollyYawFrom, _enterDollyYawTo, t01);
-            SetPose(pos, Quaternion.Euler(Pitch, _yaw, 0f));
+            SetPose(pos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
         }
 
         public void EndTransitionDrive()
         {
-            _transitionDriven = false;
             if (_enterDollyActive)
             {
                 _yaw = _enterDollyYawTo;
-                SetPose(_enterDollyTo, Quaternion.Euler(Pitch, _yaw, 0f));
+                SetPose(_enterDollyTo, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
                 _enterDollyActive = false;
             }
 
+            _transitionDriven = false;
             _holdPresetFraming = true;
             _verticalSpeed = 0f;
+            EnsureBody();
+        }
+
+        /// <summary>
+        /// 退登 / 二次揭幕：清 iris 驱动与 StayBehind 闩，避免「有声但不能走」。
+        /// </summary>
+        public void ForceUnlockLocomotion()
+        {
+            _transitionDriven = false;
+            _enterDollyActive = false;
+            _holdPresetFraming = false;
+            _heightTransitioning = false;
+            _verticalSpeed = 0f;
+            SetBodyCollisionEnabled(true);
+            EnsureBody();
         }
 
         void ComputePresetPose(IslandPresetAsset preset, float cameraToTargetDis, out Vector3 camPos, out float yaw)
@@ -593,18 +613,41 @@ namespace Game
 
         // ─── Pose / sampling ───────────────────────────────────────────────────────
 
-        void SetPose(Vector3 pos, Quaternion rot)
+        /// <param name="unconstrained">
+        /// Preset / iris dolly: exact authored eye — skip NavMesh and water clamps.
+        /// While <see cref="_transitionDriven"/>, CharacterController stays off so PhysX
+        /// cannot shove the capsule mid-animation.
+        /// </param>
+        void SetPose(Vector3 pos, Quaternion rot, bool unconstrained = false)
         {
             _verticalSpeed = 0f;
-            pos = ClampEyeToNavMesh(pos);
-            pos = ClampEyeOutOfWater(pos);
-            // Disable CC so Move() doesn't try to integrate the new placement.
+            if (!unconstrained)
+            {
+                pos = ClampEyeToNavMesh(pos);
+                pos = ClampEyeOutOfWater(pos);
+            }
+
+            // Disable CC so Move() / overlap resolve doesn't fight the placement.
             bool wasEnabled = _cc != null && _cc.enabled;
             if (wasEnabled)
                 _cc.enabled = false;
             transform.SetPositionAndRotation(pos, rot);
+            if (_transitionDriven)
+                return;
             if (wasEnabled)
                 _cc.enabled = true;
+        }
+
+        void SetBodyCollisionEnabled(bool on)
+        {
+            if (!on)
+            {
+                if (_cc != null && _cc.enabled)
+                    _cc.enabled = false;
+                return;
+            }
+
+            EnsureBody();
         }
 
         /// <summary>

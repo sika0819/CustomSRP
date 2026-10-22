@@ -28,7 +28,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 2800000, guid: 4a248f22e7e340148793ab896ffb9f8d, type: 3}
+        m_Texture: {fileID: 2800000, guid: 934f9668c5b54ad9a75f417e6eb4c1e0, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _BumpMap:
@@ -67,14 +67,16 @@ Material:
     - _PaintThickness: 0.18
     - _ReceiveShadows: 0
     - _ShadeLift: 0.42
-    - _ShadeSteps: 4
+    - _ShadeSteps: 3
     - _ShadowBrushScale: 1.8
     - _ShadowLift: 0.95
     - _ShadowWobble: 0.45
     - _Shadows: 1
-    - _Smoothness: 0
+    - _Smoothness: 0.602
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
+    - _TriplanarTiling: 0.01
+    - _WorldTriplanar: 2
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
@@ -83,7 +85,7 @@ Material:
     - _OutlineColor: {r: 0.1, g: 0.11, b: 0.14, a: 1}
     - _ShadowTint: {r: 0.3, g: 0.35, b: 0.45, a: 1}
     - _ShadowWarm: {r: 0.5, g: 0.48, b: 0.45, a: 1}
-    - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+    - _SpecColor: {r: 0.31132078, g: 0.31132078, b: 0.31132078, a: 1}
     - _SpecularColor: {r: 0.4, g: 0.42, b: 0.46, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

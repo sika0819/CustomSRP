@@ -80,18 +80,24 @@ namespace Game
         public static void TuneCloudsForMobile()
         {
 #if !UNITY_EDITOR
-            // Full cloud ring is a large transparent fill + Load/Store; fog already softens sky.
-            // Disable the component so CloudPass early-outs (Current cleared on OnDisable).
+            // Budget: keep low ring (weather-driven coverage + OIL_MOBILE_PERF fragment).
+            // Drop high ring so CloudPass does one transparent Draw/Load-Store, not two.
+            // Reflect — Game.asmdef must not reference Assembly-CSharp (OilCloudLayer).
             System.Type layerType = System.Type.GetType(
                 "CustomSRP.OilCloudLayer, Assembly-CSharp");
             if (layerType == null)
                 return;
 
+            System.Reflection.FieldInfo highRing =
+                layerType.GetField("highRing");
+            if (highRing == null || highRing.FieldType != typeof(bool))
+                return;
+
             Object[] layers = Object.FindObjectsByType(layerType);
             for (int i = 0; i < layers.Length; i++)
             {
-                if (layers[i] is Behaviour behaviour)
-                    behaviour.enabled = false;
+                if (layers[i] != null)
+                    highRing.SetValue(layers[i], false);
             }
 #endif
         }

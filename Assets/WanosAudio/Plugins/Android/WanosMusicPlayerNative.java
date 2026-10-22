@@ -690,6 +690,16 @@ public class WanosMusicPlayerNative {
     }
 
     /**
+     * 退登 {@link #stop()} 钉住的 shouldStop / userPaused：二次进岛 Arm 前由宿主清掉。
+     * 不在此处 unmute（揭幕仍走 ProcedureIsland.Uncover / ensureAudibleForUnityPlayback）。
+     */
+    public void clearLogoutStopLatch() {
+        shouldStop = false;
+        userPaused = false;
+        Log.i(TAG, "clearLogoutStopLatch");
+    }
+
+    /**
      * Unity {@code MusicPlaylist} 直发 PostEvent 起播时调用：补 AudioFocus + unmute。
      * CustomSRP 不再走 {@link #play(int, int)}，否则真机无焦点/mute 影子态会导致有 PostEvent 无听感。
      */
@@ -718,6 +728,22 @@ public class WanosMusicPlayerNative {
         if (paused) {
             mainHandler.post(() -> updateNowPlayingPlayingState(false));
         }
+    }
+
+    /**
+     * 定时到点停播（前后台均可）。不依赖 Unity Update 消费 Push。
+     * 发 Pause_Music 保留实例便于弹窗「取消/重复」续播；置 userPaused 防焦点回归/后台续播擅自出声。
+     */
+    public void pauseForTimerEnd() {
+        playbackExecutor.execute(() -> {
+            userPaused = true;
+            musicEngineMuted = true;
+            probeSetMute(true);
+            postMusicControlEvent("Pause_Music");
+            Log.i(TAG, "pauseForTimerEnd: userPaused=true");
+            mainHandler.post(() -> updateNowPlayingPlayingState(false));
+            notifyUnityPlaybackState(false);
+        });
     }
 
     /**
@@ -2057,9 +2083,14 @@ public class WanosMusicPlayerNative {
         }
         userPaused = pause;
         if (pause) {
-            // 与 C# WanosSoundAgentHelper.Pause 一致：音乐走 Pause_Music 控制事件。
+            // 对齐前台 MusicPlaylist.Pause：Pause_Music 停 BGM，再 Pause_ALL 停环境/天气等音效。
+            // 后台 Unity 已 pause，调不到 SetContentAudioPaused，只能原生直接发控制事件。
             postMusicControlEvent("Pause_Music");
+            postMusicControlEvent("Pause_ALL");
         } else {
+            // 先 Resume_ALL 恢复内容声，再 Resume_Music；此时曲已 Pause_Music，非 Started，不会踩
+            // restoreAudible「活实例 + Started 禁 Resume_ALL」那条 Ended 切歌坑。
+            postMusicControlEvent("Resume_ALL");
             postMusicControlEvent("Resume_Music");
             if (musicEngineMuted) {
                 playbackExecutor.execute(() -> runGuardedUnmuteOnCurrentThread("bg_resume"));

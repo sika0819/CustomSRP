@@ -184,6 +184,13 @@ namespace CustomSRP
         static readonly Vector4[] s_moonParamsBuf = new Vector4[4];
         static readonly float[] s_starBuf = new float[4];
 
+        // Planar mirror throttle: only redraw when TOD/look jumped enough that a
+        // cached day-blue RT would disagree with the live skybox.
+        const float MirrorSkyPeriodEpsilon = 0.15f;
+        static float s_mirrorSkyPeriod = float.NaN;
+        static OilSkyLookId s_mirrorSkyLook = (OilSkyLookId)(-1);
+        static bool s_mirrorSkyReady;
+
         // Boluo ApplyCelestialOrbits moon satellite constants (AbsoluteDay=0).
         const float MoonOrbitOffsetDeg = -95f;
         const float MoonSatelliteDirectionDeg = 11.5f;
@@ -539,6 +546,8 @@ namespace CustomSRP
             }
 
             // Island terrain may spawn after scene load; attach the Game→SRP bridge here.
+            // EnsureOnSkybox → SyncFromWeatherService writes WeatherService Hours/Look into
+            // timeOfDay before Apply, so the prefab noon default never reaches the first frame.
             OilAtmosphereDriver.EnsureOnSkybox();
             if (driveSun && sun == null)
             {
@@ -1220,6 +1229,68 @@ namespace CustomSRP
             Shader.SetGlobalFloatArray(OilSkyStarIntensityId, s_starBuf);
             Shader.SetGlobalFloat(OilSkyLookReadyId, 1f);
             Shader.SetGlobalFloat(OilSkySunriseId, 0f);
+            NotifyPlanarIfSkyChanged(HoursToPeriod(s_clockHours));
+        }
+
+        /// <summary>
+        /// Idle planar mirror reuses its RT; cold-start TOD / look jumps must bust that
+        /// cache or water keeps a day-blue reflection under a night skybox.
+        /// </summary>
+        static void NotifyPlanarIfSkyChanged(float period)
+        {
+            period = Mathf.Repeat(period, 4f);
+            bool periodJump;
+            if (float.IsNaN(s_mirrorSkyPeriod))
+            {
+                periodJump = true;
+            }
+            else
+            {
+                // Circular distance on the 0–4 period ring (night↔dawn wrap).
+                float delta = Mathf.Abs(period - s_mirrorSkyPeriod);
+                float wrap = Mathf.Min(delta, 4f - delta);
+                periodJump = wrap > MirrorSkyPeriodEpsilon;
+            }
+
+            bool lookJump = s_mirrorSkyLook != s_activeLookId;
+            bool readyJump = !s_mirrorSkyReady;
+            if (!periodJump && !lookJump && !readyJump)
+            {
+                return;
+            }
+
+            s_mirrorSkyPeriod = period;
+            s_mirrorSkyLook = s_activeLookId;
+            s_mirrorSkyReady = true;
+            OilPlanarReflection.InvalidateSky();
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void ResetMirrorSkyTracking()
+        {
+            s_mirrorSkyPeriod = float.NaN;
+            s_mirrorSkyLook = (OilSkyLookId)(-1);
+            s_mirrorSkyReady = false;
+            Shader.SetGlobalFloat(OilSkyLookReadyId, 0f);
+        }
+
+        /// <summary>
+        /// Seed _OilSkyPeriod + look anchors from the skybox material before the first
+        /// water draw. Without this, analytic sky falls back while the skybox already
+        /// shows the serialized night period — open water goes neon day-blue.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        static void SeedWaterSkyGlobals()
+        {
+            Material sky = RenderSettings.skybox;
+            if (sky != null && sky.HasProperty(PeriodId))
+            {
+                float period = sky.GetFloat(PeriodId);
+                Shader.SetGlobalFloat(OilSkyPeriodId, period);
+                s_clockHours = PeriodToHours(period);
+            }
+
+            PushLookGlobals(s_activeLookId);
         }
 
         /// <summary>
@@ -1311,6 +1382,7 @@ namespace CustomSRP
             Shader.SetGlobalVectorArray(OilSkyMoonParamsId, s_moonParamsBuf);
             Shader.SetGlobalFloatArray(OilSkyStarIntensityId, s_starBuf);
             Shader.SetGlobalFloat(OilSkyLookReadyId, 1f);
+            NotifyPlanarIfSkyChanged(HoursToPeriod(s_clockHours));
         }
 
         void SyncSkyMaterial(Material mat, float period, bool force)
@@ -1343,6 +1415,9 @@ namespace CustomSRP
             mat.SetFloat(StarDensityId, starDensity);
             mat.SetFloat(StarSizeId, starSize);
             PushLookGlobals(ActiveLookId);
+            // PushLookGlobals notifies from clock hours; re-check with the period
+            // actually written so a mid-lerp clock and material stay aligned.
+            NotifyPlanarIfSkyChanged(period);
             PushFogCanvasGlobal(mat);
 
             ResolveCelestialDirections(period, out Vector3 sunDir, out Vector3 moonDir);
@@ -1407,8 +1482,9 @@ namespace CustomSRP
             s_foggyBlend = Mathf.Clamp01(foggy01To1);
 
         /// <summary>
-        /// Boluo Trilight ambient (Cozy ambientLightZenith/Horizon × mul). NPR uses oilFill.
-        /// Also nails far-tree billboard period multiply so ApplyOilFog can melt into haze.
+        /// Boluo Trilight ambient (Cozy ambientLightZenith/Horizon × mul). NPR oilFill
+        /// is uploaded as _OilPeriodAmbient for fog / legacy readers — far tree cross
+        /// billboards share OilFoliageLighting (SH9) with near leaves, not period multiply.
         /// </summary>
         static void ApplyAmbient(float period)
         {
@@ -1418,10 +1494,9 @@ namespace CustomSRP
             RenderSettings.ambientEquatorColor = equator;
             RenderSettings.ambientGroundColor = ground;
             RenderSettings.ambientIntensity = 1f;
-            Shader.SetGlobalColor(OilPeriodAmbientId, fill);
-            // Far trees now read _OilPeriodAmbient via OilFoliageLighting — same path
-            // as near leaves. The legacy _OilTreeBBAmbient upload was a 4-anchor fixed
-            // palette that left far trees yellow-green against the foliage.
+            // Vector, not Color: Linear SetGlobalColor sRGB→linear crushes night greens
+            // (same pitfall as BoluoTreeBillboardAmbientSync).
+            Shader.SetGlobalVector(OilPeriodAmbientId, new Vector4(fill.r, fill.g, fill.b, 1f));
 
             if (float.IsNaN(_lastEnvironmentPeriod) || Mathf.Abs(period - _lastEnvironmentPeriod) > 0.02f)
             {

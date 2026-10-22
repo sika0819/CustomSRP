@@ -40,6 +40,8 @@ namespace Game.Native
                 _lastUtc = DateTime.UtcNow;
             }
 
+            // 0,-1：到点结束 → 停播（弹窗「取消」/「重复」再 ResumeAfterTimerEnd）。
+            // 0,0：用户中途取消定时 → 不停播。
             if (remainingSeconds <= 0 && totalSeconds < 0)
                 Game.MusicPlaylist.Instance.Pause();
 

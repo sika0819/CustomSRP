@@ -1,6 +1,7 @@
+using GameFramework.UI;
 using UnityEngine;
-
 using UnityGameFramework.Runtime;
+
 namespace Game
 {
     /// <summary>
@@ -108,16 +109,25 @@ namespace Game
             if (UI == null)
                 return;
 
-            EnsureGroup("Loading", 0);
+            // Loading 必须高于 Main/Panel/Dialog：进岛时 IslandMainForm 会先打开，
+            // 罩子淡出前仍须盖住 HUD（sortingOrder = depth * 100 + depthInGroup）。
             EnsureGroup("Main", 1);
             EnsureGroup("Panel", 2);
             EnsureGroup("Dialog", 3);
+            EnsureGroup("Loading", 10);
         }
 
         static void EnsureGroup(string name, int depth)
         {
             if (!UI.HasUIGroup(name))
+            {
                 UI.AddUIGroup(name, depth);
+                return;
+            }
+
+            IUIGroup group = UI.GetUIGroup(name);
+            if (group != null && group.Depth != depth)
+                group.Depth = depth;
         }
     }
 }

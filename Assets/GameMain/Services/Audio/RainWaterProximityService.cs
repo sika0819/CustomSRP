@@ -34,6 +34,8 @@ namespace Game
                 return;
             _started = true;
             IslandWorldService.OnInlandWaterReady += OnInlandWaterReady;
+            // 首装 Rain_Water 可能晚于切雨；bank 灌入后清熔断并重评。
+            WanosBankStore.OnBankLoaded += OnBankLoaded;
             RunLoop().Forget();
         }
 
@@ -45,10 +47,22 @@ namespace Game
             RebuildWaterPoints();
         }
 
+        static void OnBankLoaded(string bankName)
+        {
+            if (!_started || string.IsNullOrEmpty(bankName))
+                return;
+            if (!string.Equals(bankName, BankName, StringComparison.OrdinalIgnoreCase))
+                return;
+            _bankMissing = false;
+            Log.Info($"[RainWater] bank ready={bankName} — retry Evaluate");
+            EvaluateNow();
+        }
+
         public static void Shutdown()
         {
             _started = false;
             IslandWorldService.OnInlandWaterReady -= OnInlandWaterReady;
+            WanosBankStore.OnBankLoaded -= OnBankLoaded;
             StopPlaying();
             ReleaseBank();
             _bankMissing = false;

@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityGameFramework.Runtime;
+using Object = UnityEngine.Object;
 
 namespace Game
 {
@@ -59,15 +60,12 @@ namespace Game
 
         public static void Show(string tip = "正在进入世界...", float progress = 0.08f)
         {
-            // Never inherit a stuck fade from last Play / interrupted coroutine.
-            if (_hiding || AliveForm() == null)
-            {
-                _hiding = false;
-                _smooth = null;
-                _fade = null;
-                if (AliveForm() == null)
-                    _form = null;
-            }
+            // 退登重登：上一轮 FadeHideRoutine 若只把 _fade 置空而不 Stop，会继续跑到 Hide()，
+            // 把 GuestLogin / 二次进岛刚 Show 的罩拆掉 → 真机「卡在加载界面」。
+            StopRoutines();
+            _hiding = false;
+            if (AliveForm() == null)
+                _form = null;
 
             _tip = string.IsNullOrEmpty(tip) ? _tip : tip;
             _visible = true;
@@ -75,6 +73,7 @@ namespace Game
             _shownProgress = p;
             _targetProgress = p;
             EnsureForm();
+            AliveForm()?.RestoreCover();
             ApplyImmediate(_shownProgress, _tip);
             EnsureSmoothRunner();
         }
@@ -105,6 +104,13 @@ namespace Game
 
         public static void FadeHide(float duration = 1f)
         {
+            // 二次进岛：上一轮 Leave 可能把 _hiding 钉死，再 FadeHide 会直接 return，罩永远不关。
+            if (_hiding && AliveForm() == null)
+            {
+                Hide();
+                return;
+            }
+
             if (_hiding)
                 return;
             if (!_visible)
@@ -118,6 +124,7 @@ namespace Game
             LoadingForm form = AliveForm();
             if (host == null || form == null)
             {
+                // _form 假死但 UIManager 仍挂着 LoadingForm：必须按组关，不能只清静态。
                 Hide();
                 return;
             }
@@ -133,20 +140,51 @@ namespace Game
         public static void Hide()
         {
             StopRoutines();
-            LoadingForm form = AliveForm();
-            if (form != null
-                && GameEntry.UI != null
-                && GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
+            // 绝不依赖 AliveForm：退登重登后 _form 常假死，HasUIForm 仍为 true，跳过 Close 会黑屏卡「正在铺装草地」。
+            if (GameEntry.UI != null)
             {
-                form.SetCoverAlpha(1f);
-                GameEntry.UI.CloseUIForm(GameEntry.UI.GetUIForm(UiAssets.LoadingForm).SerialId);
+                LoadingForm form = AliveForm();
+                if (form != null)
+                {
+                    form.SetCoverAlpha(0f);
+                    form.ForceVeilOff();
+                }
+
+                if (GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
+                {
+                    var uiForm = GameEntry.UI.GetUIForm(UiAssets.LoadingForm);
+                    if (uiForm != null)
+                        GameEntry.UI.CloseUIForm(uiForm.SerialId);
+                }
+
+                // 兜底：Loading 组里任何残留（含 Logic 已毁、GetUIForm 对不上的）
+                UiAssets.CloseGroup("Loading");
             }
+
+            // 核选项：场景里残留的 LoadingForm（UIManager 已关但 UITK 仍画）
+            ForceDestroyAllLoadingForms();
 
             _form = null;
             _visible = false;
             _hiding = false;
             _shownProgress = 0f;
             _targetProgress = 0f;
+        }
+
+        static void ForceDestroyAllLoadingForms()
+        {
+            LoadingForm[] forms = Object.FindObjectsByType<LoadingForm>(FindObjectsInactive.Include);
+            for (int i = 0; i < forms.Length; i++)
+            {
+                LoadingForm f = forms[i];
+                if (f == null)
+                    continue;
+                f.ForceVeilOff();
+                Object.Destroy(f.gameObject);
+            }
+
+            if (forms.Length > 0)
+                Log.Warning("[BootLoadingService] ForceDestroyAllLoadingForms count=" + forms.Length);
         }
 
         static IEnumerator FadeHideRoutine(float duration)
@@ -189,9 +227,23 @@ namespace Game
 
             var uiForm = GameEntry.UI.GetUIForm(UiAssets.LoadingForm);
             _form = uiForm?.Logic as LoadingForm;
-            if (_form == null && !GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
+            // HasUIForm 但 Logic 已毁：先拆再开，避免假死罩挡死画面。
+            if (_form == null && GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
             {
-                GameEntry.UI.OpenUIForm(UiAssets.LoadingForm, "Loading");
+                UiAssets.CloseGroup("Loading");
+                ForceDestroyAllLoadingForms();
+                uiForm = null;
+            }
+
+            if (_form == null)
+            {
+                // Close 同帧可能仍 HasUIForm：仍尝试 Open；GF 对同 asset 重复 Open 会失败并打日志，下帧 EnsureForm 再试。
+                if (!GameEntry.UI.HasUIForm(UiAssets.LoadingForm)
+                    && !GameEntry.UI.IsLoadingUIForm(UiAssets.LoadingForm))
+                {
+                    GameEntry.UI.OpenUIForm(UiAssets.LoadingForm, "Loading");
+                }
+
                 uiForm = GameEntry.UI.GetUIForm(UiAssets.LoadingForm);
                 _form = uiForm?.Logic as LoadingForm;
             }

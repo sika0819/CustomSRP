@@ -37,14 +37,32 @@ namespace Game
         const float ModeTipFadeSeconds = 0.25f;
 
         // -----------------------------------------------------------------------
-        // Album strip layout (Boluo HorizontalDragComponent: fixed step + loop).
+        // Album strip: measure each name, pack with a fixed edge gap (no ellipsis).
         // -----------------------------------------------------------------------
 
-        const float AlbumStep = 140f;              // 120px label + 20px gap (fixed).
+        /// <summary>Fixed gap between one name's glyph end and the next name's glyph start.</summary>
+        const float AlbumNameGap = 40f;
+        const float AlbumFontUnselected = 48f;
+        const float AlbumFontSelected = 72f;
+        /// <summary>huadong viewport width — selected name centre sits at half of this.</summary>
+        const float AlbumViewportWidth = 788f;
+        const float AlbumViewportCenter = AlbumViewportWidth * 0.5f;
         const int AlbumStripCopies = 3;           // Triple strip for seamless loop.
         const string AlbumLabelClass = "game-music-form__album-label";
         const string AlbumLabelSelectedModifier = "game-music-form__album-label--selected";
         const string AlbumLabelUnselectedModifier = "game-music-form__album-label--unselected";
+
+        /// <summary>Packed slot origins / widths (albumCount × copies). Frozen while dragging.</summary>
+        readonly List<float> _albumSlotLeft = new List<float>();
+        readonly List<float> _albumSlotWidth = new List<float>();
+        /// <summary>Content distance from copy0 start to copy1 start (loop period).</summary>
+        float _albumCopyWidth;
+
+        // Track-title marquee (Boluo dual-copy horizontal scroll inside mask).
+        const float TrackMarqueeGap = 160f;       // Space between copy A and copy B.
+        const float TrackMarqueeSpeed = 80f;      // px/s leftward.
+        const float TrackMarqueePauseSeconds = 3f;
+        const long TrackMarqueeTickMs = 16;
 
         // -----------------------------------------------------------------------
         // Visual element caches
@@ -62,6 +80,17 @@ namespace Game
         float _fadeElapsed = -1f;
         bool _revealGate;
         float _ignoreProgrammaticUntil;
+
+        // ListView disables touch-drag scrolling (m_TouchDraggingAllowed=false).
+        // Drive vertical scrollOffset ourselves — same pattern as PresetForm.
+        const float ListDragSlop = 8f;
+        int _listPointerId = -1;
+        bool _listPointerDown;
+        bool _listDragging;
+        bool _listCaptured;
+        float _listDragStartY;
+        float _listScrollStartY;
+        bool _suppressTrackClick;
         VisualElement _hintWindows;
         Label _hintLabel;
         /// <summary>「全部歌曲N首」— TextElement only; Label :hover washes grey to white.</summary>
@@ -98,6 +127,16 @@ namespace Game
         static Sprite[] _playingFrames;
         IVisualElementScheduledItem _playingAnimSchedule;
         int _playingFrameIndex;
+
+        // Track-row status icons (Boluo MusicNotDownload / MusicLoading / MusicError / MusicRed).
+        static Sprite _iconNotDownload;
+        static Sprite _iconDownloading;
+        static Sprite _iconDownloadError;
+        static Sprite _iconDownloadSuccess;
+        static bool _statusIconsLoaded;
+        IVisualElementScheduledItem _downloadSpinSchedule;
+        float _downloadSpinDegrees;
+        const float DownloadSpinDegreesPerTick = 6f; // ~180°/s @ 33ms
 
         // -----------------------------------------------------------------------
         // Lifecycle
@@ -137,7 +176,9 @@ namespace Game
                 _list.pickingMode = PickingMode.Position;
 
             EnsurePlayingFramesLoaded();
+            EnsureStatusIconsLoaded();
             StartPlayingAnimLoop();
+            StartDownloadSpinLoop();
 
             if (MusicCatalog.IsReady)
                 SyncOpenToNowPlaying();
@@ -158,11 +199,24 @@ namespace Game
             _tipHide?.Pause();
             _tipHide = null;
             StopPlayingAnimLoop();
+            StopDownloadSpinLoop();
             UnbindScrollbarReveal();
             UnbindAlbumDrag();
             ClearAlbumClicks();
+            StopAllTrackMarquees();
             _title = null;
             base.OnClose(isShutdown, userData);
+        }
+
+        void StopAllTrackMarquees()
+        {
+            if (_list == null)
+                return;
+            _list.Query("titleMask").ForEach(mask =>
+            {
+                if (mask.userData is TrackTitleMarquee m)
+                    StopTrackMarquee(m);
+            });
         }
 
         void ClearAlbumClicks()
@@ -184,6 +238,9 @@ namespace Game
             for (int i = 0; i < _albumLabels.Count; i++)
                 _albumLabels[i]?.RemoveFromHierarchy();
             _albumLabels.Clear();
+            _albumSlotLeft.Clear();
+            _albumSlotWidth.Clear();
+            _albumCopyWidth = 0f;
             _albumContent?.Clear();
         }
 
@@ -344,14 +401,44 @@ namespace Game
 
             // Triple the strip so left/right drag always has neighbours (loop).
             int slotCount = albumCount * AlbumStripCopies;
+            EnsureAlbumLabelSlots(slotCount);
 
+            // Highlight: while dragging, follow the pointer; otherwise ALWAYS the
+            // middle-copy slot for _centerAlbum.
+            int highlightSlot;
+            if (_isDragging && _albumSlotLeft.Count == slotCount)
+            {
+                highlightSlot = SlotIndexFromLeft(ReadAlbumContentLeft());
+                if (highlightSlot < 0 || highlightSlot >= slotCount)
+                    highlightSlot = albumCount + _centerAlbum;
+            }
+            else
+            {
+                highlightSlot = albumCount + _centerAlbum;
+            }
+
+            // Drag: freeze packed positions (only opacity/size chrome updates).
+            // Settle / open / click: remeasure and repack so edge gap stays AlbumNameGap.
+            if (!_isDragging || _albumSlotLeft.Count != slotCount)
+                RelayoutAlbumSlots(names, albumCount, highlightSlot);
+
+            ApplyAlbumSlotVisuals(names, albumCount, highlightSlot);
+        }
+
+        void EnsureAlbumLabelSlots(int slotCount)
+        {
             while (_albumLabels.Count < slotCount)
             {
-                // TextElement avoids .unity-label:hover → white (invisible on white card).
                 var label = new TextElement();
                 label.AddToClassList(AlbumLabelClass);
                 label.pickingMode = PickingMode.Position;
                 label.style.color = AlbumTextColor;
+                label.style.position = Position.Absolute;
+                label.style.top = 0;
+                label.style.marginRight = 0;
+                label.style.overflow = Overflow.Visible;
+                label.style.whiteSpace = WhiteSpace.NoWrap;
+                label.style.unityTextAlign = TextAnchor.MiddleCenter;
                 _albumContent.Add(label);
                 _albumLabels.Add(label);
             }
@@ -368,8 +455,6 @@ namespace Game
                 stale?.RemoveFromHierarchy();
             }
 
-            // Forms are pooled: OnClose clears clicks but keeps labels. Re-bind
-            // any slots that lost their callback so reopen stays clickable.
             while (_albumClicks.Count < _albumLabels.Count)
             {
                 int slot = _albumClicks.Count;
@@ -384,25 +469,54 @@ namespace Game
                 label?.RegisterCallback(click);
                 _albumClicks.Add(click);
             }
+        }
 
-            // Highlight: while dragging, follow the pointer; otherwise ALWAYS the
-            // middle-copy slot for _centerAlbum. Using resolvedStyle.left here was
-            // the reopen bug — layout had not resolved yet, so the selected class
-            // landed on an off-screen copy and the visible name stayed at opacity
-            // 0.3 (dark×0.3 on white ≈ washed / "white").
-            int highlightSlot;
-            if (_isDragging)
+        /// <summary>
+        /// Pack labels by measured glyph width with a constant <see cref="AlbumNameGap"/>
+        /// between one name's end and the next name's start. No ellipsis / clip.
+        /// </summary>
+        void RelayoutAlbumSlots(string[] names, int albumCount, int highlightSlot)
+        {
+            int slotCount = albumCount * AlbumStripCopies;
+            _albumSlotLeft.Clear();
+            _albumSlotWidth.Clear();
+            _albumContent.style.height = 101f;
+            _albumContent.style.overflow = Overflow.Visible;
+
+            float x = 0f;
+            for (int i = 0; i < slotCount; i++)
             {
-                float left = ReadAlbumContentLeft();
-                highlightSlot = Mathf.RoundToInt(-left / AlbumStep);
-                if (highlightSlot < 0 || highlightSlot >= slotCount)
-                    highlightSlot = albumCount + _centerAlbum;
-            }
-            else
-            {
-                highlightSlot = albumCount + _centerAlbum;
+                var label = _albumLabels[i];
+                int logical = i % albumCount;
+                string name = names[logical];
+                bool isSelected = i == highlightSlot;
+                float fontSize = isSelected ? AlbumFontSelected : AlbumFontUnselected;
+
+                label.text = name;
+                label.userData = logical;
+                label.style.fontSize = fontSize;
+
+                float textW = MeasureAlbumNameWidth(label, name, fontSize);
+                _albumSlotLeft.Add(x);
+                _albumSlotWidth.Add(textW);
+
+                label.style.left = x;
+                label.style.width = textW;
+                label.style.minWidth = textW;
+                label.style.maxWidth = textW;
+                label.style.overflow = Overflow.Visible;
+
+                x += textW + AlbumNameGap;
             }
 
+            _albumCopyWidth = albumCount > 0 && _albumSlotLeft.Count > albumCount
+                ? _albumSlotLeft[albumCount] - _albumSlotLeft[0]
+                : Mathf.Max(0f, x - AlbumNameGap);
+            _albumContent.style.width = Mathf.Max(0f, x - AlbumNameGap);
+        }
+
+        void ApplyAlbumSlotVisuals(string[] names, int albumCount, int highlightSlot)
+        {
             for (int i = 0; i < _albumLabels.Count; i++)
             {
                 var label = _albumLabels[i];
@@ -413,13 +527,40 @@ namespace Game
                 label.userData = logical;
                 label.style.color = AlbumTextColor;
                 bool isSelected = i == highlightSlot;
-                // Inline opacity/size so a missed USS class cannot leave the
-                // centred name washed out after a pooled reopen.
                 label.style.opacity = isSelected ? 1f : 0.3f;
-                label.style.fontSize = isSelected ? 72f : 48f;
+                // During drag widths stay frozen; font may grow but must not reflow.
+                if (!_isDragging)
+                    label.style.fontSize = isSelected ? AlbumFontSelected : AlbumFontUnselected;
+                else if (i < _albumSlotWidth.Count)
+                {
+                    // Keep box width; allow selected glyphs to paint outside the box.
+                    label.style.fontSize = isSelected ? AlbumFontSelected : AlbumFontUnselected;
+                    label.style.width = _albumSlotWidth[i];
+                    label.style.minWidth = _albumSlotWidth[i];
+                    label.style.maxWidth = _albumSlotWidth[i];
+                    label.style.left = _albumSlotLeft[i];
+                    label.style.overflow = Overflow.Visible;
+                }
                 label.EnableInClassList(AlbumLabelSelectedModifier, isSelected);
                 label.EnableInClassList(AlbumLabelUnselectedModifier, !isSelected);
             }
+        }
+
+        static float MeasureAlbumNameWidth(TextElement el, string text, float fontSize)
+        {
+            if (el == null || string.IsNullOrEmpty(text))
+                return AlbumNameGap;
+
+            el.style.fontSize = fontSize;
+            Vector2 size = el.MeasureTextSize(
+                text,
+                0f, VisualElement.MeasureMode.Undefined,
+                0f, VisualElement.MeasureMode.Undefined);
+
+            float w = size.x;
+            if (w < 1f)
+                w = text.Length * fontSize; // CJK ≈ 1em fallback
+            return Mathf.Max(w, 1f);
         }
 
         /// <summary>Prefer written style.left; fall back to resolved when unset.</summary>
@@ -456,43 +597,88 @@ namespace Game
         }
 
         /// <summary>One copy width in content space — used to wrap the triple strip.</summary>
-        float AlbumCircumference(int albumCount) => albumCount * AlbumStep;
+        float AlbumCircumference(int albumCount)
+        {
+            if (_albumCopyWidth > 1f)
+                return _albumCopyWidth;
+            // Fallback before first layout: rough estimate from gap packing.
+            return Mathf.Max(albumCount, 1) * (AlbumFontUnselected * 2f + AlbumNameGap);
+        }
 
         /// <summary>
-        /// Keep content.left inside the middle copy range so labels never scroll
-        /// off into empty space (seamless infinite loop).
+        /// Keep content.left inside the middle-copy neighbourhood so the strip loops.
         /// </summary>
         void NormalizeAlbumLoop(ref float left, int albumCount)
         {
             if (albumCount <= 0)
                 return;
             float circ = AlbumCircumference(albumCount);
-            // Middle copy covers left in [-2*circ, -circ] when padding centres slot 0 of copy 0...
-            // Slot layout: copies 0,1,2. Center on copy 1 → left = -(albumCount + index)*step.
-            // Valid window for continuous drag without blank: roughly (-2*circ, 0).
-            // When left drifts past either edge by a full circ, jump by ±circ.
-            while (left > -circ * 0.5f)
+            if (circ < 1f)
+                return;
+            float anchor = TargetLeftForAlbum(0, albumCount);
+            while (left > anchor + circ * 0.5f)
                 left -= circ;
-            while (left < -circ * 2.5f)
+            while (left < anchor - circ * 1.5f)
                 left += circ;
+        }
+
+        /// <summary>Absolute slot index whose centre is closest to the viewport centre.</summary>
+        int SlotIndexFromLeft(float contentLeft)
+        {
+            if (_albumSlotLeft.Count == 0 || _albumSlotWidth.Count == 0)
+                return 0;
+            float viewCenterInContent = AlbumViewportCenter - contentLeft;
+            int best = 0;
+            float bestDist = float.MaxValue;
+            int n = Mathf.Min(_albumSlotLeft.Count, _albumSlotWidth.Count);
+            for (int i = 0; i < n; i++)
+            {
+                float center = _albumSlotLeft[i] + _albumSlotWidth[i] * 0.5f;
+                float d = Mathf.Abs(center - viewCenterInContent);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = i;
+                }
+            }
+            return best;
         }
 
         int LogicalAlbumFromLeft(float left, int albumCount)
         {
             if (albumCount <= 0)
                 return 0;
-            int slot = Mathf.RoundToInt(-left / AlbumStep);
+            int slot = SlotIndexFromLeft(left);
             return ((slot % albumCount) + albumCount) % albumCount;
         }
 
-        /// <summary>Target left that centres <paramref name="albumIndex"/> in the middle copy.</summary>
+        /// <summary>
+        /// Content.left that puts <paramref name="albumIndex"/>'s name centre on the
+        /// huadong viewport centre (middle copy of the triple strip).
+        /// </summary>
         float TargetLeftForAlbum(int albumIndex, int albumCount)
         {
             if (albumCount <= 0)
                 return 0f;
             albumIndex = ((albumIndex % albumCount) + albumCount) % albumCount;
-            int middleBase = albumCount; // start of copy 1
-            return -(middleBase + albumIndex) * AlbumStep;
+            int slot = albumCount + albumIndex; // middle copy
+            if (slot >= _albumSlotLeft.Count || slot >= _albumSlotWidth.Count)
+            {
+                // Layout not ready — force a pack around the requested centre.
+                if (MusicCatalog.IsReady && _albumContent != null)
+                {
+                    string[] names = MusicCatalog.GetAlbumNames();
+                    if (names != null && names.Length == albumCount)
+                    {
+                        EnsureAlbumLabelSlots(albumCount * AlbumStripCopies);
+                        RelayoutAlbumSlots(names, albumCount, albumCount + albumIndex);
+                    }
+                }
+            }
+            if (slot >= _albumSlotLeft.Count || slot >= _albumSlotWidth.Count)
+                return 0f;
+            float nameCenter = _albumSlotLeft[slot] + _albumSlotWidth[slot] * 0.5f;
+            return AlbumViewportCenter - nameCenter;
         }
 
         void RefreshTrackList()
@@ -553,9 +739,10 @@ namespace Game
                 _albumContainer.Add(_albumContent);
             }
 
-            // Match .game-music-form__huadong > VisualElement even if USS lags.
-            _albumContent.style.flexDirection = FlexDirection.Row;
-            _albumContent.style.flexWrap = Wrap.NoWrap;
+            // Packed by glyph width + AlbumNameGap; host translates via style.left.
+            _albumContent.style.position = Position.Relative;
+            _albumContent.style.height = 101f;
+            _albumContent.style.paddingLeft = 0;
             _albumContent.pickingMode = PickingMode.Ignore;
 
             // Pooled reopen: rebuild labels into this host every open.
@@ -731,10 +918,9 @@ namespace Game
         {
             if (_albumContent == null)
                 return;
-            int albumCount = MusicCatalog.AlbumCount;
-            float left = TargetLeftForAlbum(_centerAlbum, albumCount);
-            _albumContent.style.left = left;
             RefreshAlbumStrip();
+            int albumCount = MusicCatalog.AlbumCount;
+            _albumContent.style.left = TargetLeftForAlbum(_centerAlbum, albumCount);
         }
 
         void SnapAlbumContent(int albumIndex)
@@ -874,6 +1060,8 @@ namespace Game
 
             _scrollView.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             _scrollView.verticalScrollerVisibility = ScrollerVisibility.AlwaysVisible;
+            _scrollView.mode = ScrollViewMode.Vertical;
+            _scrollView.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
             _vScroller = _scrollView.verticalScroller;
             if (_vScroller == null)
                 return;
@@ -882,11 +1070,13 @@ namespace Game
             _revealGate = false;
             _ignoreProgrammaticUntil = 0f;
             _vScroller.valueChanged += OnScrollerValueChanged;
+            BindListDragScroll();
             _list.schedule.Execute(EnableRevealGate).StartingIn(32);
         }
 
         void UnbindScrollbarReveal()
         {
+            UnbindListDragScroll();
             if (_vScroller != null)
                 _vScroller.valueChanged -= OnScrollerValueChanged;
             _hideSchedule?.Pause();
@@ -896,6 +1086,150 @@ namespace Game
             _vScroller = null;
             _scrollView = null;
             _revealGate = false;
+        }
+
+        // -----------------------------------------------------------------------
+        // List touch/mouse drag scroll (ListView blocks native touch pan)
+        // -----------------------------------------------------------------------
+
+        void BindListDragScroll()
+        {
+            if (_list == null)
+                return;
+            // Listen on ListView so empty viewport chrome still receives the gesture.
+            _list.RegisterCallback<PointerDownEvent>(OnListPointerDown);
+            _list.RegisterCallback<PointerMoveEvent>(OnListPointerMove);
+            _list.RegisterCallback<PointerUpEvent>(OnListPointerUp);
+            _list.RegisterCallback<PointerCancelEvent>(OnListPointerCancel);
+            _list.RegisterCallback<PointerCaptureOutEvent>(OnListPointerCaptureOut);
+        }
+
+        void UnbindListDragScroll()
+        {
+            EndListPointerGesture(commitScroll: false);
+            if (_list == null)
+                return;
+            _list.UnregisterCallback<PointerDownEvent>(OnListPointerDown);
+            _list.UnregisterCallback<PointerMoveEvent>(OnListPointerMove);
+            _list.UnregisterCallback<PointerUpEvent>(OnListPointerUp);
+            _list.UnregisterCallback<PointerCancelEvent>(OnListPointerCancel);
+            _list.UnregisterCallback<PointerCaptureOutEvent>(OnListPointerCaptureOut);
+        }
+
+        static bool IsUnderVerticalScroller(VisualElement target)
+        {
+            for (VisualElement ve = target; ve != null; ve = ve.parent)
+            {
+                if (ve.ClassListContains("unity-scroller")
+                    || ve.ClassListContains("unity-base-slider")
+                    || ve is Scroller)
+                    return true;
+            }
+            return false;
+        }
+
+        void OnListPointerDown(PointerDownEvent evt)
+        {
+            if (_list == null || _scrollView == null || _listPointerDown)
+                return;
+            // Mouse: primary button only. Touch/pen report button 0.
+            if (evt.button != 0)
+                return;
+            if (IsUnderVerticalScroller(evt.target as VisualElement))
+                return;
+
+            _listPointerDown = true;
+            _listDragging = false;
+            _listCaptured = false;
+            _listPointerId = evt.pointerId;
+            _listDragStartY = evt.position.y;
+            _listScrollStartY = _scrollView.scrollOffset.y;
+            _suppressTrackClick = false;
+        }
+
+        void OnListPointerMove(PointerMoveEvent evt)
+        {
+            if (!_listPointerDown || evt.pointerId != _listPointerId || _scrollView == null)
+                return;
+
+            float dy = evt.position.y - _listDragStartY;
+            if (!_listDragging && Mathf.Abs(dy) >= ListDragSlop)
+            {
+                _listDragging = true;
+                _suppressTrackClick = true;
+                if (!_listCaptured)
+                {
+                    _list.CapturePointer(evt.pointerId);
+                    _listCaptured = true;
+                }
+            }
+
+            if (!_listDragging)
+                return;
+
+            float max = ListScrollMax();
+            float next = Mathf.Clamp(_listScrollStartY - dy, 0f, max);
+            _scrollView.scrollOffset = new Vector2(_scrollView.scrollOffset.x, next);
+            NotifyScrollbarUserInput(bypassProgrammaticCooldown: true);
+            evt.StopPropagation();
+        }
+
+        void OnListPointerUp(PointerUpEvent evt)
+        {
+            if (!_listPointerDown || evt.pointerId != _listPointerId)
+                return;
+            EndListPointerGesture(commitScroll: _listDragging);
+        }
+
+        void OnListPointerCancel(PointerCancelEvent evt)
+        {
+            if (!_listPointerDown || evt.pointerId != _listPointerId)
+                return;
+            EndListPointerGesture(commitScroll: false);
+        }
+
+        void OnListPointerCaptureOut(PointerCaptureOutEvent evt)
+        {
+            if (!_listPointerDown || evt.pointerId != _listPointerId)
+                return;
+            EndListPointerGesture(commitScroll: _listDragging);
+        }
+
+        void EndListPointerGesture(bool commitScroll)
+        {
+            int pointerId = _listPointerId;
+            bool wasDragging = _listDragging;
+            _listPointerDown = false;
+            _listDragging = false;
+            _listPointerId = -1;
+
+            if (_listCaptured && _list != null && pointerId >= 0 && _list.HasPointerCapture(pointerId))
+                _list.ReleasePointer(pointerId);
+            _listCaptured = false;
+
+            if (wasDragging || commitScroll)
+            {
+                // Keep click suppressed through the synthesized ClickEvent on this Up.
+                _suppressTrackClick = true;
+                _list?.schedule.Execute(() => { _suppressTrackClick = false; }).StartingIn(0);
+            }
+        }
+
+        float ListScrollMax()
+        {
+            if (_vScroller != null && !float.IsNaN(_vScroller.highValue))
+                return Mathf.Max(0f, _vScroller.highValue);
+            if (_scrollView == null)
+                return 0f;
+            VisualElement content = _scrollView.contentContainer;
+            VisualElement viewport = _scrollView.contentViewport;
+            if (content == null || viewport == null)
+                return 0f;
+            float contentH = content.layout.height;
+            float viewH = viewport.layout.height;
+            if (float.IsNaN(contentH) || float.IsNaN(viewH))
+                return 0f;
+            return Mathf.Max(0f, contentH - viewH);
         }
 
         void EnableRevealGate()
@@ -978,6 +1312,189 @@ namespace Game
         }
 
         // -----------------------------------------------------------------------
+        // Track-title marquee (dual copy inside mask)
+        // -----------------------------------------------------------------------
+
+        enum TrackMarqueePhase
+        {
+            Idle,
+            Scrolling,
+            Pausing,
+        }
+
+        /// <summary>Per-row marquee state; lives on the title mask's userData.</summary>
+        sealed class TrackTitleMarquee
+        {
+            public VisualElement Mask;
+            public VisualElement Mover;
+            public TextElement CopyA;
+            public TextElement CopyB;
+            public VisualElement Badge;
+            public IVisualElementScheduledItem Tick;
+            public EventCallback<GeometryChangedEvent> OnGeom;
+            public string Text = string.Empty;
+            public Color TitleColor = TrackTextColor;
+            public float TextWidth;
+            public float Offset;
+            public float PauseLeft;
+            public TrackMarqueePhase Phase;
+        }
+
+        /// <summary>ListView row bind payload (click + marquee handle).</summary>
+        sealed class TrackRowBind
+        {
+            public EventCallback<ClickEvent> Click;
+            public TrackTitleMarquee Marquee;
+        }
+
+        static void StopTrackMarquee(TrackTitleMarquee m)
+        {
+            if (m == null)
+                return;
+            m.Tick?.Pause();
+            m.Tick = null;
+            m.Phase = TrackMarqueePhase.Idle;
+            m.Offset = 0f;
+            m.PauseLeft = 0f;
+            if (m.Mover != null)
+                m.Mover.style.left = 0f;
+            if (m.CopyB != null)
+                m.CopyB.style.display = DisplayStyle.None;
+        }
+
+        void EnsureTrackMarqueeTick(TrackTitleMarquee m)
+        {
+            if (m == null || m.Mask == null)
+                return;
+            if (m.Tick != null)
+                return;
+            m.Tick = m.Mask.schedule.Execute(() => TickTrackMarquee(m))
+                .Every(TrackMarqueeTickMs);
+        }
+
+        void TickTrackMarquee(TrackTitleMarquee m)
+        {
+            if (m == null || m.Phase == TrackMarqueePhase.Idle || m.Mover == null)
+                return;
+
+            float dt = TrackMarqueeTickMs / 1000f;
+            if (m.Phase == TrackMarqueePhase.Pausing)
+            {
+                m.PauseLeft -= dt;
+                if (m.PauseLeft > 0f)
+                    return;
+                m.Offset = 0f;
+                m.Mover.style.left = 0f;
+                m.Phase = TrackMarqueePhase.Scrolling;
+                return;
+            }
+
+            // Scrolling left until copy B's left edge aligns with the mask left.
+            m.Offset -= TrackMarqueeSpeed * dt;
+            float loop = m.TextWidth + TrackMarqueeGap;
+            if (m.Offset <= -loop)
+            {
+                m.Offset = 0f;
+                m.Mover.style.left = 0f;
+                m.Phase = TrackMarqueePhase.Pausing;
+                m.PauseLeft = TrackMarqueePauseSeconds;
+            }
+            else
+            {
+                m.Mover.style.left = m.Offset;
+            }
+        }
+
+        void RefreshTrackMarquee(TrackTitleMarquee m, string text, Color color)
+        {
+            if (m?.Mask == null || m.CopyA == null || m.CopyB == null || m.Mover == null)
+                return;
+
+            m.Text = text ?? string.Empty;
+            m.TitleColor = color;
+            m.CopyA.text = m.Text;
+            m.CopyB.text = m.Text;
+            m.CopyA.style.color = color;
+            m.CopyB.style.color = color;
+
+            float textW = MeasureTrackTitleWidth(m.CopyA, m.Text);
+            m.TextWidth = textW;
+            m.CopyA.style.left = 0f;
+            m.CopyB.style.left = textW + TrackMarqueeGap;
+
+            // Available width = panel minus badge (when shown). Do not use the
+            // mask's current width — short-name shrink would starve the compare.
+            VisualElement panel = m.Mask.parent;
+            float panelW = panel != null ? panel.resolvedStyle.width : float.NaN;
+            if (float.IsNaN(panelW) || panelW <= 1f)
+            {
+                StopTrackMarquee(m);
+                m.Mask.style.width = StyleKeyword.Auto;
+                m.Mask.style.flexGrow = 1;
+                m.Mask.style.flexShrink = 1;
+                return;
+            }
+
+            float badgeW = 0f;
+            if (m.Badge != null && m.Badge.resolvedStyle.display != DisplayStyle.None)
+            {
+                float bw = m.Badge.resolvedStyle.width;
+                float ml = m.Badge.resolvedStyle.marginLeft;
+                if (!float.IsNaN(bw))
+                    badgeW += bw;
+                if (!float.IsNaN(ml))
+                    badgeW += ml;
+            }
+
+            float available = Mathf.Max(0f, panelW - badgeW);
+            bool needScroll = textW > available + 0.5f;
+            if (!needScroll)
+            {
+                StopTrackMarquee(m);
+                // Shrink mask to text so the red badge sits on the name Rect's right edge.
+                m.Mask.style.flexGrow = 0;
+                m.Mask.style.flexShrink = 0;
+                m.Mask.style.width = Mathf.Max(0f, textW);
+                m.Mover.style.width = textW;
+                return;
+            }
+
+            // Overflow: mask fills remaining row; dual copy scrolls inside.
+            m.Mask.style.flexGrow = 1;
+            m.Mask.style.flexShrink = 1;
+            m.Mask.style.width = StyleKeyword.Auto;
+            m.Mover.style.width = textW * 2f + TrackMarqueeGap;
+            m.CopyB.style.display = DisplayStyle.Flex;
+            if (m.Phase == TrackMarqueePhase.Idle)
+            {
+                m.Offset = 0f;
+                m.Mover.style.left = 0f;
+                m.Phase = TrackMarqueePhase.Scrolling;
+            }
+            EnsureTrackMarqueeTick(m);
+        }
+
+        static float MeasureTrackTitleWidth(TextElement el, string text)
+        {
+            if (el == null || string.IsNullOrEmpty(text))
+                return 0f;
+            // VisualElement.MeasureMode — nested enum; bare MeasureMode fails CS0103 on Unity 6.
+            Vector2 size = el.MeasureTextSize(
+                text,
+                0f, VisualElement.MeasureMode.Undefined,
+                0f, VisualElement.MeasureMode.Undefined);
+            return Mathf.Max(0f, size.x);
+        }
+
+        static void SetTrackTitleColor(TrackTitleMarquee m, Color color)
+        {
+            if (m?.CopyA != null)
+                m.CopyA.style.color = color;
+            if (m?.CopyB != null)
+                m.CopyB.style.color = color;
+        }
+
+        // -----------------------------------------------------------------------
         // ListView item callbacks
         // -----------------------------------------------------------------------
 
@@ -993,28 +1510,92 @@ namespace Game
             root.style.backgroundColor = new Color(0, 0, 0, 0);
             root.pickingMode = PickingMode.Position;
 
+            // Title row: masked marquee name + Boluo DownloadSuccess red badge
+            // after the name Rect (outside the mask so it never blocks scroll).
             var panel = new VisualElement();
             panel.name = "panel";
             panel.style.position = Position.Absolute;
             panel.style.left = 85; panel.style.top = 0; panel.style.bottom = 0; panel.style.right = 160;
+            panel.style.flexDirection = FlexDirection.Row;
+            panel.style.alignItems = Align.Center;
             panel.pickingMode = PickingMode.Ignore;
 
-            // TextElement (not Label): ListView rows under the cursor on reopen
-            // would otherwise get .unity-label:hover → white on the white card.
-            // Typography matches Musicitem Text_0 (45px + TMP characterSpacing 4.5
-            // → 4.5/100 em ≈ 2.025px letter-spacing).
-            var label = new TextElement();
-            label.name = "label0";
-            label.AddToClassList("game-music-form__track-title");
-            label.style.fontSize = 45f;
-            label.style.letterSpacing = 45f * 4.5f / 100f;
-            label.style.color = TrackTextColor;
-            label.pickingMode = PickingMode.Ignore;
-            panel.Add(label);
+            var mask = new VisualElement();
+            mask.name = "titleMask";
+            mask.AddToClassList("game-music-form__track-title-mask");
+            mask.pickingMode = PickingMode.Ignore;
 
-            // Five icon slots — all hidden by default.
-            string[] iconNames = { "notdownload", "downloading", "downloaderror", "downloadsuccess", "playinganima" };
-            foreach (var iname in iconNames)
+            var mover = new VisualElement();
+            mover.name = "titleMover";
+            mover.AddToClassList("game-music-form__track-title-mover");
+            mover.pickingMode = PickingMode.Ignore;
+
+            // Typography matches Musicitem Text_0 (45px + TMP characterSpacing 4.5
+            // → 4.5/100 em ≈ 2.025px letter-spacing). TextElement avoids hover-wash.
+            TextElement MakeTitleCopy(string name)
+            {
+                var label = new TextElement();
+                label.name = name;
+                label.AddToClassList("game-music-form__track-title");
+                label.style.fontSize = 45f;
+                label.style.letterSpacing = 45f * 4.5f / 100f;
+                label.style.color = TrackTextColor;
+                label.pickingMode = PickingMode.Ignore;
+                return label;
+            }
+
+            var copyA = MakeTitleCopy("label0");
+            var copyB = MakeTitleCopy("label1");
+            copyB.style.display = DisplayStyle.None;
+            mover.Add(copyA);
+            mover.Add(copyB);
+            mask.Add(mover);
+            panel.Add(mask);
+
+            // Red-dot badge — Boluo InGameYinYueDownloadSuccess (16×16 on Text_0).
+            // Sits after the mask so short names get badge on text right edge;
+            // long names keep badge outside the clip (does not block marquee).
+            var redBadge = new VisualElement();
+            redBadge.name = "downloadsuccess";
+            redBadge.style.width = 16;
+            redBadge.style.height = 16;
+            redBadge.style.marginLeft = 6;
+            redBadge.style.flexShrink = 0;
+            redBadge.style.display = DisplayStyle.None;
+            redBadge.style.backgroundColor = new Color(1f, 59f / 255f, 48f / 255f, 1f);
+            redBadge.style.borderTopLeftRadius = 8;
+            redBadge.style.borderTopRightRadius = 8;
+            redBadge.style.borderBottomLeftRadius = 8;
+            redBadge.style.borderBottomRightRadius = 8;
+            redBadge.pickingMode = PickingMode.Ignore;
+            panel.Add(redBadge);
+
+            var marquee = new TrackTitleMarquee
+            {
+                Mask = mask,
+                Mover = mover,
+                CopyA = copyA,
+                CopyB = copyB,
+                Badge = redBadge,
+            };
+            marquee.OnGeom = _ =>
+            {
+                if (mask.userData is TrackTitleMarquee live)
+                    RefreshTrackMarquee(live, live.Text, live.TitleColor);
+            };
+            mask.RegisterCallback(marquee.OnGeom);
+            mask.userData = marquee;
+
+            // Right-side status icons (Boluo NotDownloaded / Downloading / DownloadError / Playing).
+            EnsureStatusIconsLoaded();
+            (string name, Sprite sprite)[] rightIcons =
+            {
+                ("notdownload", _iconNotDownload),
+                ("downloading", _iconDownloading),
+                ("downloaderror", _iconDownloadError),
+                ("playinganima", null),
+            };
+            foreach (var (iname, sprite) in rightIcons)
             {
                 var icon = new VisualElement();
                 icon.name = iname;
@@ -1022,7 +1603,10 @@ namespace Game
                 icon.style.right = 84; icon.style.top = 42;
                 icon.style.width = 60; icon.style.height = 60;
                 icon.style.display = DisplayStyle.None;
+                icon.style.backgroundSize = new BackgroundSize(BackgroundSizeType.Contain);
                 icon.pickingMode = PickingMode.Ignore;
+                if (sprite != null)
+                    icon.style.backgroundImage = new StyleBackground(sprite);
                 root.Add(icon);
             }
 
@@ -1031,7 +1615,7 @@ namespace Game
             if (playingAnima != null)
             {
                 playingAnima.style.backgroundColor = StyleKeyword.None;
-                playingAnima.style.unityBackgroundScaleMode = ScaleMode.StretchToFill;
+                playingAnima.style.backgroundSize = new BackgroundSize(BackgroundSizeType.Contain);
                 ApplyPlayingFrame(playingAnima, _playingFrameIndex);
             }
 
@@ -1041,9 +1625,9 @@ namespace Game
 
         void BindItem(VisualElement element, int index)
         {
-            TextElement title = element.Q<TextElement>("label0");
-            if (title != null && index >= 0 && index < _trackNames.Count)
-                title.text = _trackNames[index];
+            string name = index >= 0 && index < _trackNames.Count
+                ? _trackNames[index]
+                : string.Empty;
 
             int album = _centerAlbum;
             int track = index;
@@ -1057,33 +1641,63 @@ namespace Game
                 && music.CurrentAlbumIndex == _centerAlbum
                 && music.CurrentTrackIndex == index;
 
+            Color titleColor = isPlaying ? TrackPlayingColor : TrackTextColor;
             if (isPlaying)
-            {
                 ShowIcon(element, "playinganima");
-                if (title != null)
-                    title.style.color = TrackPlayingColor;
+
+            TrackTitleMarquee marquee = element.Q("titleMask")?.userData as TrackTitleMarquee;
+            if (marquee != null)
+            {
+                // ApplyRowState may have toggled the badge; remasure after layout.
+                RefreshTrackMarquee(marquee, name, titleColor);
+                element.schedule.Execute(() =>
+                {
+                    if (element.Q("titleMask")?.userData is TrackTitleMarquee live)
+                        RefreshTrackMarquee(live, name, titleColor);
+                }).StartingIn(0);
             }
 
             // Unregister previous bind callback before attaching a new one.
-            if (element.userData is EventCallback<ClickEvent> prev)
-                element.UnregisterCallback(prev);
+            if (element.userData is TrackRowBind prevBind && prevBind.Click != null)
+                element.UnregisterCallback(prevBind.Click);
+            else if (element.userData is EventCallback<ClickEvent> legacy)
+                element.UnregisterCallback(legacy);
 
             EventCallback<ClickEvent> callback = evt =>
             {
+                // Drag-scroll synthesized a Click on Up — ignore it.
+                if (_suppressTrackClick)
+                {
+                    _suppressTrackClick = false;
+                    evt.StopPropagation();
+                    return;
+                }
                 HandleTrackClick(album, track);
                 evt.StopPropagation();
             };
-            element.userData = callback;
+            element.userData = new TrackRowBind { Click = callback, Marquee = marquee };
             element.RegisterCallback(callback);
         }
 
         void UnbindItem(VisualElement element, int index)
         {
+            if (element.userData is TrackRowBind bind)
+            {
+                if (bind.Click != null)
+                    element.UnregisterCallback(bind.Click);
+                StopTrackMarquee(bind.Marquee);
+                element.userData = null;
+                return;
+            }
+
             if (element.userData is EventCallback<ClickEvent> cb)
             {
                 element.UnregisterCallback(cb);
                 element.userData = null;
             }
+
+            if (element.Q("titleMask")?.userData is TrackTitleMarquee m)
+                StopTrackMarquee(m);
         }
 
         // -----------------------------------------------------------------------
@@ -1093,7 +1707,8 @@ namespace Game
         /// <summary>
         /// Determines the UI state for a given track by checking
         /// local readiness, active downloads, and playback status.
-        /// Priority: Playing > Downloading > Pending > Ready > Succeeded > NotDownloaded > Failed.
+        /// Matches Boluo <c>InGameYinYueItem</c>: queue Pending shows as NotDownloaded;
+        /// only the actively Downloading bank (or the user-clicked pending row) spins.
         /// </summary>
         MusicItemUiState DetermineRowState(int album, int track)
         {
@@ -1115,14 +1730,10 @@ namespace Game
 
             string bankName = trackData.BankName;
 
-            // Pending (user clicked, waiting for download to finish).
-            if (PendingDownloadIntent.IsMusicMatch(album, track)
+            bool userPending = PendingDownloadIntent.IsMusicMatch(album, track)
                 || (_pendingMusic.HasValue
                     && _pendingMusic.Value.album == album
-                    && _pendingMusic.Value.track == track))
-            {
-                return MusicItemUiState.Downloading;
-            }
+                    && _pendingMusic.Value.track == track);
 
             // Check active download queue entry.
             if (BankDownloader.TryGetActiveItem(bankName, out var item))
@@ -1130,12 +1741,21 @@ namespace Game
                 switch (item.State)
                 {
                     case BankDownloadState.Downloading:
-                    case BankDownloadState.Pending:
                         return MusicItemUiState.Downloading;
                     case BankDownloadState.Failed:
                         return MusicItemUiState.Failed;
+                    case BankDownloadState.Pending:
+                        // Boluo: queued Pending keeps NotDownloaded chrome; only the
+                        // user-clicked row stays on the spinner until HTTP starts.
+                        return userPending
+                            ? MusicItemUiState.Downloading
+                            : MusicItemUiState.NotDownloaded;
                 }
             }
+
+            // User just tapped download and metadata/queue has not caught up yet.
+            if (userPending)
+                return MusicItemUiState.Downloading;
 
             // Check local bank readiness.
             if (BankDownloader.IsLocalReady(bankName))
@@ -1163,10 +1783,8 @@ namespace Game
             ShowIcon(element, "downloadsuccess", false);
             ShowIcon(element, "playinganima", false);
 
-            // Reset label colour.
-            TextElement title = element.Q<TextElement>("label0");
-            if (title != null)
-                title.style.color = TrackTextColor;
+            TrackTitleMarquee marquee = element.Q("titleMask")?.userData as TrackTitleMarquee;
+            SetTrackTitleColor(marquee, TrackTextColor);
 
             switch (state)
             {
@@ -1193,8 +1811,7 @@ namespace Game
                 case MusicItemUiState.Playing:
                     ShowIcon(element, "playinganima", true);
                     ApplyPlayingFrame(element.Q("playinganima"), _playingFrameIndex);
-                    if (title != null)
-                        title.style.color = TrackPlayingColor;
+                    SetTrackTitleColor(marquee, TrackPlayingColor);
                     break;
             }
         }
@@ -1207,6 +1824,10 @@ namespace Game
             icon.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
             if (show && iconName == "playinganima")
                 ApplyPlayingFrame(icon, _playingFrameIndex);
+            if (show && iconName == "downloading")
+                icon.style.rotate = new Rotate(Angle.Degrees(_downloadSpinDegrees));
+            if (!show && iconName == "downloading")
+                icon.style.rotate = new Rotate(Angle.Degrees(0));
         }
 
         // -----------------------------------------------------------------------
@@ -1412,6 +2033,65 @@ namespace Game
             }
             catch { /* ignore */ }
             return long.MaxValue;
+        }
+
+        // -----------------------------------------------------------------------
+        // Status icons (Boluo MusicNotDownload / MusicLoading / MusicError / MusicRed)
+        // -----------------------------------------------------------------------
+
+        static void EnsureStatusIconsLoaded()
+        {
+            if (_statusIconsLoaded)
+                return;
+            _statusIconsLoaded = true;
+            _iconNotDownload = LoadMusicStatusSprite("MusicNotDownload");
+            _iconDownloading = LoadMusicStatusSprite("MusicLoading");
+            _iconDownloadError = LoadMusicStatusSprite("MusicError");
+            _iconDownloadSuccess = LoadMusicStatusSprite("MusicRed");
+            if (_iconNotDownload == null || _iconDownloading == null
+                || _iconDownloadError == null || _iconDownloadSuccess == null)
+            {
+                Log.Warning("[MusicForm] Status icons missing under Resources/MusicForm/ "
+                    + "(MusicNotDownload / MusicLoading / MusicError / MusicRed)");
+            }
+        }
+
+        static Sprite LoadMusicStatusSprite(string resourceName)
+        {
+            var sprite = Resources.Load<Sprite>($"MusicForm/{resourceName}");
+            if (sprite != null)
+                return sprite;
+            var tex = Resources.Load<Texture2D>($"MusicForm/{resourceName}");
+            if (tex == null)
+                return null;
+            return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        void StartDownloadSpinLoop()
+        {
+            StopDownloadSpinLoop();
+            if (Root == null)
+                return;
+            _downloadSpinSchedule = Root.schedule.Execute(TickDownloadSpin).Every(PlayingFrameIntervalMs);
+        }
+
+        void StopDownloadSpinLoop()
+        {
+            _downloadSpinSchedule?.Pause();
+            _downloadSpinSchedule = null;
+        }
+
+        void TickDownloadSpin()
+        {
+            if (_list == null)
+                return;
+            _downloadSpinDegrees = (_downloadSpinDegrees - DownloadSpinDegreesPerTick) % 360f;
+            _list.Query("downloading").ForEach(icon =>
+            {
+                if (icon.resolvedStyle.display == DisplayStyle.None)
+                    return;
+                icon.style.rotate = new Rotate(Angle.Degrees(_downloadSpinDegrees));
+            });
         }
 
         // -----------------------------------------------------------------------

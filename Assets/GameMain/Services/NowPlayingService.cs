@@ -152,26 +152,41 @@ namespace Game
             Log.Info("[NowPlaying] CleanupAfterLeaveIsland");
         }
 
-        public static void PublishFromPlaylist()
+        /// <summary>
+        /// 首播 / 切歌成功同一帧强制刷「播放中」卡片。
+        /// 未 Arm 时先 Arm，避免 <c>!_armed → ClearCard</c> 把刚推的卡拆掉。
+        /// </summary>
+        public static void PublishPlayingForced()
+        {
+            if (!_armed)
+                ArmSession();
+            _userManuallyPaused = false;
+            PublishFromPlaylist(forcePlaying: true);
+            Log.Info("[NowPlaying] PublishPlayingForced");
+        }
+
+        public static void PublishFromPlaylist(bool forcePlaying = false)
         {
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
             if (music == null)
             {
-                Publish("", "", false);
+                // 无 playlist 时勿拆 MediaSession：清卡只走 CleanupAfterLeaveIsland / ClearCard。
+                if (_armed)
+                    Log.Warning("[NowPlaying] PublishFromPlaylist skipped — MusicPlaylist null");
                 return;
             }
 
             var track = MusicCatalog.GetTrack(music.CurrentAlbumIndex, music.CurrentTrackIndex);
             string title = track?.MusicName ?? "";
             string album = MusicCatalog.GetAlbum(music.CurrentAlbumIndex)?.Name ?? "";
-            bool playing = music.IsPlaying && !_userManuallyPaused;
-            if (string.IsNullOrEmpty(title) && !_armed)
+            bool playing = forcePlaying || (music.IsPlaying && !_userManuallyPaused);
+            if (string.IsNullOrEmpty(title))
             {
-                Publish("", "", false);
-                return;
-            }
-            if (string.IsNullOrEmpty(title) && _armed)
+                // 未 Arm：直接跳过，禁止 Publish("",…) → ClearCard。
+                if (!_armed)
+                    return;
                 title = "波萝";
+            }
 
             Publish(title, album, playing);
 
@@ -182,36 +197,42 @@ namespace Game
 
         public static void Publish(string title, string album, bool isPlaying)
         {
-            if (!_armed || BackgroundPlayPolicyCallback.GetBackgroundPlayDisable())
+            if (BackgroundPlayPolicyCallback.GetBackgroundPlayDisable())
             {
                 ClearCard();
                 return;
             }
 
+            // 未进岛：只跳过，禁止 ClearCard。否则 Arm 前 / 竞态 Publish 会把 MediaSession 拆掉，
+            // 首播成功后再也补不回来（CustomSRP Java playlist 空，引擎回调不补卡）。
+            if (!_armed)
+            {
+                Log.Info($"[NowPlaying] Publish skipped — not armed title={title} playing={isPlaying}");
+                return;
+            }
+
+            // 空 title 会触发原生 release MediaSession；播放中 / 岛内占位一律兜底「波萝」。
+            if (string.IsNullOrEmpty(title))
+                title = "波萝";
+
             string artwork = ArtworkPath;
 
             // IMP 105 镜像（宿主不写系统会话）
             NativeBridgeFacade.PublishNowPlaying(
-                isPlaying, 0, 0, title ?? "", album ?? "", 0, 0);
+                isPlaying, 0, 0, title, album ?? "", 0, 0);
 
 #if UNITY_IOS && !UNITY_EDITOR
             if (BoluoMusicPlayerIOS.Instance != null)
             {
-                if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(album))
-                    BoluoMusicPlayerIOS.Instance.ClearNowPlaying();
-                else
-                    BoluoMusicPlayerIOS.Instance.SetNowPlayingInfo(
-                        title, album, album, artwork);
+                BoluoMusicPlayerIOS.Instance.SetNowPlayingInfo(
+                    title, album ?? "", album ?? "", artwork);
                 BoluoMusicPlayerIOS.Instance.SyncExternalPlaybackState(isPlaying);
             }
 #elif UNITY_ANDROID && !UNITY_EDITOR
             if (BoluoMusicPlayerAndroid.Instance != null)
             {
-                if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(album))
-                    BoluoMusicPlayerAndroid.Instance.ClearNowPlaying();
-                else
-                    BoluoMusicPlayerAndroid.Instance.UpdateNowPlayingInfo(
-                        title, artwork, isPlaying);
+                BoluoMusicPlayerAndroid.Instance.UpdateNowPlayingInfo(
+                    title, artwork, isPlaying);
             }
 #else
             // Editor: IMP only

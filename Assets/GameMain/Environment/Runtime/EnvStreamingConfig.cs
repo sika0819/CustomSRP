@@ -67,8 +67,8 @@ namespace Game
         /// <summary>
         /// Android Native DrawMeshInstanced。编辑器默认关；真机移动档在
         /// <see cref="ApplyMobileTierDefaults"/> 里打开。
-        /// OilNPRShaderStripper（CustomSRP.Editor）保留 INSTANCING_ON 变体，剥掉会让
-        /// 合批实例化在真机上整片不可见。
+        /// 树/石/桥走 <see cref="ShouldForceSkipNativeInstancing"/>（多 MR/多材质）；
+        /// 合批只接单 MeshRenderer + 单材质。剥掉 OilNPR INSTANCING_ON 也会整片不可见。
         /// </summary>
         public static bool NativeInstancingEnabled = false;
 
@@ -258,6 +258,10 @@ namespace Game
         public static bool ShouldForceSkipNativeInstancing(string category, string prefabName)
         {
             if (IsBridgeCategory(category) || IsRockCategory(category))
+                return true;
+            // Trees are multi MeshRenderer / multi-material (bark+leaf). EnvNativeInstancing
+            // only draws LOD0 materials[0] / submesh 0 after disabling all MRs → bare island.
+            if (IsTreeCategory(category))
                 return true;
             if (string.IsNullOrEmpty(prefabName))
                 return false;

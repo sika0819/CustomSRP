@@ -33,7 +33,9 @@ struct Varyings
 {
     float4 positionCS_SS : SV_POSITION;
     float3 positionWS : VAR_POSITION;
+    float3 positionOS : VAR_POSITION_OS;
     float3 normalWS : VAR_NORMAL;
+    float3 normalOS : VAR_NORMAL_OS;
     float2 baseUV : VAR_BASE_UV;
     float keepCard : VAR_KEEP_CARD;
     UNITY_VERTEX_INPUT_INSTANCE_ID
@@ -46,6 +48,7 @@ Varyings OilNPRPassVertex(Attributes input)
     UNITY_TRANSFER_INSTANCE_ID(input, output);
 
     float3 positionOS = input.positionOS;
+    float3 normalOS = input.normalOS;
     float3 normalWS;
     float keep = 1.0;
     // Metal stage-split: both flags must be read in vertex or fragment-only
@@ -55,7 +58,7 @@ Varyings OilNPRPassVertex(Attributes input)
     if (crossBb > 0.5)
     {
         positionOS = OilTreeCrossBillboardRotateYaw(
-            input.positionOS, input.normalOS, normalWS, keep);
+            input.positionOS, input.normalOS, normalOS, normalWS, keep);
     }
     else
     {
@@ -71,8 +74,10 @@ Varyings OilNPRPassVertex(Attributes input)
     float3 positionWS = TransformObjectToWorld(positionOS);
 
     output.positionWS = positionWS;
+    output.positionOS = positionOS;
     output.positionCS_SS = TransformWorldToHClip(output.positionWS);
     output.normalWS = normalWS;
+    output.normalOS = normalOS;
     output.baseUV = TransformBaseUV(input.baseUV);
     output.keepCard = keep + foliageFlag * 0.0;
     return output;
@@ -84,9 +89,23 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     clip(input.keepCard - 0.5);
     OilBakeClipAboveWater(input.positionWS);
 
-    InputConfig config = GetInputConfig(input.positionCS_SS, input.baseUV);
+    InputConfig config = GetInputConfig(
+        input.positionCS_SS,
+        input.baseUV,
+        input.positionWS,
+        input.positionOS,
+        input.normalWS,
+        input.normalOS);
 
-    half4 base = (half4)GetBase(config);
+    // Cross-billboard atlas: bias before clip so mip-averaged alpha doesn't punch holes
+    // and crown RGB doesn't wash to grey (Boluo SAMPLE_TEXTURE2D_BIAS -0.65).
+    float crossBbEarly = _OilCrossBillboard;
+    half4 base;
+    if (crossBbEarly > 0.5)
+        base = (half4)SAMPLE_TEXTURE2D_BIAS(_BaseMap, sampler_BaseMap, config.baseUV, -0.65)
+            * (half4)_BaseColor;
+    else
+        base = (half4)GetBase(config);
     half3 albedo = base.rgb;
     half alpha = base.a;
 
@@ -136,10 +155,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     float foliageFlagFrag = _OilFoliage;
     float crossBbFrag = _OilCrossBillboard;
 
-    // Far cross-card billboards: same lit term as near leaves (OilFoliageLighting)
-    // so directional SH ambient (keyed to surface normal) + sun N·L + shadow match
-    // within a fragment. OilNPRLighting functions now sample SH9 internally, so
-    // there's no per-pass ambient color to thread through.
+    // Far cross-card: same OilFoliageLighting as near leaves (BoluoUnity LitAlbedoObject).
     if (crossBbFrag > 0.5)
     {
 #if !defined(OIL_MOBILE_PERF)
@@ -149,16 +165,17 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
 #endif
         half3 bakedN = (half3)SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, config.baseUV).rgb;
         half3 bb = OilTreeCrossBillboardShade(
-            albedo, bakedN, (half)_NormalStrength, surface);
+            albedo, bakedN, (half)_NormalStrength, surface, config.fragment.screenUV);
 #if defined(OIL_MOBILE_PERF)
         bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush);
 #else
+        bb = OilWeaveTint(bb, input.positionWS.xz * 0.15);
         bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush, input.positionWS);
 #endif
         return half4(bb, alpha);
     }
 
-    // Near leaves: directional SH ambient × albedo, then distance fog (same as Boluo MixFog).
+    // Near leaves: live albedo × (N·L * sun * shadow + SH), then distance fog.
     if (foliageFlagFrag > 0.5)
     {
         half3 foliage = OilFoliageLighting(

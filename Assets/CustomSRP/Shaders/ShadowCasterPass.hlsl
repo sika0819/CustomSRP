@@ -43,6 +43,8 @@ Varyings ShadowCasterPassVertex(Attributes input)
 void ShadowCasterPassFragment(Varyings input)
 {
     UNITY_SETUP_INSTANCE_ID(input);
+    // Lit/Unlit/OilNPR 共用：阴影裁剪仍走 mesh UV（2 参 GetInputConfig）。
+    // OilNPR 正向已支持 Object/World 单向三向；阴影 alpha 与正向略有偏差可接受。
     InputConfig config = GetInputConfig(input.positionCS_SS, input.baseUV);
     float4 base = GetBase(config);
 #if defined(_SHADOWS_CLIP)

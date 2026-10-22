@@ -1,3 +1,4 @@
+using System;
 using GameFramework.Event;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -32,9 +33,13 @@ namespace Game
         static bool _rainBankHeld;
         static bool _windMissing;
         static bool _rainMissing;
-        static float _windRtpc = float.NaN;
-        static float _rainRtpc = float.NaN;
-        static float _foggyRtpc = float.NaN;
+        /// <summary>Logical weather intensity (pre-duck). Written value = logical × ContentAudioDuck.</summary>
+        static float _windLogical;
+        static float _rainLogical;
+        static float _foggyLogical;
+        static float _windWritten = float.NaN;
+        static float _rainWritten = float.NaN;
+        static float _foggyWritten = float.NaN;
 
         public static void Start()
         {
@@ -51,9 +56,9 @@ namespace Game
             Unsubscribe();
             StopLoop(ref _windPlaying, WanosInteraction.WindObjectId, WindStop, ref _windBankHeld, WindBank);
             StopLoop(ref _rainPlaying, WanosInteraction.RainObjectId, RainStop, ref _rainBankHeld, RainBank);
-            WriteWeatherRtpc(WindParam, 0f, ref _windRtpc);
-            WriteWeatherRtpc(RainParam, 0f, ref _rainRtpc);
-            WriteWeatherRtpc(FoggyParam, 0f, ref _foggyRtpc);
+            WriteLogicalRtpc(WindParam, 0f, ref _windLogical, ref _windWritten);
+            WriteLogicalRtpc(RainParam, 0f, ref _rainLogical, ref _rainWritten);
+            WriteLogicalRtpc(FoggyParam, 0f, ref _foggyLogical, ref _foggyWritten);
             _contentAudioPaused = false;
             _windMissing = false;
             _rainMissing = false;
@@ -76,19 +81,28 @@ namespace Game
 
         /// <summary>
         /// Hard-stop wind/rain loops without changing the BGM content-pause latch.
-        /// Preset iris: stop events / zero RTPCs but <b>keep</b> banks retained so reveal
-        /// can re-Post without a late Release racing a fresh Retain.
+        /// Preset iris: zero RTPCs first (already ducked), then stop — keep banks retained.
         /// </summary>
         public static void ClearPlaying()
         {
+            WriteLogicalRtpc(WindParam, 0f, ref _windLogical, ref _windWritten);
+            WriteLogicalRtpc(RainParam, 0f, ref _rainLogical, ref _rainWritten);
+            WriteLogicalRtpc(FoggyParam, 0f, ref _foggyLogical, ref _foggyWritten);
             StopLoopKeepBank(ref _windPlaying, WanosInteraction.WindObjectId, WindStop);
             StopLoopKeepBank(ref _rainPlaying, WanosInteraction.RainObjectId, RainStop);
-            WriteWeatherRtpc(WindParam, 0f, ref _windRtpc);
-            WriteWeatherRtpc(RainParam, 0f, ref _rainRtpc);
-            WriteWeatherRtpc(FoggyParam, 0f, ref _foggyRtpc);
         }
 
         public static void Refresh() => ApplyFromWeather();
+
+        /// <summary>Re-push Wind/Rain/Foggy × <see cref="ContentAudioDuck.Level01"/> (preset ramp).</summary>
+        public static void ReapplyDuckedRtpcs()
+        {
+            if (!_started)
+                return;
+            ForceWrite(WindParam, _windLogical, ref _windWritten);
+            ForceWrite(RainParam, _rainLogical, ref _rainWritten);
+            ForceWrite(FoggyParam, _foggyLogical, ref _foggyWritten);
+        }
 
         /// <summary>
         /// 回前台 / 打断恢复：风 / 雨循环的 voice 可能已被引擎掐掉，但本地态还认为在播
@@ -107,21 +121,42 @@ namespace Game
 
         static void Subscribe()
         {
-            if (_subscribed || GameEntry.Event == null)
+            if (_subscribed)
                 return;
-            GameEntry.Event.Subscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
+            if (GameEntry.Event != null)
+                GameEntry.Event.Subscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
+            // 首装 Critical 波未完成时切风雨会 miss bank；下载灌入后必须重试（对齐 AmbienceZone）。
+            WanosBankStore.OnBankLoaded += OnBankLoaded;
             _subscribed = true;
         }
 
         static void Unsubscribe()
         {
-            if (!_subscribed || GameEntry.Event == null)
+            if (!_subscribed)
                 return;
-            GameEntry.Event.Unsubscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
+            if (GameEntry.Event != null)
+                GameEntry.Event.Unsubscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
+            WanosBankStore.OnBankLoaded -= OnBankLoaded;
             _subscribed = false;
         }
 
         static void OnWeatherChanged(object sender, GameEventArgs e) => ApplyFromWeather();
+
+        static void OnBankLoaded(string bankName)
+        {
+            if (!_started || string.IsNullOrEmpty(bankName))
+                return;
+            bool isWind = string.Equals(bankName, WindBank, StringComparison.OrdinalIgnoreCase);
+            bool isRain = string.Equals(bankName, RainBank, StringComparison.OrdinalIgnoreCase);
+            if (!isWind && !isRain)
+                return;
+            if (isWind)
+                _windMissing = false;
+            if (isRain)
+                _rainMissing = false;
+            Log.Info($"[WeatherAudio] bank ready={bankName} — retry ApplyFromWeather");
+            ApplyFromWeather();
+        }
 
         static void ApplyFromWeather()
         {
@@ -160,9 +195,9 @@ namespace Game
             }
 
             // Always write all three so a prior kind does not leave a non-zero RTPC.
-            WriteWeatherRtpc(WindParam, wind, ref _windRtpc);
-            WriteWeatherRtpc(RainParam, rain, ref _rainRtpc);
-            WriteWeatherRtpc(FoggyParam, foggy, ref _foggyRtpc);
+            WriteLogicalRtpc(WindParam, wind, ref _windLogical, ref _windWritten);
+            WriteLogicalRtpc(RainParam, rain, ref _rainLogical, ref _rainWritten);
+            WriteLogicalRtpc(FoggyParam, foggy, ref _foggyLogical, ref _foggyWritten);
 
             // Retry bank load after a prior miss (banks may land later).
             if (wantWind)
@@ -186,12 +221,19 @@ namespace Game
             RainWaterProximityService.EvaluateNow();
         }
 
-        static void WriteWeatherRtpc(string name, float value, ref float cached)
+        static void WriteLogicalRtpc(string name, float logical, ref float logicalField, ref float writtenField)
         {
-            if (!float.IsNaN(cached) && Mathf.Approximately(cached, value))
+            logicalField = logical;
+            ForceWrite(name, logical, ref writtenField);
+        }
+
+        static void ForceWrite(string name, float logical, ref float writtenField)
+        {
+            float ducked = logical * ContentAudioDuck.Level01;
+            if (!float.IsNaN(writtenField) && Mathf.Approximately(writtenField, ducked))
                 return;
-            cached = value;
-            WanosEngine.SetGlobalParameter(name, value);
+            writtenField = ducked;
+            WanosEngine.SetGlobalParameter(name, ducked);
         }
 
         static void StartLoop(

@@ -120,6 +120,8 @@ Editor 联调:`GameMain/Boluo/环境·渠道·版本`;换票需开启 `Editor Gu
 | [Docs/08-input-camera.md](Docs/08-input-camera.md) | 走不动、视角乱、相机 render scale 不变 |
 | [Docs/09-boluoapi-native.md](Docs/09-boluoapi-native.md) | 登录拿不到 token、Bank 下载不了、混流 HUD 不出 |
 | [Docs/10-bug-index.md](Docs/10-bug-index.md) | **先查这里**:已知坑总表(症状→定位)+ 标准排障流程 + grep 命令 |
+| [Docs/11-rain-device-visual.md](Docs/11-rain-device-visual.md) | 真机已是雨仍无雨丝;与「真机没云」区分;streakMaterial / Current / 重打包 |
+| [Docs/11-rain-device-visual.md](Docs/11-rain-device-visual.md) | 真机已是「雨」仍无雨丝；与「真机没云」区分 |
 
 ## 8. 排障速查
 

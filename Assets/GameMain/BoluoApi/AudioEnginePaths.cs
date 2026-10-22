@@ -17,6 +17,7 @@ namespace Game.BoluoApi
         /// <summary>
         /// APK 内置 bank（StreamingAssets/WanosBank）。Android 上须先解压到 persistent，
         /// 原生 LoadBank 只能吃真实文件路径。
+        /// 风雨等 Critical 音效也打进首包，避免首装等 HTTP 才能切天气。
         /// </summary>
         static readonly string[] BuiltinStreamingRelativePaths =
         {
@@ -24,6 +25,9 @@ namespace Game.BoluoApi
             "WanosBank/Common_Music.wb",
             "WanosBank/Music1_1.wsbk",
             "WanosBank/Ocean_Calm_Quad.wsbk",
+            "WanosBank/Wind.wb",
+            "WanosBank/Rain.wb",
+            "WanosBank/Rain_Water.wb",
         };
 
         /// <summary>
@@ -70,6 +74,7 @@ namespace Game.BoluoApi
             _extractTcs = null;
             _migrateState = 0;
             _migrateTcs = null;
+            StreamingBankCatalog.ResetSession();
         }
 
         public static string StripBankExtension(string name)
@@ -146,6 +151,9 @@ namespace Game.BoluoApi
             try
             {
                 EnsureWritableDirs();
+                // 先读首包版本表，供 BankDownloader 跳过同版本 HTTP。
+                await StreamingBankCatalog.EnsureLoadedAsync();
+
                 string markerPath = Path.Combine(PersistentBankPath, ExtractMarkerName);
                 string buildId = Application.buildGUID ?? Application.version ?? "dev";
 

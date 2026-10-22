@@ -101,8 +101,8 @@
 
 /* -----------------------------------------------------------------------
    Album strip: horizontal infinite loop (triple-copy strip in C#).
-   Selection = font-size + opacity only (Boluo CalcLerp). Fixed 120px width
-   so layout step stays 140 and labels never leave the clip as a blank bar.
+   Width = MeasureTextSize; constant AlbumNameGap between glyph end → next start.
+   No ellipsis — long names take their full measured width.
    ----------------------------------------------------------------------- */
 
 .game-music-form__huadong {
@@ -112,22 +112,25 @@
     overflow: hidden;
 }
 
-/* Content row: C# sets left for drag; padding-left centres a 120px label. */
+/* Content host: C# sets left for drag / centering. */
 .game-music-form__huadong > VisualElement {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    padding-left: 334px; /* (788-120)/2 */
+    position: relative;
+    height: 101px;
+    padding-left: 0;
     picking-mode: Ignore;
 }
 
-/* TextElement (not Label) — avoids .unity-label:hover washing text to white. */
+/* TextElement (not Label) — avoids .unity-label:hover washing text to white.
+   Width is assigned in C# from MeasureTextSize; do not lock to a fixed px. */
 .game-music-form__album-label {
+    position: absolute;
+    top: 0;
+    flex-grow: 0;
     flex-shrink: 0;
-    width: 120px;
     height: 101px;
-    min-height: 0;
-    margin-right: 20px;
+    min-height: 101px;
+    max-height: 101px;
+    margin: 0;
     -unity-text-align: middle-center;
     color: rgba(24, 24, 25, 1.000);
     white-space: nowrap;
@@ -201,22 +204,41 @@
     picking-mode: Ignore;
 }
 
-/* Track row title — Musicitem Text_0: fontSize 45, characterSpacing 4.5
-   (TMP 1/100 em → 4.5% of 45px ≈ 2.025px). TextElement avoids hover-wash. */
-.game-music-form__track-title {
+/* Track title mask — clips dual-copy marquee; badge sits after this in flex. */
+.game-music-form__track-title-mask {
+    position: relative;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    height: 100%;
+    overflow: hidden;
+    picking-mode: Ignore;
+}
+
+.game-music-form__track-title-mover {
     position: absolute;
     left: 0;
     top: 0;
-    right: 0;
+    bottom: 0;
+    picking-mode: Ignore;
+}
+
+/* Track row title — Musicitem Text_0: fontSize 45, characterSpacing 4.5
+   (TMP 1/100 em → 4.5% of 45px ≈ 2.025px). TextElement avoids hover-wash.
+   Width is content-sized; mask clips. Copy B is the marquee duplicate. */
+.game-music-form__track-title {
+    position: absolute;
+    top: 0;
     bottom: 0;
     -unity-text-align: middle-left;
     font-size: 45px;
     letter-spacing: 2px;
     color: rgba(24, 24, 25, 1.000);
     white-space: nowrap;
-    overflow: hidden;
+    overflow: visible;
     -unity-font: url("../Fonts/pingfangsc-medium.ttf");
     picking-mode: Ignore;
+    flex-shrink: 0;
 }
 
 /* Theme .unity-label:hover can beat a plain class colour when the sheet

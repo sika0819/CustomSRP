@@ -34,6 +34,8 @@
 | `Environment/Runtime/` | [07](07-environment.md) | MapItem 流式加载、碰撞体 LOD、篝火、原生合批 |
 | `Input/` + `Entity/` | [08](08-input-camera.md) | 虚拟摇杆、移动输入、第一人称相机 |
 | `BoluoApi/` + `Native/` | [09](09-boluoapi-native.md) | 登录换票、签名、Bank 下载、原生桥 |
+| （跨模块坑） | [10](10-bug-index.md) | 已知坑总表与排障流程 |
+| （雨视觉） | [11](11-rain-device-visual.md) | 真机雨丝 Editor 有 / 真机无 |
 
 ## 3. 启动时序
 

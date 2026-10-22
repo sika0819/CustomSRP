@@ -49,7 +49,8 @@ namespace Game
 
         public void Tick(bool pointerPressedThisFrame, bool locomotionActive)
         {
-            bool popup = HudOverlayGate.HasPopup();
+            // 含原生定时窗 bottomIconsHidden / 半层 overlayPresent，否则 Compose 定时期间仍会淡掉 HUD 进度环。
+            bool popup = HudOverlayGate.BlocksIdleImmersive();
             if (_hadPopupLastFrame && !popup)
                 ArmCountdown();
             _hadPopupLastFrame = popup;
@@ -114,7 +115,7 @@ namespace Game
         {
             _lastActivityRealtime = Time.realtimeSinceStartup;
             _armed = true;
-            _hadPopupLastFrame = HudOverlayGate.HasPopup();
+            _hadPopupLastFrame = HudOverlayGate.BlocksIdleImmersive();
         }
 
         void ResetVisible()

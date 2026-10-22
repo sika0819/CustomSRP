@@ -34,6 +34,96 @@ half OilWaterNightWeight(float period)
     return saturate(1.0 - d * 1.15);
 }
 
+// Keep in sync with OilSkyboxNPRPass.hlsl PeriodLookFallback — same Camera_1 anchors
+// so water analytic sky matches the skybox before C# pushes _OilSkyLookReady.
+void OilWaterPeriodLookFallback(
+    int index,
+    out half3 zenith,
+    out half3 mid,
+    out half3 horizon,
+    out half3 ground,
+    out half3 sunDisc,
+    out half3 sunGlow,
+    out half3 moonDisc,
+    out half3 moonGlow,
+    out half sunSize,
+    out half sunIntensity,
+    out half sunGlowAmt,
+    out half moonSize,
+    out half moonIntensity,
+    out half moonGlowAmt)
+{
+    if (index <= 0)
+    {
+        zenith = half3(0.0078h, 0.1451h, 0.7412h);
+        mid = half3(0.9098h, 0.7686h, 0.6902h);
+        horizon = half3(1.0000h, 0.7373h, 0.0000h);
+        ground = half3(0.40h, 0.36h, 0.26h);
+        sunDisc = half3(1.0000h, 0.9725h, 0.9098h);
+        sunGlow = half3(1.0000h, 0.8235h, 0.3922h);
+        moonDisc = half3(0.7800h, 0.8200h, 0.9000h);
+        moonGlow = half3(0.4500h, 0.5200h, 0.7000h);
+        sunSize = 0.07h;
+        sunIntensity = 0.9h;
+        sunGlowAmt = 0.24h;
+        moonSize = 0.05h;
+        moonIntensity = 0.12h;
+        moonGlowAmt = 0.06h;
+    }
+    else if (index == 1)
+    {
+        zenith = half3(0.0667h, 0.4784h, 1.0000h);
+        mid = half3(0.361h, 0.632h, 0.965h);
+        horizon = half3(0.7216h, 0.8196h, 0.9216h);
+        ground = half3(0.8392h, 0.7686h, 0.7020h);
+        sunDisc = half3(1.0000h, 0.9804h, 0.8235h);
+        sunGlow = half3(1.0000h, 0.9804h, 0.8235h);
+        moonDisc = half3(0.0h, 0.0h, 0.0h);
+        moonGlow = half3(0.0h, 0.0h, 0.0h);
+        sunSize = 0.055h;
+        sunIntensity = 1.0h;
+        sunGlowAmt = 0.16h;
+        moonSize = 0.05h;
+        moonIntensity = 0.0h;
+        moonGlowAmt = 0.0h;
+    }
+    else if (index == 2)
+    {
+        zenith = half3(0.2157h, 0.2588h, 0.4314h);
+        mid = half3(0.459h, 0.437h, 0.473h);
+        horizon = half3(0.9098h, 0.7686h, 0.5490h);
+        ground = half3(0.22h, 0.16h, 0.14h);
+        sunDisc = half3(1.0000h, 0.7843h, 0.4157h);
+        sunGlow = half3(1.0000h, 0.7843h, 0.4157h);
+        moonDisc = half3(0.7000h, 0.7400h, 0.8600h);
+        moonGlow = half3(0.3500h, 0.4000h, 0.5800h);
+        sunSize = 0.08h;
+        sunIntensity = 0.75h;
+        sunGlowAmt = 0.28h;
+        moonSize = 0.055h;
+        moonIntensity = 0.45h;
+        moonGlowAmt = 0.14h;
+    }
+    else
+    {
+        // Night — was the startup blue bug: old path always used day zenith (0.07,0.48,1).
+        zenith = half3(0.0118h, 0.0706h, 0.3216h);
+        mid = half3(0.0059h, 0.0608h, 0.3118h);
+        horizon = half3(0.0000h, 0.0510h, 0.3020h);
+        ground = half3(0.0000h, 0.0306h, 0.1812h);
+        sunDisc = half3(0.4000h, 0.4500h, 0.5800h);
+        sunGlow = half3(0.0800h, 0.0900h, 0.1200h);
+        moonDisc = half3(0.6200h, 0.6800h, 0.8200h);
+        moonGlow = half3(0.2800h, 0.3400h, 0.5200h);
+        sunSize = 0.05h;
+        sunIntensity = 0.08h;
+        sunGlowAmt = 0.02h;
+        moonSize = 0.07h;
+        moonIntensity = 0.85h;
+        moonGlowAmt = 0.22h;
+    }
+}
+
 void OilWaterSkyAnchors(
     float period,
     out half3 zenith,
@@ -66,20 +156,26 @@ void OilWaterSkyAnchors(
 
     if (_OilSkyLookReady < 0.5)
     {
-        zenith = half3(0.07h, 0.48h, 1.0h);
-        mid = half3(0.45h, 0.62h, 0.86h);
-        horizon = half3(0.55h, 0.72h, 0.90h);
-        ground = half3(0.28h, 0.32h, 0.28h);
-        sunDisc = half3(1.0h, 0.72h, 0.37h);
-        sunGlow = half3(1.0h, 0.84h, 0.45h);
-        moonDisc = half3(0.78h, 0.84h, 0.95h);
-        moonGlow = half3(0.45h, 0.52h, 0.72h);
-        sunSize = 0.08h;
-        sunIntensity = 1.0h;
-        sunGlowAmt = 0.35h;
-        moonSize = 0.06h;
-        moonIntensity = 0.0h;
-        moonGlowAmt = 0.0h;
+        half3 z0, m0, h0, g0, sd0, sg0, md0, mg0;
+        half ss0, si0, sga0, ms0, mi0, mga0;
+        half3 z1, m1, h1, g1, sd1, sg1, md1, mg1;
+        half ss1, si1, sga1, ms1, mi1, mga1;
+        OilWaterPeriodLookFallback(i0, z0, m0, h0, g0, sd0, sg0, md0, mg0, ss0, si0, sga0, ms0, mi0, mga0);
+        OilWaterPeriodLookFallback(i1, z1, m1, h1, g1, sd1, sg1, md1, mg1, ss1, si1, sga1, ms1, mi1, mga1);
+        zenith = lerp(z0, z1, t);
+        mid = lerp(m0, m1, t);
+        horizon = lerp(h0, h1, t);
+        ground = lerp(g0, g1, t);
+        sunDisc = lerp(sd0, sd1, t);
+        sunGlow = lerp(sg0, sg1, t);
+        moonDisc = lerp(md0, md1, t);
+        moonGlow = lerp(mg0, mg1, t);
+        sunSize = lerp(ss0, ss1, t);
+        sunIntensity = lerp(si0, si1, t);
+        sunGlowAmt = lerp(sga0, sga1, t);
+        moonSize = lerp(ms0, ms1, t);
+        moonIntensity = lerp(mi0, mi1, t);
+        moonGlowAmt = lerp(mga0, mga1, t);
         return;
     }
 
@@ -195,8 +291,10 @@ half3 ApplyOilWaterReflection(
             (half3)_BaseColor.rgb,
             (half3)_ShallowColor.rgb,
             saturate(fresnel * 1.4h + 0.25h));
-        // 视线越正（fresnel 小）越压向深水本色；掠射保留更多天光（不破坏远处夕阳感）。
-        half keep = lerp(0.30h, 0.65h, fresnel);
+        // BaseColor 偏青（G>R）时正视会把倒影拖成墨绿；压一档 G，并把 keep 抬高保留更多天光。
+        half rb = (waterTint.r + waterTint.b) * 0.5h;
+        waterTint.g = lerp(waterTint.g, rb, 0.35h);
+        half keep = lerp(0.42h, 0.72h, fresnel);
         reflectCol = lerp(waterTint, reflectCol, keep);
     }
 
@@ -223,6 +321,12 @@ half3 ApplyOilWaterReflection(
             planar += (half3)SAMPLE_TEXTURE2D_LOD(
                 _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv - float2(0.0, texel.y), 0.0).rgb;
             planar *= 0.2h;
+            // 青苔山 / 树叶在 0.1× 反射 RT 里糊成一片绿；只削「G 高于 R/B」的植被溢色，
+            // 直视山体与 analytic sky 路径不动。
+            half maxRB = max(planar.r, planar.b);
+            half gPush = saturate((planar.g - maxRB) * 2.4h);
+            planar.g = lerp(planar.g, maxRB, gPush * 0.72h);
+            planar.b = saturate(planar.b + gPush * 0.12h);
             reflectCol = lerp(reflectCol, planar, edgeFade);
         }
     }

@@ -27,8 +27,6 @@ namespace Game
     {
         const float EvalIntervalSeconds = 0.25f;
         const int VoiceStopFadeMs = 250;
-        /// <summary>Preset / hard clear under black veil — longer fade if anything still audible.</summary>
-        const int VoiceStopFadeClearMs = 800;
         /// <summary>
         /// Shared-bank bed switch: keep the playing bed until another is nearer by this much.
         /// Without hysteresis, midpoint walk flip-flops every Eval → emitter teleport crackle.
@@ -36,6 +34,21 @@ namespace Game
         const float ExclusiveShareHysteresisMeters = 12f;
         /// <summary>Cap per-eval emitter teleport (water nearest-point jitter).</summary>
         const float MaxEmitterJumpMetersPerEval = 10f;
+        /// <summary>Engine floor; matches GainInvTransform far end (~−96 dB).</summary>
+        const float GainFloorDb = -96f;
+        /// <summary>
+        /// Boluo <c>WanosCurveForGain.gainSmoothTime</c>：声源位/距离跳变时 SmoothDamp 增益，
+        /// 避免边缘 Distance RTPC + 衰减硬跳成「电流音 / 刺啦」。
+        /// </summary>
+        const float GainSmoothTimeSeconds = 0.15f;
+        /// <summary>Boluo <c>TeleportGainSnapMeters</c>：距离跳这么多立刻贴增益（预设落点）。</summary>
+        const float TeleportGainSnapMeters = 8f;
+        /// <summary>Distance RTPC 每秒最多追这么远；硬写会让 bank 内 Distance 曲线拉链。</summary>
+        const float MaxDistanceSlewMetersPerSecond = 40f;
+        /// <summary>走路出区软衰减时长（原 VoiceStopFadeMs/1000=0.25 太陡，边缘像电流）。</summary>
+        const float WalkSoftStopSeconds = 0.55f;
+        /// <summary>First Post starts below target then slews up — avoids enter click.</summary>
+        const float SoftEnterStartDb = -36f;
 
         /// <summary>
         /// Boluo <c>WanosCurveForGain</c> 编辑器 Y 是「显示 dB」；远端点统一约 -17.25。
@@ -131,6 +144,8 @@ namespace Game
 
         /// <summary>标记 inland water 已就绪（收到 OnInlandWaterReady 时设为 true，无需重复设）。</summary>
         static bool _inlandWaterReady;
+        static int _softStopDriveGen;
+        static int _attenuationDriveGen;
 
         sealed class RuntimeSource
         {
@@ -149,6 +164,29 @@ namespace Game
             /// NaN 表示尚未推送过。
             /// </summary>
             public float LastPostedDistance = float.NaN;
+
+            /// <summary>Last distance-curve target (pre-slew / pre-duck). NaN = none.</summary>
+            public float LastTargetGainDb = float.NaN;
+
+            /// <summary>Last gain actually written to the engine (post-slew, pre-duck lerp).</summary>
+            public float LastAppliedGainDb = float.NaN;
+
+            /// <summary>SmoothDamp velocity for <see cref="LastAppliedGainDb"/>.</summary>
+            public float GainSlewVelocity;
+
+            /// <summary>Last Distance RTPC written (slewed). NaN = none.</summary>
+            public float LastSlewedDistance = float.NaN;
+
+            /// <summary>Raw target distance this eval (pre Distance-RTPC slew).</summary>
+            public float LastTargetDistance = float.NaN;
+
+            /// <summary>Walk-exit: ramp gain to floor before StopEvent (native fade may be stub).</summary>
+            public bool SoftStopping;
+            public float SoftStopStartedAt;
+            public float SoftStopSeconds;
+            public float SoftStopFromGainDb;
+            public bool SoftStopForceReleaseBank;
+            public bool SoftStopKeepBank;
 
             /// <summary>Forest：第一次离开 150m 球的时刻。&lt;0 表示仍在球内。</summary>
             public float OutsideSince = -1f;
@@ -202,10 +240,40 @@ namespace Game
         /// Hard-stop every zone voice without changing the BGM content-pause latch.
         /// Used when switching island presets so old emitters do not linger across teleport.
         /// Forces bank Release (doc: 虹膜中卸掉走路区域加载器).
+        /// Preset path should already be ducked to silence — snap floor then stop with no fade.
         /// </summary>
         public static void ClearAllPlaying()
         {
-            StopAllPlaying(forceReleaseBank: true, keepBank: false, fadeMs: VoiceStopFadeClearMs);
+            CancelAllSoftStops();
+            SnapAllPlayingGainsToFloor();
+            StopAllPlaying(forceReleaseBank: true, keepBank: false, fadeMs: 0);
+        }
+
+        /// <summary>
+        /// Re-push attenuation for live emitters using <see cref="ContentAudioDuck.Level01"/>.
+        /// Called every frame while a preset duck ramp runs (Evaluate alone is too coarse).
+        /// </summary>
+        public static void ApplyDuckToPlayingEmitters()
+        {
+            if (!_started || !_catalogBuilt)
+                return;
+            float duck = ContentAudioDuck.Level01;
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var src = Sources[i];
+                if ((!src.Playing && !src.SoftStopping) || src.Emitter == null)
+                    continue;
+                // Duck 只乘在写出层；不要把 ducked 写回 LastAppliedGainDb，
+                // 否则 duck 结束后 SmoothDamp 会从地板猛追，边缘再走又是电流音。
+                float preDuck = float.IsNaN(src.LastAppliedGainDb) ? 0f : src.LastAppliedGainDb;
+                if (src.SoftStopping)
+                    preDuck = SoftStopGainNow(src);
+                float gainDb = Mathf.Lerp(GainFloorDb, preDuck, duck);
+                float dist = float.IsNaN(src.LastSlewedDistance)
+                    ? (float.IsNaN(src.LastPostedDistance) ? 0f : src.LastPostedDistance)
+                    : src.LastSlewedDistance;
+                WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, gainDb);
+            }
         }
 
         /// <summary>
@@ -568,6 +636,7 @@ namespace Game
         static void Evaluate()
         {
             FlushDeferredEmitterReleases(force: false);
+            TickSoftStops();
             if (!_started || !_catalogBuilt || !WanosInteraction.IsReady)
                 return;
             if (_contentAudioPaused)
@@ -587,7 +656,8 @@ namespace Game
             // Listener-still skip: if the listener moved < 0.09m since the last
             // tick, the previous Enter/Exit decisions are still valid. Cheaper
             // than scanning all sources for nothing.
-            if (!ShouldEvaluateListener(listener))
+            // Soft-stop / gain-slew need ticks even when the listener stands still.
+            if (!ShouldEvaluateListener(listener) && !AnySoftStopping() && !AnyGainSlewPending())
                 return;
 
             int n = Sources.Count;
@@ -647,15 +717,18 @@ namespace Game
                 var src = Sources[i];
                 if (_wantScratch[i])
                 {
+                    if (src.SoftStopping)
+                        CancelSoftStop(src);
                     if (!src.Playing)
                         Log.Info($"[AmbienceZone] want->keep id={src.Spec.Id} bank={src.Spec.Bank} event={src.Spec.PlayEvent}");
                     KeepSourcePlaying(src, _posScratch[i], _distScratch[i]);
                 }
-                else if (src.Playing)
+                else if (src.Playing && !src.SoftStopping)
                 {
-                    // 同组已无任何床位 want：整组 Stop + Release（一组 bank 一起卸）。
+                    // 同组已无任何床位 want：软衰减到静音再 Stop（不靠可能 stub 的 native fade）。
+                    // 边缘出区用 WalkSoftStopSeconds，避免 0.25s 拉到 −96dB 的电流音。
                     Log.Info($"[AmbienceZone] want->stop id={src.Spec.Id} bank={src.Spec.Bank}");
-                    StopSource(src);
+                    BeginSoftStop(src, WalkSoftStopSeconds);
                 }
             }
         }
@@ -747,6 +820,7 @@ namespace Game
         /// Lake ↔ Waterfall mutual exclusion: only the nearer side keeps want=true.
         /// Sticky hysteresis so the lake/fall boundary does not flip-flop Stop↔Play.
         /// Stop path KeepBank so exclusivity never unloads the suppressed side's bank.
+        /// <see cref="AmbienceEmitterSpec.FixedWorldAnchor"/> 观景点瀑不参与互斥（可与湖同播）。
         /// </summary>
         static void ApplyLakeWaterfallExclusion(int n)
         {
@@ -760,7 +834,10 @@ namespace Game
             {
                 if (!_wantScratch[i])
                     continue;
-                AmbienceEmitterKind kind = Sources[i].Spec.Kind;
+                var spec = Sources[i].Spec;
+                if (spec.FixedWorldAnchor)
+                    continue;
+                AmbienceEmitterKind kind = spec.Kind;
                 float d = _distScratch[i];
                 if (kind == AmbienceEmitterKind.Lake)
                 {
@@ -799,7 +876,10 @@ namespace Game
             {
                 if (!_wantScratch[i])
                     continue;
-                AmbienceEmitterKind kind = Sources[i].Spec.Kind;
+                var spec = Sources[i].Spec;
+                if (spec.FixedWorldAnchor)
+                    continue;
+                AmbienceEmitterKind kind = spec.Kind;
                 if (preferLake && kind == AmbienceEmitterKind.Waterfall)
                     _wantScratch[i] = false;
                 else if (!preferLake && kind == AmbienceEmitterKind.Lake)
@@ -879,6 +959,20 @@ namespace Game
             from.VoiceIds.Clear();
             from.Emitter = null;
 
+            // Inherit applied gain / Distance RTPC so transfer does not zipper from NaN→target.
+            to.LastAppliedGainDb = from.LastAppliedGainDb;
+            to.LastTargetGainDb = from.LastTargetGainDb;
+            to.GainSlewVelocity = from.GainSlewVelocity;
+            to.LastSlewedDistance = from.LastSlewedDistance;
+            to.LastTargetDistance = from.LastTargetDistance;
+            to.LastPostedDistance = from.LastPostedDistance;
+            from.LastAppliedGainDb = float.NaN;
+            from.LastTargetGainDb = float.NaN;
+            from.GainSlewVelocity = 0f;
+            from.LastSlewedDistance = float.NaN;
+            from.LastTargetDistance = float.NaN;
+            from.LastPostedDistance = float.NaN;
+
             if (to.Emitter != null)
             {
                 // Clamp first transfer jump so Distance RTPC / spatializer do not zipper.
@@ -886,12 +980,17 @@ namespace Game
                 Vector3 clamped = ClampEmitterStep(cur, toPos);
                 to.Emitter.transform.position = clamped;
                 WanosInteraction.EnsureEmitter(to.Emitter, clamped, to.Spec.EnterRadius);
-                float gainDb = GainDbForDistance(to.Spec, toDist);
-                WanosInteraction.ApplyEmitterDistanceAttenuation(to.Emitter, toDist, gainDb);
-                to.LastPostedDistance = toDist;
+                float jump = float.IsNaN(to.LastSlewedDistance)
+                    ? float.PositiveInfinity
+                    : Mathf.Abs(toDist - to.LastSlewedDistance);
+                if (jump > TeleportGainSnapMeters)
+                {
+                    Log.Info(
+                        $"[AmbienceZone] transfer-snap bank={to.Spec.Bank} id={to.Spec.Id} Δdist={jump:F1}m");
+                }
+                PushSlewedAttenuation(to, toDist, GainDbForDistance(to.Spec, toDist));
+                EnsureAttenuationDrive();
             }
-            else
-                to.LastPostedDistance = float.NaN;
         }
 
         static Vector3 ClampEmitterStep(Vector3 from, Vector3 to)
@@ -929,7 +1028,20 @@ namespace Game
                 return ResolveEmitterPosition(spec);
             }
 
-            float radius = src.Playing ? EffectiveExitRadius(spec) : spec.EnterRadius;
+            float enter = spec.EnterRadius;
+            float exit = src.Playing ? EffectiveExitRadius(spec) : enter;
+            // Ocean: exit already includes +12m near. River: no near on stop radius (Boluo audible-split).
+            float nearExtra = NearMetersForExitGrace(spec);
+
+            // 观景点固定锚：禁止用水面最近点（否则湖边观瀑会量到 Splash ~86m 永远不进区）。
+            if (spec.FixedWorldAnchor)
+            {
+                Vector3 anchor = ResolveEmitterPosition(spec);
+                float dAnchor = Distance(spec, listener, anchor);
+                bool mutedAnchor = IsWaterfallMutedByCampfire(spec, listener);
+                want = !mutedAnchor && KeepPlayingWithExitGrace(src, dAnchor, enter, exit, nearExtra);
+                return anchor;
+            }
 
             if ((spec.Kind == AmbienceEmitterKind.River || spec.Kind == AmbienceEmitterKind.Waterfall)
                 && (_inlandWaterReady || IslandWorldService.InlandWaterReady))
@@ -941,7 +1053,8 @@ namespace Game
                 // 场景里还没内河（还没加载完）时探针没数据，先按 catalog / MapItem 单点走。
                 if (WaterSurfaceProbe.TryNearestAny(kind, listener, out Vector3 nearest, out float dWater))
                 {
-                    want = dWater <= radius && !IsWaterfallMutedByCampfire(spec, listener);
+                    bool muted = IsWaterfallMutedByCampfire(spec, listener);
+                    want = !muted && KeepPlayingWithExitGrace(src, dWater, enter, exit, nearExtra);
                     return nearest;
                 }
             }
@@ -949,7 +1062,8 @@ namespace Game
             // 降级：catalog / MapItem 单点
             Vector3 fallback = ResolveEmitterPosition(spec);
             float d = Distance(spec, listener, fallback);
-            want = d <= radius && !IsWaterfallMutedByCampfire(spec, listener);
+            bool mutedFb = IsWaterfallMutedByCampfire(spec, listener);
+            want = !mutedFb && KeepPlayingWithExitGrace(src, d, enter, exit, nearExtra);
             return fallback;
         }
 
@@ -987,6 +1101,8 @@ namespace Game
         /// <summary>Repost 时取代表点（与 Evaluate 走同一条水面查询路径，探针没数据时退回 catalog）。</summary>
         static Vector3 ResolveRepostPosition(AmbienceEmitterSpec spec, Vector3 listener)
         {
+            if (spec.FixedWorldAnchor)
+                return ResolveEmitterPosition(spec);
             if (spec.Kind == AmbienceEmitterKind.River || spec.Kind == AmbienceEmitterKind.Waterfall)
             {
                 var kind = spec.Kind == AmbienceEmitterKind.River
@@ -1010,15 +1126,13 @@ namespace Game
                 return false;
 
             float dist = Distance(spec, listener, emitterPos);
-            if (spec.Kind == AmbienceEmitterKind.Forest)
-                return ShouldPlayForest(src, dist);
-
-            float radius = src.Playing ? EffectiveExitRadius(spec) : spec.EnterRadius;
-            if (dist > radius)
-                return false;
             if (IsWaterfallMutedByCampfire(spec, listener))
                 return false;
-            return true;
+
+            float enter = spec.EnterRadius;
+            float exit = src.Playing ? EffectiveExitRadius(spec) : enter;
+            float nearExtra = NearMetersForExitGrace(spec);
+            return KeepPlayingWithExitGrace(src, dist, enter, exit, nearExtra);
         }
 
         /// <summary>Big waterfall muted inside campfire 22m silence ring.</summary>
@@ -1042,13 +1156,45 @@ namespace Game
         }
 
         /// <summary>
-        /// Boluo Forest_Audio：SphereCollider r=150 进区；出球后 2s 宽限，
-        /// 贴表面 12m 内继续播（ClosestPoint），再远才 Stop。
+        /// River：不加 near（可听带与停播带已拆开）。Ocean / Forest / Grassland / Plateau：
+        /// 出球后贴表面 <see cref="AmbienceZoneCatalog.NearSurfaceMeters"/> 继续播，
+        /// 再远仍有 <see cref="AmbienceZoneCatalog.ExitGraceSeconds"/> 时间宽限
+        /// （对齐 Boluo Trigger Exit→Enter 抖动，避免 UnLoad↔Play 刺啦）。
         /// </summary>
-        static bool ShouldPlayForest(RuntimeSource src, float dist)
+        static float NearMetersForExitGrace(AmbienceEmitterSpec spec)
         {
-            float enter = src.Spec.EnterRadius;
-            if (dist <= enter)
+            if (spec == null)
+                return 0f;
+            switch (spec.Kind)
+            {
+                case AmbienceEmitterKind.River:
+                    return 0f;
+                case AmbienceEmitterKind.Ocean:
+                    // EffectiveExitRadius 已含 OceanNearSurface；时间宽限仍要，near 不再叠一层。
+                    return 0f;
+                case AmbienceEmitterKind.Lake:
+                case AmbienceEmitterKind.Waterfall:
+                case AmbienceEmitterKind.Forest:
+                case AmbienceEmitterKind.Grassland:
+                case AmbienceEmitterKind.Plateau:
+                case AmbienceEmitterKind.Campfire:
+                    return AmbienceZoneCatalog.NearSurfaceMeters;
+                default:
+                    return AmbienceZoneCatalog.NearSurfaceMeters;
+            }
+        }
+
+        /// <summary>
+        /// Boluo trigger-overlap keep：进区立刻播；已播时 exit+near 内保持；
+        /// 刚出 near 后 <see cref="AmbienceZoneCatalog.ExitGraceSeconds"/> 内仍保持（取消 Stop/UnLoad）。
+        /// </summary>
+        static bool KeepPlayingWithExitGrace(
+            RuntimeSource src, float dist, float enterRadius, float exitRadius, float nearExtraMeters)
+        {
+            float enter = enterRadius > 0f ? enterRadius : 0f;
+            float exit = exitRadius > enter ? exitRadius : enter;
+
+            if (dist <= enter || (src.Playing && dist <= exit))
             {
                 src.OutsideSince = -1f;
                 return true;
@@ -1063,10 +1209,10 @@ namespace Game
             if (src.OutsideSince < 0f)
                 src.OutsideSince = Time.realtimeSinceStartup;
 
-            if (dist <= enter + AmbienceZoneCatalog.ForestNearSurfaceMeters)
+            if (nearExtraMeters > 0f && dist <= exit + nearExtraMeters)
                 return true;
 
-            return Time.realtimeSinceStartup - src.OutsideSince < AmbienceZoneCatalog.ForestExitGraceSeconds;
+            return Time.realtimeSinceStartup - src.OutsideSince < AmbienceZoneCatalog.ExitGraceSeconds;
         }
 
         static bool IsBiomeKind(AmbienceEmitterKind kind) =>
@@ -1091,6 +1237,8 @@ namespace Game
         static void KeepSourcePlaying(RuntimeSource src, Vector3 pos, float dist)
         {
             var spec = src.Spec;
+            // Already audible: never re-Load / re-Post (Boluo「已播禁止再 Loading」).
+            // Only pose + attenuation. Voice-empty while Playing → Repost once.
             if (src.Playing && src.VoiceIds.Count > 0)
             {
                 if (src.Emitter != null)
@@ -1101,17 +1249,25 @@ namespace Game
                     WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
 
                     // 每 tick 都推增益（不靠 MinPostDistanceDelta）：Post 后引擎可能重置 gain enable。
-                    float gainDb = GainDbForDistance(spec, dist);
-                    WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, gainDb);
-                    src.LastPostedDistance = dist;
+                    float targetDb = GainDbForDistance(spec, dist);
+                    float prevDist = src.LastSlewedDistance;
+                    float gainDb = PushSlewedAttenuation(src, dist, targetDb);
+                    EnsureAttenuationDrive();
+
+                    if (!float.IsNaN(prevDist) && Mathf.Abs(dist - prevDist) > TeleportGainSnapMeters)
+                    {
+                        Log.Info(
+                            $"[AmbienceZone] dist-jump id={spec.Id} {prevDist:F1}→{dist:F1}m (snap/slew)");
+                    }
 
                     if (Time.realtimeSinceStartup >= _nextAttenuationLogTime)
                     {
                         _nextAttenuationLogTime = Time.realtimeSinceStartup + 1f;
                         ulong oid = 0;
                         WanosInteraction.TryGetEmitterObjectId(src.Emitter, out oid);
+                        float posted = float.IsNaN(src.LastSlewedDistance) ? dist : src.LastSlewedDistance;
                         Log.Info(
-                            $"[AmbienceZone] 3D id={spec.Id} bank={spec.Bank} dist={dist:F1}m gain={gainDb:F1}dB obj={oid} voices={src.VoiceIds.Count}");
+                            $"[AmbienceZone] 3D id={spec.Id} bank={spec.Bank} dist={dist:F1}m posted={posted:F1}m gain={gainDb:F1}dB target={targetDb:F1}dB obj={oid} voices={src.VoiceIds.Count}");
                     }
                 }
                 src.NeedsRepost = true;
@@ -1247,10 +1403,16 @@ namespace Game
                 src.NeedsRepost = true;
                 // 先 Post，再 enable+gain（Boluo CurveForGain 也是 voice 起来后持续推）。
                 PostSourceEvents(src, plays);
-                float gainDb = GainDbForDistance(spec, dist);
-                WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, gainDb);
-                src.LastPostedDistance = dist;
+                float targetDb = GainDbForDistance(spec, dist);
+                // Soft enter: write quiet first frame; later frames SmoothDamp toward target.
+                src.LastTargetGainDb = targetDb;
+                src.LastAppliedGainDb = Mathf.Min(SoftEnterStartDb, targetDb);
+                src.GainSlewVelocity = 0f;
+                src.LastSlewedDistance = dist;
+                src.LastTargetDistance = dist;
+                float gainDb = WriteDuckedGain(src, dist, src.LastAppliedGainDb);
                 src.Playing = true;
+                EnsureAttenuationDrive();
                 Log.Info(
                     $"[AmbienceZone] play id={spec.Id} events={string.Join(",", plays)} pos={pos} radius={spec.EnterRadius} dist={dist:F1} gain={gainDb:F1}dB");
             }
@@ -1277,10 +1439,15 @@ namespace Game
                 return;
 
             PostSourceEvents(src, plays);
-            float gainDb = GainDbForDistance(spec, dist);
-            WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, gainDb);
-            src.LastPostedDistance = dist;
+            float targetDb = GainDbForDistance(spec, dist);
+            src.LastTargetGainDb = targetDb;
+            src.LastAppliedGainDb = Mathf.Min(SoftEnterStartDb, targetDb);
+            src.GainSlewVelocity = 0f;
+            src.LastSlewedDistance = dist;
+            src.LastTargetDistance = dist;
+            WriteDuckedGain(src, dist, src.LastAppliedGainDb);
             src.NeedsRepost = true;
+            EnsureAttenuationDrive();
         }
 
         /// <summary>
@@ -1391,6 +1558,256 @@ namespace Game
         /// 3. 释放 emitter
         /// 4. 按策略 Release bank（或 KeepBank）
         /// </summary>
+        static float PushSlewedAttenuation(RuntimeSource src, float dist, float targetDb)
+        {
+            src.LastTargetGainDb = targetDb;
+            src.LastTargetDistance = dist;
+
+            float prevDist = src.LastSlewedDistance;
+            bool snap = float.IsNaN(src.LastAppliedGainDb)
+                || float.IsNaN(prevDist)
+                || Mathf.Abs(dist - prevDist) > TeleportGainSnapMeters;
+
+            float slewedDist;
+            float slewedGain;
+            if (snap)
+            {
+                slewedDist = dist;
+                slewedGain = targetDb;
+                src.GainSlewVelocity = 0f;
+            }
+            else
+            {
+                // Eval is 4 Hz; SmoothDamp uses real dt so edge walks stay continuous.
+                float dt = Mathf.Max(Time.deltaTime, 1f / 120f);
+                slewedDist = Mathf.MoveTowards(
+                    prevDist, dist, MaxDistanceSlewMetersPerSecond * dt);
+                float current = src.LastAppliedGainDb;
+                slewedGain = Mathf.SmoothDamp(
+                    current, targetDb, ref src.GainSlewVelocity, GainSmoothTimeSeconds, Mathf.Infinity, dt);
+            }
+
+            src.LastSlewedDistance = slewedDist;
+            src.LastAppliedGainDb = slewedGain;
+            return WriteDuckedGain(src, slewedDist, slewedGain);
+        }
+
+        static float WriteDuckedGain(RuntimeSource src, float dist, float preDuckGainDb)
+        {
+            // dist here is the Distance RTPC actually written (already slewed by caller).
+            src.LastPostedDistance = dist;
+            if (float.IsNaN(src.LastSlewedDistance))
+                src.LastSlewedDistance = dist;
+            float ducked = Mathf.Lerp(GainFloorDb, preDuckGainDb, ContentAudioDuck.Level01);
+            if (src.Emitter != null)
+                WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, ducked);
+            return ducked;
+        }
+
+        /// <summary>
+        /// Boluo CurveForGain 每 FixedUpdate 推增益；本工程 Evaluate 只有 4Hz，
+        /// 边缘走时必须每帧把 SmoothDamp / Distance RTPC 追完，否则听感就是电流音。
+        /// </summary>
+        static void EnsureAttenuationDrive()
+        {
+            if (!_started)
+                return;
+            int gen = ++_attenuationDriveGen;
+            DriveAttenuationSlews(gen).Forget();
+        }
+
+        static async UniTaskVoid DriveAttenuationSlews(int gen)
+        {
+            while (gen == _attenuationDriveGen && _started)
+            {
+                TickAttenuationSlews();
+                if (!AnyGainSlewPending() && !AnyDistanceSlewPending())
+                    return;
+                await UniTask.Yield(PlayerLoopTiming.Update);
+            }
+        }
+
+        static void TickAttenuationSlews()
+        {
+            if (!_started || !_catalogBuilt || _contentAudioPaused || _presetTransitionHeld)
+                return;
+            float dt = Mathf.Max(Time.deltaTime, 1f / 120f);
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var src = Sources[i];
+                if (!src.Playing || src.SoftStopping || src.Emitter == null)
+                    continue;
+                if (float.IsNaN(src.LastTargetGainDb) || float.IsNaN(src.LastTargetDistance))
+                    continue;
+
+                float targetDist = src.LastTargetDistance;
+                float targetGain = src.LastTargetGainDb;
+                float prevDist = float.IsNaN(src.LastSlewedDistance) ? targetDist : src.LastSlewedDistance;
+                bool snap = float.IsNaN(src.LastAppliedGainDb)
+                    || Mathf.Abs(targetDist - prevDist) > TeleportGainSnapMeters;
+
+                float slewedDist;
+                float slewedGain;
+                if (snap)
+                {
+                    slewedDist = targetDist;
+                    slewedGain = targetGain;
+                    src.GainSlewVelocity = 0f;
+                }
+                else
+                {
+                    slewedDist = Mathf.MoveTowards(
+                        prevDist, targetDist, MaxDistanceSlewMetersPerSecond * dt);
+                    float current = float.IsNaN(src.LastAppliedGainDb) ? targetGain : src.LastAppliedGainDb;
+                    slewedGain = Mathf.SmoothDamp(
+                        current, targetGain, ref src.GainSlewVelocity, GainSmoothTimeSeconds, Mathf.Infinity, dt);
+                }
+
+                src.LastSlewedDistance = slewedDist;
+                src.LastAppliedGainDb = slewedGain;
+                WriteDuckedGain(src, slewedDist, slewedGain);
+            }
+        }
+
+        static bool AnyDistanceSlewPending()
+        {
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var src = Sources[i];
+                if (!src.Playing || src.SoftStopping)
+                    continue;
+                if (float.IsNaN(src.LastSlewedDistance) || float.IsNaN(src.LastTargetDistance))
+                    continue;
+                if (Mathf.Abs(src.LastSlewedDistance - src.LastTargetDistance) > 0.25f)
+                    return true;
+            }
+            return false;
+        }
+
+        static void BeginSoftStop(
+            RuntimeSource src,
+            float seconds,
+            bool forceReleaseBank = false,
+            bool keepBank = false)
+        {
+            if (src == null || (!src.Playing && !src.SoftStopping))
+                return;
+            src.SoftStopping = true;
+            src.SoftStopStartedAt = Time.realtimeSinceStartup;
+            src.SoftStopSeconds = Mathf.Max(0.05f, seconds);
+            src.SoftStopFromGainDb = float.IsNaN(src.LastAppliedGainDb) ? 0f : src.LastAppliedGainDb;
+            src.SoftStopForceReleaseBank = forceReleaseBank;
+            src.SoftStopKeepBank = keepBank;
+            src.LastTargetGainDb = src.SoftStopFromGainDb;
+            // Evaluate is 4 Hz — drive soft-stop gain every frame so the ramp is continuous.
+            int gen = ++_softStopDriveGen;
+            DriveSoftStops(gen).Forget();
+        }
+
+        static async UniTaskVoid DriveSoftStops(int gen)
+        {
+            while (gen == _softStopDriveGen && _started)
+            {
+                TickSoftStops();
+                if (!AnySoftStopping())
+                    return;
+                await UniTask.Yield(PlayerLoopTiming.Update);
+            }
+        }
+
+        static void CancelSoftStop(RuntimeSource src)
+        {
+            if (src == null || !src.SoftStopping)
+                return;
+            src.SoftStopping = false;
+            src.SoftStopForceReleaseBank = false;
+            src.SoftStopKeepBank = false;
+        }
+
+        static void CancelAllSoftStops()
+        {
+            _softStopDriveGen++;
+            for (int i = 0; i < Sources.Count; i++)
+                CancelSoftStop(Sources[i]);
+        }
+
+        static bool AnySoftStopping()
+        {
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                if (Sources[i].SoftStopping)
+                    return true;
+            }
+            return false;
+        }
+
+        static bool AnyGainSlewPending()
+        {
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var src = Sources[i];
+                if (!src.Playing || src.SoftStopping)
+                    continue;
+                if (float.IsNaN(src.LastAppliedGainDb) || float.IsNaN(src.LastTargetGainDb))
+                    continue;
+                // Match Boluo SmoothDamp epsilon (~0.05 dB); keep a little slack for float noise.
+                if (Mathf.Abs(src.LastAppliedGainDb - src.LastTargetGainDb) > 0.1f)
+                    return true;
+            }
+            return false;
+        }
+
+        static float SoftStopGainNow(RuntimeSource src)
+        {
+            float t = Mathf.Clamp01(
+                (Time.realtimeSinceStartup - src.SoftStopStartedAt) / src.SoftStopSeconds);
+            return Mathf.Lerp(src.SoftStopFromGainDb, GainFloorDb, t);
+        }
+
+        static void TickSoftStops()
+        {
+            if (!_started || !_catalogBuilt)
+                return;
+            float now = Time.realtimeSinceStartup;
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var src = Sources[i];
+                if (!src.SoftStopping)
+                    continue;
+
+                float gain = SoftStopGainNow(src);
+                src.LastTargetGainDb = gain;
+                src.LastAppliedGainDb = gain;
+                src.GainSlewVelocity = 0f;
+                float dist = float.IsNaN(src.LastSlewedDistance)
+                    ? (float.IsNaN(src.LastPostedDistance) ? 0f : src.LastPostedDistance)
+                    : src.LastSlewedDistance;
+                WriteDuckedGain(src, dist, gain);
+
+                if (now < src.SoftStopStartedAt + src.SoftStopSeconds)
+                    continue;
+
+                bool force = src.SoftStopForceReleaseBank;
+                bool keep = src.SoftStopKeepBank;
+                CancelSoftStop(src);
+                StopSource(src, force, keep, fadeMs: 0);
+            }
+        }
+
+        static void SnapAllPlayingGainsToFloor()
+        {
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var src = Sources[i];
+                if (!src.Playing || src.Emitter == null)
+                    continue;
+                src.LastTargetGainDb = GainFloorDb;
+                src.LastAppliedGainDb = GainFloorDb;
+                float dist = float.IsNaN(src.LastPostedDistance) ? 0f : src.LastPostedDistance;
+                WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, GainFloorDb);
+            }
+        }
+
         static void StopSource(
             RuntimeSource src,
             bool forceReleaseBank = false,
@@ -1402,6 +1819,12 @@ namespace Game
             src.NeedsRepost = false;
             src.OutsideSince = -1f;
             src.LastPostedDistance = float.NaN;  // 重置距离状态，下次 Start 时重新推送
+            src.LastTargetGainDb = float.NaN;
+            src.LastAppliedGainDb = float.NaN;
+            src.GainSlewVelocity = 0f;
+            src.LastSlewedDistance = float.NaN;
+            src.LastTargetDistance = float.NaN;
+            CancelSoftStop(src);
             
             Log.Info($"[AmbienceZone] StopSource id={spec.Id} voiceCount={src.VoiceIds.Count}");
 
@@ -1430,13 +1853,34 @@ namespace Game
                 src.Emitter = null;
             }
 
+            // Shared bank (e.g. GrassLand_* → Boluodao_Grassland): another bed still holds
+            // → never Release/UnLoad (Boluo AnyListedBankHeldByOtherLoader).
             bool keep = keepBank || (!forceReleaseBank && ShouldKeepBankOnWalkStop(spec));
+            if (!keep && !forceReleaseBank && AnyOtherSourceHoldsBank(src, spec.Bank))
+                keep = true;
             if (src.BankHeld && !keep)
             {
                 WanosBankStore.Release(spec.Bank, UnloadDelaySecondsFor(spec));
                 src.BankHeld = false;
             }
             Log.Info($"[AmbienceZone] stop id={spec.Id} keepBank={keep}");
+        }
+
+        static bool AnyOtherSourceHoldsBank(RuntimeSource self, string bank)
+        {
+            if (self == null || string.IsNullOrEmpty(bank))
+                return false;
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var other = Sources[i];
+                if (ReferenceEquals(other, self))
+                    continue;
+                if (!other.BankHeld)
+                    continue;
+                if (string.Equals(other.Spec.Bank, bank, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
         static void StopAllPlaying(

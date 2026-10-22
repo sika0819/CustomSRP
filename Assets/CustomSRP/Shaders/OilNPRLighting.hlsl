@@ -10,24 +10,14 @@
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
 #include "OilPaintNoise.hlsl"
 #include "OilTreeCrossBillboard.hlsl"
+#include "OilVegetationLighting.hlsl"
 
 // Real IBL: SH9 directional ambient sampled by surface normal (天顶→地平渐变).
-// Replaces the legacy flat OilPeriodAmbient which ignored the normal.
-// _OilPeriodAmbient (OilSkyboxTime legacy fill) is kept as a global-color fallback
-// for third-party code that still reads it, but Oil NPR now always uses SH.
-float4 _OilPeriodAmbient;
+// Vegetation uses OilVegetationAmbient; _OilPeriodAmbient declared in OilVegetationLighting.
 
 half3 OilSampleSHDirectional(half3 n)
 {
-    float4 coefficients[7];
-    coefficients[0] = unity_SHAr;
-    coefficients[1] = unity_SHAg;
-    coefficients[2] = unity_SHAb;
-    coefficients[3] = unity_SHBr;
-    coefficients[4] = unity_SHBg;
-    coefficients[5] = unity_SHBb;
-    coefficients[6] = unity_SHC;
-    return (half3)max(0.0, SampleSH9(coefficients, n));
+    return OilVegSampleSH(n);
 }
 
 // Returns directional SH ambient keyed to surfaceWS.normal.
@@ -321,77 +311,47 @@ half3 OilNPRLightingEx(
 #endif
 }
 
-// Boluo EnvFoliage: albedo * (NdotL * mainLight * shadow + SH/ambient).
-// Oil NPR's 0.45 ambient add is drowned by the sun, so leaves stay one green.
-// Ambient is now keyed to surface normal via SH9 (OilNPRAmbient) — zenith→ground gradient.
+// Boluo EnvFoliage: shared OilVegetationDirect + local other lights.
 half3 OilFoliageLighting(Surface surfaceWS, half3 albedo, half shadeSteps, float2 screenUV)
 {
     half3 N = normalize((half3)surfaceWS.normal);
-    half3 ambient = OilNPRAmbient(surfaceWS);
-    half3 other = OilNPROtherLights(surfaceWS, albedo, N, shadeSteps, screenUV);
-
-    half3 lightColor = 0.0h;
-    half ndotl = 0.0h;
-    half att = 0.0h;
-    if (GetDirectionalLightCount() > 0)
-    {
-        ShadowData shadowData = GetShadowData(surfaceWS);
-        Light light = GetDirectionalLight(0, surfaceWS, shadowData);
-        lightColor = (half3)light.color;
-        half3 L = (half3)light.direction;
-        ndotl = saturate(dot(N, L));
-        att = (half)light.attenuation;
-    }
-
-    return albedo * (lightColor * ndotl * att + ambient) + other;
-}
-
-// Port of BoluoTreeCrossBillboardShade.
-//
-// Near leaves use OilFoliageLighting (EnvFoliage ambient × albedo). Far cross-card
-// billboards must read the SAME directional ambient so distance fog + tone line up:
-// any divergence shows as a visible seam between near and far trees.
-//
-// The baked daytime atlas is darkened by the directional SH ambient (zenith→ground
-// gradient keyed to the decoded billboard normal). Shadow sampling still goes through
-// the directional light + cascade, matching the near-leaf path.
-half3 OilTreeCrossBillboardShade(
-    half3 albedo,
-    half3 bakedNormalEnc,
-    half normalStrength,
-    Surface surfaceWS)
-{
-    half strength = saturate(normalStrength);
-    half3 bakedN = OilTreeCrossBillboardDecodeWorldNormal(bakedNormalEnc);
-    half3 n = normalize(lerp(half3(0.0h, 1.0h, 0.0h), bakedN, strength));
-
-    // Directional SH ambient keyed to the billboard-derived normal,
-    // so the per-card lit term stays consistent with the rest of the scene.
-    half3 ambient = OilSampleSHDirectional(n);
-
-    half3 other = OilNPROtherLights(surfaceWS, albedo, n, 2.0h, float2(0, 0));
-
     half3 lightColor = 0.0h;
     half3 L = half3(0.0h, 1.0h, 0.0h);
-    half attenuation = 1.0h;
+    half att = 0.0h;
+    half lightLum = 0.0h;
     if (GetDirectionalLightCount() > 0)
     {
-#if !defined(OIL_MOBILE_PERF)
         ShadowData shadowData = GetShadowData(surfaceWS);
         Light light = GetDirectionalLight(0, surfaceWS, shadowData);
         lightColor = (half3)light.color;
         L = (half3)light.direction;
-        attenuation = (half)light.attenuation;
-#else
-        DirectionalLightData data = _DirectionalLightData[0];
-        lightColor = (half3)data.color.rgb;
-        L = (half3)data.directionAndMask.xyz;
-#endif
+        att = (half)light.attenuation;
+        lightLum = OilVegMainLightLuma(lightColor);
     }
 
-    // Same lit term as OilFoliageLighting: albedo * (N·L * sun * shadow + ambient).
-    // Near leaves use the same SH sample → far trees match within a fragment.
-    return albedo * (lightColor * saturate(dot(n, L)) * attenuation + ambient) + other;
+    half3 lit = OilVegetationDirect(albedo, N, lightColor, L, att, lightLum);
+    lit += OilNPROtherLights(surfaceWS, albedo, N, shadeSteps, screenUV);
+    return OilVegetationNightKeep(lit, albedo, N, lightLum);
+}
+
+// Far cross-card: same OilFoliageLighting as near leaves (BoluoUnity LitAlbedoObject).
+// Dark: OilVegetationLitNormal biases toward up → ambient matches grass zenith fill.
+half3 OilTreeCrossBillboardShade(
+    half3 albedo,
+    half3 bakedNormalEnc,
+    half normalStrength,
+    Surface surfaceWS,
+    float2 screenUV)
+{
+    half strength = saturate(normalStrength);
+    half3 bakedOS = OilTreeCrossBillboardDecodeObjectNormal(bakedNormalEnc);
+    half3 bakedWS = (half3)TransformObjectToWorldNormal((float3)bakedOS);
+    half3 n = normalize(lerp(half3(0.0h, 1.0h, 0.0h), bakedWS, strength));
+
+    Surface s = surfaceWS;
+    s.normal = (float3)n;
+    s.interpolatedNormal = (float3)n;
+    return OilFoliageLighting(s, albedo, 2.0h, screenUV);
 }
 
 // Wrapper: sample cascade shadows (forcedAttenuation < 0).

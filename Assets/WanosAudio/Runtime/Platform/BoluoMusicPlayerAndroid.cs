@@ -80,15 +80,26 @@ namespace WanosAudio
                 return;
             }
 
+            // 空 title+cover 会 release MediaSession。播放中禁止走清卡，兜底「波萝」。
             if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(artworkPath))
             {
-                ClearNowPlaying();
-                return;
+                if (isPlaying)
+                {
+                    title = "波萝";
+                    artworkPath = ArtworkDefault ?? "";
+                }
+                else
+                {
+                    ClearNowPlaying();
+                    return;
+                }
             }
 
+            if (string.IsNullOrEmpty(title))
+                title = "波萝";
             if (string.IsNullOrEmpty(artworkPath))
                 artworkPath = ArtworkDefault ?? "";
-            BoluoAndroidEngineNative.UpdateNowPlayingInfo(title ?? "", artworkPath, isPlaying);
+            BoluoAndroidEngineNative.UpdateNowPlayingInfo(title, artworkPath, isPlaying);
         }
 
         public void ClearNowPlaying()
@@ -158,9 +169,16 @@ namespace WanosAudio
                 return;
             bool playing = value == "1";
             if (playing)
+            {
                 OnNowPlayingPlay("");
-            else
-                OnNowPlayingPause("");
+                return;
+            }
+
+            // 后台负一屏 / 锁屏暂停由原生直接 Pause_Music，并排队这条消息。
+            // Unity 解 pause 后若再走 OnNowPlayingPause → RequestPauseAll，
+            // 会把 AudioAppLifecycle 刚恢复的播放又掐掉，且 _needsRestore 已清、
+            // 点场景也无法再恢复。暂停态回前台由 ResyncFromNative + RestoreForegroundAudio
+            //（覆盖暂停）处理，这里对 pause 通知 no-op。
         }
 
         public void OnMediaSkipNext(string empty)

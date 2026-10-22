@@ -197,7 +197,8 @@ namespace Game.Native
             GUILayout.Space(12);
             if (GUILayout.Button("重复定时", GUILayout.Height(36)))
             {
-                Game.GameEntry.Music?.Resume();
+                // 与真机 startSleepTimer(restore=1) 一致：取消/重复都先续播。
+                ResumePlaybackAfterTimerEnd();
                 StartTimer(_lastArmedMinutes);
                 Close();
             }
@@ -205,9 +206,15 @@ namespace Game.Native
             if (GUILayout.Button("取消", GUILayout.Height(32)))
             {
                 // 只恢复播放，不再武装定时（对齐旧 Hybrid 结束弹窗「取消」）。
-                Game.GameEntry.Music?.Resume();
+                ResumePlaybackAfterTimerEnd();
                 Close();
             }
+        }
+
+        static void ResumePlaybackAfterTimerEnd()
+        {
+            var music = Game.GameEntry.Music ?? Game.MusicPlaylist.Instance;
+            music?.ResumeAfterTimerEnd("timer-end");
         }
 
         static void StartTimer(int minutes)

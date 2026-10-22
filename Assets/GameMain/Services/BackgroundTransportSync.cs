@@ -143,7 +143,8 @@ namespace Game
             if (music == null)
                 return;
 
-            // 暂停态先同步；回前台 RestoreForegroundAudio 末尾会按「覆盖暂停」清掉。
+            // 暂停态先同步给 C#（AdoptTrack 路径可能提前 return）；
+            // RestoreForegroundAudio 在 Resync 之后会再清一次（覆盖负一屏暂停）。
             NowPlayingService.NoteUserPaused(paused);
 
             if (string.Equals(music.CurrentEventName, eventName, System.StringComparison.OrdinalIgnoreCase))

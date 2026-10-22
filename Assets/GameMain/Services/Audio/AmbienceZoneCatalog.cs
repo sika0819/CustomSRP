@@ -27,6 +27,11 @@ namespace Game
         public float ExitRadius;
         public bool UseXzDistance = true;
         public bool FollowForestCentroid;
+        /// <summary>
+        /// 观景点等固定世界锚：River/Waterfall 不走 <c>WaterSurfaceProbe</c>，
+        /// 距离按 <see cref="Position"/>；湖↔瀑互斥也不压制这类床位。
+        /// </summary>
+        public bool FixedWorldAnchor;
         public int RiverCatalogIndex = -1;
         public string RiverMeshName;
     }
@@ -42,8 +47,13 @@ namespace Game
         /// <summary>河开播半径（贴着河岸约几米必进区；原 20 偏紧）。</summary>
         public const float RiverAttenuationMeters = 30f;
         public const float OceanAttenuationMeters = 60f;
-        /// <summary>近岸海已播后再加约 12m 宽限（河不加）。</summary>
-        public const float OceanNearSurfaceMeters = 12f;
+        /// <summary>
+        /// Boluo <c>NearTriggerMeters</c>：物理已空但人仍贴桥/岸时禁止立刻 Stop/UnLoad。
+        /// 近岸海 / Forest / 草地出球宽限共用。
+        /// </summary>
+        public const float NearSurfaceMeters = 12f;
+        /// <summary>近岸海已播后再加约 12m 宽限（河不加 near 进停播半径；宽限时间仍用 ExitGrace）。</summary>
+        public const float OceanNearSurfaceMeters = NearSurfaceMeters;
         public const float LakeAttenuationMeters = 20f;
         public const float CampfireAttenuationMeters = 30f;
         /// <summary>大瀑开播半径。</summary>
@@ -59,16 +69,21 @@ namespace Game
         /// <summary>Boluo Forest_Audio SphereCollider：3D 半径 150 才是进出区，曲线 160 只衰减。</summary>
         public const float ForestEnterMeters = 150f;
         /// <summary>Boluo <c>NearTriggerMeters</c>：刚出球仍贴表面时继续播。</summary>
-        public const float ForestNearSurfaceMeters = 12f;
-        /// <summary>Boluo <c>MinTriggerExitGraceSeconds</c>：离开球体至少再等这么久才 Stop。</summary>
-        public const float ForestExitGraceSeconds = 2f;
+        public const float ForestNearSurfaceMeters = NearSurfaceMeters;
+        /// <summary>
+        /// Boluo <c>MinTriggerExitGraceSeconds</c>：离开可听区至少再等这么久才 Stop。
+        /// 须盖住桥面 CharacterController 0.5–1.5s 的 Exit→Enter 抖动。
+        /// </summary>
+        public const float ExitGraceSeconds = 2f;
+        public const float ForestExitGraceSeconds = ExitGraceSeconds;
         public const float ForestExitMeters = ForestEnterMeters;
         public const float ForestUnloadDelaySeconds = 3f;
         /// <summary>草地主区触发球（增益曲线远端仍 150）。</summary>
         public const float GrasslandEnterMeters = 180f;
         /// <summary>增益曲线远端 / 空间化。</summary>
         public const float GrasslandAttenuationMeters = 150f;
-        public const float GrasslandUnloadDelaySeconds = 0f;
+        /// <summary>禁止 0：共享 Boluodao_Grassland 一侧 Exit 立刻 UnLoad 会掐另一侧。</summary>
+        public const float GrasslandUnloadDelaySeconds = 2f;
         /// <summary>草地卫星触发（胶囊约 75；增益远端 60）。</summary>
         public const float GrasslandSecondaryEnterMeters = 75f;
         public const float GrasslandSecondaryAttenuationMeters = 60f;
@@ -94,6 +109,9 @@ namespace Game
             // 湖在岛 preset 7 那一侧（出生点 504.67 / 463.85），补一个锚点，
             // 玩家走到湖边才听得到湖面声。
             Lake("Lake_Audio_Preset7", 504.6723f, 38.82f, 463.8487f),
+            // 灵感唤醒湖边观瀑点：落点离 WaterfallSplash ~86m，探针瀑进不了 42m 圈。
+            // 固定锚在观景点朝瀑方向约 20m，开播用 catalog 距离（见 FixedWorldAnchor）。
+            ScenicWaterfallOverlook(),
             Grassland("GrassLand_Audio", 419.46387f, 41.16188f, 362.95004f, GrasslandEnterMeters),
             Grassland("GrassLand_S_Audio", 503.9f, 17.36f, 667.1f, GrasslandSecondaryEnterMeters),
             Plateau("Plateau_Audio", 171.5f, 50.5f, 583.7f),
@@ -258,6 +276,28 @@ namespace Game
                 ExitRadius = LakeAttenuationMeters * AttenuationExitScale,
                 UseXzDistance = true,
             };
+        }
+
+        /// <summary>
+        /// Preset7 湖边观瀑：锚在观景点（504.67）朝 <c>WaterfallSplash</c> 约 20m，
+        /// 站在灵感唤醒落点即可进大瀑 Enter；与探针瀑床位共用 bank，由最近者独占 Post。
+        /// </summary>
+        static AmbienceEmitterSpec ScenicWaterfallOverlook()
+        {
+            // overlook (504.67, 38.82, 463.85) → splash (423.81, 66.34, 457.4), |d|≈85.7m
+            var pos = new Vector3(485.79f, 45.25f, 462.34f);
+            var spec = Point(
+                "waterfall_scenic_Preset7Overlook",
+                AmbienceEmitterKind.Waterfall,
+                "Waterfall_Big_Quad",
+                "Play_Waterfall_Big_LR",
+                "Stop_Waterfall_Big",
+                pos,
+                WaterfallBigEnterMeters,
+                WaterfallBigExitMeters);
+            spec.UseXzDistance = true;
+            spec.FixedWorldAnchor = true;
+            return spec;
         }
 
         static AmbienceEmitterSpec Grassland(string id, float x, float y, float z, float radiusMeters)

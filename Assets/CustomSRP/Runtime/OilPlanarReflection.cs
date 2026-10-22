@@ -66,6 +66,9 @@ namespace CustomSRP
         Vector3 _prevFramePos;
         Quaternion _prevFrameRot;
         bool _hasPrevFramePose;
+        // Sky TOD / look changed while the camera is idle — force one mirror redraw
+        // so a day-blue RT captured at boot cannot stick over the night skybox.
+        bool _skyDirty;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() => Ensure();
@@ -87,6 +90,20 @@ namespace CustomSRP
             }
 
             _instance = go.AddComponent<OilPlanarReflection>();
+        }
+
+        /// <summary>
+        /// Sky period / look globals changed. Idle throttle would otherwise keep a
+        /// stale mirror RT (startup day-blue over a night skybox). Drop ReflectOn
+        /// immediately so water falls back to analytic sky until the next mirror draw.
+        /// </summary>
+        public static void InvalidateSky()
+        {
+            Shader.SetGlobalFloat(ReflectOnId, 0f);
+            if (_instance != null)
+            {
+                _instance._skyDirty = true;
+            }
         }
 
         void OnEnable() => Shader.SetGlobalFloat(ReflectOnId, 0f);
@@ -255,6 +272,12 @@ namespace CustomSRP
         {
             if (_reflectionRt == null || !_hasPrevFramePose)
                 return true;
+
+            if (_skyDirty)
+            {
+                _skyDirty = false;
+                return true;
+            }
 
             // A resolution flip (orientation change / render-scale tweak) resizes the
             // RT in EnsureReflectionRt below, which this gate runs before. Draw this

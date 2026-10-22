@@ -6,7 +6,8 @@
 // collapse the orthogonal card so only one face is lit (no cross seam / edge-on strip).
 
 float3 OilTreeCrossBillboardRotateYaw(
-    float3 positionOS, float3 normalOS, out float3 normalWS, out float keep)
+    float3 positionOS, float3 normalOS,
+    out float3 rotatedNormalOS, out float3 normalWS, out float keep)
 {
     float3 pivotWS = TransformObjectToWorld(float3(0.0, 0.0, 0.0));
     float3 toCamOS = TransformWorldToObjectDir(_WorldSpaceCameraPos - pivotWS);
@@ -35,6 +36,7 @@ float3 OilTreeCrossBillboardRotateYaw(
     n.x = normalOS.x * c + normalOS.z * s;
     n.y = normalOS.y;
     n.z = -normalOS.x * s + normalOS.z * c;
+    rotatedNormalOS = n;
     normalWS = TransformObjectToWorldNormal(n);
 
     keep = dropCard ? 0.0 : 1.0;
@@ -43,10 +45,16 @@ float3 OilTreeCrossBillboardRotateYaw(
     return p;
 }
 
-half3 OilTreeCrossBillboardDecodeWorldNormal(half3 encoded)
+// Atlas stores near-tree object-space normals (bake at prefab origin), same as BoluoUnity.
+half3 OilTreeCrossBillboardDecodeObjectNormal(half3 encoded)
 {
     half3 n = encoded * 2.0h - 1.0h;
     return normalize(n);
+}
+
+half3 OilTreeCrossBillboardDecodeWorldNormal(half3 encoded)
+{
+    return OilTreeCrossBillboardDecodeObjectNormal(encoded);
 }
 
 #endif

@@ -104,10 +104,8 @@ namespace Game.BoluoApi
         /// </summary>
         public static async UniTask<bool> EnsureUserTokenAsync(bool failFast)
         {
-            BoluoSession.LoadFromPrefs();
-            if (!string.IsNullOrEmpty(BoluoSession.UserToken))
-                return true;
-
+            // Hybrid：宿主 SSOT 优先。退登后 Prefs 可能仍有旧票，或 Leave 已清票；
+            // 若先 short-circuit Prefs，二次登录会沿用脏 token / 跳过 JNI 新票。
             if (Game.Native.NativeSession.IsHybridAvailable()
                 && Game.Native.NativeSession.TryGetUserToken(out string hybridToken)
                 && !string.IsNullOrEmpty(hybridToken))
@@ -116,6 +114,10 @@ namespace Game.BoluoApi
                 Log.Info($"[DeviceLogin] hybrid userToken len={hybridToken.Length}");
                 return true;
             }
+
+            BoluoSession.LoadFromPrefs();
+            if (!string.IsNullOrEmpty(BoluoSession.UserToken))
+                return true;
 
             if (string.IsNullOrEmpty(BoluoSession.DeviceToken))
             {

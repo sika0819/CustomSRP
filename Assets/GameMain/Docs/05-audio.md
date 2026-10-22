@@ -283,5 +283,6 @@ WanosEngine.SetVolumeParameter(WanosEngine.FxVolumeParam, ui01);
 | 切预设后环境音没了 | `PresetService.Apply` 会 `ClearContent3D()` | 正常，切换后会 `RetriggerContentAtListener()` |
 | 目录里没有服务器的新专辑 | 本地 JSON 先加载导致服务器数据被忽略 | 已修复（服务器优先） |
 | `Next()` 跳过一首歌 | `PlayIndex` 先推进索引再尝试播放，bank 缺失时不播但索引已变 | 看 `[MusicPlaylist]` 的 bank 缺失日志 |
-| 媒体卡片不更新 | `NowPlayingService` 需要 `IslandWorldReadyEventArgs` 才 `ArmSession()` | 确认世界就绪事件已触发 |
+| 媒体卡片不更新 | `NowPlayingService` 需要 `IslandWorldReadyEventArgs` 才 `ArmSession()`；首播须 `PublishPlayingForced`（`TryStartTrack` 成功路径） | 确认世界就绪 + `[NowPlaying] PublishPlayingForced`；`!_armed` 时 Publish 只 skip 不清卡 |
+| 听得到歌但负一屏空白 | 旧逻辑 `!_armed` Publish 会 `ClearCard` 拆 Session；CustomSRP Java playlist 空无法补卡 | 看是否误打 `updateNowPlayingInfo: all empty, cleared`；应只有离岛/关后台播放才清 |
 | 远程暂停/播放无效（前台） | `NowPlayingService.Tick()` 依赖 `Native/BoluoNativeBridge` 每帧泵送 | 非原生宿主环境需要自己泵 `Tick()` |

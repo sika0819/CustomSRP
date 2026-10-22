@@ -8,9 +8,9 @@ Shader "CustomSRP/OilRainSplash"
 
     SubShader
     {
+        // Do NOT set RenderPipeline=CustomSRP — same strip→magenta pitfall as OilRainStreakQuad.
         Tags
         {
-            "RenderPipeline" = "CustomSRP"
             "Queue" = "Transparent"
             "RenderType" = "Transparent"
             "IgnoreProjector" = "True"

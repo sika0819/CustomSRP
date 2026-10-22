@@ -355,23 +355,37 @@ namespace Game.Editor.BuildTool
             return boluoDefines;
         }
 
-        public static void ApplyDefines(CIConfig config)
+        /// <summary>
+        /// 写入 BOLUO_* 宏。若任一平台宏实际变更，返回 true（会触发脚本重编 / 域重载）。
+        /// 调用方必须在变更后 defer 构建：否则 YooAsset/BuildPlayer 会报
+        /// "script class layout is incompatible between the editor and the player"。
+        /// </summary>
+        public static bool ApplyDefines(CIConfig config)
         {
             var boluoDefines = BuildBoluoDefineList(config);
+            bool changed = false;
 
             foreach (BuildTargetGroup group in TargetPlatforms)
             {
                 var defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(group)
                     .Split(';').Where(d => !string.IsNullOrEmpty(d)).ToList();
+                var before = new HashSet<string>(defines, StringComparer.Ordinal);
                 defines.RemoveAll(d =>
                     d == DisableLogDefine || d == PadDefine ||
                     d == DevDefine || d == TestDefine || d == PrereleaseDefine || d == ProductDefine);
                 defines.AddRange(boluoDefines);
+                var after = new HashSet<string>(defines, StringComparer.Ordinal);
+                if (before.SetEquals(after))
+                    continue;
                 PlayerSettings.SetScriptingDefineSymbolsForGroup(group, string.Join(";", defines));
+                changed = true;
             }
 
             ApplyScreenOrientation(config);
-            Debug.Log($"[BoluoCI] 已应用宏: {string.Join(", ", boluoDefines)}");
+            Debug.Log(changed
+                ? $"[BoluoCI] 已应用宏（有变更，需域重载）: {string.Join(", ", boluoDefines)}"
+                : $"[BoluoCI] 宏已对齐（无变更）: {string.Join(", ", boluoDefines)}");
+            return changed;
         }
 
         public static void ApplyVersion(CIConfig config)
@@ -419,7 +433,12 @@ namespace Game.Editor.BuildTool
             if (string.IsNullOrEmpty(config.ScreenOrientation))
                 config.ScreenOrientation = "sensor";
 
-            ApplyDefines(config);
+            // 宏变更会触发域重载：先 return 3，由 HostShell / CLI 在重载后再跑，避免 AB 构建踩 class layout
+            if (ApplyDefines(config))
+            {
+                Debug.Log("[BoluoCI] 宏变更，等待域重载后重试导出");
+                return 3;
+            }
             try
             {
                 ApplyVersion(config);
@@ -484,7 +503,11 @@ namespace Game.Editor.BuildTool
         public static int BuildiOS(CIConfig config)
         {
             SwitchBuildTarget(BuildTarget.iOS);
-            ApplyDefines(config);
+            if (ApplyDefines(config))
+            {
+                Debug.Log("[BoluoCI] 宏变更，等待域重载后重试导出");
+                return 3;
+            }
             try
             {
                 ApplyVersion(config);
@@ -527,7 +550,11 @@ namespace Game.Editor.BuildTool
                 config.ScreenOrientation = "sensor";
 
             BoluoAndroidBuildHelper.ApplyBeforeApkPack();
-            ApplyDefines(config);
+            if (ApplyDefines(config))
+            {
+                Debug.Log("[BoluoCI] 宏变更，等待域重载后重试导出");
+                return 3;
+            }
             try
             {
                 ApplyVersion(config);

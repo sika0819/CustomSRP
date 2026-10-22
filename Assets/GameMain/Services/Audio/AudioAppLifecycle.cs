@@ -43,10 +43,12 @@ namespace Game
         /// 玩家点了游戏场景：兜底跑一次恢复。
         /// 宿主壳里 Unity 的 <c>OnApplicationFocus</c> 不一定触发（Unity 窗口不一定是 key），
         /// 一次真实点击是可靠的「我回前台了」信号。
+        /// 负一屏暂停（<see cref="NowPlayingService.UserManuallyPaused"/>）也在此覆盖续播，
+        /// 不挂到 focus 回调上，避免通知栏抢焦把岛内主动暂停误恢复。
         /// </summary>
         public static void OnSceneInteraction()
         {
-            if (!NeedsRestore())
+            if (!NeedsRestore() && !NowPlayingService.UserManuallyPaused)
                 return;
             RestoreForegroundAudio("scene-interaction");
         }
@@ -102,11 +104,12 @@ namespace Game
         }
 
         /// <summary>
-        /// 是否需要跑一次恢复。
+        /// 是否需要跑一次恢复（回前台自动路径）。
         /// <para>
         /// 只认「进过后台」latch 与原生打断标记。
         /// 禁止用 <c>PlaybackState != Started</c> 当常驻条件：macOS / Editor 上该状态
         /// 经常与真实发声不同步，会导致每次焦点 / 点击都 Stop+Play 音乐与环境声。
+        /// 手动暂停的点场景覆盖见 <see cref="OnSceneInteraction"/>。
         /// </para>
         /// </summary>
         static bool NeedsRestore()
@@ -121,13 +124,22 @@ namespace Game
         /// <summary>回前台恢复：引擎 → 平台 → 业务（音乐 / 内容声）。</summary>
         public static void RestoreForegroundAudio(string reason)
         {
-            _needsRestore = false;
-
             if (!WanosEngine.IsLoaded)
             {
                 // 引擎还没起来（不在岛内）→ 没有可恢复的东西。
+                // 保留 latch，避免点场景时 NeedsRestore 已灭、再也补不回来。
                 return;
             }
+
+            _needsRestore = false;
+
+            // 0. 先清暂停意图：负一屏后台 pause 会把原生 userPaused=true，
+            //    ReclaimFocusOnForeground / restoreAudible* 见此旗会直接 skip。
+            //    需求：回前台 / 点场景覆盖暂停，必须先清再抢焦。
+            NowPlayingService.NoteUserPaused(false);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
+#endif
 
             // 1. 播放设备可能后台被系统释放 → 引擎没开就重新开一次。
             if (!WanosEngine.IsPlaybackEnabled)
@@ -143,10 +155,15 @@ namespace Game
 
             // 3.5 平台层对账：后台负一屏可能由原生切过歌 → 采用原生的当前曲，
             // 否则岛内 UI 与「下一曲」都会错位（原生切走的曲 C# 不知道）。
+            // 暂停态只用于 AdoptTrack；清暂停意图已在步骤 0，这里再盖一次防止 Resync 写回。
             BackgroundTransportSync.ResyncFromNative();
+            NowPlayingService.NoteUserPaused(false);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
+#endif
 
             // 4. 业务层：音乐续播 / 必要时重起当前曲目。
-            GameEntry.Music?.EnsureMusicRestored(reason);
+            (GameEntry.Music ?? MusicPlaylist.Instance)?.EnsureMusicRestored(reason);
 
             // 5. 业务层：环境声 / 天气 / 雨水强制重起。
             AudioInteractionBootstrap.RestoreContentAudio(reason);

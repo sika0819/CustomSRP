@@ -80,14 +80,18 @@ namespace Game
             if (GetById(id) == null)
                 return;
 
-            SchemeState = 1;
-            if (GameEntry.Event != null)
+            // 无 iris 订阅方时勿只抬 SchemeState=1：否则 IsTransitioning 永真，行走/开预设全死。
+            bool hasIrisHandler = GameEntry.Event != null
+                && GameEntry.Event.Count(PresetTransitionRequestEventArgs.EventId) > 0;
+            if (hasIrisHandler)
             {
+                SchemeState = 1;
                 GameEntry.Event.Fire(this, PresetTransitionRequestEventArgs.Create(id));
                 return;
             }
 
             Apply(id, teleportPlayer: true);
+            MarkPlaying();
         }
 
         /// <summary>Called when the HUD veil finishes and the preset is live.</summary>

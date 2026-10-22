@@ -17,6 +17,12 @@ Shader "CustomSRP/OilNPR"
         _ShadowWobble ("Shadow Brush Edge", Range(0, 1)) = 0.45
         _ShadowBrushScale ("Shadow Brush Scale", Range(0.2, 8)) = 1.8
         _AmbientColor ("Ambient", Color) = (0.55, 0.5, 0.44, 1)
+
+        // 0=Mesh UV, 1=World triplanar, 2=Object triplanar（与旧 Boluo LitStrokeRock 枚举一致）
+        // 单向三向：单张 _BaseMap 从 X/Y/Z 三轴采样后按 |N| 混合。
+        [Enum(Mesh UV,0,World,1,Object,2)] _WorldTriplanar ("Triplanar", Float) = 0
+        _TriplanarTiling ("Triplanar Tiling", Float) = 0.25
+
         [Toggle] _OilFoliage ("Foliage (ambient × albedo)", Float) = 0
         // Cross-card LOD billboards: yaw kept card to camera, drop the orthogonal card.
         [Toggle] _OilCrossBillboard ("Tree Cross Billboard", Float) = 0

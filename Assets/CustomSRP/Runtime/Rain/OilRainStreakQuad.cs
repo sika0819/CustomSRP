@@ -1,3 +1,4 @@
+using Game;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -18,6 +19,7 @@ namespace CustomSRP
         static readonly int QualityId = Shader.PropertyToID("_Quality");
         static readonly int MistId = Shader.PropertyToID("_Mist");
         static readonly int ColorId = Shader.PropertyToID("_RainColor");
+        static readonly int StreakLengthId = Shader.PropertyToID("_StreakLength");
 
         // Match SkyMobileRain density / fall / mist tables by weather intensity band.
         static readonly float[] DensityByState = { 0f, 1.05f, 1.9f, 2.85f };
@@ -37,6 +39,7 @@ namespace CustomSRP
         int _appliedState = -1;
         float _appliedQuality = -1f;
         bool _raining;
+        bool _ownsMaterial;
 
         void OnEnable()
         {
@@ -71,7 +74,11 @@ namespace CustomSRP
                 return;
             }
 
-            float intensity = _settings.intensity;
+            // Always read intensity from Current when set — YooAsset may have
+            // duplicated the settings SO; weather writes only to Current.
+            float intensity = OilRainSettings.Current != null
+                ? OilRainSettings.Current.intensity
+                : _settings.intensity;
             int state = IntensityToState(intensity);
             if (state <= 0)
             {
@@ -102,6 +109,9 @@ namespace CustomSRP
                 c.a = 0.36f;
             c.a *= Mathf.Lerp(0.7f, 1f, Mathf.Clamp01(_settings.streakOpacity));
 
+            // Max dash length (min is fixed 0.58 in shader). Authored range: 0.58~0.8.
+            float streakLen = Mathf.Clamp(_settings.streakLength, 0.58f, 1f);
+
             // Material + MPB: CustomSRP sometimes ignores MPB-only overrides on
             // UnityPerMaterial CBUFFER props; writing both matches SkyMobileRain reliability.
             _material.SetFloat(RainTimeId, _rainTime);
@@ -110,6 +120,7 @@ namespace CustomSRP
             _material.SetFloat(MistId, mist);
             _material.SetFloat(WindId, wind);
             _material.SetFloat(QualityId, quality);
+            _material.SetFloat(StreakLengthId, streakLen);
             _material.SetColor(ColorId, c);
 
             _block ??= new MaterialPropertyBlock();
@@ -119,6 +130,7 @@ namespace CustomSRP
             _block.SetFloat(MistId, mist);
             _block.SetFloat(WindId, wind);
             _block.SetFloat(QualityId, quality);
+            _block.SetFloat(StreakLengthId, streakLen);
             _block.SetColor(ColorId, c);
             _renderer.SetPropertyBlock(_block);
 
@@ -131,13 +143,28 @@ namespace CustomSRP
 
         void ResolveSettings()
         {
-            if (_settings != null)
+            // Prefer the weather-driven singleton so prefab SO duplicates stay in sync.
+            if (OilRainSettings.Current != null)
+            {
+                _settings = OilRainSettings.Current;
                 return;
-            _settings = OilRainSettings.Current;
+            }
+
+            if (_settings == null)
+                _settings = OilRainSettings.Current;
         }
 
         static Camera ResolveCamera()
         {
+            // Island walk cam is authoritative on device (tag/main can lag during load).
+            IslandJoystickCamera island = IslandJoystickCamera.Current;
+            if (island != null)
+            {
+                Camera islandCam = island.GetComponent<Camera>();
+                if (islandCam != null && islandCam.isActiveAndEnabled)
+                    return islandCam;
+            }
+
             Camera main = Camera.main;
             if (main != null && main.isActiveAndEnabled)
                 return main;
@@ -242,10 +269,27 @@ namespace CustomSRP
             if (_material != null)
                 return;
 
+            // Boluo pattern: use the pre-baked settings material (pulls shader into Yoo/player).
+            Material authored = _settings != null ? _settings.streakMaterial : null;
+            if (authored != null && authored.shader != null &&
+                authored.shader.name != "Hidden/InternalErrorShader")
+            {
+                _material = new Material(authored)
+                {
+                    name = "OilRainCurtain_Runtime",
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                _ownsMaterial = true;
+                _material.renderQueue = 3050;
+                return;
+            }
+
             var shader = Shader.Find("CustomSRP/OilRainStreakQuad");
             if (shader == null)
             {
-                Debug.LogWarning("[OilRainStreakQuad] Shader CustomSRP/OilRainStreakQuad not found.");
+                Debug.LogWarning(
+                    "[OilRainStreakQuad] No streakMaterial on OilRainSettings and " +
+                    "Shader.Find(CustomSRP/OilRainStreakQuad) failed — rain curtain disabled.");
                 enabled = false;
                 return;
             }
@@ -255,7 +299,7 @@ namespace CustomSRP
                 name = "OilRainCurtain_Runtime",
                 hideFlags = HideFlags.HideAndDontSave
             };
-            // Transparent+50 — keep in sync with shader Tags.
+            _ownsMaterial = true;
             _material.renderQueue = 3050;
         }
 
@@ -323,14 +367,15 @@ namespace CustomSRP
             _renderer = null;
             _filter = null;
 
-            if (_material != null)
+            if (_material != null && _ownsMaterial)
             {
                 if (Application.isPlaying)
                     Destroy(_material);
                 else
                     DestroyImmediate(_material);
-                _material = null;
             }
+            _material = null;
+            _ownsMaterial = false;
 
             _block = null;
             _appliedState = -1;

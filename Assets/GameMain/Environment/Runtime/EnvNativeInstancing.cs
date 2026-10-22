@@ -393,6 +393,7 @@ namespace Game
             localBounds = new Bounds(Vector3.zero, Vector3.one);
 
             MeshRenderer mr = null;
+            int lod0MeshRendererCount = 0;
             var lodGroup = prefab.GetComponentInChildren<LODGroup>(true);
             if (lodGroup != null)
             {
@@ -403,20 +404,38 @@ namespace Game
                     {
                         if (lods[0].renderers[i] is MeshRenderer candidate && candidate != null)
                         {
-                            mr = candidate;
-                            break;
+                            lod0MeshRendererCount++;
+                            if (mr == null)
+                                mr = candidate;
                         }
                     }
                 }
             }
 
             if (mr == null)
-                mr = prefab.GetComponentInChildren<MeshRenderer>(true);
-            if (mr == null)
+            {
+                var all = prefab.GetComponentsInChildren<MeshRenderer>(true);
+                if (all == null || all.Length == 0)
+                    return false;
+                // Single-draw path cannot replace multi-MR prefabs (bark+leaf trees).
+                if (all.Length != 1)
+                    return false;
+                mr = all[0];
+                lod0MeshRendererCount = 1;
+            }
+            else if (lod0MeshRendererCount != 1)
+            {
                 return false;
+            }
 
             var filter = mr.GetComponent<MeshFilter>();
             if (filter == null || filter.sharedMesh == null || mr.sharedMaterial == null)
+                return false;
+
+            // Submesh loop not implemented — multi-mat would leave later slots undrawn
+            // after SetRenderersEnabled(false).
+            Material[] mats = mr.sharedMaterials;
+            if (mats != null && mats.Length > 1)
                 return false;
 
             mesh = filter.sharedMesh;

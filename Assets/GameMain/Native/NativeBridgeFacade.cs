@@ -65,6 +65,7 @@ namespace Game.Native
             if (Game.GameEntry.Event != null)
                 Game.GameEntry.Event.Unsubscribe(Game.IslandWorldReadyEventArgs.EventId, OnWorldReady);
             NativeMessages.ResetIslandReadyFlag();
+            HostIslandEntryGate.Reset();
             NativeTimerService.Reset();
 #if UNITY_EDITOR
             NativeOverlayGate.ResetForEditor();

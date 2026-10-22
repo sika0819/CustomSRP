@@ -91,7 +91,7 @@ public class WanosMediaPlaybackForegroundService extends Service {
             return START_NOT_STICKY;
         }
         sRunning = true;
-        dispatchTransportAction(action);
+        dispatchTransportAction(intent, action);
         ensureChannel();
         Notification notification = buildNotification();
         try {
@@ -107,7 +107,17 @@ public class WanosMediaPlaybackForegroundService extends Service {
         return START_STICKY;
     }
 
-    private void dispatchTransportAction(String action) {
+    private void dispatchTransportAction(Intent intent, String action) {
+        if (action == null) return;
+        // MediaSession.setMediaButtonReceiver 兜底：OEM 不走 Callback 时键事件进 FGS。
+        if (Intent.ACTION_MEDIA_BUTTON.equals(action)) {
+            if (WIAEngineJNI.dispatchFromMediaButtonIntent(intent)) {
+                Log.i(TAG, "FGS handled ACTION_MEDIA_BUTTON");
+            } else {
+                Log.w(TAG, "FGS ACTION_MEDIA_BUTTON ignored (no KeyEvent)");
+            }
+            return;
+        }
         if (ACTION_TRANSPORT_PLAY.equals(action)) {
             WIAEngineJNI.dispatchTransportPlay();
         } else if (ACTION_TRANSPORT_PAUSE.equals(action)) {
