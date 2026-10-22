@@ -158,13 +158,16 @@ namespace Game
             float trackWidth = track.layout.width;
             float travel = Mathf.Max(trackWidth - MinFillWidth, 0f);
             // Design max (value=1): left = track.x + trackWidth - KnobSize (726 when track is 867@x=3).
-            // Design min (value=0): that max minus fill travel (63) — same span as Boluo minValue→maxValue.
+            // Design min (value=0): that max minus fill travel — park left, animate via translate.
             float knobLeftMax = track.layout.x + trackWidth - KnobSize;
             float knobLeftMin = knobLeftMax - travel;
-            knob.style.left = knobLeftMin + travel * value;
+            knob.style.left = knobLeftMin;
+            knob.style.translate = new Translate(travel * value, 0f);
 
             if (fill != null)
             {
+                // 9-slice fill: width change (not scale) so end-caps stay unscaled.
+                // Event-driven only (drag / layout), not a per-frame tick.
                 if (value <= 0.001f)
                 {
                     fill.style.width = 0f;

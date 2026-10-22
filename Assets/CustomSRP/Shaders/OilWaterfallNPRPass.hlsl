@@ -157,7 +157,11 @@ half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
         color += (half3)_SpecularColor.rgb * specMask * 0.55h;
     }
 
+#if defined(OIL_MOBILE_PERF)
+    color = (half3)ApplyOilFog((float3)color, s.depth, stroke);
+#else
     color = (half3)ApplyOilFog((float3)color, s.depth, stroke, input.positionWS);
+#endif
 
     half alpha = lerp((half)_BaseColor.a, (half)_ShallowColor.a, v * 0.5h);
     alpha = saturate(alpha + teeth * 0.18h);

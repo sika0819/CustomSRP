@@ -205,7 +205,7 @@ namespace Game.Editor
                 // Boot loading uses solid clear; ProcedureIsland switches to Skybox on enter.
                 camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = new Color(0.55f, 0.72f, 0.78f, 1f);
-                camera.allowHDR = true;
+                camera.allowHDR = false;
                 camera.allowMSAA = false;
                 IslandCameraSrpSetup.EnsureCustomRenderPipelineCamera(camera.gameObject);
             }

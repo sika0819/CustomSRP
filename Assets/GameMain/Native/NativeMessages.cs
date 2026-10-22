@@ -123,8 +123,9 @@ namespace Game.Native
             }
 
             OnDemandRendering.renderFrameInterval = 1;
-            Application.targetFrameRate = _fpsBeforeYield > 0 ? _fpsBeforeYield : 60;
             _fpsBeforeYield = int.MinValue;
+            // 不盲目还原进 yield 前的值（可能是沉浸 25）；按当前岛面状态重算 60/25。
+            Game.IslandCameraSrpSetup.ReapplyTargetFrameRateAfterOverlay();
             Log.Info("[IMP] overlay gpu-yield off");
         }
 

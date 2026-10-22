@@ -15,8 +15,12 @@ namespace Game
 
         readonly List<Prototype> _prototypes = new List<Prototype>(64);
         readonly Dictionary<EntityId, int> _assetIdToIndex = new Dictionary<EntityId, int>(64);
+        /// <summary>Billboard prototype keys (separate from LOD0 so veg + tree bb don't collide).</summary>
+        readonly Dictionary<EntityId, int> _bbAssetIdToIndex = new Dictionary<EntityId, int>(64);
+        readonly Dictionary<string, int> _bbNameToIndex = new Dictionary<string, int>(64);
         readonly Dictionary<string, int> _nameToIndex = new Dictionary<string, int>(64);
         readonly List<Bucket> _buckets = new List<Bucket>(64);
+        int _syncFrame;
 
         readonly Plane[] _frustumPlanes = new Plane[6];
         readonly Matrix4x4[] _batch = new Matrix4x4[BatchSize];
@@ -88,7 +92,12 @@ namespace Game
                 _removedAtFrame[id] = Time.frameCount;
             }
 
-            public void SyncMatrices()
+            /// <summary>
+            /// Dirty sync: only rewrite matrices when transform.hasChanged, or force
+            /// every <paramref name="forceFull"/> call (periodic sweep for destroyed GOs).
+            /// Far tree billboards are static in world space (yaw is GPU).
+            /// </summary>
+            public void SyncMatrices(bool forceFull)
             {
                 for (int i = Instances.Count - 1; i >= 0; i--)
                 {
@@ -99,7 +108,11 @@ namespace Game
                         continue;
                     }
 
-                    Matrices[i] = go.transform.localToWorldMatrix;
+                    Transform t = go.transform;
+                    if (!forceFull && !t.hasChanged)
+                        continue;
+                    Matrices[i] = t.localToWorldMatrix;
+                    t.hasChanged = false;
                 }
             }
 
@@ -190,6 +203,69 @@ namespace Game
 #endif
         }
 
+        /// <summary>
+        /// Far-tree single-card billboard prototype (Y-facing material instance).
+        /// Separate key space from <see cref="AddPrototype"/> so LOD0 veg and tree bb coexist.
+        /// </summary>
+        public int AddBillboardPrototype(GameObject prefabAsset, bool mainCameraOnly)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (prefabAsset == null)
+                return -1;
+            EntityId assetId = prefabAsset.GetEntityId();
+            if (_bbAssetIdToIndex.TryGetValue(assetId, out int existing))
+                return existing;
+
+            if (!EnvTreeBillboardUtil.TryExtractBillboard(
+                    prefabAsset, out Mesh mesh, out Material sharedMat, out Bounds localBounds))
+                return -1;
+
+            Material material = EnvTreeBillboardUtil.CreateYBillboardMaterial(sharedMat, mesh);
+            if (mesh == null || material == null)
+                return -1;
+
+            int index = _prototypes.Count;
+            string protoName = prefabAsset.name + "#bb";
+            var proto = new Prototype
+            {
+                Name = protoName,
+                Mesh = mesh,
+                Material = material,
+                LocalBounds = localBounds,
+                CanCastShadows = false,
+                MainCameraOnly = mainCameraOnly,
+            };
+            _prototypes.Add(proto);
+            _buckets.Add(new Bucket());
+            _bbAssetIdToIndex[assetId] = index;
+            if (!_bbNameToIndex.ContainsKey(prefabAsset.name))
+                _bbNameToIndex[prefabAsset.name] = index;
+            return index;
+#else
+            return -1;
+#endif
+        }
+
+        public int GetBillboardPrototypeIndex(GameObject instanceOrPrefab)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (instanceOrPrefab == null)
+                return -1;
+            if (_bbAssetIdToIndex.TryGetValue(instanceOrPrefab.GetEntityId(), out int byAsset))
+                return byAsset;
+            string name = StripSpawnIndexPrefix(instanceOrPrefab.name);
+            if (!string.IsNullOrEmpty(name))
+            {
+                // Proxy names: "12 Grand Fir 1" or "12 Grand Fir 1#bb"
+                if (name.EndsWith("#bb"))
+                    name = name.Substring(0, name.Length - 3);
+                if (_bbNameToIndex.TryGetValue(name, out int byName))
+                    return byName;
+            }
+#endif
+            return -1;
+        }
+
         public int GetPrototypeIndex(GameObject instanceOrPrefab)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -247,6 +323,7 @@ namespace Game
             if (cam == null)
                 return;
 
+            _syncFrame++;
             Vector3 camPos = cam.transform.position;
             GeometryUtility.CalculateFrustumPlanes(cam, _frustumPlanes);
             float maxDistSq = _maxDist * _maxDist;
@@ -259,11 +336,13 @@ namespace Game
                 if (proto.Mesh == null || proto.Material == null || bucket.Count == 0)
                     continue;
 
-                bucket.SyncMatrices();
+                // Full sweep every 30 frames to drop destroyed GOs; otherwise dirty-only.
+                bool forceSync = (_syncFrame % 30) == 0;
+                bucket.SyncMatrices(forceSync);
                 // Shadow-capable prototypes (big trees / buildings) split into a near
                 // casting batch and a far non-casting batch, mirroring the streamer's
                 // per-distance ShadowCastMaxDist toggle. Prototypes that never cast
-                // (shrubs / small veg / clutter) stay single-batch Off.
+                // (shrubs / small veg / clutter / far tree bb) stay single-batch Off.
                 bool splitShadows = proto.CanCastShadows;
                 int batchCount = 0;
                 int nearCount = 0;

@@ -38,8 +38,9 @@ namespace Game.Editor
         {
             (new Vector3(610.0767f, 12.80065f, 706.1781f), 130.443f, new Vector3(346f, 0f, 0f), 3f, 6f, 6f + 13f / 60f, 3, 1),
             (new Vector3(560.7702f, 23.856f, 582.0682f), -81.77f, Vector3.zero, 3f, 6f, 8f + 27f / 60f, 3, 1),
-            // 午后放松：Boluo 17:00 + Atmosphere 3（暖金雾）；眼睛在 (468, 地面+PlayerHeight, 411.1)。
-            (new Vector3(468f, 0f, 411.1f), -168.898f, new Vector3(358.33f, 0f, 0f), 0f, 4f, 17f, 2, 1),
+            // 午后放松：Boluo PresetsScheme_3 落点。TargetPos 贴帐篷；StayBehind dis=2。
+            // 勿用 (468, 411.1)：前方 Grand Fir 6 会挡住 Tent 2 (1)。
+            (new Vector3(466.472f, 37.88541f, 402.16f), -168.898f, new Vector3(358.33f, 0f, 0f), 2f, 4f, 17f, 2, 1),
             (new Vector3(390.6678f, 75.45603f, 480.2867f), -193.155f, new Vector3(350f, 0f, 0f), 0.1f, 6f, 22.5f, 1, 1),
             (new Vector3(325.88f, 81.40367f, 481f), -92.137f, new Vector3(350.3f, 357f, 0f), 2.9f, 3.5f, 8.5f, 3, 1),
             (new Vector3(233.5713f, 105.0471f, 663.811f), -12.449f, new Vector3(355.03f, 1.5f, 0f), 3f, 6f, 23f, 1, 3),

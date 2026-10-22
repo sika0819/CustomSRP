@@ -7,11 +7,11 @@ namespace CustomSRP
     {
         public CameraBufferSettings cameraBuffer = new CameraBufferSettings
         {
-            allowHDR = true,
+            allowHDR = false,
             copyColor = true,
             copyDepth = true,
             renderScale = 1f,
-            bicubicRescaling = CameraBufferSettings.BicubicRescalingMode.UpOnly,
+            bicubicRescaling = CameraBufferSettings.BicubicRescalingMode.Off,
             fxaa = new CameraBufferSettings.FXAA
             {
                 enabled = true,

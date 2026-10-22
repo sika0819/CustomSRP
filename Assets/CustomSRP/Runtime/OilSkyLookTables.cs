@@ -496,28 +496,30 @@ namespace CustomSRP
             };
         }
 
+        /// <summary>Atmosphere 10 — cold moonlight #2C5FC0 + NightDistanceFog (「准备入睡」@20:00).</summary>
         static LookTable BuildNightCold()
         {
             LookTable canon = BuildCanonical();
-            // NightCold: cooler/darker than Canonical, still zhanweitu4 teal-navy (no royal).
-            var nightZ = Hex(0x2E, 0x3E, 0x58);
-            var nightH = Hex(0x0A, 0x20, 0x38);
-            canon.sky[3] = Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x06, 0x10, 0x18),
+            // Keep day anchors; replace night light/sky with Atmosphere 10 cold moon.
+            var nightZ = Hex(0x03, 0x12, 0x52);
+            var nightH = Hex(0x00, 0x0D, 0x4D);
+            canon.sky[3] = Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x00, 0x08, 0x2E),
                 Hex(0x40, 0x48, 0x58), Hex(0x10, 0x14, 0x1C),
-                Hex(0xA0, 0xB4, 0xCC), Hex(0x3A, 0x52, 0x6E),
+                Hex(0xA8, 0xC0, 0xF0), Hex(0x2C, 0x5F, 0xC0),
                 0.05f, 0.06f, 0.02f, 0.075f, 0.95f, 0.26f, 0.62f);
-            canon.sky[2] = Sky(Hex(0x1A, 0x2C, 0x42), MidOf(Hex(0x1A, 0x2C, 0x42), Hex(0x0A, 0x20, 0x38)),
-                Hex(0x0A, 0x20, 0x38), Hex(0x0C, 0x14, 0x1E),
+            // Soften dusk toward night earlier (20:00 「准备入睡」).
+            canon.sky[2] = Sky(Hex(0x14, 0x27, 0x65), MidOf(Hex(0x14, 0x27, 0x65), Hex(0x00, 0x0D, 0x4D)),
+                Hex(0x00, 0x0D, 0x4D), Hex(0x10, 0x14, 0x28),
                 Hex(0x80, 0x90, 0xB0), Hex(0x40, 0x50, 0x70),
-                Hex(0x4A, 0x62, 0x7E), Hex(0x3A, 0x52, 0x6E),
+                Hex(0x2C, 0x5F, 0xC0), Hex(0x2C, 0x5F, 0xC0),
                 0.06f, 0.2f, 0.08f, 0.065f, 0.7f, 0.2f, 0.35f);
-            // Atmosphere 10 ambient — desaturated teal night for campfire contrast.
+            // Atmosphere 10 ambient — deep royal blue night for moonlit contrast.
             canon.ambient[0] = Amb(Hex(0x3F, 0x6B, 0x98), Hex(0xAD, 0x61, 0x3D), 0.96f);
             canon.ambient[1] = Amb(Hex(0x6B, 0xA2, 0xAC), Hex(0x7B, 0xB5, 0xB3), 1.00f);
-            canon.ambient[2] = Amb(Hex(0x76, 0x87, 0xC7), Hex(0x68, 0x4F, 0x69), 0.95f);
-            canon.ambient[3] = Amb(Hex(0x16, 0x2A, 0x3A), Hex(0x0A, 0x1A, 0x26), 0.44f);
-            canon.light[2] = Light(Hex(0x4A, 0x62, 0x7E), 0.24f, Hex(0xAE, 0xA3, 0xA6), 1.13f);
-            canon.light[3] = Light(Hex(0x3A, 0x4E, 0x66), 0.18f, Hex(0x2A, 0x32, 0x3A), 0.55f);
+            canon.ambient[2] = Amb(Hex(0x4A, 0x5A, 0xA0), Hex(0x3A, 0x3A, 0x58), 0.88f);
+            canon.ambient[3] = Amb(Hex(0x12, 0x1A, 0x48), Hex(0x08, 0x0C, 0x2A), 0.42f);
+            canon.light[2] = Light(Hex(0x2C, 0x5F, 0xC0), 0.28f, Hex(0x5A, 0x58, 0x67), 1.13f);
+            canon.light[3] = Light(Hex(0x2C, 0x5F, 0xC0), 0.22f, Hex(0x36, 0x36, 0x3C), 0.55f);
             return canon;
         }
 

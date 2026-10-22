@@ -11,6 +11,10 @@ half3 SamplePaintSeamless(float2 worldXZ, float tileMeters)
 {
     float tile = max(tileMeters, 80.0);
     float2 uv = worldXZ / tile;
+#if defined(OIL_MOBILE_PERF)
+    // Seam blend is invisible at renderScale 0.5 — one tap.
+    return (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, uv).rgb;
+#else
     float2 f = frac(uv);
     float2 edge = min(f, 1.0 - f);
     float border = min(edge.x, edge.y);
@@ -18,6 +22,7 @@ half3 SamplePaintSeamless(float2 worldXZ, float tileMeters)
     half3 center = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, uv).rgb;
     half3 offset = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, uv + 0.5).rgb;
     return lerp(offset, center, w);
+#endif
 }
 
 half PaintLuma(half3 paint)

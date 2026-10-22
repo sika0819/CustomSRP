@@ -40,7 +40,7 @@ namespace CustomSRP
         const float StillMoveThresholdSq = 1e-6f;    // ~1 mm²
         const float StillTurnAngle = 0.05f;          // degrees
         /// <summary>Walking on mobile: re-render mirror every N frames (reuse RT otherwise).</summary>
-        const int WalkMirrorInterval = 3;
+        const int WalkMirrorInterval = 6;
 
         static readonly int ReflectTexId = Shader.PropertyToID("_OilPlanarReflectTex");
         static readonly int ReflectOnId = Shader.PropertyToID("_OilPlanarReflectOn");
@@ -69,6 +69,17 @@ namespace CustomSRP
         // Sky TOD / look changed while the camera is idle — force one mirror redraw
         // so a day-blue RT captured at boot cannot stick over the night skybox.
         bool _skyDirty;
+        // InvalidateSky can run from AfterSceneLoad before Ensure() creates the
+        // instance (SeedWaterSkyGlobals vs Boot order is undefined). A static bit
+        // keeps the request alive so noon cold-start does not freeze a wrong RT.
+        static bool _pendingSkyDirty;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void ResetPendingSkyDirty()
+        {
+            _pendingSkyDirty = false;
+            _updatedFrame = -1;
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() => Ensure();
@@ -90,6 +101,10 @@ namespace CustomSRP
             }
 
             _instance = go.AddComponent<OilPlanarReflection>();
+            if (_pendingSkyDirty)
+            {
+                _instance._skyDirty = true;
+            }
         }
 
         /// <summary>
@@ -100,6 +115,7 @@ namespace CustomSRP
         public static void InvalidateSky()
         {
             Shader.SetGlobalFloat(ReflectOnId, 0f);
+            _pendingSkyDirty = true;
             if (_instance != null)
             {
                 _instance._skyDirty = true;
@@ -252,6 +268,10 @@ namespace CustomSRP
             _prevFramePos = source.transform.position;
             _prevFrameRot = source.transform.rotation;
             _hasPrevFramePose = true;
+            // Only clear after a real draw — early outs (!_hasPlane / no RT) must
+            // keep the dirty bit so the next frame still redraws.
+            _skyDirty = false;
+            _pendingSkyDirty = false;
 
             Shader.SetGlobalTexture(ReflectTexId, _reflectionRt);
             Shader.SetGlobalFloat(ReflectOnId, 1f);
@@ -270,14 +290,17 @@ namespace CustomSRP
         /// </summary>
         bool ShouldRenderThisFrame(Camera source)
         {
+            if (_pendingSkyDirty)
+            {
+                _skyDirty = true;
+            }
+
             if (_reflectionRt == null || !_hasPrevFramePose)
                 return true;
 
+            // Keep _skyDirty set until RenderMirror finishes a real capture.
             if (_skyDirty)
-            {
-                _skyDirty = false;
                 return true;
-            }
 
             // A resolution flip (orientation change / render-scale tweak) resizes the
             // RT in EnsureReflectionRt below, which this gate runs before. Draw this

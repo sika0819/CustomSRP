@@ -175,14 +175,14 @@ namespace Game
             StretchSquare(timerIdle, size);
 
             float s = size / RefIcon;
-            ScaleChild(host.Q("barCenter"), 49f, 29f, 10f, 45f, s);
-            ScaleChild(host.Q("barRight"), 67f, 44f, 10f, 30f, s);
-            ScaleChild(host.Q("barLeft"), 31f, 54f, 10f, 20f, s);
+            // Equalizer bars are mesh (HudEqualizerBars) — no ScaleChild layout anim.
             ScaleChild(host.Q("volumeTrack"), 0f, 0f, 108f, 108f, s);
+            // Fills: full track width; volume anim uses scale.x from left origin.
             ScaleChild(host.Q("volumeTrack1"), 24f, 33f, 60f, 12f, s);
             ScaleChild(host.Q("volumeTrack2"), 24f, 63f, 60f, 12f, s);
+            // Dots: park at minX (24); volume anim uses translate.
             ScaleChild(host.Q("effectvolumeyuan"), 24f, 58f, 22f, 22f, s);
-            ScaleChild(host.Q("musicvolumeyuan"), 62f, 28f, 22f, 22f, s);
+            ScaleChild(host.Q("musicvolumeyuan"), 24f, 28f, 22f, 22f, s);
             ScaleChild(host.Q("timerFill"), 0f, 0f, 108f, 108f, s);
             ScaleChild(host.Q("topRule"), 41.85f, 20.25f, 24.3f, 8.1f, s);
             ScaleChild(host.Q("topRightDecor"), 74f, 33f, 12f, 13f, s);

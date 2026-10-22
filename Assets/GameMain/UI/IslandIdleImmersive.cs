@@ -14,7 +14,7 @@ namespace Game
         const float FadeOutDuration = 1f;
         const float FadeInDuration = 0.35f;
 
-        /// <summary>HUD 已完全淡出；供相机压 renderScale 等查询。</summary>
+        /// <summary>HUD 已完全淡出；供相机压 renderScale / 目标帧率等查询。</summary>
         public static bool IsActive { get; private set; }
 
         readonly VisualElement[] _fadeRoots = new VisualElement[2];
@@ -94,6 +94,7 @@ namespace Game
             IsActive = false;
             _armed = false;
             SetHudAlpha(1f);
+            IslandCameraSrpSetup.ApplyTargetFrameRate();
         }
 
         public void ExitOnReturnFromForeground()
@@ -145,7 +146,10 @@ namespace Game
             StartFade(_currentAlpha, 1f, FadeInDuration);
             ArmCountdown();
             if (wasImmersive)
-                Log.Info("[IslandIdleImmersive] exit");
+            {
+                IslandCameraSrpSetup.ApplyTargetFrameRate();
+                Log.Info("[IslandIdleImmersive] exit fps=" + IslandCameraSrpSetup.DefaultFrameRate);
+            }
         }
 
         void StartFade(float from, float to, float duration)
@@ -179,7 +183,8 @@ namespace Game
             _fullyFadedOut = true;
             IsActive = true;
             _breath.Show();
-            Log.Info("[IslandIdleImmersive] enter");
+            IslandCameraSrpSetup.ApplyTargetFrameRate();
+            Log.Info("[IslandIdleImmersive] enter fps=" + IslandCameraSrpSetup.ImmersiveFrameRate);
         }
 
         void KillFade() => _fadeElapsed = -1f;

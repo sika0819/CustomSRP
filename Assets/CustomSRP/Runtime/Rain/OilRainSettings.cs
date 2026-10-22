@@ -39,8 +39,12 @@ namespace CustomSRP
         [Tooltip("Height above the follow target where particles are born (metres).")]
         public float spawnHeight = 25f;
 
-        [Tooltip("Maximum particles allocated in the GPU buffer (PC). Mobile halves this automatically.")]
+        [Tooltip("Maximum particles allocated in the GPU buffer (PC).")]
         public int maxParticles = 30000;
+
+        [Tooltip("Maximum particles on mobile (target 3–8k for device budget).")]
+        [Range(3000, 8000)]
+        public int mobileMaxParticles = 6000;
 
         [Tooltip("Lerp speed for smooth camera/target following (0=instant).")]
         public float followLerpSpeed = 6f;
@@ -210,10 +214,12 @@ namespace CustomSRP
         // Editor helpers
         // =====================================================================
         /// <summary>
-        /// Returns the effective max particle count, halved for mobile platforms.
+        /// Returns the effective max particle count (PC uses maxParticles; mobile uses mobileMaxParticles).
         /// </summary>
         public int EffectiveMaxParticles =>
-            Application.isMobilePlatform ? maxParticles / 2 : maxParticles;
+            Application.isMobilePlatform
+                ? Mathf.Clamp(mobileMaxParticles, 3000, 8000)
+                : maxParticles;
 
         /// <summary>
         /// Returns a safe spawn radius clamped to reasonable mobile values.

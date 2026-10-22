@@ -55,10 +55,16 @@ Varyings OilNPRPassVertex(Attributes input)
     // CBUFFER members are stripped while this file is still parsed.
     float foliageFlag = OilEffectiveFoliageFlag(_OilFoliage, _OilFoliageSkipDay);
     float crossBb = _OilCrossBillboard;
+    float yBb = _OilYBillboard;
     if (crossBb > 0.5)
     {
         positionOS = OilTreeCrossBillboardRotateYaw(
             input.positionOS, input.normalOS, normalOS, normalWS, keep);
+    }
+    else if (yBb > 0.5)
+    {
+        positionOS = OilTreeYBillboardRotateYaw(
+            input.positionOS, input.normalOS, normalOS, normalWS);
     }
     else
     {
@@ -66,7 +72,7 @@ Varyings OilNPRPassVertex(Attributes input)
     }
 
     // 风力偏移：树叶在局部空间摇摆，不离树干。
-    if (foliageFlag > 0.5 || crossBb > 0.5)
+    if (foliageFlag > 0.5 || crossBb > 0.5 || yBb > 0.5)
     {
         positionOS = OilFoliageWindDisplace(positionOS, input.normalOS, foliageFlag);
     }
@@ -97,11 +103,13 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         input.normalWS,
         input.normalOS);
 
-    // Cross-billboard atlas: bias before clip so mip-averaged alpha doesn't punch holes
+    // Billboard atlas: bias before clip so mip-averaged alpha doesn't punch holes
     // and crown RGB doesn't wash to grey (Boluo SAMPLE_TEXTURE2D_BIAS -0.65).
+    // Far Y-billboard proxies need the same bias — without it, 120m+ trees clip away entirely.
     float crossBbEarly = _OilCrossBillboard;
+    float yBbEarly = _OilYBillboard;
     half4 base;
-    if (crossBbEarly > 0.5)
+    if (crossBbEarly > 0.5 || yBbEarly > 0.5)
         base = (half4)SAMPLE_TEXTURE2D_BIAS(_BaseMap, sampler_BaseMap, config.baseUV, -0.65)
             * (half4)_BaseColor;
     else

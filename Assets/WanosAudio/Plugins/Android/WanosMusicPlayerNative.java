@@ -690,6 +690,27 @@ public class WanosMusicPlayerNative {
     }
 
     /**
+     * 定时结束弹窗「取消/重复」专用：只清 userPaused + unmute。
+     * <p>
+     * 禁止在此发 Resume_ALL / Resume_Music——Resume_ALL 可能把已 Pause_Music 的 BGM 打成 Ended，
+     * 随后 Unity {@code PlayIndex(restart)} 硬起播才是 BGM 权威路径；音效由 Unity ContentAudio 闸恢复。
+     */
+    public void resumeAfterTimerEnd() {
+        playbackExecutor.execute(() -> {
+            userPaused = false;
+            shouldStop = false;
+            if (!ensureFocusBeforeAudible("timer_end_resume")) {
+                Log.w(TAG, "resumeAfterTimerEnd: focus failed");
+                return;
+            }
+            Log.i(TAG, "resumeAfterTimerEnd: unmute only (Unity PlayIndex owns BGM)");
+            runGuardedUnmuteOnCurrentThread("timer_end_resume");
+            startMediaPlaybackForegroundService();
+            mainHandler.post(this::updateNowPlayingForCurrentTrack);
+        });
+    }
+
+    /**
      * 退登 {@link #stop()} 钉住的 shouldStop / userPaused：二次进岛 Arm 前由宿主清掉。
      * 不在此处 unmute（揭幕仍走 ProcedureIsland.Uncover / ensureAudibleForUnityPlayback）。
      */

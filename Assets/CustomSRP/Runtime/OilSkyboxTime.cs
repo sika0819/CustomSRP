@@ -563,6 +563,11 @@ namespace CustomSRP
             // Assign Light color/intensity immediately (Launch scene may keep a second dir light).
             Apply(markDirty: false);
             DisableCompetingDirectionalLights();
+            // Noon cold-start: SeedWaterSkyGlobals already armed mirror tracking at
+            // period≈day, so NotifyPlanarIfSkyChanged no-ops on the same noon Apply.
+            // Force one planar redraw after the real skybox/sun bind — otherwise the
+            // idle throttle freezes a pre-Apply mirror RT until the camera moves.
+            OilPlanarReflection.InvalidateSky();
         }
 
         void OnDisable()
@@ -1291,6 +1296,14 @@ namespace CustomSRP
             }
 
             PushLookGlobals(s_activeLookId);
+            // PushLookGlobals arms mirror tracking + InvalidateSky. That is only a
+            // pigment seed — OilSkyboxTime.OnEnable has not bound the runtime skybox
+            // / sun yet. Reset tracking so the real Apply still counts as readyJump
+            // (critical at noon: Seed period already equals prefab timeOfDay=12, so
+            // periodJump would be false and a wrong early planar RT would stick).
+            s_mirrorSkyPeriod = float.NaN;
+            s_mirrorSkyLook = (OilSkyLookId)(-1);
+            s_mirrorSkyReady = false;
         }
 
         /// <summary>

@@ -32,6 +32,7 @@ CBUFFER_START(UnityPerMaterial)
     float _OilFoliage;
     float _OilFoliageSkipDay;
     float _OilCrossBillboard;
+    float _OilYBillboard;
     float _NormalStrength;
     float _EdgeFade;
     float _OilGrassWindStrength;
@@ -82,7 +83,8 @@ float OilEffectiveFoliageFlag(float foliageFlag, float skipDay)
 half SampleShadowBrush(float3 positionWS, float2 baseUV)
 {
 #if defined(OIL_MOBILE_PERF)
-    return SampleOilShadowBrushCheap(positionWS, baseUV, 0.25);
+    // LightingEx ignores brush/wobble; SoftFogStroke(0.5) is identity. Skip the tex tap.
+    return 0.5h;
 #else
     return SampleOilShadowBrush(positionWS, baseUV, 0.25);
 #endif

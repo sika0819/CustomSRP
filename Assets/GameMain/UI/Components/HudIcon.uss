@@ -161,9 +161,10 @@
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
 }
 
+/* musicvolumeyuan parks at minX (24); volume anim uses translate — see IslandMainForm. */
 .hud-icon__musicvolumeyuan {
     position: absolute;
-    left: 62px;
+    left: 24px;
     top: 28px;
     width: 22px;
     height: 22px;

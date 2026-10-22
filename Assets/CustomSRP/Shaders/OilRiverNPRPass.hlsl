@@ -185,7 +185,11 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     glint *= (1.0h - intersection * 0.85h);
     color += (half3)_GlintColor.rgb * glint * (half)_GlintStrength;
 
+#if defined(OIL_MOBILE_PERF)
+    color = (half3)ApplyOilFog((float3)color, surface.depth, stroke);
+#else
     color = (half3)ApplyOilFog((float3)color, surface.depth, stroke, input.positionWS);
+#endif
 
     color = ApplyOilWaterReflection(
         color,

@@ -17,6 +17,7 @@ Material:
   - _SHADOWS_CLIP
   m_InvalidKeywords:
   - _ALPHATEST_ON
+  - _OILFOLIAGESKIPDAY_ON
   - _OILFOLIAGE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
@@ -83,6 +84,8 @@ Material:
     - _NormalStrength: 0.85
     - _OilCrossBillboard: 0
     - _OilFoliage: 1
+    - _OilFoliageSkipDay: 1
+    - _OilYBillboard: 0
     - _Outline: 0
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5

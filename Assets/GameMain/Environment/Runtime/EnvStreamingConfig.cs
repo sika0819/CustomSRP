@@ -37,8 +37,18 @@ namespace Game
         /// </summary>
         public static float TreeBillboardKeepRadius = 380f;
 
-        /// <summary>远树隔株起点（Boluo DefaultFillBoundFarTreeSilhouetteMinDistance）。</summary>
-        public static float FillBoundFarTreeSilhouetteMinDistance = 120f;
+        /// <summary>
+        /// 大树完整 Prefab（LOD0/1 + LODGroup）最远距离。
+        /// 超出后改用 Billboard 轻量代理（可合批）。
+        /// 对齐 Boluo 默认 <c>TreeBillboardEnterRadius</c>（环内 80% ≈ 160），避免广告牌贴脸。
+        /// </summary>
+        public static float TreeFullMeshMaxDist = 160f;
+
+        /// <summary>Full↔Billboard 切换迟滞（米），避免边界来回换档。</summary>
+        public static float TreeFullMeshHysteresis = 12f;
+
+        /// <summary>远树隔株起点；须 ≥ TreeFullMeshMaxDist，勿在完整树带内抽稀。</summary>
+        public static float FillBoundFarTreeSilhouetteMinDistance = 160f;
 
         /// <summary>远树隔株：每 N 棵留 1（Boluo Non4KFarTreeSilhouetteStride=6）。</summary>
         public static int FillBoundFarTreeSilhouetteStride = 6;
@@ -54,6 +64,13 @@ namespace Game
         public static float ClutterShowDistance = 45f;
         public static float BuildingLodHideDistance = 130f;
         public static float BuildingLodShowDistance = 110f;
+
+        /// <summary>
+        /// 帐篷是午后放松等预设锚点，须比普通 JianZhu 留得更远。
+        /// 真机 renderScale 0.5 还会让 LODGroup 更早判“屏占比不足”，流式半径要盖住视觉裁切。
+        /// </summary>
+        public static float TentLodHideDistance = 220f;
+        public static float TentLodShowDistance = 180f;
 
         /// <summary>
         /// 海滩轮廓大石 Rock_Ramp_02 / _03。
@@ -245,28 +262,70 @@ namespace Game
 
         public static bool IsSmallRockForFarCull(string prefabName) => !IsLargeRockPrefab(prefabName);
 
+        public static bool IsTentPrefab(string prefabName)
+        {
+            if (string.IsNullOrEmpty(prefabName))
+                return false;
+            return prefabName.IndexOf("Tent", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         public static bool IsBuildingForFarCull(string prefabName)
         {
             if (string.IsNullOrEmpty(prefabName))
                 return false;
+            if (IsTentPrefab(prefabName))
+                return true;
             return prefabName.IndexOf("House", System.StringComparison.OrdinalIgnoreCase) >= 0
                    || prefabName.IndexOf("building_closed", System.StringComparison.OrdinalIgnoreCase) >= 0
-                   || prefabName.IndexOf("shed_wood", System.StringComparison.OrdinalIgnoreCase) >= 0
-                   || prefabName.IndexOf("Tent", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                   || prefabName.IndexOf("shed_wood", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         public static bool ShouldForceSkipNativeInstancing(string category, string prefabName)
         {
             if (IsBridgeCategory(category) || IsRockCategory(category))
                 return true;
-            // Trees are multi MeshRenderer / multi-material (bark+leaf). EnvNativeInstancing
-            // only draws LOD0 materials[0] / submesh 0 after disabling all MRs → bare island.
-            if (IsTreeCategory(category))
+            // Big trees (Songshu/Lvshu/Yeshu): Full Prefab still skips LOD0 native
+            // (bark+leaf multi-MR). Far Billboard proxies use AddBillboardPrototype instead.
+            // Small trees (Guanmu) stay on MeshRenderer / optional LOD0 extract.
+            if (IsBigTreeCategory(category))
                 return true;
             if (string.IsNullOrEmpty(prefabName))
                 return false;
             return prefabName.IndexOf("Dock", System.StringComparison.OrdinalIgnoreCase) >= 0
                    || prefabName.IndexOf("Pier", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>大树（松/绿/椰）：可走 Full Prefab ↔ Billboard 代理两档。</summary>
+        public static bool IsBigTreeCategory(string category) =>
+            IsTreeCategory(category) && !IsSmallTreeCategory(category);
+
+        /// <summary>距焦点超过 Full 半径 → 应驻留 Billboard 代理（不含迟滞）。</summary>
+        public static bool ShouldSpawnAsTreeBillboard(string category, float distSq)
+        {
+            if (!IsBigTreeCategory(category))
+                return false;
+            float max = TreeFullMeshMaxDist;
+            return distSq > max * max;
+        }
+
+        /// <summary>
+        /// Visible Full 走出 Full+hysteresis → 降为 Billboard。
+        /// Visible Billboard 进入 Full−hysteresis → 升为 Full。
+        /// </summary>
+        public static bool ShouldDowngradeTreeToBillboard(string category, float distSq)
+        {
+            if (!IsBigTreeCategory(category))
+                return false;
+            float lim = TreeFullMeshMaxDist + TreeFullMeshHysteresis;
+            return distSq > lim * lim;
+        }
+
+        public static bool ShouldUpgradeTreeToFull(string category, float distSq)
+        {
+            if (!IsBigTreeCategory(category))
+                return false;
+            float lim = Mathf.Max(1f, TreeFullMeshMaxDist - TreeFullMeshHysteresis);
+            return distSq <= lim * lim;
         }
 
         /// <summary>
@@ -283,6 +342,9 @@ namespace Game
             if (IsSmallVegCategory(category))
                 return true;
             if (IsClutterCategory(category))
+                return true;
+            // Far tree billboard batches must not pollute planar water reflections.
+            if (IsBigTreeCategory(category))
                 return true;
             return false;
         }
@@ -408,6 +470,12 @@ namespace Game
                 return ClutterHideDistance;
             }
 
+            if (category == "JianZhu" && IsTentPrefab(prefabName))
+            {
+                showDistance = TentLodShowDistance;
+                return TentLodHideDistance;
+            }
+
             if (category == "JianZhu" && IsBuildingForFarCull(prefabName))
             {
                 showDistance = BuildingLodShowDistance;
@@ -431,15 +499,17 @@ namespace Game
             Ring1EnterRadius = 130f;
             Ring1ExitRadius = 160f;
 
-            // B2：树 keep 180→130，远景更稀但少 DrawMeshInstanced / 阴影 caster。
+            // 树：近处完整 mesh 到 160；片树 160–220；隔株与切入对齐，避免 120m 就见广告牌。
             TreeRing0EnterRadius = 70f;
             TreeRing0ExitRadius = 90f;
-            TreeRing1EnterRadius = 130f * 0.65f; // ~85
-            TreeRing1ExitRadius = 160f * 0.65f;  // ~104
-            TreeBillboardKeepRadius = 130f;
-            FillBoundFarTreeSilhouetteMinDistance = 90f;
-            FillBoundFarTreeSilhouetteStride = 5;
-            PrefillTreeBoostRadius = 130f;
+            TreeRing1EnterRadius = 180f * 0.65f; // ~117
+            TreeRing1ExitRadius = 220f * 0.65f;  // ~143
+            TreeBillboardKeepRadius = 220f;
+            TreeFullMeshMaxDist = 160f;
+            TreeFullMeshHysteresis = 12f;
+            FillBoundFarTreeSilhouetteMinDistance = 160f;
+            FillBoundFarTreeSilhouetteStride = 6;
+            PrefillTreeBoostRadius = 220f;
 
             // Boluo FillBoundGuanmu*（标准版不收灌木）
             GuanmuHideDistance = 90f;
@@ -454,6 +524,9 @@ namespace Game
             ClutterShowDistance = 32f;
             BuildingLodHideDistance = 110f;
             BuildingLodShowDistance = 95f;
+            // 帐篷：真机仍须远于 House；配合 prefab LOD 阈值放宽，避免 40–80m 闪没。
+            TentLodHideDistance = 200f;
+            TentLodShowDistance = 160f;
             // 真机略收，但仍须大于 MoveSpeed 数帧路程，避免穿进未开碰撞的大石。
             MeshColliderEnableRadius = 72f;
             MeshColliderDisableRadius = 96f;
@@ -463,7 +536,7 @@ namespace Game
             Ring1ExitRadius = Mathf.Max(Ring1ExitRadius, TreeRing1ExitRadius);
 
             NativeInstancingEnabled = true;
-            NativeInstancingMaxDist = Mathf.Max(130f, TreeBillboardKeepRadius);
+            NativeInstancingMaxDist = Mathf.Max(220f, TreeBillboardKeepRadius);
             SpawnPerFrameBudget = 8;
             DespawnPerFrameBudget = 8;
             FinalizePerFrameBudgetMs = 2.5f;

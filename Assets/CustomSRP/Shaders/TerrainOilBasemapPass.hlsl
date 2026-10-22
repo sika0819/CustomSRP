@@ -90,7 +90,11 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
     surface.dither = InterleavedGradientNoise(input.positionCS_SS.xy, 0);
     surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
 
+#if defined(OIL_MOBILE_PERF)
+    half brush = 0.5h;
+#else
     half brush = SampleOilShadowBrushCheap(input.positionWS, input.uv, 0.25);
+#endif
 
     Fragment fragment = GetFragmentScreen(input.positionCS_SS);
     half3 color = OilNPRLighting(

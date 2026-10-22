@@ -868,11 +868,14 @@ namespace Game
                     : walking
                         ? IslandCameraSrpSetup.WalkingRenderScale
                         : IslandCameraSrpSetup.DefaultRenderScale;
-            if (Mathf.Approximately(scale, _appliedRenderScale))
-                return;
+            if (!Mathf.Approximately(scale, _appliedRenderScale))
+            {
+                IslandCameraSrpSetup.SetRenderScale(gameObject, scale);
+                _appliedRenderScale = scale;
+            }
 
-            IslandCameraSrpSetup.SetRenderScale(gameObject, scale);
-            _appliedRenderScale = scale;
+            // 默认 60；闲置沉浸 25 省电。原生半层 YieldsGpu 时由 NativeOverlayGate 接管。
+            IslandCameraSrpSetup.ApplyTargetFrameRate();
         }
 
         void ApplyAspectFov()

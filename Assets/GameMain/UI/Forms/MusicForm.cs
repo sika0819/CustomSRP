@@ -98,6 +98,8 @@ namespace Game
 
         VisualElement _albumContainer;
         VisualElement _albumContent;
+        /// <summary>Host X offset via <see cref="IStyle.translate"/> (avoids layout recalc).</summary>
+        float _albumOffsetX;
         /// <summary>Visual labels (albumCount × <see cref="AlbumStripCopies"/> for loop).</summary>
         /// <remarks>Use <see cref="TextElement"/> not <see cref="Label"/> — Unity's default
         /// Label theme washes :hover text to white on the white card (invisible).</remarks>
@@ -111,7 +113,7 @@ namespace Game
         VisualElement _modeIcon;
         float _dragStartX;
         float _dragStartY;
-        /// <summary>Content <c>left</c> at PointerDown — drag offsets accumulate from this.</summary>
+        /// <summary>Content translate X at PointerDown — drag offsets accumulate from this.</summary>
         float _dragStartLeft;
         /// <summary>True once pointer has moved past the drag threshold during this press.</summary>
         bool _isDragging;
@@ -299,10 +301,10 @@ namespace Game
             else
                 _centerAlbum = 0;
             // Place strip BEFORE highlight — never highlight from a stale
-            // resolvedStyle.left (pooled reopen left the visible centre at
-            // opacity 0.3, which reads as "white" on the card).
+            // offset (pooled reopen left the visible centre at opacity 0.3,
+            // which reads as "white" on the card).
             if (_albumContent != null && count > 0)
-                _albumContent.style.left = TargetLeftForAlbum(_centerAlbum, count);
+                SetAlbumOffsetX(TargetLeftForAlbum(_centerAlbum, count));
             RefreshAlbumStrip();
             RefreshTrackList();
             RefreshTitle();
@@ -563,15 +565,15 @@ namespace Game
             return Mathf.Max(w, 1f);
         }
 
-        /// <summary>Prefer written style.left; fall back to resolved when unset.</summary>
-        float ReadAlbumContentLeft()
+        /// <summary>Current strip host X (translate); kept in <see cref="_albumOffsetX"/>.</summary>
+        float ReadAlbumContentLeft() => _albumOffsetX;
+
+        void SetAlbumOffsetX(float x)
         {
+            _albumOffsetX = x;
             if (_albumContent == null)
-                return 0f;
-            StyleLength left = _albumContent.style.left;
-            if (left.keyword == StyleKeyword.Null || left.keyword == StyleKeyword.Auto)
-                return _albumContent.resolvedStyle.left;
-            return left.value.value;
+                return;
+            _albumContent.style.translate = new Translate(x, 0f);
         }
 
         void OnAlbumClicked(int albumIndex)
@@ -739,11 +741,14 @@ namespace Game
                 _albumContainer.Add(_albumContent);
             }
 
-            // Packed by glyph width + AlbumNameGap; host translates via style.left.
+            // Packed by glyph width + AlbumNameGap; host moves via style.translate.
             _albumContent.style.position = Position.Relative;
+            _albumContent.style.left = 0f;
             _albumContent.style.height = 101f;
             _albumContent.style.paddingLeft = 0;
             _albumContent.pickingMode = PickingMode.Ignore;
+            _albumContent.usageHints = UsageHints.DynamicTransform;
+            SetAlbumOffsetX(_albumOffsetX);
 
             // Pooled reopen: rebuild labels into this host every open.
             ClearAlbumStripVisuals();
@@ -842,7 +847,7 @@ namespace Game
             float nextLeft = _dragStartLeft + dx;
             NormalizeAlbumLoop(ref nextLeft, albumCount);
             _dragStartLeft = nextLeft - dx;
-            _albumContent.style.left = nextLeft;
+            SetAlbumOffsetX(nextLeft);
 
             // Visual highlight only — do NOT commit album / rebuild track list until Up.
             RefreshAlbumStrip();
@@ -920,7 +925,7 @@ namespace Game
                 return;
             RefreshAlbumStrip();
             int albumCount = MusicCatalog.AlbumCount;
-            _albumContent.style.left = TargetLeftForAlbum(_centerAlbum, albumCount);
+            SetAlbumOffsetX(TargetLeftForAlbum(_centerAlbum, albumCount));
         }
 
         void SnapAlbumContent(int albumIndex)
@@ -945,7 +950,7 @@ namespace Game
             else if (delta < -circ * 0.5f)
                 startLeft -= circ;
 
-            _albumContent.style.left = startLeft;
+            SetAlbumOffsetX(startLeft);
             _albumSnapSchedule?.Pause();
             float start = Time.unscaledTime;
             const float Duration = 0.2f;
@@ -956,10 +961,10 @@ namespace Game
                 float t = Mathf.Clamp01((Time.unscaledTime - start) / Duration);
                 float eased = t * t * (3f - 2f * t);
                 float left = Mathf.Lerp(startLeft, to, eased);
-                _albumContent.style.left = left;
+                SetAlbumOffsetX(left);
                 if (t >= 1f)
                 {
-                    _albumContent.style.left = TargetLeftForAlbum(albumIndex, albumCount);
+                    SetAlbumOffsetX(TargetLeftForAlbum(albumIndex, albumCount));
                     RefreshAlbumStrip();
                     _albumSnapSchedule?.Pause();
                     _albumSnapSchedule = null;
@@ -1357,7 +1362,7 @@ namespace Game
             m.Offset = 0f;
             m.PauseLeft = 0f;
             if (m.Mover != null)
-                m.Mover.style.left = 0f;
+                m.Mover.style.translate = new Translate(0f, 0f);
             if (m.CopyB != null)
                 m.CopyB.style.display = DisplayStyle.None;
         }
@@ -1384,7 +1389,7 @@ namespace Game
                 if (m.PauseLeft > 0f)
                     return;
                 m.Offset = 0f;
-                m.Mover.style.left = 0f;
+                m.Mover.style.translate = new Translate(0f, 0f);
                 m.Phase = TrackMarqueePhase.Scrolling;
                 return;
             }
@@ -1395,13 +1400,13 @@ namespace Game
             if (m.Offset <= -loop)
             {
                 m.Offset = 0f;
-                m.Mover.style.left = 0f;
+                m.Mover.style.translate = new Translate(0f, 0f);
                 m.Phase = TrackMarqueePhase.Pausing;
                 m.PauseLeft = TrackMarqueePauseSeconds;
             }
             else
             {
-                m.Mover.style.left = m.Offset;
+                m.Mover.style.translate = new Translate(m.Offset, 0f);
             }
         }
 
@@ -1468,7 +1473,7 @@ namespace Game
             if (m.Phase == TrackMarqueePhase.Idle)
             {
                 m.Offset = 0f;
-                m.Mover.style.left = 0f;
+                m.Mover.style.translate = new Translate(0f, 0f);
                 m.Phase = TrackMarqueePhase.Scrolling;
             }
             EnsureTrackMarqueeTick(m);
@@ -1529,6 +1534,7 @@ namespace Game
             mover.name = "titleMover";
             mover.AddToClassList("game-music-form__track-title-mover");
             mover.pickingMode = PickingMode.Ignore;
+            mover.usageHints = UsageHints.DynamicTransform;
 
             // Typography matches Musicitem Text_0 (45px + TMP characterSpacing 4.5
             // → 4.5/100 em ≈ 2.025px letter-spacing). TextElement avoids hover-wash.

@@ -284,8 +284,13 @@ half3 OilNPRLightingEx(
     {
         umbraColor = lerp(umbraColor, albedo * half3(0.48h, 0.24h, 0.1h) + other * 0.25h, 0.5h);
     }
-    half3 spec = OilNPRLightSpecular(lightColor, L, N, normalize(_WorldSpaceCameraPos - surfaceWS.position),
-        specularColor, smoothness, attenuation);
+    // Most env mats ship Smoothness=0 — skip view normalize + Blinn path.
+    half3 spec = 0.0h;
+    if (smoothness >= 0.01h && any(specularColor > 0.0h))
+    {
+        half3 V = normalize((half3)(_WorldSpaceCameraPos - surfaceWS.position));
+        spec = OilNPRLightSpecular(lightColor, L, N, V, specularColor, smoothness, attenuation);
+    }
     return lerp(umbraColor, litColor, lit) + other + spec;
 #else
     half3 lightHue = lightColor / lightPeak;

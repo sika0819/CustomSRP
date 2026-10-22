@@ -45,6 +45,37 @@ float3 OilTreeCrossBillboardRotateYaw(
     return p;
 }
 
+// Single-card impostor: continuous cylindrical yaw so the card always faces the camera.
+// Does not pitch — trees stay upright. Instancing-safe (camera global + per-instance M).
+float3 OilTreeYBillboardRotateYaw(
+    float3 positionOS, float3 normalOS,
+    out float3 rotatedNormalOS, out float3 normalWS)
+{
+    float3 pivotWS = TransformObjectToWorld(float3(0.0, 0.0, 0.0));
+    float3 toCamOS = TransformWorldToObjectDir(_WorldSpaceCameraPos - pivotWS);
+    toCamOS.y = 0.0;
+    float lenSq = max(dot(toCamOS.xz, toCamOS.xz), 1e-8);
+    float invLen = rsqrt(lenSq);
+    float2 dir = toCamOS.xz * invLen;
+    // Mesh card faces −Z in object space; yaw so −Z aligns with toCam on XZ.
+    float yaw = atan2(dir.x, dir.y);
+    float c = cos(yaw);
+    float s = sin(yaw);
+
+    float3 p;
+    p.x = positionOS.x * c + positionOS.z * s;
+    p.y = positionOS.y;
+    p.z = -positionOS.x * s + positionOS.z * c;
+
+    float3 n;
+    n.x = normalOS.x * c + normalOS.z * s;
+    n.y = normalOS.y;
+    n.z = -normalOS.x * s + normalOS.z * c;
+    rotatedNormalOS = n;
+    normalWS = TransformObjectToWorldNormal(n);
+    return p;
+}
+
 // Atlas stores near-tree object-space normals (bake at prefab origin), same as BoluoUnity.
 half3 OilTreeCrossBillboardDecodeObjectNormal(half3 encoded)
 {

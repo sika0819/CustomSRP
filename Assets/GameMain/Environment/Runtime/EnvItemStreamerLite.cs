@@ -15,6 +15,11 @@ namespace Game
         const byte StateHidden = 0;
         const byte StateVisible = 1;
 
+        /// <summary>Full Prefab + LODGroup.</summary>
+        const byte TierFull = 0;
+        /// <summary>Lightweight single-card billboard (optionally native-batched).</summary>
+        const byte TierBillboard = 1;
+
         struct Item
         {
             public Vector3 Pos;
@@ -31,6 +36,9 @@ namespace Game
             public bool SkipNative;
             public bool FarField;
             public byte State;
+            public byte LodTier;
+            /// <summary>Desired tier for next spawn after a forced despawn (tier swap).</summary>
+            public byte PendingTier;
             public GameObject Go;
             public int ProtoIndex;
             public bool InNative;
@@ -107,6 +115,8 @@ namespace Game
                                  || EnvStreamingConfig.IsFarFieldLandmark(prefabName),
                     FarField = EnvStreamingConfig.IsFarFieldLandmark(prefabName),
                     State = StateHidden,
+                    LodTier = TierFull,
+                    PendingTier = TierFull,
                     Go = null,
                     ProtoIndex = -1,
                     InNative = false,
@@ -178,19 +188,15 @@ namespace Game
                     continue;
                 }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
-                if (_native != null && !item.SkipNative)
+                byte tier = ResolveSpawnTier(item, DistSqXZ(item.Pos, p));
+                var spawned = CreateInstanceForTier(item, prefab, tier);
+                if (spawned.Go == null)
                 {
-                    bool mainCameraOnly = EnvStreamingConfig.ShouldBeMainCameraOnly(
-                        item.Category, item.PrefabName);
-                    bool canCastShadows = EnvStreamingConfig.CanItemCastShadows(
-                        item.Category, item.PrefabName);
-                    _native.AddPrototype(prefab, mainCameraOnly, canCastShadows);
+                    done++;
+                    continue;
                 }
-#endif
 
-                GameObject instance = Instantiate(prefab, item.Parent, false);
-                FinalizeSpawned(idx, instance, prefab);
+                FinalizeSpawned(idx, spawned.Go, prefab, spawned.Tier);
                 done++;
 
                 if (sw.ElapsedMilliseconds >= EnvStreamingConfig.FinalizePerFrameBudgetMs)
@@ -266,15 +272,24 @@ namespace Game
                 {
                     if (!thinFar && (neverUnload || distSq <= item.ShowDist * item.ShowDist))
                     {
+                        // After Full↔Billboard swap: LodTier (pre-despawn) != PendingTier
+                        // → keep PendingTier. Otherwise re-resolve from distance.
+                        if (item.LodTier == item.PendingTier)
+                            item.PendingTier = ResolveSpawnTier(item, distSq);
+                        _items[i] = item;
                         if (_spawnQueued.Add(i))
                             _spawnQueue.Add(i);
                     }
                 }
                 else if (!neverUnload && (thinFar || distSq > item.HideDist * item.HideDist))
                 {
-                    // 超 keep 卸，或标准版 120m 外非留株隔掉。
+                    // 超 keep 卸，或远树隔株。
                     if (_despawnQueued.Add(i))
                         _despawnQueue.Add(i);
+                }
+                else if (TryQueueTreeTierSwap(ref item, distSq, i))
+                {
+                    _items[i] = item;
                 }
                 else if (item.ShadowCasters != null && UpdateShadowRange(ref item, distSq))
                 {
@@ -331,11 +346,94 @@ namespace Game
             if (prefab == null)
                 yield break;
 
-            GameObject instance = Instantiate(prefab, item.Parent, false);
-            FinalizeSpawned(index, instance, prefab);
+            byte tier = item.PendingTier;
+            if (tier != TierFull && tier != TierBillboard)
+                tier = ResolveSpawnTier(item, DistSqToFocus(item.Pos));
+
+            var spawned = CreateInstanceForTier(item, prefab, tier);
+            if (spawned.Go == null)
+                yield break;
+
+            FinalizeSpawned(index, spawned.Go, prefab, spawned.Tier);
         }
 
-        void FinalizeSpawned(int index, GameObject instance, GameObject prefab)
+        static byte ResolveSpawnTier(Item item, float distSq)
+        {
+            if (EnvStreamingConfig.ShouldSpawnAsTreeBillboard(item.Category, distSq))
+                return TierBillboard;
+            return TierFull;
+        }
+
+        /// <summary>
+        /// Full↔Billboard swap: despawn now; spawn is re-queued next eval once Hidden
+        /// (avoids same-frame Visible spawn skip). PendingTier selects the next form.
+        /// </summary>
+        bool TryQueueTreeTierSwap(ref Item item, float distSq, int index)
+        {
+            if (!EnvStreamingConfig.IsBigTreeCategory(item.Category) || item.Go == null)
+                return false;
+
+            if (item.LodTier == TierFull
+                && EnvStreamingConfig.ShouldDowngradeTreeToBillboard(item.Category, distSq))
+            {
+                item.PendingTier = TierBillboard;
+                if (_despawnQueued.Add(index))
+                    _despawnQueue.Add(index);
+                return true;
+            }
+
+            if (item.LodTier == TierBillboard
+                && EnvStreamingConfig.ShouldUpgradeTreeToFull(item.Category, distSq))
+            {
+                item.PendingTier = TierFull;
+                if (_despawnQueued.Add(index))
+                    _despawnQueue.Add(index);
+                return true;
+            }
+
+            return false;
+        }
+
+        struct SpawnedInstance
+        {
+            public GameObject Go;
+            public byte Tier;
+        }
+
+        /// <summary>
+        /// Builds Full Prefab or Billboard proxy. Tier may fall back to Full when
+        /// the prefab has no extractable LOD_Billboard. Returns a struct so
+        /// iterator callers avoid ref/out locals.
+        /// </summary>
+        SpawnedInstance CreateInstanceForTier(Item item, GameObject prefab, byte requestedTier)
+        {
+            byte actualTier = requestedTier;
+            if (requestedTier == TierBillboard
+                && EnvStreamingConfig.IsBigTreeCategory(item.Category))
+            {
+                Vector3 pos = item.Pos;
+                EnvGroundFit.TrySnapMapItemY(ref pos, item.Category, item.PrefabName);
+                GameObject proxy = EnvTreeBillboardUtil.BuildBillboardProxy(
+                    prefab,
+                    item.Parent,
+                    (prefab != null ? prefab.name : item.PrefabName) + "#bb",
+                    pos,
+                    item.Rotation,
+                    item.Scale);
+                if (proxy != null)
+                    return new SpawnedInstance { Go = proxy, Tier = TierBillboard };
+                // No LOD_Billboard on prefab — fall back to full mesh.
+                actualTier = TierFull;
+            }
+
+            return new SpawnedInstance
+            {
+                Go = Object.Instantiate(prefab, item.Parent, false),
+                Tier = actualTier,
+            };
+        }
+
+        void FinalizeSpawned(int index, GameObject instance, GameObject prefab, byte tier)
         {
             if (instance == null || index < 0 || index >= _items.Count)
                 return;
@@ -347,7 +445,12 @@ namespace Game
                 return;
             }
 
-            instance.name = index + " " + prefab.name;
+            bool isBillboard = tier == TierBillboard
+                && EnvStreamingConfig.IsBigTreeCategory(item.Category);
+
+            instance.name = isBillboard
+                ? index + " " + prefab.name + "#bb"
+                : index + " " + prefab.name;
             instance.transform.SetParent(item.Parent, false);
 
             Vector3 pos = item.Pos;
@@ -360,57 +463,69 @@ namespace Game
             instance.transform.position = pos;
             instance.transform.localEulerAngles = item.Rotation;
             instance.transform.localScale = item.Scale;
-            // Foliage material patches (clipping/shadows/keyword) live in
-            // MapItemEditorMenu.EnsureFoliageClipAndShadows (Editor menu).
-            // Prefab-driven LOD0+LOD1 + Billboard disable used to live in
-            // EnvLodRepair; deleted along with the Outline pass.
 
-            // 阴影 atlas 留给大树：灌木/草/杂物只显示不投射，地面接触影更稳、更省。
+            // 阴影 atlas 留给大树：灌木/草/杂物只显示不投射。
             if (EnvStreamingConfig.IsSmallTreeCategory(item.Category)
                 || EnvStreamingConfig.IsSmallVegCategory(item.Category)
-                || EnvStreamingConfig.IsClutterCategory(item.Category))
+                || EnvStreamingConfig.IsClutterCategory(item.Category)
+                || isBillboard)
                 EnvGroundFit.DisableCastShadows(instance);
 
             instance.SetActive(item.IsActive);
-            if (EnvStreamingConfig.IsRockCategory(item.Category))
-                EnvRockColliders.Ensure(instance, item.PrefabName);
-            if (EnvStreamingConfig.IsBridgeCategory(item.Category))
-                EnvBridgePillarFit.Ensure(instance);
-            // Small rocks (ShiTou + !IsLargeRockPrefab) skip native instancing and
-            // would otherwise be picked up by the planar mirror camera. Flag them
-            // onto the ReflectionSkip layer at spawn time so the mirror cull
-            // mask (<see cref="OilWaterLayers.PlanarReflectionCullingMask"/>) drops
-            // them. Big landmark rocks (Cliff / Cave / Ramp / Spike / Large) keep
-            // their default layer and remain visible in the mirror.
-            if (EnvStreamingConfig.IsRockCategory(item.Category) &&
-                EnvStreamingConfig.IsSmallRockForFarCull(item.PrefabName))
+
+            if (!isBillboard)
             {
-                EnvStreamerReflectionSkip.Apply(instance);
+                if (EnvStreamingConfig.IsRockCategory(item.Category))
+                    EnvRockColliders.Ensure(instance, item.PrefabName);
+                if (EnvStreamingConfig.IsBridgeCategory(item.Category))
+                    EnvBridgePillarFit.Ensure(instance);
+                if (EnvStreamingConfig.IsRockCategory(item.Category) &&
+                    EnvStreamingConfig.IsSmallRockForFarCull(item.PrefabName))
+                {
+                    EnvStreamerReflectionSkip.Apply(instance);
+                }
+                if (item.FarField)
+                    EnvLandmarkColliders.Ensure(instance, item.PrefabName);
+                // Near full trees: LOD_Billboard must also Y-face when LOD switches.
+                if (EnvStreamingConfig.IsBigTreeCategory(item.Category))
+                    EnvTreeBillboardUtil.ApplyYBillboardToLodBillboardChildren(instance);
+
+                _colliderLod?.Register(instance, pos);
             }
-            if (item.FarField)
-                EnvLandmarkColliders.Ensure(instance, item.PrefabName);
-            _colliderLod?.Register(instance, pos);
 
             int proto = -1;
             bool inNative = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (!item.SkipNative && _native != null)
+            if (_native != null)
             {
-                bool mainCameraOnly = EnvStreamingConfig.ShouldBeMainCameraOnly(
-                    item.Category, item.PrefabName);
-                bool canCastShadows = EnvStreamingConfig.CanItemCastShadows(
-                    item.Category, item.PrefabName);
-                proto = _native.AddPrototype(prefab, mainCameraOnly, canCastShadows);
-                if (proto >= 0 && _native.TryAddInstance(instance, proto))
-                    inNative = true;
+                if (isBillboard)
+                {
+                    bool mainCameraOnly = EnvStreamingConfig.ShouldBeMainCameraOnly(
+                        item.Category, item.PrefabName);
+                    proto = _native.AddBillboardPrototype(prefab, mainCameraOnly);
+                    if (proto >= 0 && _native.TryAddInstance(instance, proto))
+                        inNative = true;
+                }
+                else if (!item.SkipNative)
+                {
+                    bool mainCameraOnly = EnvStreamingConfig.ShouldBeMainCameraOnly(
+                        item.Category, item.PrefabName);
+                    bool canCastShadows = EnvStreamingConfig.CanItemCastShadows(
+                        item.Category, item.PrefabName);
+                    proto = _native.AddPrototype(prefab, mainCameraOnly, canCastShadows);
+                    if (proto >= 0 && _native.TryAddInstance(instance, proto))
+                        inNative = true;
+                }
             }
 #endif
 
             item.Go = instance;
             item.State = StateVisible;
+            item.LodTier = isBillboard ? TierBillboard : TierFull;
+            item.PendingTier = item.LodTier;
             item.ProtoIndex = proto;
             item.InNative = inNative;
-            item.ShadowCasters = CaptureShadowCasters(instance, item);
+            item.ShadowCasters = isBillboard ? null : CaptureShadowCasters(instance, item);
             if (item.ShadowCasters != null)
             {
                 bool cast = DistSqToFocus(item.Pos) <=
@@ -451,6 +566,7 @@ namespace Game
             item.ProtoIndex = -1;
             item.ShadowCasters = null;
             item.CastingShadows = false;
+            // Keep PendingTier so a tier-swap re-spawn uses the desired tier.
             _items[index] = item;
             _spawnedCount = Mathf.Max(0, _spawnedCount - 1);
         }

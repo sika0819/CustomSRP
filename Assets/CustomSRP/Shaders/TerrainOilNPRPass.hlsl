@@ -200,7 +200,12 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
     surface.dither = InterleavedGradientNoise(input.positionCS_SS.xy, 0);
     surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
 
+#if defined(OIL_MOBILE_PERF)
+    // LightingEx ignores brush; SoftFogStroke(0.5) is identity — skip OutlineBrush tap.
+    half brush = 0.5h;
+#else
     half brush = SampleOilShadowBrushCheap(input.positionWS, input.controlUV, 0.25);
+#endif
     Fragment fragment = GetFragmentScreen(input.positionCS_SS);
     half3 color = OilNPRLighting(
         surface,

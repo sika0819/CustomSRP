@@ -307,6 +307,11 @@ half3 ApplyOilWaterReflection(
         half edgeFade = (half)(edge.x * edge.y);
         if (edgeFade > 0.001h)
         {
+#if defined(OIL_MOBILE_PERF)
+            // RT is already ≤192px soft glaze — 5-tap smear is invisible at 0.5 scale.
+            half3 planar = (half3)SAMPLE_TEXTURE2D_LOD(
+                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv, 0.0).rgb;
+#else
             // Low-res RT + wide 5-tap smear at mip0 (no auto-mips — those were black).
             float2 texel = max(_OilPlanarReflectTex_TexelSize.xy, float2(1.0 / 160.0, 1.0 / 160.0));
             texel *= 4.5;
@@ -321,6 +326,7 @@ half3 ApplyOilWaterReflection(
             planar += (half3)SAMPLE_TEXTURE2D_LOD(
                 _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv - float2(0.0, texel.y), 0.0).rgb;
             planar *= 0.2h;
+#endif
             // 青苔山 / 树叶在 0.1× 反射 RT 里糊成一片绿；只削「G 高于 R/B」的植被溢色，
             // 直视山体与 analytic sky 路径不动。
             half maxRB = max(planar.r, planar.b);

@@ -31,14 +31,16 @@ namespace Game
         VisualElement _weatherGlyph;
         VisualElement _musicGlyph;
         VisualElement _musicPlaying;
-        VisualElement _eqBarLeft;
-        VisualElement _eqBarCenter;
-        VisualElement _eqBarRight;
+        HudEqualizerBars _eqBars;
         float _eqTime;
+        bool _musicWasPlaying;
         VisualElement _volumeMusicDot;
         VisualElement _volumeEffectDot;
         VisualElement _volumeMusicFill;
         VisualElement _volumeEffectFill;
+        float _lastMusicVolume = -1f;
+        float _lastEffectVolume = -1f;
+        bool _volumeMarksReady;
         Label _timeLabelText;
         Texture2D _texLabelMorning;
         Texture2D _texLabelNoon;
@@ -50,9 +52,9 @@ namespace Game
         Texture2D _texArrowMorning;
         Texture2D _texArrowEvening;
         Texture2D _texArrowNight;
-        // Boluo HudWeatherBinder atlas: clear + cloud / rain / fog / wind × 小中大.
+        // Boluo HudWeatherBinder atlas: clear（太阳）+ rain / fog / wind × 小中大。
+        // Cloud 预设无风雨雾，HUD 走 clear，不加载多云贴图。
         Texture2D _texWeatherClear;
-        Texture2D[] _texWeatherCloud;
         Texture2D[] _texWeatherRain;
         Texture2D[] _texWeatherFog;
         Texture2D[] _texWeatherWind;
@@ -129,16 +131,17 @@ namespace Game
             VisualElement musicIcon = Root.Q("musicBackground");
             _musicGlyph = musicIcon?.Q("glyph");
             _musicPlaying = musicIcon?.Q("musicPlaying");
-            _eqBarLeft = _musicPlaying?.Q("barLeft");
-            _eqBarCenter = _musicPlaying?.Q("barCenter");
-            _eqBarRight = _musicPlaying?.Q("barRight");
+            _eqBars = EnsureHudEqualizer(_musicPlaying);
+            _musicWasPlaying = false;
+            _eqTime = 0f;
 
             VisualElement volumeIcon = Root.Q("volumeBackground");
             _volumeMusicDot = volumeIcon?.Q("musicvolumeyuan");
             _volumeEffectDot = volumeIcon?.Q("effectvolumeyuan");
             _volumeMusicFill = volumeIcon?.Q("volumeTrack1");
             _volumeEffectFill = volumeIcon?.Q("volumeTrack2");
-            SyncVolumeIcon();
+            PrepareVolumeMarks();
+            SyncVolumeIcon(force: true);
             SyncWeatherIcon();
 
             VisualElement pauseHint = Root.Q("pauseHint");
@@ -273,68 +276,114 @@ namespace Game
         void SyncMusicPlaying(float dt)
         {
             bool playing = GameEntry.Music != null && GameEntry.Music.IsPlaying;
-            if (_musicPlaying != null)
-                _musicPlaying.style.display = playing ? DisplayStyle.Flex : DisplayStyle.None;
-            if (_musicGlyph != null)
-                _musicGlyph.style.display = playing ? DisplayStyle.None : DisplayStyle.Flex;
-            if (playing)
-                TickMusicEqualizer(dt);
-        }
-
-        // Design space (108px icon): bars share baseline y=74 and bounce upward.
-        const float EqBaseline = 74f;
-        const float EqBarWidth = 10f;
-
-        void TickMusicEqualizer(float dt)
-        {
-            _eqTime += dt;
-            float s = 1f;
-            if (_musicPlaying != null)
+            if (playing != _musicWasPlaying)
             {
-                float w = _musicPlaying.resolvedStyle.width;
-                if (w > 1f)
-                    s = w / 108f;
+                _musicWasPlaying = playing;
+                if (_musicPlaying != null)
+                    _musicPlaying.style.display = playing ? DisplayStyle.Flex : DisplayStyle.None;
+                if (_musicGlyph != null)
+                    _musicGlyph.style.display = playing ? DisplayStyle.None : DisplayStyle.Flex;
             }
 
-            PlaceEqBar(_eqBarLeft, 31f, 10f, 32f, _eqTime * 5.2f + 0.4f, s);
-            PlaceEqBar(_eqBarCenter, 49f, 14f, 48f, _eqTime * 6.7f + 1.8f, s);
-            PlaceEqBar(_eqBarRight, 67f, 10f, 40f, _eqTime * 4.4f + 3.1f, s);
+            if (!playing || _eqBars == null)
+                return;
+
+            _eqTime += dt;
+            _eqBars.Tick(_eqTime);
         }
 
-        static void PlaceEqBar(VisualElement bar, float left, float minH, float maxH, float phase, float s)
+        /// <summary>Replace legacy barLeft/Center/Right with mesh equalizer (no layout style anim).</summary>
+        static HudEqualizerBars EnsureHudEqualizer(VisualElement host)
         {
-            if (bar == null)
-                return;
-            float t = 0.5f + 0.5f * Mathf.Sin(phase);
-            float h = Mathf.Lerp(minH, maxH, t) * s;
-            bar.style.left = left * s;
-            bar.style.width = EqBarWidth * s;
-            bar.style.height = h;
-            bar.style.top = EqBaseline * s - h;
+            if (host == null)
+                return null;
+
+            HudEqualizerBars existing = host.Q<HudEqualizerBars>("equalizer");
+            if (existing != null)
+                return existing;
+
+            host.Clear();
+            var eq = new HudEqualizerBars { name = "equalizer" };
+            host.Add(eq);
+            return eq;
         }
 
         /// <summary>
-        /// Boluo HudVolumeBinder: dots travel x 24→62, horizontal fills are 60px * volume.
+        /// Boluo HudVolumeBinder: dots travel x 24→62 via translate; fills use fixed width + scale.x.
         /// Track 1 / music dot follow music; track 2 / effect dot follow effects.
         /// </summary>
-        void SyncVolumeIcon()
+        void SyncVolumeIcon(bool force = false)
         {
             MusicPlaylist music = GameEntry.Music;
             float musicVolume = music != null ? Mathf.Clamp01(music.MusicVolume) : 1f;
             float effectVolume = music != null ? Mathf.Clamp01(music.EffectVolume) : 1f;
+            if (!force
+                && Mathf.Approximately(musicVolume, _lastMusicVolume)
+                && Mathf.Approximately(effectVolume, _lastEffectVolume))
+                return;
+
+            _lastMusicVolume = musicVolume;
+            _lastEffectVolume = effectVolume;
             PlaceVolumeMark(_volumeMusicDot, _volumeMusicFill, musicVolume);
             PlaceVolumeMark(_volumeEffectDot, _volumeEffectFill, effectVolume);
         }
 
+        void PrepareVolumeMarks()
+        {
+            if (_volumeMarksReady)
+                return;
+            // Design-space anchors; IslandMainHudLayout ScaleChild still sizes them.
+            // Animation uses translate / scale only after that.
+            PrepareVolumeDot(_volumeMusicDot);
+            PrepareVolumeDot(_volumeEffectDot);
+            PrepareVolumeFill(_volumeMusicFill);
+            PrepareVolumeFill(_volumeEffectFill);
+            _volumeMarksReady = true;
+        }
+
+        static void PrepareVolumeDot(VisualElement dot)
+        {
+            if (dot == null)
+                return;
+            dot.usageHints = UsageHints.DynamicTransform;
+            dot.style.transformOrigin = new TransformOrigin(Length.Percent(0), Length.Percent(50));
+        }
+
+        static void PrepareVolumeFill(VisualElement fill)
+        {
+            if (fill == null)
+                return;
+            fill.usageHints = UsageHints.DynamicTransform;
+            fill.style.transformOrigin = new TransformOrigin(Length.Percent(0), Length.Percent(50));
+        }
+
         static void PlaceVolumeMark(VisualElement dot, VisualElement fill, float value)
         {
-            const float minX = 24f;
-            const float maxX = 62f;
-            const float trackWidth = 60f;
-            if (dot != null)
-                dot.style.left = minX + (maxX - minX) * value;
+            // Design travel 38px (24→62) over 108 icon; scale with resolved fill width (60 design).
+            float travel = 38f;
             if (fill != null)
-                fill.style.width = trackWidth * value;
+            {
+                float fillW = fill.resolvedStyle.width;
+                if (fillW > 1f)
+                    travel = fillW * (38f / 60f);
+            }
+
+            if (dot != null)
+                dot.style.translate = new Translate(travel * value, 0f);
+            if (fill != null)
+            {
+                float x = Mathf.Clamp01(value);
+                if (x < 0.001f)
+                {
+                    fill.style.scale = new Scale(new Vector2(0.001f, 1f));
+                    fill.style.display = DisplayStyle.None;
+                }
+                else
+                {
+                    fill.style.display = DisplayStyle.Flex;
+                    fill.style.scale = new Scale(new Vector2(x, 1f));
+                }
+            }
         }
 
         void OnScreenLayoutChanged()
@@ -346,7 +395,7 @@ namespace Game
         void ApplyInputLayout()
         {
             _hudLayout.Apply();
-            SyncVolumeIcon();
+            SyncVolumeIcon(force: true);
             _locomotion.ApplyLayoutScale();
             _idle.ApplyLayout();
         }
@@ -385,7 +434,8 @@ namespace Game
         }
 
         /// <summary>
-        /// Boluo HudWeatherBinder.Refresh: level 0 → 晴天；否则按 Kind 取 小/中/大 图标。
+        /// Boluo HudWeatherBinder.Refresh: level 0 / Clear / Cloud（无风雨雾）→ 晴天太阳；
+        /// 否则按风/雨/雾取 小/中/大 图标。
         /// </summary>
         void SyncWeatherIcon()
         {
@@ -401,13 +451,15 @@ namespace Game
 
         Texture2D ResolveWeatherIcon(IslandWeatherKind kind, int level)
         {
-            if (level <= 0 || kind == IslandWeatherKind.Clear)
+            // Cloud = Boluo 预设「无天气」（WeatherForm 也当关闭档）；图标用太阳，不用多云贴图。
+            if (level <= 0
+                || kind == IslandWeatherKind.Clear
+                || kind == IslandWeatherKind.Cloud)
                 return _texWeatherClear;
 
             int idx = Mathf.Clamp(level - 1, 0, 2);
             return kind switch
             {
-                IslandWeatherKind.Cloud => PickWeatherTier(_texWeatherCloud, idx),
                 IslandWeatherKind.Rain => PickWeatherTier(_texWeatherRain, idx),
                 IslandWeatherKind.Foggy => PickWeatherTier(_texWeatherFog, idx),
                 IslandWeatherKind.Wind => PickWeatherTier(_texWeatherWind, idx),
@@ -429,13 +481,6 @@ namespace Game
 
             _texWeatherClear = Resources.Load<Texture2D>("UI/WeatherIcons/qingtian");
             // 档位按“强度从小到大”排列，idx = level - 1。
-            // 云层资源里没有“大云”贴图，3 级复用中云。
-            _texWeatherCloud = new[]
-            {
-                Resources.Load<Texture2D>("UI/WeatherIcons/xiaoyun"),
-                Resources.Load<Texture2D>("UI/WeatherIcons/zhongyun"),
-                Resources.Load<Texture2D>("UI/WeatherIcons/zhongyun"),
-            };
             _texWeatherRain = new[]
             {
                 Resources.Load<Texture2D>("UI/WeatherIcons/xiaoyu"),

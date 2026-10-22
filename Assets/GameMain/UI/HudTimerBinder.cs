@@ -12,8 +12,9 @@ namespace Game
         // UITK Painter2D：0°=+X；从 -90° 顺时针 = 顶点，对齐 uGUI FillOrigin=Top + Clockwise。
         const float StartAngleDeg = -90f;
         // 对齐旧 dingShiProgress / timer-fill.png：108px 上约 7px 环宽（≈0.065）。
+        // 贴图本体为白 + α≈76/255（≈0.298）；勿用实心灰，否则环发黑。
         const float RingThickness = 7f / 108f;
-        static readonly Color RingColor = new Color(0.62f, 0.62f, 0.62f, 1f);
+        static readonly Color RingColor = new Color(1f, 1f, 1f, 76f / 255f);
 
         VisualElement _idle;
         VisualElement _active;

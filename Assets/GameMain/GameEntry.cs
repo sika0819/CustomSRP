@@ -68,10 +68,19 @@ namespace Game
         static void ApplyDeviceGraphicsPolicy()
         {
 #if !UNITY_EDITOR
-            // Medium (2): lower GI/LOD cost than Ultra; keep CRP + hard shadows.
+            // Very Low (0): lowest GI/LOD cost; keep CRP + hard shadows (QualitySettings.asset).
             // Clarity comes from DPI×renderScale; FPS from quality + streaming + far clip.
-            int medium = Mathf.Clamp(2, 0, QualitySettings.names.Length - 1);
-            QualitySettings.SetQualityLevel(medium, true);
+            int veryLow = 0;
+            string[] names = QualitySettings.names;
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (names[i] == "Very Low")
+                {
+                    veryLow = i;
+                    break;
+                }
+            }
+            QualitySettings.SetQualityLevel(veryLow, true);
             Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 0;
             // Never Screen.SetResolution: 1280×720 locks 16:9, then FullScreenWindow

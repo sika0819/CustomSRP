@@ -32,6 +32,13 @@ GameMain（`Assets/GameMain/`，`Game.asmdef`）是游戏侧程序集，与 `Cus
   - 改 `PanelSettings.sortingOrder` 做深度排序（用 `UIDocument.sortingOrder`）
 - YooAsset 资源释放走 `UI/YooUIFormHelper.cs`（实现 `IUIFormHelper`）。
 
+### UITK 动效 / 热路径性能
+
+- **位移动画用 Transform**：动画、每帧 tick、拖拽过程中禁止写 `style.left|top|right|bottom|width|height`；用 `style.translate` / `scale` / `rotate`（GPU 路径，绕过 Layout Recalculation）。一次性布局（打开时 `ApplyLayout`、ListView 行 bind）允许写布局属性。
+- **动画期勿加减 class**：`schedule.Every` / `OnUpdate` tick 内禁止 `AddToClassList` / `RemoveFromClassList` 改外观（会触发深层 Style Resolution）；改用 inline `style.*`。class 只在打开/关闭/状态切换时用一次。
+- **慎改几何**：运行时不要改 `border-radius` / `border-width`（触发 Vertex Buffer 重建）。新控件移动端优先 9-slice / Sprite 背景，避免程序化圆角边框。
+- **均衡器范例**：每帧波形优先 `Painter2D` + `MarkDirtyRepaint`（见 `PresetEqualizerBars` / `HudEqualizerBars`），不要用布局属性顶高度。
+
 ## 资源加载
 
 - 全部走 `GameEntry.Resource.LoadAsset(...)` 异步（GF `IResourceManager`，桥到 YooAsset）。

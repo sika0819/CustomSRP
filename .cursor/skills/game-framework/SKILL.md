@@ -72,6 +72,7 @@ description: >-
 - 深度写在**该界面自己的** `UIDocument.sortingOrder`（`OnDepthChanged`）。多个界面不要改同一份 `PanelSettings.sortingOrder`。
 - 禁止 `UnityEngine.UI`、Canvas、`GraphicRaycaster`、NGUI，以及用 `OnGUI` 做游戏界面或调试窗。
 - 游戏界面不要写进 `DebuggerComponent`。
+- **动效热路径**：位移动画用 `translate`/`scale`/`rotate`，勿每帧改布局属性；动画期勿加减 USS class；均衡器用 `Painter2D`+`MarkDirtyRepaint`。细则见 [`.cursor/rules/gamemain.mdc`](../../rules/gamemain.mdc)「UITK 动效 / 热路径性能」。
 
 ## 6. 与 Custom SRP
 

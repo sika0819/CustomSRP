@@ -66,6 +66,9 @@ float2 WaterfallMonetPaintUv(float2 flowUv, float t, float tileMeters, float ban
 
 half3 SampleWaterfallPaint(float2 st)
 {
+#if defined(OIL_MOBILE_PERF)
+    return (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, st).rgb;
+#else
     float2 f = frac(st);
     float2 edge = min(f, 1.0 - f);
     float border = min(edge.x, edge.y);
@@ -73,6 +76,7 @@ half3 SampleWaterfallPaint(float2 st)
     half3 center = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, st).rgb;
     half3 offset = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, st + 0.5).rgb;
     return lerp(offset, center, w);
+#endif
 }
 
 #endif

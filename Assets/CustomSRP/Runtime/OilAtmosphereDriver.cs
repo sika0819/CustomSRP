@@ -8,7 +8,8 @@ namespace CustomSRP
     /// <summary>
     /// Bridges Game.WeatherService to OilSkyboxTime / fog / cloud density.
     /// Lives in Assembly-CSharp so it can reference both Game and CustomSRP types.
-    /// Sun/moon always follow Cozy clock orbits — never pinned to the camera.
+    /// Dawn/sleep presets (1 / 4 / 6 / 10) pin sun/moon in view once on apply;
+    /// time-dial changes release the pin so discs follow the clock (BoluoProject).
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class OilAtmosphereDriver : MonoBehaviour, IAtmosphereVisualDriver
@@ -26,6 +27,7 @@ namespace CustomSRP
         IslandWeatherKind _kind = IslandWeatherKind.Cloud;
         int _level = 1;
         float _fogDensity = DefaultFogDensity;
+        int _syncedCelestialLookId = -1;
         bool _presetEventBound;
 
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -66,7 +68,6 @@ namespace CustomSRP
         {
             ResolveRefs();
             ResolveRainSettings();
-            ClearCelestialLookOverride();
             // Prefer WeatherService clock/look/weather before local defaults. IslandTerrain
             // serializes timeOfDay=12; without this, OnEnable Apply paints noon sun + day-blue
             // water reflection until ProcedureIsland.PushVisuals (one-frame cyan flash).
@@ -81,7 +82,6 @@ namespace CustomSRP
         void OnEnable()
         {
             BindPresetEvent();
-            ClearCelestialLookOverride();
             PresetWeatherHold.HeldChanged += OnWeatherHoldChanged;
             SyncFromWeatherService();
         }
@@ -109,6 +109,7 @@ namespace CustomSRP
         void LateUpdate()
         {
             BindPresetEvent();
+            SyncCelestialLookFromPreset();
         }
 
         void OnWeatherHoldChanged() => SetRainIntensity();
@@ -148,6 +149,9 @@ namespace CustomSRP
             if (SkyboxTime == null)
                 return;
 
+            // BoluoProject: sunTransform.localEuler follows dayPercentage during IETimeLerp.
+            // Skip PlaceSun/PlaceMoon while time blending — pins would cover the lerp.
+            // Keep _syncedCelestialLookId so LateUpdate does not immediately re-pin.
             SkyboxTime.ReleaseCelestialLookForClock();
             SkyboxTime.SetTimeOfDay(hours);
             // Re-scale ExpSquared density for Cozy fogDensityMultiplier at this TOD.
@@ -219,17 +223,72 @@ namespace CustomSRP
 
         void OnPresetChanged(object sender, GameEventArgs e)
         {
-            ClearCelestialLookOverride();
             if (e is PresetChangedEventArgs preset)
                 SkyboxTime?.ApplyPresetPoster(preset.PresetId);
+            // Force re-pin dawn/sleep looks even when CurrentId is unchanged (re-apply same preset).
+            _syncedCelestialLookId = -1;
+            SyncCelestialLookFromPreset();
         }
 
-        void ClearCelestialLookOverride()
+        void SyncCelestialLookFromPreset()
         {
             if (SkyboxTime == null)
                 ResolveRefs();
-            if (SkyboxTime != null)
+            if (SkyboxTime == null)
+                return;
+
+            int lookId = GameEntry.Presets != null ? GameEntry.Presets.CurrentId : 0;
+            if (lookId == _syncedCelestialLookId)
+                return;
+
+            _syncedCelestialLookId = lookId;
+            ApplyCelestialLook(lookId);
+        }
+
+        void ApplyCelestialLook(int lookId)
+        {
+            bool dawn = lookId == 1;
+            bool sleep = lookId == 4 || lookId == 6 || lookId == 10;
+            if (!dawn && !sleep)
+            {
                 SkyboxTime.ClearCelestialLookPlacement();
+                return;
+            }
+
+            Vector3 camFwd = ResolveCameraForward();
+            float period = SkyboxTime.CurrentPeriod();
+            Vector3 orbitSun = OilSkyboxTime.SunDirectionAt(period);
+            Vector3 orbitMoon = OilSkyboxTime.MoonDirectionAt(period);
+
+            if (dawn)
+            {
+                OilSkyboxTime.PlaceSunForView(
+                    camFwd, OilSkyboxTime.DawnSunElevationDeg, out Vector3 sunDir, out Vector3 moonDir);
+                SkyboxTime.SetCelestialLookPlacement(lookId, sunDir, moonDir);
+                return;
+            }
+
+            OilSkyboxTime.PlaceMoonForView(
+                camFwd,
+                OilSkyboxTime.SleepMoonElevationDeg,
+                orbitSun,
+                orbitMoon,
+                out Vector3 sleepSun,
+                out Vector3 sleepMoon);
+            SkyboxTime.SetCelestialLookPlacement(lookId, sleepSun, sleepMoon);
+        }
+
+        static Vector3 ResolveCameraForward()
+        {
+            IslandJoystickCamera joy = IslandJoystickCamera.Current;
+            if (joy != null)
+                return joy.transform.forward;
+
+            Camera cam = Camera.main;
+            if (cam != null)
+                return cam.transform.forward;
+
+            return Vector3.forward;
         }
 
         void ApplyWeatherVisuals()

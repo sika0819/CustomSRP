@@ -375,21 +375,35 @@ namespace Game
         }
 
         /// <summary>
-        /// 定时结束弹窗「取消」/「重复定时」：续播当前曲（不 Stop+Play）。
+        /// 定时结束弹窗「取消」/「重复定时」：恢复音效闸并硬起重播当前曲。
+        /// <para>
+        /// 真机到点走 Pause_Music+Pause_ALL+mute 后，Resume_Music 经常拉不起 BGM
+        /// （音效 Resume_ALL / ContentAudio 却正常）——不赌 Pause 态，直接 PlayIndex restart。
+        /// </para>
         /// </summary>
         public void ResumeAfterTimerEnd(string reason = "timer-end")
         {
+            NowPlayingService.NoteUserPaused(false);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
+#endif
+            AudioInteractionBootstrap.SetContentAudioPaused(false);
+
             if (!HasRestorableTrack)
             {
-                // 没选过曲也要把程序化暂停旗标清掉，避免点场景误判。
-                NowPlayingService.NoteUserPaused(false);
-                AudioInteractionBootstrap.SetContentAudioPaused(false);
+                Log.Info($"[MusicPlaylist] ResumeAfterTimerEnd ({reason}): no track, SFX gate only");
+#if UNITY_ANDROID && !UNITY_EDITOR
+                BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
+#endif
                 return;
             }
 
             if (!WanosEngine.IsPlaybackEnabled)
                 WanosEngine.EnablePlayback(reason);
-            EnsureMusicRestored(reason);
+
+            // 硬起播：Stop_Music + Play_*，绕过失效的 Resume_Music。
+            Log.Info($"[MusicPlaylist] ResumeAfterTimerEnd ({reason}): replay {CurrentAlbumIndex}/{CurrentTrackIndex}");
+            PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
         }
 
         /// <summary>

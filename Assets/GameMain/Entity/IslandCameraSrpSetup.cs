@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using Game.Native;
 using UnityEngine;
 
 using UnityGameFramework.Runtime;
@@ -28,6 +29,12 @@ namespace Game
         /// <summary>Idle 沉浸模式（HUD 隐去）同样 0.25。</summary>
         public const float ImmersiveRenderScale = 0.25f;
 
+        /// <summary>默认目标帧率（与 GameEntry / Base.FrameRate 一致）。</summary>
+        public const int DefaultFrameRate = 60;
+
+        /// <summary>闲置沉浸降载：够看就行，省电。</summary>
+        public const int ImmersiveFrameRate = 25;
+
         static Type _crpType;
         static PropertyInfo _settingsProp;
         static FieldInfo _renderScaleField;
@@ -36,6 +43,7 @@ namespace Game
         static EntityId _cachedEntityId;
         static Component _cachedCrp;
         static object _cachedSettings;
+        static int _appliedFrameRate = int.MinValue;
 
         /// <summary>
         /// Skybox clear flags + CustomRenderPipelineCamera (copy color/depth, mobile scale).
@@ -47,7 +55,7 @@ namespace Game
                 return;
 
             camera.clearFlags = CameraClearFlags.Skybox;
-            camera.allowHDR = true;
+            camera.allowHDR = false;
             camera.allowMSAA = false;
             if (camera.nearClipPlane < 0.3f)
                 camera.nearClipPlane = 0.3f;
@@ -111,6 +119,34 @@ namespace Game
 
             // CameraSettings is a class; mutate in place (Settings has no setter).
             _renderScaleField.SetValue(_cachedSettings, renderScale);
+        }
+
+        /// <summary>
+        /// 按岛面状态设目标帧率：默认 60 / 沉浸 25。
+        /// 原生半层 YieldsGpu 时不抢（overlay 自管 15/1）。
+        /// </summary>
+        public static void ApplyTargetFrameRate()
+        {
+            if (NativeOverlayGate.YieldsGpu)
+                return;
+
+            int fps = IslandIdleImmersive.IsActive ? ImmersiveFrameRate : DefaultFrameRate;
+            if (fps == _appliedFrameRate
+                && Application.targetFrameRate == fps)
+                return;
+
+            _appliedFrameRate = fps;
+            if (GameEntry.Base != null)
+                GameEntry.Base.FrameRate = fps;
+            else
+                Application.targetFrameRate = fps;
+        }
+
+        /// <summary>overlay 让帧结束后强制按当前岛面状态重算（清缓存）。</summary>
+        public static void ReapplyTargetFrameRateAfterOverlay()
+        {
+            _appliedFrameRate = int.MinValue;
+            ApplyTargetFrameRate();
         }
 
         static void ApplyDefaultSettings(Component crp)

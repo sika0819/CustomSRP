@@ -258,12 +258,16 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
         input.worldXZ, t, _PaintTile, _StrokeBands);
     half3 paint;
     {
+#if defined(OIL_MOBILE_PERF)
+        paint = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt).rgb;
+#else
         float2 f = frac(paintSt);
         float2 e = min(f, 1.0 - f);
         half w = (half)smoothstep(0.0, 0.14, min(e.x, e.y));
         half3 c0 = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt).rgb;
         half3 c1 = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt + 0.5).rgb;
         paint = lerp(c1, c0, w);
+#endif
     }
     half stroke = PaintStroke(PaintLuma(paint), (half)_PaintContrast);
     albedo = lerp(albedo, paint, relief);
@@ -362,7 +366,12 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     color = lerp(color, sceneCol, refractMix);
 #endif
 
+#if defined(OIL_MOBILE_PERF)
+    // Match OilNPR: SoftFogStroke only — skip dual fog-canvas taps on water.
+    color = (half3)ApplyOilFog((float3)color, surface.depth, stroke);
+#else
     color = (half3)ApplyOilFog((float3)color, surface.depth, stroke, input.positionWS);
+#endif
 
     // Fog first, then planar / sky reflect — otherwise atmosphere washes the glaze out.
     color = ApplyOilWaterReflection(

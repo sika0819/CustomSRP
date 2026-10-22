@@ -160,16 +160,8 @@ namespace Game
                 runtime.name = mat.name + " (MobileShadow)";
                 if (runtime.HasProperty("_ShadowLift"))
                     runtime.SetFloat("_ShadowLift", 0.62f);
-                if (runtime.HasProperty("_ShadowWobble"))
-                    runtime.SetFloat("_ShadowWobble", 0.4f);
-                if (runtime.HasProperty("_AmbientColor"))
-                {
-                    Color a = runtime.GetColor("_AmbientColor");
-                    // Cap sky-blue ambient that washed contact umbra to invisibility.
-                    float peak = Mathf.Max(a.r, Mathf.Max(a.g, a.b));
-                    if (peak > 0.55f)
-                        runtime.SetColor("_AmbientColor", a * (0.5f / peak));
-                }
+                // _ShadowWobble / _AmbientColor are authored but unused by OilNPRLightingEx
+                // (ambient = SH; brush/wobble ignored) — do not write dead props.
 
                 if (runtime.HasProperty("_ReceiveShadows"))
                     runtime.SetFloat("_ReceiveShadows", 1f);
