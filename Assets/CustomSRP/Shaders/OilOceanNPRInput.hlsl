@@ -35,12 +35,15 @@ CBUFFER_START(UnityPerMaterial)
     float _ReflectStrength;
 CBUFFER_END
 
+// 海面 Monet 纹理 UV 滚动（世界 XZ / 秒）。Glint V 共用此方向，表观漂向一致。
+#define OCEAN_PAINT_SCROLL float2(0.045, -0.12)
+
 // 对齐河：横向 Monet 切片。海贴图已是横笔，不再 st.yx 对调。
 float2 OceanMonetPaintUv(float2 worldXZ, float t, float tileMeters, float bands)
 {
     float tile = max(tileMeters, 80.0);
     float2 st = worldXZ / tile;
-    st += float2(t * 0.045, -t * 0.12);
+    st += OCEAN_PAINT_SCROLL * t;
 
     float b = max(bands, 8.0);
     float zBand = floor(st.y * b) / b;

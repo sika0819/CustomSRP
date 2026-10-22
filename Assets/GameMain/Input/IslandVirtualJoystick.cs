@@ -11,12 +11,14 @@ namespace Game
     /// </summary>
     public sealed class IslandVirtualJoystick
     {
-        // Match Boluo GameControl.prefab: fanwei 444, drag 180.
-        const float DeadZone = 14f;
+        // Match Boluo GameControl.prefab: fanwei 444, drag 180 (portrait design @ 1125 short edge).
+        const float DeadZoneDesign = 14f;
         const float RingDesign = 444f;
         const float KnobDesign = 180f;
-        const float RimMargin = 18f;
+        const float RimMarginDesign = 18f;
         const float RingInnerRadiusFactor = 0.878f;
+        /// <summary>Portrait design short edge; joystick scales so physical throw stays stable across orientation.</summary>
+        const float RefShortEdge = 1125f;
 
         VisualElement _host;
         VisualElement _hit;
@@ -30,6 +32,7 @@ namespace Game
         int _pointerId = -1;
         float _ringSize = RingDesign;
         float _knobSize = KnobDesign;
+        float _deadZone = DeadZoneDesign;
         float _maxDrag = 48f;
 
         public bool IsActive => _active;
@@ -66,16 +69,39 @@ namespace Game
 
         public void ApplyLayoutScale()
         {
-            // PanelSettings already scales like Boluo CanvasScaler; keep design px.
-            _ringSize = RingDesign;
-            _knobSize = KnobDesign;
+            // Short-edge relative (common floating-stick): Match Height landscape enlarges
+            // panel short edge → scale up design px so on-screen throw ≈ portrait.
+            float shortEdge = ResolvePanelShortEdge();
+            float s = shortEdge > 1f ? shortEdge / RefShortEdge : 1f;
+            _ringSize = RingDesign * s;
+            _knobSize = KnobDesign * s;
+            _deadZone = DeadZoneDesign * s;
+            float rim = RimMarginDesign * s;
             float ringInnerR = _ringSize * 0.5f * RingInnerRadiusFactor;
             float knobR = _knobSize * 0.5f;
-            _maxDrag = Mathf.Max(DeadZone + 1f, ringInnerR - knobR - RimMargin);
+            _maxDrag = Mathf.Max(_deadZone + 1f, ringInnerR - knobR - rim);
             ApplyGlyphSize(_ring, _ringSize);
             ApplyGlyphSize(_knob, _knobSize);
             if (!_active)
                 HideGlyphs();
+        }
+
+        float ResolvePanelShortEdge()
+        {
+            VisualElement el = _host != null ? _host : _paint;
+            if (el != null)
+            {
+                float w = el.resolvedStyle.width;
+                float h = el.resolvedStyle.height;
+                if (w > 1f && h > 1f)
+                    return Mathf.Min(w, h);
+            }
+
+            // Match Height fallback: panel height = ref 2436, width follows aspect.
+            const float RefH = 2436f;
+            float sh = Mathf.Max(1f, Screen.height);
+            float panelW = Screen.width * RefH / sh;
+            return Mathf.Min(panelW, RefH);
         }
 
         public void TickFrame(bool allowBegin)
@@ -92,9 +118,12 @@ namespace Game
                 return false;
 
             float dis = _offset.magnitude;
-            speedRatio = Mathf.Clamp01(dis / _maxDrag);
-            if (dis <= DeadZone)
+            if (dis <= _deadZone)
                 return true;
+
+            // Remap past dead zone → 0..1 (full throw = full walk), independent of resolution.
+            float span = Mathf.Max(1e-3f, _maxDrag - _deadZone);
+            speedRatio = Mathf.Clamp01((dis - _deadZone) / span);
 
             // Panel +Y is down → game +Y is screen-up.
             direction = new Vector2(_offset.x, -_offset.y) / dis;
@@ -343,7 +372,7 @@ namespace Game
             Place(_knob, origin + offset, _knobSize);
             SetShown(_knob, true);
 
-            if (mag > DeadZone)
+            if (mag > _deadZone)
             {
                 Place(_ring, origin, _ringSize);
                 float deg = Mathf.Atan2(offset.y, offset.x) * Mathf.Rad2Deg;

@@ -27,10 +27,9 @@ Shader "CustomSRP/OilNPR"
         // Billboard only: keep _OilFoliage on, but disable the foliage path around noon
         // (period≈1). Near leaves leave this off so they stay foliage all day.
         [Toggle] _OilFoliageSkipDay ("Foliage Off At Noon", Float) = 0
-        // Cross-card LOD billboards: yaw kept card to camera, drop the orthogonal card.
-        [Toggle] _OilCrossBillboard ("Tree Cross Billboard", Float) = 0
-        // Single-card impostor: continuous Y-axis yaw to face camera (cylindrical).
-        [Toggle] _OilYBillboard ("Tree Y Billboard", Float) = 0
+        // Runtime-only (EnvTreeBillboardUtil); not authored on shared mats.
+        [HideInInspector] [Toggle] _OilCrossBillboard ("Tree Cross Billboard", Float) = 0
+        [HideInInspector] [Toggle] _OilYBillboard ("Tree Y Billboard", Float) = 0
         [NoScaleOffset] _BumpMap ("Billboard Baked Normal (RGB)", 2D) = "bump" {}
         _NormalStrength ("Billboard Normal Strength", Range(0, 1)) = 0.85
         _EdgeFade ("Billboard Edge Fade", Range(0, 0.5)) = 0.12

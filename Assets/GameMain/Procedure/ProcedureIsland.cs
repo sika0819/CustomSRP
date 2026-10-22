@@ -156,9 +156,11 @@ namespace Game
                 _worldLoadRoutine = null;
             }
 
+            // 杀进程 / 正常离岛都尽量落盘坐标（大气已在变更时 Persist，此处一并 flush）。
+            IslandPlayerPosSave.TrySaveCurrentAndFlush();
+
             if (!isShutdown)
             {
-                IslandPlayerPosSave.TrySaveCurrent();
                 IslandPlayerPosSave.ResetSession();
                 AudioInteractionBootstrap.Shutdown();
                 WanosAudio.WanosEngine.StopEngine("ProcedureIsland.OnLeave");
@@ -185,7 +187,8 @@ namespace Game
                         AccountPasswordLoginThrottle.ClearAll();
                     BoluoGameSave.Load();
                     DownloadedUnplayedManager.EnsureLoaded();
-                    GameEntry.Weather?.ApplyLocalClockIfNeeded();
+                    // 有存档则恢复天气/时段；否则跟墙钟并写入首份快照。
+                    GameEntry.Weather?.RestoreOrApplyLocalClock();
                     GameEntry.Music?.ApplySavedVolumes();
                     BootLoadingService.ReportProgress(0.71f, "正在进入世界...");
                     _phase = Phase.World;
@@ -231,7 +234,7 @@ namespace Game
                             Log.Warning("[ProcedureIsland] stale IslandMainForm — CloseGroup Main before reopen");
                             UiAssets.CloseGroup("Main");
                         }
-                        GameEntry.Weather?.ApplyLocalClockIfNeeded();
+                        // 不再 ApplyLocalClock：Services 已 Restore；此处只推视觉。
                         GameEntry.Weather?.PushVisuals();
                         Log.Info("[ProcedureIsland] OpenUIForm IslandMainForm");
                         GameEntry.UI.OpenUIForm(UiAssets.IslandMainForm, "Main");

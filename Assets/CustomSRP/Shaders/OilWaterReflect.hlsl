@@ -72,9 +72,10 @@ void OilWaterPeriodLookFallback(
     }
     else if (index == 1)
     {
-        zenith = half3(0.0667h, 0.4784h, 1.0000h);
-        mid = half3(0.361h, 0.632h, 0.965h);
-        horizon = half3(0.7216h, 0.8196h, 0.9216h);
+        // Camera_1 noon — keep in sync with OilSkyboxNPRPass PeriodLookFallback.
+        zenith = half3(0.0685h, 0.4793h, 1.0000h);
+        mid = half3(0.2739h, 0.5619h, 0.9154h);
+        horizon = half3(0.4793h, 0.6445h, 0.8308h);
         ground = half3(0.8392h, 0.7686h, 0.7020h);
         sunDisc = half3(1.0000h, 0.9804h, 0.8235h);
         sunGlow = half3(1.0000h, 0.9804h, 0.8235h);
@@ -199,12 +200,12 @@ void OilWaterSkyAnchors(
     if (sunrise > 0.001h)
     {
         zenith = lerp(zenith, half3(1.0 / 255.0, 40.0 / 255.0, 205.0 / 255.0), sunrise);
-        mid = lerp(mid, half3(212.0 / 255.0, 140.0 / 255.0, 104.0 / 255.0), sunrise);
-        horizon = lerp(horizon, half3(246.0 / 255.0, 192.0 / 255.0, 31.0 / 255.0), sunrise);
+        mid = lerp(mid, half3(72.0 / 255.0, 104.0 / 255.0, 184.0 / 255.0), sunrise);
+        horizon = lerp(horizon, half3(224.0 / 255.0, 160.0 / 255.0, 40.0 / 255.0), sunrise);
         sunDisc = lerp(sunDisc, half3(1.0, 138.0 / 255.0, 95.0 / 255.0), sunrise);
-        sunGlow = lerp(sunGlow, half3(1.0, 180.0 / 255.0, 42.0 / 255.0), sunrise);
-        sunIntensity = lerp(sunIntensity, 1.05h, sunrise);
-        sunGlowAmt = lerp(sunGlowAmt, 0.28h, sunrise);
+        sunGlow = lerp(sunGlow, half3(240.0 / 255.0, 168.0 / 255.0, 58.0 / 255.0), sunrise);
+        sunIntensity = lerp(sunIntensity, 0.72h, sunrise);
+        sunGlowAmt = lerp(sunGlowAmt, 0.16h, sunrise);
     }
 }
 
@@ -276,25 +277,42 @@ half3 ApplyOilWaterReflection(
     half facing = saturate(dot(viewDir, half3(0.0h, 1.0h, 0.0h)));
     half fresnel = saturate(1.0h - facing);
     fresnel = fresnel * fresnel * (3.0h - 2.0h * fresnel);
-    // Soft glaze — never a hard mirror, even at grazing angles.
-    half mix = strength * lerp(0.2h, 0.7h, fresnel);
+    // Soft glaze — 掠射上限收紧，避免宽 FOV 屏幕边缘刷成奶白。
+    half mix = strength * lerp(0.18h, 0.52h, fresnel);
     mix *= lerp(0.9h, 1.0h, stroke);
+
+    // 屏幕边缘：FOV 角上 viewDir 更掠射，解析天空被 Fresnel 拉满 → 跟镜头边走的白带。
+    // 边框压 mix，画面中心倒影仍叠天空色。
+    float2 frame = saturate(min(screenUV, 1.0 - screenUV) * 4.5);
+    half inFrame = saturate(frame.x * frame.y);
+    mix *= lerp(0.38h, 1.0h, inFrame);
 
     float3 n = normalize(lerp(float3(0.0, 1.0, 0.0), (float3)normalWS, 0.35));
     float3 rayDir = reflect(-(float3)viewDir, n);
     half3 reflectCol = OilWaterAnalyticSky(rayDir, stroke);
 
-    // 全时段把倒影色往水体本色调，避免 horizon/sun 把水面贴成偏白。
-    // 不动 mix / fresnel / _ReflectStrength（倒影可见度由它们控制）。
+    // 倒影保留天空色相；高亮（含微彩过曝灰天）往水体本色收。
     {
         half3 waterTint = lerp(
             (half3)_BaseColor.rgb,
             (half3)_ShallowColor.rgb,
             saturate(fresnel * 1.4h + 0.25h));
-        // BaseColor 偏青（G>R）时正视会把倒影拖成墨绿；压一档 G，并把 keep 抬高保留更多天光。
         half rb = (waterTint.r + waterTint.b) * 0.5h;
         waterTint.g = lerp(waterTint.g, rb, 0.35h);
-        half keep = lerp(0.42h, 0.72h, fresnel);
+        half keep = lerp(0.40h, 0.62h, fresnel);
+        keep *= lerp(0.72h, 1.0h, inFrame);
+
+        half reflL = max(reflectCol.r, max(reflectCol.g, reflectCol.b));
+        half reflC = reflL - min(reflectCol.r, min(reflectCol.g, reflectCol.b));
+        half chalk = saturate((reflL - 0.68h) * 3.2h) * saturate(1.0h - reflC * 7.0h);
+        // 灰白天也算热：亮度够高就压一档，不只砍零彩度。
+        half hot = saturate((reflL - 0.78h) * 4.5h);
+        chalk = saturate(max(chalk, hot * 0.55h));
+        half sunrise = (half)saturate(_OilSkySunrise);
+        chalk = saturate(chalk * lerp(0.7h, 1.15h, sunrise));
+        reflectCol = lerp(reflectCol, waterTint, chalk * 0.5h);
+        reflectCol *= lerp(1.0h, 0.78h, chalk);
+
         reflectCol = lerp(waterTint, reflectCol, keep);
     }
 

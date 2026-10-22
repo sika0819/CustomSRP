@@ -72,7 +72,6 @@ Material:
     - _InternalEdge: 0
     - _LayerDetailStrength: 0
     - _NormalStrength: 0.85
-    - _OilCrossBillboard: 0
     - _OilFoliage: 0
     - _Outline: 0
     - _OutlineBreak: 0.12

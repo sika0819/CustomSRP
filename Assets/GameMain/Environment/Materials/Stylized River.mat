@@ -27,7 +27,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _GlintMap:
-        m_Texture: {fileID: 2800000, guid: 899d68770692240cb83aef8ababfc7cf, type: 3}
+        m_Texture: {fileID: 2800000, guid: 6af26b362ad64f439ba2bc20d968cbf4, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _IntersectionNoise:
@@ -44,17 +44,17 @@ Material:
     - _DstBlend: 10
     - _GlintStrength: 1.2
     - _GlintTile: 10
-    - _IntersectionClipping: 0.689
+    - _IntersectionClipping: 0.631
     - _IntersectionDistortion: 0.12
     - _IntersectionFalloff: 0.68
-    - _IntersectionLength: 1.8
+    - _IntersectionLength: 1.15
     - _IntersectionSpeed: 0.3
-    - _IntersectionTiling: 0.2
+    - _IntersectionTiling: 0.28
     - _PaintContrast: 3
-    - _PaintRelief: 0.055
+    - _PaintRelief: 0.18
     - _PaintTile: 20
     - _PremulAlpha: 1
-    - _ReflectStrength: 0.146
+    - _ReflectStrength: 0.48
     - _ShadeSteps: 3
     - _ShoreSteep: 0.92
     - _SpecularBoost: 0.6
@@ -62,16 +62,16 @@ Material:
     - _SrcBlend: 1
     - _StrokeBands: 20.8
     - _StrokeSlice: 0
-    - _StrokeWarp: 0.31
+    - _StrokeWarp: 0.14
     - _ZWrite: 0
     m_Colors:
     - _AmbientColor: {r: 0.48, g: 0.54, b: 0.62, a: 1}
     - _BankUv: {r: 0, g: 0.134, b: 0.06, a: 0}
-    - _BaseColor: {r: 0.4481132, g: 0.86484414, b: 1, a: 1}
+    - _BaseColor: {r: 0.52156866, g: 0.7921569, b: 0.9647059, a: 1}
     - _GlintColor: {r: 0.92, g: 0.78, b: 0.42, a: 1}
-    - _IntersectionColor: {r: 0.78, g: 0.84, b: 0.86, a: 1}
+    - _IntersectionColor: {r: 0.78, g: 0.84, b: 0.86, a: 0.92}
     - _MeshFlowScale: {r: 50, g: -100, b: 0, a: 0}
-    - _ShallowColor: {r: 0.32, g: 0.4, b: 0.34, a: 0.82}
+    - _ShallowColor: {r: 0.18, g: 0.28, b: 0.36, a: 0.9}
     - _SpecularColor: {r: 0.78, g: 0.74, b: 0.52, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

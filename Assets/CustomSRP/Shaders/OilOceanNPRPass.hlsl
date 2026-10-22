@@ -70,12 +70,10 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
     float2 side = float2(-sunH.y, sunH.x);
     float2 fromCam = positionWS.xz - _WorldSpaceCameraPos.xz;
 
-    // 沿波向滚动：风向决定光痕走向，滚动速度随风力缩放。
-    float2 waveH = OCEAN_WAVE_DIR0;
-    float2 waveSide = float2(-waveH.y, waveH.x);
-    float along = dot(fromCam, waveH);
-    float lat = dot(fromCam, waveSide);
-    lat += dot(float2(normalWS.x, normalWS.z), waveSide) * 2.4;
+    // 车道沿相机→太阳（光痕从太阳底下伸出）；V 滚动跟 Monet 纹理，不跟太阳。
+    float along = dot(fromCam, sunH);
+    float lat = dot(fromCam, side);
+    lat += dot(float2(normalWS.x, normalWS.z), side) * 2.4;
 
     // 海面车道比河宽；_SunPathWidth 仍作窄度（默认 4.5 → ×1.33）。
     float halfW = lerp(3.5, 16.0, saturate(along / 220.0));
@@ -95,11 +93,13 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
         return 0.0h;
     }
 
-    // U：侧向进竖列中心；V：沿光迹滚动（速度随风力缩放）。
+    // U：侧向进竖列中心；V：与 OceanMonetPaintUv 同向滚动（+t 对齐 st += SCROLL * t）。
     float u = saturate(lat / max(halfW * 2.4, 1e-3) * 0.5 + 0.5);
     float tileM = max(_SunPathWidth * 8.0, 28.0);
+    float2 scrollDir = normalize(OCEAN_PAINT_SCROLL);
+    float alongPaint = dot(positionWS.xz, scrollDir);
     float glintSpeed = 0.05 + max(_OilOceanWindStrength, 0.0) * 0.12;
-    float v = frac(along / tileM - t * glintSpeed);
+    float v = frac(alongPaint / tileM + t * glintSpeed);
     float2 st = float2(u, v);
 #if defined(OIL_MOBILE_PERF)
     half3 g = (half3)SAMPLE_TEXTURE2D(_SparkleBrush, sampler_SparkleBrush, st).rgb;

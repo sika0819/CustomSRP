@@ -47,8 +47,19 @@ namespace Game
 
         public static void ApplyUserSession(string token, string userId, bool isGuest)
         {
+            BoluoSession.LoadFromPrefs();
+            string prevId = BoluoSession.UserId ?? "";
+            string nextId = userId ?? "";
+            // 未走退登的热切账号：旧 userId → 新 userId 时清掉上一账号本地配置。
+            if (!string.IsNullOrEmpty(prevId)
+                && !string.IsNullOrEmpty(nextId)
+                && !string.Equals(prevId, nextId, StringComparison.Ordinal))
+            {
+                BoluoLogout.ClearAccountLocalProgress("userId switched");
+            }
+
             BoluoSession.ApplyUserSession(
-                new UserSession { token = token ?? "", userId = userId ?? "" },
+                new UserSession { token = token ?? "", userId = nextId },
                 isGuest);
             PlayerPrefs.SetInt(IsGuestKey, isGuest ? 1 : 0);
             PlayerPrefs.Save();

@@ -44,6 +44,7 @@ namespace Game
         IAtmosphereVisualDriver _timeLerpDriver;
         bool _lookBlendActive;
         IslandLookKind _lookBlendTo;
+        bool _suppressPersist;
 
         public static WeatherService Ensure()
         {
@@ -58,6 +59,7 @@ namespace Game
 
         void Awake()
         {
+            // 进岛 Procedure 会 RestoreOrApplyLocalClock；此处仅在无快照时跟墙钟。
             ApplyLocalClockIfNeeded();
             PushAll();
         }
@@ -87,18 +89,87 @@ namespace Game
             if (GameEntry.Event != null)
                 GameEntry.Event.Fire(this, TimeOfDayChangedEventArgs.Create(Hours, Period));
             GameEntry.AtmosphereProps?.Refresh();
+            PersistAtmosphereIfSettled();
         }
 
         /// <summary>
-        /// Cold-start / HUD open: wall clock → <see cref="IslandTimePeriod"/> → period anchor
-        /// (06 / 12 / 18 / 00). Matches Boluo InitClockHandFromTimeType so sky, main-light
-        /// intensity, and fog tint use that slot's presets rather than mid-slot interpolation.
+        /// 进岛：有存档快照则恢复；否则墙钟 → 时段锚点，并写入首份快照。
+        /// </summary>
+        public void RestoreOrApplyLocalClock()
+        {
+            if (BoluoGameSave.TryApplyIslandAtmosphere(this))
+                return;
+            ApplyWallClock();
+            PersistAtmosphereIfSettled();
+        }
+
+        /// <summary>切账号 / 退登：内存回到默认大气，禁止写盘（磁盘已由 persistence 清空）。</summary>
+        public void ClearForAccountSwitch()
+        {
+            _suppressPersist = true;
+            try
+            {
+                StopTimeLerp();
+                ClearPanelTransitionLock();
+                Kind = IslandWeatherKind.Cloud;
+                Level = 1;
+                Hours = 12f;
+                Period = IslandTimePeriod.Noon;
+                LookKind = IslandLookKind.Canonical;
+                FogDensity = 0.001f;
+                _hazeFogDensity = 0.001f;
+                PushAll();
+            }
+            finally
+            {
+                _suppressPersist = false;
+            }
+        }
+
+        /// <summary>
+        /// HUD / 冷启动：已有大气快照则不动（避免覆盖恢复结果）；否则跟墙钟。
         /// </summary>
         public void ApplyLocalClockIfNeeded()
+        {
+            BoluoGameSave.EnsureLoaded();
+            if (BoluoGameSave.HasIslandAtmosphere)
+                return;
+            ApplyWallClock();
+        }
+
+        void ApplyWallClock()
         {
             var now = System.DateTime.Now;
             float clockHours = now.Hour + now.Minute / 60f;
             SetPeriod(ResolvePeriod(clockHours), animate: false);
+        }
+
+        /// <summary>存档灌入（不写回盘，由调用方决定是否随后 Capture）。</summary>
+        public void ApplyAtmosphereSnapshot(
+            IslandWeatherKind kind,
+            int level,
+            float hours,
+            IslandLookKind lookKind,
+            float fogDensity,
+            bool fireEvent = false)
+        {
+            _suppressPersist = true;
+            try
+            {
+                StopTimeLerp();
+                SetLookKind(lookKind);
+                Hours = Mathf.Repeat(hours, 24f);
+                Period = ResolvePeriod(Hours);
+                PushTime();
+                SetWeather(kind, level, fireEvent);
+                SetFogDensity(fogDensity);
+                if (fireEvent && GameEntry.Event != null)
+                    GameEntry.Event.Fire(this, TimeOfDayChangedEventArgs.Create(Hours, Period));
+            }
+            finally
+            {
+                _suppressPersist = false;
+            }
         }
 
         public void SetTimeOfDay(float hours, bool fireEvent = true)
@@ -109,6 +180,7 @@ namespace Game
             PushTime();
             if (fireEvent && GameEntry.Event != null)
                 GameEntry.Event.Fire(this, TimeOfDayChangedEventArgs.Create(Hours, Period));
+            PersistAtmosphereIfSettled();
         }
 
         public void SetPeriod(IslandTimePeriod period) => SetPeriod(period, animate: false);
@@ -146,9 +218,9 @@ namespace Game
             }
             else
             {
-                // Same palette (morning/noon/evening). Still drop a preset poster pin.
+                // Same palette (morning/noon/evening). Pin look without persisting mid-lerp.
                 _lookBlendActive = false;
-                SetLookKind(nextLook);
+                PushLookKind();
             }
 
             float from = Hours;
@@ -196,6 +268,7 @@ namespace Game
             if (fireEvent && GameEntry.Event != null)
                 GameEntry.Event.Fire(this, WeatherChangedEventArgs.Create(Kind, Level));
             GameEntry.AtmosphereProps?.Refresh();
+            PersistAtmosphereIfSettled();
         }
 
         /// <summary>
@@ -207,6 +280,7 @@ namespace Game
             float scale = WeatherFogScale(Kind, Level);
             _hazeFogDensity = scale > 1e-4f ? FogDensity / scale : FogDensity;
             PushFogDensity();
+            PersistAtmosphereIfSettled();
         }
 
         /// <summary>
@@ -297,6 +371,14 @@ namespace Game
             LookKind = lookKind;
             _lookBlendActive = false;
             PushLookKind();
+            PersistAtmosphereIfSettled();
+        }
+
+        void PersistAtmosphereIfSettled()
+        {
+            if (_suppressPersist || _timeLerpActive)
+                return;
+            BoluoGameSave.CaptureIslandAtmosphere(Kind, Level, Hours, Period, LookKind, FogDensity);
         }
 
         void PushLookBlend(float t)

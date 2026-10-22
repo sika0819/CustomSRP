@@ -1,4 +1,5 @@
 using Game;
+using Game.Native;
 using GameFramework.Event;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -337,6 +338,9 @@ namespace CustomSRP
                 rainIntensity = 0f;
             if (Mathf.Abs(settings.intensity - rainIntensity) > 0.001f)
                 settings.intensity = rainIntensity;
+
+            // Overlay GPU yield 雨天抬下限；Game 侧不引用 OilRainSettings。
+            NativeOverlayGate.SetRainActiveForYield(rainIntensity > 0.01f);
         }
 
         void ApplyFogSettings()

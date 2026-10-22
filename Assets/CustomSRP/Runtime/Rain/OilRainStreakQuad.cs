@@ -1,4 +1,5 @@
 using Game;
+using Game.Native;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -80,6 +81,8 @@ namespace CustomSRP
                 ? OilRainSettings.Current.intensity
                 : _settings.intensity;
             int state = IntensityToState(intensity);
+            // 兜底：强度绕过 Atmosphere 写入时仍同步 overlay yield。
+            NativeOverlayGate.SetRainActiveForYield(state > 0);
             if (state <= 0)
             {
                 ClearImmediate();

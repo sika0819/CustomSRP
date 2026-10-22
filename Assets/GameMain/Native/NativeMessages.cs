@@ -74,10 +74,25 @@ namespace Game.Native
         /// <summary>原生页盖住岛：挡行走且不让触摸穿透时，把 GPU 让给原生。</summary>
         public static bool YieldsGpu => OverlayPresent && !TouchEnabled;
 
+        /// <summary>
+        /// 雨帘可见时抬高 overlay yield 下限（由 CustomSRP 雨驱动写入；Game 不引用 OilRainSettings）。
+        /// </summary>
+        public static bool RainActiveForYield { get; private set; }
+
         public static event System.Action Changed;
 
         static int _fpsBeforeYield = int.MinValue;
         static int _intervalBeforeYield = 1;
+
+        /// <summary>雨强度变化时调用；若正 YieldsGpu 则重算 fps/interval。</summary>
+        public static void SetRainActiveForYield(bool active)
+        {
+            if (RainActiveForYield == active)
+                return;
+            RainActiveForYield = active;
+            if (YieldsGpu)
+                ApplyGpuYield();
+        }
 
         public static void Apply(int present, int touchEnabled, int bottomHidden)
         {
@@ -100,18 +115,29 @@ namespace Game.Native
                 }
 
                 // 不 UnityPause：pause 清 GL，关页会闪相机蓝。隔帧提交，Surface 留最后一帧。
-                // Android 禁止 1fps / interval=60，Push 消费会被拖死；按 60 基准隔 4 帧 ≈ 15fps。
+                // 雨天：30fps / interval 2，雨帘可滚且仍让出 GPU（配合 renderScale 0.25）。
+                // 晴天：Android 禁止 1fps / interval=60（Push 会被拖死）→ 15/4；iOS 1/60 近冻景。
+                int overlayFps;
+                int overlayInterval;
+                if (RainActiveForYield)
+                {
+                    overlayFps = 30;
+                    overlayInterval = 2;
+                }
+                else
+                {
 #if UNITY_ANDROID
-                const int overlayFps = 15;
-                const int overlayInterval = 4;
+                    overlayFps = 15;
+                    overlayInterval = 4;
 #else
-                const int overlayFps = 1;
-                const int overlayInterval = 60;
+                    overlayFps = 1;
+                    overlayInterval = 60;
 #endif
+                }
                 QualitySettings.vSyncCount = 0;
                 Application.targetFrameRate = overlayFps;
                 OnDemandRendering.renderFrameInterval = overlayInterval;
-                Log.Info($"[IMP] overlay gpu-yield on fps={overlayFps} interval={overlayInterval}");
+                Log.Info($"[IMP] overlay gpu-yield on fps={overlayFps} interval={overlayInterval} rain={RainActiveForYield}");
                 return;
             }
 #endif

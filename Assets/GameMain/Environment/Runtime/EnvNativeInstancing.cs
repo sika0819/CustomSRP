@@ -220,7 +220,7 @@ namespace Game
                     prefabAsset, out Mesh mesh, out Material sharedMat, out Bounds localBounds))
                 return -1;
 
-            Material material = EnvTreeBillboardUtil.CreateYBillboardMaterial(sharedMat, mesh);
+            Material material = EnvTreeBillboardUtil.CreateYBillboardMaterial(sharedMat);
             if (mesh == null || material == null)
                 return -1;
 

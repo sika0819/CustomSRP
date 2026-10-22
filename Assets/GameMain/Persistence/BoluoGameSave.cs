@@ -58,9 +58,11 @@ namespace Game
             MigrateVolumesFromSettingIfNeeded(raw);
             _loaded = true;
             Log.Info(
-                $"[BoluoGameSave] loaded guest={GuestSession.IsGuest} weather={_data.weatherLinkage} " +
+                $"[BoluoGameSave] loaded guest={GuestSession.IsGuest} weatherLinkage={_data.weatherLinkage} " +
                 $"healthTip={_data.healthTip} recommend={_data.recommend} " +
-                $"bgm={_data.bgmVolume} voice={_data.voiceVolume}");
+                $"bgm={_data.bgmVolume} voice={_data.voiceVolume} " +
+                $"atm={_data.hasIslandAtmosphere} kind={_data.weatherKind} lv={_data.weatherLevel} " +
+                $"hours={_data.hours:F1} period={_data.period}");
         }
 
         /// <summary>无主存档时，从既有 Setting 音量键迁移一次（正式账号）。</summary>
@@ -176,6 +178,59 @@ namespace Game
             _data.lastPressureLevel = level;
             _data.lastPressureLevelDate = dateUnix;
             Persist();
+        }
+
+        public static bool HasIslandAtmosphere
+        {
+            get
+            {
+                EnsureLoaded();
+                return _data.hasIslandAtmosphere;
+            }
+        }
+
+        /// <summary>写入当前岛上天气/时段快照（游客不落盘）。</summary>
+        public static void CaptureIslandAtmosphere(
+            IslandWeatherKind kind,
+            int level,
+            float hours,
+            IslandTimePeriod period,
+            IslandLookKind lookKind,
+            float fogDensity)
+        {
+            EnsureLoaded();
+            _data.hasIslandAtmosphere = true;
+            _data.weatherKind = (int)kind;
+            _data.weatherLevel = level;
+            _data.hours = hours;
+            _data.period = (int)period;
+            _data.lookKind = (int)lookKind;
+            _data.fogDensity = fogDensity;
+            Persist();
+        }
+
+        /// <summary>
+        /// 若有大气快照则灌进 <paramref name="weather"/>；成功返回 true。
+        /// 调用方负责 <c>fireEvent:false</c> 路径下的 UI 同步。
+        /// </summary>
+        public static bool TryApplyIslandAtmosphere(WeatherService weather)
+        {
+            if (weather == null)
+                return false;
+            EnsureLoaded();
+            if (!_data.hasIslandAtmosphere)
+                return false;
+
+            var kind = (IslandWeatherKind)_data.weatherKind;
+            int level = _data.weatherLevel;
+            float hours = _data.hours;
+            var look = (IslandLookKind)_data.lookKind;
+            float fog = _data.fogDensity;
+
+            weather.ApplyAtmosphereSnapshot(kind, level, hours, look, fog, fireEvent: false);
+            Log.Info(
+                $"[BoluoGameSave] restored atmosphere kind={kind} lv={level} hours={hours:F1} look={look}");
+            return true;
         }
     }
 }

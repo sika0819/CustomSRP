@@ -98,6 +98,7 @@ namespace CustomSRP
         [Tooltip("走完 24 小时一圈的秒数。")]
         public float cycleSeconds = 180f;
 
+        [Tooltip("Lighting 里的 Skybox 材质；Brush / Stars 等参数以该材质为准，本组件只写 _Period。")]
         public Material skyboxMaterial;
         public Light sun;
         public bool driveSun = true;
@@ -111,37 +112,14 @@ namespace CustomSRP
         static bool s_overrideColors;
         static OilSkyColorSet s_colorSet = OilSkyColorSet.DefaultDay;
 
-        [Header("Brush")]
-        [Range(0.5f, 8f)] public float brushScale = 8f;
-        [Range(0f, 1f)] public float brushStrength = 1f;
-        [Range(0.5f, 4f)] public float brushContrast = 1.8f;
-        [Range(0f, 1f)] public float brushRelief = 1f;
-
-        [Header("Stars")]
-        [Range(0.25f, 3f)]
-        [Tooltip("夜晚星点密度。1 为默认，越大越密。")]
-        public float starDensity = 1f;
-
-        [Range(0.25f, 3f)]
-        [Tooltip("单颗星角半径缩放。1 为默认，越大单颗越大。")]
-        public float starSize = 1f;
-
-        Material _runtime;
         /// <summary>Optional override that bypasses the 4-anchor LightPresets interpolation. Null = use the time-of-day table.</summary>
         Color? _lightColorOverride;
 #if UNITY_EDITOR
-        Material _editorPreview;
         bool _editorSunDriveQueued;
 #endif
 
         public const string ShaderName = "CustomSRP/OilSkyboxNPR";
 
-        static readonly int BrushScaleId = Shader.PropertyToID("_BrushScale");
-        static readonly int BrushStrengthId = Shader.PropertyToID("_BrushStrength");
-        static readonly int BrushContrastId = Shader.PropertyToID("_BrushContrast");
-        static readonly int BrushReliefId = Shader.PropertyToID("_BrushRelief");
-        static readonly int StarDensityId = Shader.PropertyToID("_StarDensity");
-        static readonly int StarSizeId = Shader.PropertyToID("_StarSize");
         static readonly int PeriodId = Shader.PropertyToID("_Period");
         static readonly int OilSkyPeriodId = Shader.PropertyToID("_OilSkyPeriod");
         static readonly int OilPeriodAmbientId = Shader.PropertyToID("_OilPeriodAmbient");
@@ -204,12 +182,6 @@ namespace CustomSRP
         int _celestialLookId;
 
         float _lastSyncedPeriod = float.NaN;
-        float _lastBrushScale = float.NaN;
-        float _lastBrushStrength = float.NaN;
-        float _lastBrushContrast = float.NaN;
-        float _lastBrushRelief = float.NaN;
-        float _lastStarDensity = float.NaN;
-        float _lastStarSize = float.NaN;
 
         /// <summary>Guards Apply against OnValidate re-entry when writing Light / Transform.</summary>
         static int skyboxApplyDepth;
@@ -575,42 +547,12 @@ namespace CustomSRP
 #if UNITY_EDITOR
             CancelEditorSunDrive();
 #endif
-            if (_runtime == null)
-            {
-                return;
-            }
-
-            if (RenderSettings.skybox == _runtime && skyboxMaterial != null)
-            {
-                RenderSettings.skybox = skyboxMaterial;
-            }
-
-            if (Application.isPlaying)
-            {
-                Destroy(_runtime);
-            }
-            else
-            {
-                DestroyImmediate(_runtime);
-            }
-
-            _runtime = null;
         }
 
         void OnDestroy()
         {
 #if UNITY_EDITOR
             CancelEditorSunDrive();
-            if (_editorPreview != null)
-            {
-                if (RenderSettings.skybox == _editorPreview)
-                {
-                    RenderSettings.skybox = skyboxMaterial;
-                }
-
-                DestroyImmediate(_editorPreview);
-                _editorPreview = null;
-            }
 #endif
         }
 
@@ -643,71 +585,36 @@ namespace CustomSRP
 
         Material ResolveSkyMaterialForEditor()
         {
-            Material mat = RenderSettings.skybox;
-            if (IsOilSky(mat))
-            {
-                return mat;
-            }
-
-            mat = ActiveSkyMaterial();
-            if (mat != null)
-            {
-                BindSkybox();
-            }
-
-            return mat;
+            BindSkybox();
+            return ActiveSkyMaterial();
         }
 
+        /// <summary>
+        /// Scene Lighting skybox when it is Oil; otherwise the assigned asset.
+        /// No runtime clone — Brush / Stars stay on the shared material for live tweaking.
+        /// </summary>
         Material ActiveSkyMaterial()
         {
-            if (!IsOilSky(skyboxMaterial))
+            Material scene = RenderSettings.skybox;
+            if (IsOilSky(scene))
             {
-                return null;
+                return scene;
             }
 
-            if (Application.isPlaying)
-            {
-                if (_runtime == null)
-                {
-                    _runtime = new Material(skyboxMaterial)
-                    {
-                        name = skyboxMaterial.name + " Runtime"
-                    };
-                }
-
-                return _runtime;
-            }
-
-#if UNITY_EDITOR
-            if (_editorPreview == null || _editorPreview.shader != skyboxMaterial.shader)
-            {
-                if (_editorPreview != null)
-                {
-                    DestroyImmediate(_editorPreview);
-                }
-
-                _editorPreview = new Material(skyboxMaterial)
-                {
-                    name = skyboxMaterial.name + " (Editor Preview)",
-                    hideFlags = HideFlags.HideAndDontSave
-                };
-            }
-
-            return _editorPreview;
-#else
-            return skyboxMaterial;
-#endif
+            return IsOilSky(skyboxMaterial) ? skyboxMaterial : null;
         }
 
         void BindSkybox()
         {
-            Material target = ActiveSkyMaterial();
-            if (target == null || RenderSettings.skybox == target)
+            if (IsOilSky(RenderSettings.skybox))
             {
                 return;
             }
 
-            RenderSettings.skybox = target;
+            if (IsOilSky(skyboxMaterial))
+            {
+                RenderSettings.skybox = skyboxMaterial;
+            }
         }
 
         void ApplySkyOnly()
@@ -1172,8 +1079,9 @@ namespace CustomSRP
                 look.zenith = Color.Lerp(look.zenith, OilSkyLookTables.SunriseSkyZenith, sunrise);
                 look.mid = Color.Lerp(look.mid, OilSkyLookTables.SunriseSkyMid, sunrise);
                 look.horizon = Color.Lerp(look.horizon, OilSkyLookTables.SunriseSkyHorizon, sunrise);
-                look.sunIntensity = Mathf.Lerp(look.sunIntensity, 1.05f, sunrise);
-                look.sunGlow = Mathf.Lerp(look.sunGlow, 0.28f, sunrise);
+                look.sunIntensity = Mathf.Lerp(
+                    look.sunIntensity, OilSkyLookTables.SunriseSunIntensity, sunrise);
+                look.sunGlow = Mathf.Lerp(look.sunGlow, OilSkyLookTables.SunriseSunGlow, sunrise);
             }
 
             return look;
@@ -1400,33 +1308,16 @@ namespace CustomSRP
 
         void SyncSkyMaterial(Material mat, float period, bool force)
         {
-            if (!force && Mathf.Abs(period - _lastSyncedPeriod) < 1e-5f
-                && Mathf.Approximately(brushScale, _lastBrushScale)
-                && Mathf.Approximately(brushStrength, _lastBrushStrength)
-                && Mathf.Approximately(brushContrast, _lastBrushContrast)
-                && Mathf.Approximately(brushRelief, _lastBrushRelief)
-                && Mathf.Approximately(starDensity, _lastStarDensity)
-                && Mathf.Approximately(starSize, _lastStarSize))
+            // Brush / Stars live on the shared skybox material — only drive _Period from the clock.
+            if (!force && Mathf.Abs(period - _lastSyncedPeriod) < 1e-5f)
             {
                 return;
             }
 
             _lastSyncedPeriod = period;
-            _lastBrushScale = brushScale;
-            _lastBrushStrength = brushStrength;
-            _lastBrushContrast = brushContrast;
-            _lastBrushRelief = brushRelief;
-            _lastStarDensity = starDensity;
-            _lastStarSize = starSize;
 
             mat.SetFloat(PeriodId, period);
             Shader.SetGlobalFloat(OilSkyPeriodId, period);
-            mat.SetFloat(BrushScaleId, brushScale);
-            mat.SetFloat(BrushStrengthId, brushStrength);
-            mat.SetFloat(BrushContrastId, brushContrast);
-            mat.SetFloat(BrushReliefId, brushRelief);
-            mat.SetFloat(StarDensityId, starDensity);
-            mat.SetFloat(StarSizeId, starSize);
             PushLookGlobals(ActiveLookId);
             // PushLookGlobals notifies from clock hours; re-check with the period
             // actually written so a mid-lerp clock and material stay aligned.
@@ -1460,25 +1351,19 @@ namespace CustomSRP
             Shader.SetGlobalVector(OilFogCanvasStId, new Vector4(0.016f, 0.016f, 0f, 0f));
         }
 
-        /// <summary>Editor setup: textures + brush/star defaults; sky colors blend in shader from _Period.</summary>
-        public static void SyncSkyMaterialStatic(
-            Material mat,
-            float period,
-            float brushScale,
-            float brushStrength,
-            float brushContrast,
-            float brushRelief,
-            float starDensity = 1f,
-            float starSize = 1f)
+        /// <summary>
+        /// Editor/scene setup: drive clock _Period + look globals only.
+        /// Brush / Stars stay on the material asset — do not overwrite artist values.
+        /// </summary>
+        public static void SyncSkyMaterialStatic(Material mat, float period)
         {
+            if (mat == null)
+            {
+                return;
+            }
+
             mat.SetFloat(PeriodId, period);
             Shader.SetGlobalFloat(OilSkyPeriodId, period);
-            mat.SetFloat(BrushScaleId, brushScale);
-            mat.SetFloat(BrushStrengthId, brushStrength);
-            mat.SetFloat(BrushContrastId, brushContrast);
-            mat.SetFloat(BrushReliefId, brushRelief);
-            mat.SetFloat(StarDensityId, starDensity);
-            mat.SetFloat(StarSizeId, starSize);
             PushLookGlobals(s_activeLookId);
             PushFogCanvasGlobal(mat);
             Shader.SetGlobalVector(OilSkySunDirId, SunDirectionAt(period));
@@ -1711,11 +1596,12 @@ namespace CustomSRP
             public Color ambientZenith;
             public Color ambientHorizon;
 
+            /// <summary>Camera_1 sky + fog + ambient @ 12:00 (ctime 32768).</summary>
             public static OilSkyColorSet DefaultDay => new OilSkyColorSet
             {
-                zenith = new Color(0.0667f, 0.4784f, 1f),
-                mid = new Color(0.361f, 0.632f, 0.965f),
-                horizon = new Color(0.7216f, 0.8196f, 0.9216f),
+                zenith = new Color(0.0685f, 0.4793f, 1f),
+                mid = new Color(0.2739f, 0.5619f, 0.9154f),
+                horizon = new Color(0.4793f, 0.6445f, 0.8308f),
                 ground = new Color(0.8392f, 0.7686f, 0.7020f),
                 sunDisc = new Color(1f, 0.9804f, 0.8235f),
                 sunGlow = new Color(1f, 0.9804f, 0.8235f),
@@ -1723,9 +1609,9 @@ namespace CustomSRP
                 moonGlow = Color.black,
                 lightColor = new Color(1f, 0.9804f, 0.8235f),
                 lightIntensity = 1.5f,
-                fogColor = new Color(0.424f, 0.600f, 0.855f),
-                ambientZenith = new Color(0.592f, 0.710f, 0.482f),
-                ambientHorizon = new Color(0.482f, 0.710f, 0.663f),
+                fogColor = new Color(0.4252f, 0.6011f, 0.8585f),
+                ambientZenith = new Color(0.5922f, 0.7098f, 0.4824f),
+                ambientHorizon = new Color(0.4824f, 0.7098f, 0.6628f),
             };
         }
 

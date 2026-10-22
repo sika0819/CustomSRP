@@ -253,15 +253,16 @@ float3 ApplyOilSkyFogLayer(
 }
 
 // Painted sky base: horizon haze that still leaves oil color through.
+// Opacity floors kept modest — 0.32..0.72 milked noon/dusk pigments at default density.
 float3 ApplyOilSkyFog(float3 color, float3 viewDirWS, half stroke)
 {
-    return ApplyOilSkyFogLayer(color, viewDirWS, stroke, 0.32, 0.72);
+    return ApplyOilSkyFogLayer(color, viewDirWS, stroke, 0.16, 0.46);
 }
 
 // After sun/moon/stars stamps — lighter veil so discs sit in the same air as the horizon.
 float3 ApplyOilCelestialFog(float3 color, float3 viewDirWS, half stroke)
 {
-    return ApplyOilSkyFogLayer(color, viewDirWS, stroke, 0.12, 0.38);
+    return ApplyOilSkyFogLayer(color, viewDirWS, stroke, 0.06, 0.24);
 }
 
 // Opaque cloud cards: same density-height fog glaze on RGB. Never touch alpha.

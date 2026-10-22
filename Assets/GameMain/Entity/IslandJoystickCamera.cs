@@ -50,7 +50,10 @@ namespace Game
         const float WalkRenderScaleThreshold = 0.05f;
         const float InputSmooth = 10f;
         const float GroundStickSpeed = 2f;
+        /// <summary>Degrees per pixel at <see cref="RefLookWidth"/> (portrait design 1125).</summary>
         const float LookSensitivity = 0.18f;
+        /// <summary>Portrait design width; wider screens scale look down so full-width swipes feel similar.</summary>
+        const float RefLookWidth = 1125f;
         const float ColliderRefreshMinRadius = 48f;
         const float GroundNormalMinY = 0.45f;
         /// <summary>脚底低于海平面超过此值视为走进海里（允许湿沙滩浅滩）。</summary>
@@ -421,8 +424,11 @@ namespace Game
 
         void ConsumeLookInput()
         {
-            if (LocomotionInput.ConsumeLook(out Vector2 look))
-                _yaw += look.x * LookSensitivity;
+            if (!LocomotionInput.ConsumeLook(out Vector2 look))
+                return;
+            // Screen-relative: same fraction of width → same yaw. Ref width keeps portrait feel.
+            float scale = RefLookWidth / Mathf.Max(1f, Screen.width);
+            _yaw += look.x * LookSensitivity * scale;
         }
 
         void ConsumeMoveInput(float dt)
@@ -859,7 +865,7 @@ namespace Game
 
         void ApplyRenderScale(bool walking)
         {
-            // Unity 弹窗 / 原生半层 / 闲置沉浸：同一档 0.25（与沉浸降载策略一致）。
+            // 弹窗 / 原生半层 / 闲置沉浸同档；数值见 IslandCameraSrpSetup（手机 / 闺蜜机分档）。
             // 定时窗只抬 BottomIconsHidden、不抬 OverlayPresent，保持场景正常分辨率。
             float scale = HudOverlayGate.HasPopup() || NativeOverlayGate.OverlayPresent
                 ? IslandCameraSrpSetup.PopupRenderScale

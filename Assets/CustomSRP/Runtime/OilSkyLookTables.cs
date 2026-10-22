@@ -95,19 +95,24 @@ namespace CustomSRP
         }
 
         // boluo-main Camera_1 @ 06:13（PresetsScheme_1 清晨起床）。
+        // Mid stays blue-lavender — peach #D48C68 filled the upper frame chalk-white.
         public static readonly Color SunriseSkyZenith = Hex(0x01, 0x28, 0xCD);
-        public static readonly Color SunriseSkyMid = Hex(0xD4, 0x8C, 0x68); // 暖霞中层（地平金 × 粉云）
-        public static readonly Color SunriseSkyHorizon = Hex(0xF6, 0xC0, 0x1F);
+        public static readonly Color SunriseSkyMid = Hex(0x48, 0x68, 0xB8);
+        public static readonly Color SunriseSkyHorizon = Hex(0xE0, 0xA0, 0x28);
         public static readonly Color SunriseSunDisc = Hex(0xFF, 0x8A, 0x5F);
-        public static readonly Color SunriseSun = Hex(0xFF, 0xB4, 0x2A);
+        public static readonly Color SunriseSun = Hex(0xF0, 0xA8, 0x3A);
         public static readonly Color SunriseFog = Hex(0x97, 0x50, 0x28);
         public static readonly Color SunriseCloud = Hex(0xBC, 0x72, 0x73);
         public static readonly Color SunriseAmbZenith = Hex(0x51, 0x86, 0xB0);
         public static readonly Color SunriseAmbHorizon = Hex(0xC0, 0x6D, 0x31);
-        /// <summary>Camera_1 ambientLightMultiplier @ 06:13.</summary>
-        public const float SunriseAmbientMul = 0.977f;
-        /// <summary>Main-light intensity at sunrise (NPR; Cozy sunlight HDR clamped).</summary>
-        public const float SunriseLightIntensity = 0.62f;
+        /// <summary>Camera_1 ambientLightMultiplier @ 06:13 (pulled down — scene was over-bright).</summary>
+        public const float SunriseAmbientMul = 0.82f;
+        /// <summary>Main-light intensity at sunrise (NPR; was 0.62 + disc 1.05 → yellow flood).</summary>
+        public const float SunriseLightIntensity = 0.45f;
+        /// <summary>Skybox sun disc intensity at sunrise peak (was 1.05).</summary>
+        public const float SunriseSunIntensity = 0.72f;
+        /// <summary>Skybox sun glow amount at sunrise peak (was 0.28).</summary>
+        public const float SunriseSunGlow = 0.16f;
 
         /// <summary>
         /// boluo-main 清晨起床带。峰值约 6:13，8:15 前收回。
@@ -244,13 +249,16 @@ namespace CustomSRP
         static LookTable BuildCanonical()
         {
             var dawnZ = Hex(0x02, 0x25, 0xBD);
-            var dawnH = Hex(0xFF, 0xBC, 0x00);
-            var dawnM = Hex(0xE8, 0xC4, 0xB0);
+            // Gold stays on the horizon; mid must stay blue so the upper frame reads cool.
+            var dawnH = Hex(0xE0, 0xA0, 0x28);
+            var dawnM = Hex(0x3E, 0x5C, 0xAA);
+            // Camera_1 skyZenith/Horizon @ ctime 32768 (12:00). Not morning key2 #B8D1EB.
             var dayZ = Hex(0x11, 0x7A, 0xFF);
-            var dayH = Hex(0xB8, 0xD1, 0xEB);
+            var dayH = Hex(0x7A, 0xA4, 0xD4);
             var dayG = Hex(0xD6, 0xC4, 0xB3);
-            var duskZ = Hex(0x37, 0x42, 0x6E);
-            var duskH = Hex(0xE8, 0xC4, 0x8C);
+            // Dusk must keep indigo + amber — chalk #E8C48C horizon + Soften TwilightFog milked the dome.
+            var duskZ = Hex(0x2A, 0x38, 0x60);
+            var duskH = Hex(0xD4, 0x8A, 0x48);
             // zhanweitu4 night — muted slate / teal-navy (not royal #031252).
             var nightZ = Hex(0x38, 0x4A, 0x6B);
             var nightH = Hex(0x11, 0x2A, 0x46);
@@ -287,9 +295,12 @@ namespace CustomSRP
                 // fogColor5 raw from Camera_1 (Soften → MorningFog / Day haze / NightDistanceFog).
                 light = new[]
                 {
-                    Light(Hex(0xFF, 0xD2, 0x64), 0.47f, Hex(0xA4, 0x9D, 0x94), 1.50f),
-                    Light(Hex(0xFF, 0xFA, 0xD2), 1.5f, Hex(0xB8, 0xC2, 0xD1), 0.50f),
-                    Light(Hex(0xFF, 0xC8, 0x6A), 0.57f, Hex(0xB3, 0xA7, 0xAE), 1.25f),
+                    // Cooler dawn haze; chalk #A49D94 + MorningFog Soften whitened the zenith band.
+                    Light(Hex(0xF0, 0xC0, 0x58), 0.38f, Hex(0x6A, 0x72, 0x8A), 1.35f),
+                    // Day haze stays blue-gray (#6C99DB); chalk #B8C2D1 + Soften → MorningFog milked noon.
+                    Light(Hex(0xFF, 0xFA, 0xD2), 1.5f, Hex(0x6C, 0x99, 0xDB), 0.50f),
+                    // Warm dusk haze — pale #B3A7AE + TwilightFog Soften washed the skybox white.
+                    Light(Hex(0xFF, 0xC8, 0x6A), 0.57f, Hex(0x8E, 0x6A, 0x5C), 1.25f),
                     Light(Hex(0x3A, 0x4E, 0x66), 0.16f, Hex(0x2A, 0x32, 0x3A), 1.05f),
                 },
             };
@@ -451,6 +462,7 @@ namespace CustomSRP
             var dawnZ = Hex(0x02, 0x25, 0xBD);
             var dawnH = Hex(0xFC, 0xBE, 0x0B);
             var dayZ = Hex(0x01, 0x4F, 0xFF);
+            // Camera_1 noon horizon sample (Atmosphere 8 keeps deep zenith).
             var dayH = Hex(0x7A, 0xA4, 0xD4);
             var duskZ = Hex(0x37, 0x42, 0x6E);
             var duskH = Hex(0xE8, 0xC4, 0x8C);

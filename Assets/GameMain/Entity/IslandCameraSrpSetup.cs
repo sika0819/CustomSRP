@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using Game.BoluoApi;
 using Game.Native;
 using UnityEngine;
 
@@ -15,19 +16,20 @@ namespace Game
         const string CrpTypeName = "CustomSRP.CustomRenderPipelineCamera, Assembly-CSharp";
 
         /// <summary>
-        /// 站立 / 走路共用一档，避免起停走时 bufferSize 抖动触发中间 RT 重建。
-        /// 沉浸 / 弹窗仍压到 0.25。
+        /// 站立 renderScale。手机 0.5；闺蜜机大屏默认 1（锐度优先）。
         /// </summary>
-        public static float DefaultRenderScale => 0.5f;
+        public static float DefaultRenderScale => BoluoDeviceInfo.IsSkyworthGmj() ? 1f : 0.5f;
 
-        /// <summary>走路与站立同档（B5：消 RT 抖动）。</summary>
-        public static float WalkingRenderScale => DefaultRenderScale;
+        /// <summary>
+        /// 走路略压一档省带宽。手机 0.375；闺蜜机 0.5。起停会重建中间 RT，可接受。
+        /// </summary>
+        public static float WalkingRenderScale => BoluoDeviceInfo.IsSkyworthGmj() ? 0.5f : 0.375f;
 
-        /// <summary>Unity Panel/Dialog 或原生半层（OverlayPresent）打开时压到 0.25，与沉浸同档。</summary>
-        public const float PopupRenderScale = 0.25f;
+        /// <summary>Unity Panel/Dialog 或原生半层（OverlayPresent）打开时，与沉浸同档。</summary>
+        public static float PopupRenderScale => ImmersiveRenderScale;
 
-        /// <summary>Idle 沉浸模式（HUD 隐去）同样 0.25。</summary>
-        public const float ImmersiveRenderScale = 0.25f;
+        /// <summary>Idle 沉浸（HUD 隐去）：手机 0.25；闺蜜机 0.5。</summary>
+        public static float ImmersiveRenderScale => BoluoDeviceInfo.IsSkyworthGmj() ? 0.5f : 0.25f;
 
         /// <summary>默认目标帧率（与 GameEntry / Base.FrameRate 一致）。</summary>
         public const int DefaultFrameRate = 60;

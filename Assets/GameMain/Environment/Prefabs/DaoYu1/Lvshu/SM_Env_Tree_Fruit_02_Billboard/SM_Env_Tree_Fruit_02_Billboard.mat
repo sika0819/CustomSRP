@@ -13,12 +13,11 @@ Material:
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
   - _CLIPPING
-  - _RECEIVE_SHADOWS
-  - _SHADOWS_CLIP
   m_InvalidKeywords:
   - _CANVAS_ON
   - _OILFOLIAGESKIPDAY_ON
   - _OILFOLIAGE_ON
+  - _SHADOWS_OFF
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -26,6 +25,7 @@ Material:
   stringTagMap: {}
   disabledShaderPasses:
   - Outline
+  - SHADOWCASTER
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
@@ -74,13 +74,13 @@ Material:
     - _OutlineWidth: 0.028
     - _OutlineWobble: 0.85
     - _PaintThickness: 0.18
-    - _ReceiveShadows: 1
+    - _ReceiveShadows: 0
     - _ShadeLift: 0.58
     - _ShadeSteps: 4
     - _ShadowBrushScale: 1.8
     - _ShadowLift: 1.05
     - _ShadowWobble: 0.45
-    - _Shadows: 1
+    - _Shadows: 3
     - _Smoothness: 0
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
@@ -89,7 +89,7 @@ Material:
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
-    - _BaseColor: {r: 1.039345, g: 1.031328, b: 0.982486, a: 1}
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _BottomColor: {r: 0.380392, g: 0.478431, b: 0.34902, a: 1}
     - _Color: {r: 1.131149, g: 1.104427, b: 0.94162, a: 1}
     - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}

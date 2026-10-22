@@ -178,7 +178,7 @@ namespace Game
             ResubscribeHudEvents();
             IslandJoystickCamera.Current?.ForceUnlockLocomotion();
 
-            // Cold-start: wall clock → Period → four cardinal dial snaps (Boluo InitClockHandFromTimeType).
+            // 进岛已 RestoreOrApplyLocalClock；此处只同步 HUD（有快照时不再跟墙钟覆盖）。
             GameEntry.Weather?.ApplyLocalClockIfNeeded();
             SyncDial();
             SyncWeatherIcon();
@@ -402,7 +402,9 @@ namespace Game
 
         void OnApplicationPause(bool paused)
         {
-            if (!paused)
+            if (paused)
+                IslandPlayerPosSave.TrySaveCurrentAndFlush();
+            else
                 _idle.ExitOnReturnFromForeground();
         }
 

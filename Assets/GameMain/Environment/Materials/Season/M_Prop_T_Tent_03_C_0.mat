@@ -81,7 +81,6 @@ Material:
     - _LightStrength: 0.22
     - _LightThreshold: 0.72
     - _NormalStrength: 0.85
-    - _OilCrossBillboard: 0
     - _OilFoliage: 0
     - _Outline: 1
     - _OutlineBreak: 0.12

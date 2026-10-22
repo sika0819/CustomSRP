@@ -138,9 +138,10 @@ SkyPeriodLook PeriodLookFallback(int index)
     SkyPeriodLook p;
     if (index <= 0)
     {
+        // Match Canonical dawn: blue mid (#3E5CAA), gold only on horizon.
         p.zenith = half3(0.0078h, 0.1451h, 0.7412h);
-        p.mid = half3(0.9098h, 0.7686h, 0.6902h);
-        p.horizon = half3(1.0000h, 0.7373h, 0.0000h);
+        p.mid = half3(0.243h, 0.361h, 0.667h);
+        p.horizon = half3(0.878h, 0.627h, 0.157h);
         p.ground = half3(0.40h, 0.36h, 0.26h);
         p.sunDisc = float3(1.0000, 0.9725, 0.9098);
         p.sunGlowColor = float3(1.0000, 0.8235, 0.3922);
@@ -156,9 +157,10 @@ SkyPeriodLook PeriodLookFallback(int index)
     }
     else if (index == 1)
     {
-        p.zenith = half3(0.0667h, 0.4784h, 1.0000h);
-        p.mid = half3(0.361h, 0.632h, 0.965h);
-        p.horizon = half3(0.7216h, 0.8196h, 0.9216h);
+        // Camera_1 noon @ ctime 32768: zenith #117AFF, horizon #7AA4D4.
+        p.zenith = half3(0.0685h, 0.4793h, 1.0000h);
+        p.mid = half3(0.2739h, 0.5619h, 0.9154h);
+        p.horizon = half3(0.4793h, 0.6445h, 0.8308h);
         p.ground = half3(0.8392h, 0.7686h, 0.7020h);
         p.sunDisc = float3(1.0000, 0.9804, 0.8235);
         p.sunGlowColor = float3(1.0000, 0.9804, 0.8235);
@@ -174,9 +176,10 @@ SkyPeriodLook PeriodLookFallback(int index)
     }
     else if (index == 2)
     {
-        p.zenith = half3(0.2157h, 0.2588h, 0.4314h);
-        p.mid = half3(0.459h, 0.437h, 0.473h);
-        p.horizon = half3(0.9098h, 0.7686h, 0.5490h);
+        // Match Canonical dusk: indigo zenith + amber horizon (not chalk peach).
+        p.zenith = half3(0.165h, 0.220h, 0.376h);
+        p.mid = half3(0.445h, 0.355h, 0.337h);
+        p.horizon = half3(0.831h, 0.541h, 0.282h);
         p.ground = half3(0.22h, 0.16h, 0.14h);
         p.sunDisc = float3(1.0000, 0.7843, 0.4157);
         p.sunGlowColor = float3(1.0000, 0.7843, 0.4157);
@@ -281,14 +284,14 @@ void ApplyOilSkySunrise(inout SkyPeriodLook p)
         return;
     }
 
-    // 0x0128CD / 0xD48C68 / 0xF6C01F / 0xFF8A5F / 0xFFB42A
+    // 0x0128CD / 0x4868B8 / 0xE0A028 — mid stays blue; gold only on horizon.
     p.zenith = lerp(p.zenith, half3(1.0 / 255.0, 40.0 / 255.0, 205.0 / 255.0), w);
-    p.mid = lerp(p.mid, half3(212.0 / 255.0, 140.0 / 255.0, 104.0 / 255.0), w);
-    p.horizon = lerp(p.horizon, half3(246.0 / 255.0, 192.0 / 255.0, 31.0 / 255.0), w);
+    p.mid = lerp(p.mid, half3(72.0 / 255.0, 104.0 / 255.0, 184.0 / 255.0), w);
+    p.horizon = lerp(p.horizon, half3(224.0 / 255.0, 160.0 / 255.0, 40.0 / 255.0), w);
     p.sunDisc = lerp(p.sunDisc, float3(255.0 / 255.0, 138.0 / 255.0, 95.0 / 255.0), w);
-    p.sunGlowColor = lerp(p.sunGlowColor, float3(255.0 / 255.0, 180.0 / 255.0, 42.0 / 255.0), w);
-    p.sunIntensity = lerp(p.sunIntensity, 1.05, w);
-    p.sunGlow = lerp(p.sunGlow, 0.28, w);
+    p.sunGlowColor = lerp(p.sunGlowColor, float3(240.0 / 255.0, 168.0 / 255.0, 58.0 / 255.0), w);
+    p.sunIntensity = lerp(p.sunIntensity, 0.72, w);
+    p.sunGlow = lerp(p.sunGlow, 0.16, w);
 }
 
 SkyPeriodLook EvaluatePeriodLook(float period)
@@ -387,7 +390,7 @@ float2 Hash22(float2 p)
 }
 
 // Small oil dabs from Stars_Oil 4x4 atlas. Each cell stamps ONE tile, never the whole sheet.
-// Density / size: material _StarDensity / _StarSize (OilSkyboxTime syncs them).
+// Density / size: material _StarDensity / _StarSize (authored on OilSkybox.mat).
 // One cell, one stamp. The disc is inset so it does not need the eight neighbors.
 half3 PaintStars(half3 sky, float3 viewDir, float yaw, float pitch, float starIntensity)
 {

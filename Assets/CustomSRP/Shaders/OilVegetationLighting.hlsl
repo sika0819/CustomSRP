@@ -7,6 +7,9 @@
 // Dark-scene unify: when main light is dim, ambient pulls toward zenith SH so
 // grass / leaves / billboards share night fill. NightKeep lifts crowns with
 // period oilFill + moon chroma (BoluoNightKeepFoliage) so they don't crush black.
+//
+// Dusk: half-Lambert wrap keeps low sun on up-facing grass; moon cool is gated
+// so warm oilFill periods (黄昏) don't turn blades teal/grey.
 
 #ifndef OIL_PERIOD_AMBIENT_DECLARED
 #define OIL_PERIOD_AMBIENT_DECLARED
@@ -37,6 +40,13 @@ half OilVegPeriodLuma()
     return dot(period, half3(0.2126h, 0.7152h, 0.0722h));
 }
 
+// 1 when oilFill is warm (dusk/dawn horizon) → suppress moon-blue cool on foliage.
+half OilVegPeriodWarmth()
+{
+    half3 period = (half3)_OilPeriodAmbient.rgb;
+    return saturate((period.r - period.b) * 3.5h);
+}
+
 // 0 day → 1 full night. Uses main-light luma and oilFill (dial already night).
 half OilVegetationNightAmount(half lightLum)
 {
@@ -56,6 +66,15 @@ half3 OilVegMoonChroma()
     return moon / srcL;
 }
 
+// How hard to pull ambient toward moon blue. Delayed past dusk; killed by warm oilFill.
+half OilVegMoonCoolAmount(half unify, half nightAmt)
+{
+    half late = saturate((unify - 0.42h) / 0.58h);
+    half night = saturate((nightAmt - 0.35h) / 0.65h);
+    half cool = max(late, night);
+    return cool * (1.0h - OilVegPeriodWarmth());
+}
+
 // lightLum 0 = night → ambient ≈ zenith + period floor; 1 = day → N-keyed SH.
 half3 OilVegetationAmbient(half3 n, half lightLum)
 {
@@ -70,12 +89,13 @@ half3 OilVegetationAmbient(half3 n, half lightLum)
     if (periodLum > 0.02h)
         amb = lerp(amb, max(amb, period), unify * 0.35h);
 
-    // Night: cool the fill toward moon chroma (luma-preserved) so foliage reads slightly blue.
-    if (unify > 0.01h)
+    // Night only: cool fill toward moon. Dusk warm oilFill keeps amber grass/leaves.
+    half moonCool = OilVegMoonCoolAmount(unify, OilVegetationNightAmount(lightLum));
+    if (moonCool > 0.01h)
     {
         half ambLum = max(dot(amb, half3(0.2126h, 0.7152h, 0.0722h)), 1e-3h);
         half3 cool = OilVegMoonChroma() * ambLum;
-        amb = lerp(amb, cool, unify * 0.32h);
+        amb = lerp(amb, cool, moonCool * 0.32h);
     }
     return amb;
 }
@@ -98,7 +118,8 @@ half3 OilVegetationDirect(
 {
     half3 N = OilVegetationLitNormal(n, lightLum);
     half3 ambient = OilVegetationAmbient(N, lightLum);
-    half ndotl = saturate(dot(N, L));
+    // Half-Lambert: dusk low sun still warms up-facing grass (matches terrain NPR wrap).
+    half ndotl = saturate(dot(N, L) * 0.5h + 0.5h);
     half att = saturate(attenuation);
     return albedo * (lightColor * ndotl * att + ambient);
 }
@@ -120,11 +141,13 @@ half3 OilVegetationNightKeep(half3 lit, half3 albedo, half3 n, half lightLum)
     half wantLum = max(fillLum, lerp(0.035h, 0.055h, nightAmt));
     fill *= wantLum / fillLum;
 
-    // Extra cool shift on NightKeep env (chroma only — keep night dark).
+    // Extra cool only after dusk; warm oilFill periods keep amber NightKeep.
+    half moonCool = OilVegMoonCoolAmount(
+        saturate(1.0h - lightLum * 3.5h), nightAmt);
     half3 moon = OilVegMoonChroma();
-    fill = lerp(fill, moon * wantLum, nightAmt * 0.38h);
+    fill = lerp(fill, moon * wantLum, moonCool * 0.38h);
 
-    half3 env = albedo * (fill + moon * 0.055h);
+    half3 env = albedo * (fill + moon * (0.055h * moonCool));
     half3 lifted = max(lit, env);
     return saturate(lerp(lit, lifted, nightAmt * 0.55h));
 }

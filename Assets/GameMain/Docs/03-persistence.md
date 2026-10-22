@@ -49,7 +49,13 @@ static void SetRecommend(bool v);
 static void SetMaxHealthLevel(int level, uint dateUnix);
 static void SetNoEnquireHealthLevel(bool v);
 static void SetLastPressureLevel(int level, uint dateUnix);
+
+static bool HasIslandAtmosphere { get; }
+static void CaptureIslandAtmosphere(kind, level, hours, period, look, fog);
+static bool TryApplyIslandAtmosphere(WeatherService weather);
 ```
+
+岛上大气（天气 kind/level、hours、period、look、fog）写在 `BoluoSaveData.hasIslandAtmosphere` 等字段；`WeatherService` 在稳定变更后 Capture，进岛 `RestoreOrApplyLocalClock` 恢复。
 
 ### BoluoGamePersistence
 
@@ -68,6 +74,7 @@ public static class Keys
     // 账号密码锁定：前缀 "Boluo.AccPwLogin.Fail." / ".LockUtcTicks." / ".PhoneRegistry"
 }
 
+static void ClearAccountBoundProgress();   // 切账号/退登：删位置/大气/首进岛/教程/红点等
 static string LoadBoluoSaveDataRaw();
 static void PersistBoluoSaveDataRaw(string json);
 static void PersistPlayerPositionJson(string json);
@@ -150,3 +157,4 @@ static string PresetKey(string displayName);   // "p:{name}"
 | 老存档缺字段 | iOS 迁移逻辑只在 `UNITY_IOS` 编译 | 跨平台行为差异 |
 | 首次进岛不按存档走 | `DaoYuFirstRunComplete` 标记未打 | 清 `PlayerPrefs` 复现 |
 | 登出后仍读旧坐标 | `BoluoLogout.Execute()` 会置 `UseDefaultPlayerPosNextLoad` 并清会话 | 确认登出走的是 `BoluoLogout.Execute()` |
+| 切账号仍恢复上一账号天气/位置 | 退登只清内存、未删 `BoluoSaveData`/`PlayerPos` | `BoluoLogout.ClearAccountLocalProgress` + `ClearAccountBoundProgress`；`ApplyUserSession` 在 userId 变化时也会清 |

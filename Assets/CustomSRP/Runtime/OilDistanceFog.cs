@@ -10,7 +10,8 @@ namespace CustomSRP
     public static class OilDistanceFog
     {
         public static readonly Color MorningFog = Hex(0xD1, 0xC7, 0xB8);
-        public static readonly Color TwilightFog = Hex(0xC4, 0xB6, 0xC0);
+        // Deeper mauve — chalk #C4B6C0 milked dusk skyboxes to lavender-white.
+        public static readonly Color TwilightFog = Hex(0x7A, 0x68, 0x78);
         public static readonly Color NightDistanceFog = Hex(0x36, 0x36, 0x3C);
 
         static Color Hex(byte r, byte g, byte b) =>
@@ -34,8 +35,10 @@ namespace CustomSRP
             Color.RGBToHSV(src, out float h, out float s, out float v);
             float orangeWall = Mathf.Clamp01((s - 0.22f) / 0.50f)
                 * Mathf.Clamp01((src.r - Mathf.Min(src.g, src.b)) * 2.1f);
-            s = Mathf.Lerp(s, s * 0.32f, orangeWall);
-            v = Mathf.Lerp(v, Mathf.Max(v, 0.58f), orangeWall * 0.55f);
+            // Keep dusk chroma/value — orange-wall crush + V lift was chalking sunset haze.
+            float duskKeep = 1f - dusk * 0.85f;
+            s = Mathf.Lerp(s, s * 0.32f, orangeWall * duskKeep);
+            v = Mathf.Lerp(v, Mathf.Max(v, 0.58f), orangeWall * 0.55f * duskKeep);
 
             float coolTint = 0f;
             if (!night)
@@ -52,13 +55,19 @@ namespace CustomSRP
 
             Color softened = Color.HSVToRGB(h, Mathf.Clamp01(s), Mathf.Clamp01(v));
             softened.a = src.a;
+            // Cool→MorningFog is for dawn/dusk haze walls. At noon (period≈1) keep blue-gray
+            // so the skybox dome stays blue instead of milking to beige chalk.
+            float midday = Mathf.Clamp01(1f - Mathf.Abs(period - 1f) / 0.85f);
             if (!night && coolTint > 0.01f)
-                softened = Color.Lerp(softened, MorningFog, coolTint * 0.82f);
+                softened = Color.Lerp(
+                    softened, MorningFog, coolTint * 0.82f * (1f - midday * 0.92f));
 
+            // Soft mauve wash only — 0.78× chalk TwilightFog erased dusk indigo/amber.
             if (!night && dusk > 0.01f)
-                softened = Color.Lerp(softened, TwilightFog, dusk * 0.78f);
+                softened = Color.Lerp(softened, TwilightFog, dusk * 0.34f);
+            // Dawn: keep cool haze — 0.88× MorningFog chalked the upper sky white.
             else if (dawn > 0.01f)
-                softened = Color.Lerp(softened, MorningFog, dawn * 0.88f);
+                softened = Color.Lerp(softened, MorningFog, dawn * 0.28f);
 
             if (night)
             {

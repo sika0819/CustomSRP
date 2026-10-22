@@ -93,6 +93,13 @@ namespace Game
             BoluoGamePersistence.PersistPlayerPositionJson(JsonUtility.ToJson(prop));
         }
 
+        /// <summary>写当前坐标并立刻 flush（进后台 / 离岛）。</summary>
+        public static void TrySaveCurrentAndFlush()
+        {
+            TrySaveCurrent();
+            BoluoGamePersistence.PlayerPrefsSave();
+        }
+
         static void ApplySpawnPriority(IslandJoystickCamera cam)
         {
             void ApplyDefault() =>

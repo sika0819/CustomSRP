@@ -22,24 +22,21 @@ namespace CustomSRP
         const float RescanSeconds = 1f;
         const float ClipPlaneOffset = 0.04f;
 
-        // Throttle: a full mirror render (cull + opaque + skybox) is one of the
-        // most expensive things in the frame, and a planar reflection at 0.1x /
-        // max 192px cannot show more than a few pixels of camera motion. Compare
-        // the source camera against its PREVIOUS frame pose:
-        //   walking / fast move on mobile -> every WalkMirrorInterval frames
-        //   fast turn (desktop / standing)  -> every frame
-        //   slow turn                       -> even frames only
-        //   stationary (below Still*)       -> never (reuse RT)
-        // Skipped frames reuse the previous RT, which the water shader still
-        // samples through _OilPlanarReflectTex, so the surface stays stable
-        // instead of flickering.
+        // Throttle: a full mirror render (cull + opaque + skybox) is expensive.
+        // The water shader samples _OilPlanarReflectTex with *current* screen UV,
+        // so a stale RT immediately reads as slide / shake / "one frame behind".
+        // Rules (pose vs previous frame):
+        //   any meaningful turn              -> every frame (never throttle yaw/pitch)
+        //   walking on mobile, little turn   -> every WalkMirrorInterval frames
+        //   fast move (standing / desktop)   -> every frame
+        //   slow creep, no turn              -> even frames only
+        //   stationary (below Still*)        -> never (reuse RT)
         const float SlowMoveThresholdSq = 0.0225f; // 0.15 m²
-        const float SlowTurnAngle = 1f;              // degrees
         // Below these: treat as fully still — do not re-render (even-frame path
         // used to fire on zero delta and waste a mirror pass every other frame).
         const float StillMoveThresholdSq = 1e-6f;    // ~1 mm²
         const float StillTurnAngle = 0.05f;          // degrees
-        /// <summary>Walking on mobile: re-render mirror every N frames (reuse RT otherwise).</summary>
+        /// <summary>Mobile walk + little turn: re-render mirror every N frames.</summary>
         const int WalkMirrorInterval = 6;
 
         static readonly int ReflectTexId = Shader.PropertyToID("_OilPlanarReflectTex");
@@ -283,10 +280,8 @@ namespace CustomSRP
         /// <summary>
         /// Frame budget gate for the mirror render. First frame and any frame
         /// after the RT was (re)created must draw — a stale or empty RT would
-        /// otherwise leak into the water. Afterwards the delta against the
-        /// previous frame decides: walking on mobile every N frames; fast turn
-        /// every frame when standing; slow turn only on even frames; fully
-        /// stationary never (reuse last RT).
+        /// otherwise leak into the water. Afterwards pose delta decides; turn
+        /// always wins over walk-interval / even-frame throttle.
         /// </summary>
         bool ShouldRenderThisFrame(Camera source)
         {
@@ -311,29 +306,29 @@ namespace CustomSRP
                 return true;
             }
 
-            // B1: walking on mobile — mirror every WalkMirrorInterval frames.
-            // Cull+opaque of the mirror nearly doubles render-thread cost while
-            // the tiny RT cannot resolve per-frame locomotion anyway.
-            if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)
-                return (Time.frameCount % WalkMirrorInterval) == 0;
-
             Vector3 pos = source.transform.position;
             float dx = pos.x - _prevFramePos.x;
             float dy = pos.y - _prevFramePos.y;
             float dz = pos.z - _prevFramePos.z;
             float moveSq = dx * dx + dy * dy + dz * dz;
+            float turn = Quaternion.Angle(source.transform.rotation, _prevFrameRot);
+
+            // Screen-UV planar sample + stale RT = shake / lag. Never skip on look.
+            if (turn > StillTurnAngle)
+                return true;
+
+            // Mobile walk, mostly translation: interval reuse (tiny RT hides walk parallax).
+            if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)
+                return (Time.frameCount % WalkMirrorInterval) == 0;
+
             if (moveSq > SlowMoveThresholdSq)
                 return true;
 
-            float turn = Quaternion.Angle(source.transform.rotation, _prevFrameRot);
-            if (turn > SlowTurnAngle)
-                return true;
-
             // Truly idle: reuse the previous mirror RT (no cull / opaque / skybox).
-            if (moveSq <= StillMoveThresholdSq && turn <= StillTurnAngle)
+            if (moveSq <= StillMoveThresholdSq)
                 return false;
 
-            // Slow turn / creep: render on even frames only.
+            // Slow creep, no turn: render on even frames only.
             return (Time.frameCount & 1) == 0;
         }
 

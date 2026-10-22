@@ -82,7 +82,6 @@ half OilRiverSunGlint(float3 positionWS, half3 normalWS, float t, half stroke)
         return 0.0h;
     }
 
-    // U：侧向落在单列贴图中心；V：沿光迹滚动（不平铺出第二道）。
     float u = saturate(lat / max(halfW * 2.4, 1e-3) * 0.5 + 0.5);
     float v = frac(along / max((float)_GlintTile, 12.0) - t * 0.12);
     float2 st = float2(u, v);
@@ -108,16 +107,14 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     half3 flowN = RiverFlowNormal(input.flowUv, t, crest);
     half3 geoN = normalize((half3)input.normalWS);
     half3 normalWS = normalize(lerp(geoN, flowN, 0.55h));
-    // 雨滴涟漪：法线序列帧直接扰动法线，光照/折射/高光都会跟着动。
     normalWS = ApplyRainRippleNormal(normalWS, input.positionWS);
-    // 光照用法线压平，避免 NdotL / 高光在河面打出圆形光斑。
     half3 lightN = half3(0.0h, 1.0h, 0.0h);
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
 
+    // 对齐海：深/浅水色 + Monet 笔触主导 albedo。
     half3 albedo = lerp(_ShallowColor.rgb, _BaseColor.rgb, 0.45h);
     albedo *= (half)_AlbedoBoost;
 
-    // Monet 水彩：横向切片采样 PaintMap。
     float2 paintSt = RiverMonetPaintUv(
         input.flowUv, t, _PaintTile, _StrokeBands);
     half3 paint = SampleRiverPaint(paintSt);
@@ -126,7 +123,6 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     albedo = lerp(albedo, paint, relief);
     albedo = ImpastoDeviation(albedo, stroke, relief * 0.55h);
 
-    // 始终采 Depth（Copy Depth 已开）。岸缘用 Intersection，不用 FoamMap。
     Fragment fragment = GetFragment(input.positionCS_SS);
     half2 shore = OilRiverShoreFoamMask(
         fragment,
@@ -137,13 +133,22 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
         t,
         _IntersectionNoise,
         sampler_IntersectionNoise);
-    half intersection = shore.x;
+    half shoreMask = shore.x;
     half shoreWash = shore.y;
 
-    half3 whiteEdge = half3(0.72h, 0.80h, 0.84h);
-    half3 shorePigment = lerp(albedo, whiteEdge, 0.45h);
-    albedo = lerp(albedo, _ShallowColor.rgb, shoreWash * 0.16h);
-    albedo = lerp(albedo, shorePigment, intersection * 0.55h);
+    half night = OilWaterNightWeight(_OilSkyPeriod);
+    albedo = lerp(albedo, _ShallowColor.rgb, shoreWash * 0.18h);
+
+    float viewDepth = max(fragment.bufferDepth - fragment.depth, 0.0);
+    float clearReach = max((float)_IntersectionLength * 1.15, 1.2);
+    half glass = (half)(1.0 - smoothstep(0.06, clearReach, viewDepth));
+    glass = saturate(glass);
+
+    half deepA = (half)_BaseColor.a;
+    half shallowA = (half)_ShallowColor.a;
+    half alpha = lerp(deepA, shallowA, glass * 0.65h);
+    alpha = lerp(alpha, min(shallowA, 0.85h), glass * glass * 0.45h);
+    alpha = lerp(alpha, deepA, night * glass * 0.8h);
 
     Surface surface;
     surface.position = input.positionWS;
@@ -152,7 +157,7 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     surface.viewDirection = (float3)viewDir;
     surface.depth = -TransformWorldToView(input.positionWS).z;
     surface.color = (float3)albedo;
-    surface.alpha = (float)_BaseColor.a;
+    surface.alpha = (float)alpha;
     surface.metallic = 0.0;
     surface.occlusion = 1.0;
     surface.smoothness = 0.0;
@@ -180,40 +185,33 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     color = OilWeaveTint(color, paintSt * 6.0);
 #endif
 
-    // 太阳光痕一道：世界车道遮罩 + 单列 GlintMap，不要 Blinn 圆斑、不要多列平铺。
-    half glint = OilRiverSunGlint(input.positionWS, normalWS, t, stroke);
-    glint *= (1.0h - intersection * 0.85h);
-    color += (half3)_GlintColor.rgb * glint * (half)_GlintStrength;
-
 #if defined(OIL_MOBILE_PERF)
     color = (half3)ApplyOilFog((float3)color, surface.depth, stroke);
 #else
     color = (half3)ApplyOilFog((float3)color, surface.depth, stroke, input.positionWS);
 #endif
 
+    // 对齐海：雾后叠天空/平面倒影，岸沫区压 openWater，否则大气把釉面冲掉。
     color = ApplyOilWaterReflection(
         color,
         input.positionWS,
         normalWS,
         viewDir,
         stroke,
-        1.0h - intersection,
+        (1.0h - shoreMask) * (1.0h - shoreWash),
         fragment.screenUV);
 
-    half3 shoreEdge = lerp(color, whiteEdge, 0.45h);
-    color = lerp(color, _ShallowColor.rgb, shoreWash * 0.14h);
-    color = lerp(color, shoreEdge, intersection * 0.5h);
+    half glint = OilRiverSunGlint(input.positionWS, normalWS, t, stroke);
+    glint *= (1.0h - shoreMask * 0.85h);
+    color += (half3)_GlintColor.rgb * glint * (half)_GlintStrength;
 
-    float viewDepth = max(fragment.bufferDepth - fragment.depth, 0.0);
-    float clearReach = max((float)_IntersectionLength * 1.6, 1.8);
-    half glass = (half)(1.0 - smoothstep(0.05, clearReach, viewDepth));
-    // 浅水区 glass→1 时，颜色再压一档（暗度补偿），避免 Premul 之后整片浅滩发白。
-    color *= lerp(0.78h, 1.0h, 1.0h - glass);
-    half deepA = (half)_BaseColor.a;
-    half shallowA = (half)_ShallowColor.a;
-    half alpha = lerp(deepA, shallowA, glass * 0.65h);
-    alpha = lerp(alpha, min(shallowA, 0.85h), glass * glass * 0.5h);
-    alpha = saturate(alpha + intersection * 0.18h + relief * 0.08h);
+    // 对齐海：雾+倒影之后再画岸沫；钛白偏冷灰，夜晚压暗，避免岸缘一条粉笔白。
+    half3 whiteFoam = half3(0.78h, 0.82h, 0.86h);
+    half3 shoreCol = lerp(color, whiteFoam, 0.72h);
+    half foamNight = lerp(1.0h, 0.38h, night);
+    color = lerp(color, shoreCol, shoreWash * 0.36h * foamNight);
+    color = lerp(color, shoreCol, shoreMask * 0.78h * foamNight);
+    alpha = saturate(alpha + shoreMask * 0.35h + relief * 0.06h);
 
 #if defined(_PREMULTIPLY_ALPHA)
     color *= alpha;

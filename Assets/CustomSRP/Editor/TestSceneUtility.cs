@@ -705,7 +705,8 @@ namespace CustomSRP.Editor
             }
 
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (material == null)
+            bool created = material == null;
+            if (created)
             {
                 material = new Material(sky);
                 AssetDatabase.CreateAsset(material, path);
@@ -759,13 +760,26 @@ namespace CustomSRP.Editor
                 material.SetTexture("_StarsTex", starsTex);
             }
 
+            // Brush / Stars: seed defaults only on brand-new assets; never clobber artist tweaks.
+            if (created)
+            {
+                if (material.HasProperty("_BrushScale"))
+                    material.SetFloat("_BrushScale", 8f);
+                if (material.HasProperty("_BrushStrength"))
+                    material.SetFloat("_BrushStrength", 1f);
+                if (material.HasProperty("_BrushContrast"))
+                    material.SetFloat("_BrushContrast", 1.8f);
+                if (material.HasProperty("_BrushRelief"))
+                    material.SetFloat("_BrushRelief", 1f);
+                if (material.HasProperty("_StarDensity"))
+                    material.SetFloat("_StarDensity", 1f);
+                if (material.HasProperty("_StarSize"))
+                    material.SetFloat("_StarSize", 1f);
+            }
+
             OilSkyboxTime.SyncSkyMaterialStatic(
                 material,
-                OilSkyboxTime.HoursToPeriod(timeOfDay),
-                brushScale: 8f,
-                brushStrength: 1f,
-                brushContrast: 1.8f,
-                brushRelief: 1f);
+                OilSkyboxTime.HoursToPeriod(timeOfDay));
 
             material.enableInstancing = false;
             EditorUtility.SetDirty(material);

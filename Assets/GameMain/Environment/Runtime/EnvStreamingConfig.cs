@@ -38,17 +38,20 @@ namespace Game
         public static float TreeBillboardKeepRadius = 380f;
 
         /// <summary>
-        /// 大树完整 Prefab（LOD0/1 + LODGroup）最远距离。
-        /// 超出后改用 Billboard 轻量代理（可合批）。
-        /// 对齐 Boluo 默认 <c>TreeBillboardEnterRadius</c>（环内 80% ≈ 160），避免广告牌贴脸。
+        /// 大树完整 Prefab 最远距离；超出后改用 Billboard 代理（Native 合批）。
+        /// 须 ≥ 树 LOD 片树切入距离（prefab screenRelativeHeight≈0.12 × lodBias=1 → ~70–90m），
+        /// 只在 LOD 已进片树后再换成合批代理，避免比 LOD 更早贴脸。
         /// </summary>
         public static float TreeFullMeshMaxDist = 160f;
 
         /// <summary>Full↔Billboard 切换迟滞（米），避免边界来回换档。</summary>
         public static float TreeFullMeshHysteresis = 12f;
 
-        /// <summary>远树隔株起点；须 ≥ TreeFullMeshMaxDist，勿在完整树带内抽稀。</summary>
-        public static float FillBoundFarTreeSilhouetteMinDistance = 160f;
+        /// <summary>
+        /// 远树隔株起点（对齐 main / Boluo Non4K = 120）。
+        /// 可小于 <see cref="TreeFullMeshMaxDist"/>：完整树带内先隔株控 fill，再切片树合批。
+        /// </summary>
+        public static float FillBoundFarTreeSilhouetteMinDistance = 120f;
 
         /// <summary>远树隔株：每 N 棵留 1（Boluo Non4KFarTreeSilhouetteStride=6）。</summary>
         public static int FillBoundFarTreeSilhouetteStride = 6;
@@ -62,6 +65,9 @@ namespace Game
         public static float SmallVegShowDistance = 32f;
         public static float ClutterHideDistance = 55f;
         public static float ClutterShowDistance = 45f;
+        /// <summary>栏杆/稻草人：比普通 ZaWu 留更远（农场簇 ~House 周边）。</summary>
+        public static float StructuralClutterHideDistance = 130f;
+        public static float StructuralClutterShowDistance = 110f;
         public static float BuildingLodHideDistance = 130f;
         public static float BuildingLodShowDistance = 110f;
 
@@ -289,10 +295,28 @@ namespace Game
             // Small trees (Guanmu) stay on MeshRenderer / optional LOD0 extract.
             if (IsBigTreeCategory(category))
                 return true;
+            // JianZhu / 结构杂物：合批会 SetRenderersEnabled(false)，超出 NativeInstancingMaxDist
+            // 后既不画合批也不回退 MeshRenderer → 真机建筑/栏杆/稻草人整片消失。
+            // 数量少，走 MeshRenderer；合批留给灌木/草/远树广告牌。
+            if (category == "JianZhu" || IsStructuralClutter(prefabName))
+                return true;
             if (string.IsNullOrEmpty(prefabName))
                 return false;
-            return prefabName.IndexOf("Dock", System.StringComparison.OrdinalIgnoreCase) >= 0
+            // Tent：子节点缩放；合批用根矩阵会画小/被剔（午后放松锚点）。
+            // Dock/Pier：地标，保持 MeshRenderer。
+            return IsTentPrefab(prefabName)
+                   || prefabName.IndexOf("Dock", System.StringComparison.OrdinalIgnoreCase) >= 0
                    || prefabName.IndexOf("Pier", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>栏杆 / 稻草人等结构杂物：不可进 Native（见 SkipNative）。</summary>
+        public static bool IsStructuralClutter(string prefabName)
+        {
+            if (string.IsNullOrEmpty(prefabName))
+                return false;
+            return prefabName.IndexOf("Fence", System.StringComparison.OrdinalIgnoreCase) >= 0
+                   || prefabName.IndexOf("ScareCrow", System.StringComparison.OrdinalIgnoreCase) >= 0
+                   || prefabName.IndexOf("Scarecrow", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>大树（松/绿/椰）：可走 Full Prefab ↔ Billboard 代理两档。</summary>
@@ -420,6 +444,20 @@ namespace Game
 
         public static float GetHideDistance(string category, string prefabName, out float showDistance)
         {
+            // 帐篷：须在 NeverUnload(JianZhu) 之前，否则吃 MaxValue；半径见 TentLod*。
+            if (IsTentPrefab(prefabName))
+            {
+                showDistance = TentLodShowDistance;
+                return TentLodHideDistance;
+            }
+
+            // 栏杆/稻草人：结构点，勿跟普通 ZaWu 32m 一起卸。
+            if (IsStructuralClutter(prefabName))
+            {
+                showDistance = StructuralClutterShowDistance;
+                return StructuralClutterHideDistance;
+            }
+
             if (IsFarFieldLandmark(prefabName) || IsNeverUnloadCategory(category))
             {
                 showDistance = float.MaxValue;
@@ -470,12 +508,6 @@ namespace Game
                 return ClutterHideDistance;
             }
 
-            if (category == "JianZhu" && IsTentPrefab(prefabName))
-            {
-                showDistance = TentLodShowDistance;
-                return TentLodHideDistance;
-            }
-
             if (category == "JianZhu" && IsBuildingForFarCull(prefabName))
             {
                 showDistance = BuildingLodShowDistance;
@@ -499,17 +531,17 @@ namespace Game
             Ring1EnterRadius = 130f;
             Ring1ExitRadius = 160f;
 
-            // 树：近处完整 mesh 到 160；片树 160–220；隔株与切入对齐，避免 120m 就见广告牌。
+            // 树：≤160 完整 Prefab+LODGroup；160–180 片树 Native 合批；120 外 stride6 隔株；keep 180。
             TreeRing0EnterRadius = 70f;
             TreeRing0ExitRadius = 90f;
             TreeRing1EnterRadius = 180f * 0.65f; // ~117
             TreeRing1ExitRadius = 220f * 0.65f;  // ~143
-            TreeBillboardKeepRadius = 220f;
+            TreeBillboardKeepRadius = 180f;
             TreeFullMeshMaxDist = 160f;
             TreeFullMeshHysteresis = 12f;
-            FillBoundFarTreeSilhouetteMinDistance = 160f;
+            FillBoundFarTreeSilhouetteMinDistance = 120f;
             FillBoundFarTreeSilhouetteStride = 6;
-            PrefillTreeBoostRadius = 220f;
+            PrefillTreeBoostRadius = 180f;
 
             // Boluo FillBoundGuanmu*（标准版不收灌木）
             GuanmuHideDistance = 90f;
@@ -522,6 +554,9 @@ namespace Game
             SmallVegShowDistance = 24f;
             ClutterHideDistance = 40f;
             ClutterShowDistance = 32f;
+            // 栏杆/稻草人：真机勿跟普通 clutter 32m；盖住农场簇与中距观景点。
+            StructuralClutterHideDistance = 120f;
+            StructuralClutterShowDistance = 100f;
             BuildingLodHideDistance = 110f;
             BuildingLodShowDistance = 95f;
             // 帐篷：真机仍须远于 House；配合 prefab LOD 阈值放宽，避免 40–80m 闪没。
@@ -536,7 +571,7 @@ namespace Game
             Ring1ExitRadius = Mathf.Max(Ring1ExitRadius, TreeRing1ExitRadius);
 
             NativeInstancingEnabled = true;
-            NativeInstancingMaxDist = Mathf.Max(220f, TreeBillboardKeepRadius);
+            NativeInstancingMaxDist = Mathf.Max(180f, TreeBillboardKeepRadius);
             SpawnPerFrameBudget = 8;
             DespawnPerFrameBudget = 8;
             FinalizePerFrameBudgetMs = 2.5f;

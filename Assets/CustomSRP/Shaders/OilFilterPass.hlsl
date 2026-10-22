@@ -6,9 +6,12 @@
 
 float4 _OilFilterTexelSize;
 float _OilFilterHasDepth;
+// Authored for ~1080 short-side buffers; C# scales down on large (TV) buffers so wet-oil stays sharp.
+float _OilFilterRadiusScale;
 
 #define OIL_FILTER_NEAR_M 1.0
 #define OIL_FILTER_FAR_M 18.0
+#define OIL_FILTER_REF_SHORT 1080.0
 
 half OilFilterLuma(half3 c)
 {
@@ -46,6 +49,10 @@ half3 OilFilterQuadPick(float2 uv, float2 texel, float eye, float sil, out half 
     float farW = smoothstep(OIL_FILTER_NEAR_M, OIL_FILTER_FAR_M, eye);
     float r = lerp(7.5, 5.5, farW);
     r = lerp(r, r * 1.15, sil);
+    // Larger buffer → smaller texel radius (same UV smear looks mushier on big screens).
+    // Unset/0 → treat as 1 so a missed SetGlobal does not kill the pass.
+    float radiusScale = _OilFilterRadiusScale > 1e-4 ? saturate(_OilFilterRadiusScale) : 1.0;
+    r *= radiusScale;
     float2 t = texel * r;
 
     half3 c0 = GetSource(uv + float2(-t.x, -t.y)).rgb;

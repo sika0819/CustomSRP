@@ -29,7 +29,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 2800000, guid: 4249b6a36f37f4aa1b0aa1fb2d0e173f, type: 3}
+        m_Texture: {fileID: 2800000, guid: 8fcfdd22426f74535bb2f0d2442ecdc0, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _BumpMap:
@@ -80,6 +80,8 @@ Material:
     - _NormalStrength: 0.85
     - _OilCrossBillboard: 0
     - _OilFoliage: 0
+    - _OilFoliageSkipDay: 0
+    - _OilYBillboard: 0
     - _Outline: 0
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5
@@ -102,8 +104,10 @@ Material:
     - _SpecularHighlights: 1
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
+    - _TriplanarTiling: 0.25
     - _WindNoiseSize: 0.1
     - _WindStrength: 1
+    - _WorldTriplanar: 0
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}

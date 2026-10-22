@@ -42,13 +42,13 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _BrushContrast: 1.8
+    - _BrushContrast: 2.48
     - _BrushRelief: 1
     - _BrushScale: 8
-    - _BrushStrength: 1
-    - _Period: 1
-    - _StarDensity: 3
-    - _StarSize: 2
+    - _BrushStrength: 0.593
+    - _Period: 0
+    - _StarDensity: 2
+    - _StarSize: 1.5
     m_Colors: []
   m_BuildTextureStacks: []
   m_AllowLocking: 1

@@ -12,6 +12,10 @@ namespace Game
     {
         static bool IsGuestSession => GuestSession.IsGuest;
 
+        /// <summary>正式账号且已登录才读写岛内进度（游客 / 退登后都不碰盘）。</summary>
+        static bool AllowsAccountProgressDisk =>
+            GuestSession.IsLoggedIn && !IsGuestSession;
+
         public static class Keys
         {
             public const string BoluoSaveData = "BoluoSaveData";
@@ -30,18 +34,35 @@ namespace Game
             public const string AccPwPhoneRegistry = "Boluo.AccPwLogin.PhoneRegistry";
         }
 
+        /// <summary>
+        /// 切账号 / 退登：清账号绑定进度（位置、大气存档、首进岛、教程、红点等）。
+        /// 保留设备级键（位置权限、首次联网、密码节流）。
+        /// </summary>
+        public static void ClearAccountBoundProgress()
+        {
+            PlayerPrefs.DeleteKey(Keys.BoluoSaveData);
+            PlayerPrefs.DeleteKey(Keys.PlayerPos);
+            PlayerPrefs.DeleteKey(Keys.DaoYuFirstRunComplete);
+            PlayerPrefs.DeleteKey(Keys.TutorialType);
+            PlayerPrefs.DeleteKey(Keys.GongNengView);
+            PlayerPrefs.DeleteKey(Keys.DownloadedUnplayed);
+            PlayerPrefs.DeleteKey(Keys.ActivityWorldSleepPopupDate);
+            PlayerPrefs.DeleteKey(Keys.AppleUserIdKey);
+            PlayerPrefs.Save();
+        }
+
         #region BoluoSaveData
 
         public static string LoadBoluoSaveDataRaw()
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return "";
             return PlayerPrefs.GetString(Keys.BoluoSaveData, "") ?? "";
         }
 
         public static void PersistBoluoSaveDataRaw(string json)
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return;
             PlayerPrefs.SetString(Keys.BoluoSaveData, json ?? "");
         }
@@ -52,35 +73,35 @@ namespace Game
 
         public static void PersistPlayerPositionJson(string json)
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return;
             PlayerPrefs.SetString(Keys.PlayerPos, json ?? "");
         }
 
         public static bool HasPlayerPositionSaved()
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return false;
             return PlayerPrefs.HasKey(Keys.PlayerPos);
         }
 
         public static string LoadPlayerPositionJson()
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return "";
             return PlayerPrefs.GetString(Keys.PlayerPos, "") ?? "";
         }
 
         public static bool HasDaoYuFirstRunCompleteMarker()
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return false;
             return PlayerPrefs.HasKey(Keys.DaoYuFirstRunComplete);
         }
 
         public static void SetDaoYuFirstRunCompleteMarker()
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return;
             PlayerPrefs.SetInt(Keys.DaoYuFirstRunComplete, 1);
         }
@@ -94,7 +115,7 @@ namespace Game
 
         public static void TrySetTutorialTypeMarker()
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return;
             PlayerPrefs.SetInt(Keys.TutorialType, 1);
         }
@@ -104,7 +125,7 @@ namespace Game
 
         public static void TrySetGongNengViewMarker()
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return;
             PlayerPrefs.SetInt(Keys.GongNengView, 1);
         }
@@ -130,14 +151,14 @@ namespace Game
 
         public static string LoadDownloadedUnplayedRaw()
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return "";
             return PlayerPrefs.GetString(Keys.DownloadedUnplayed, "") ?? "";
         }
 
         public static void PersistDownloadedUnplayedRaw(string json)
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return;
             PlayerPrefs.SetString(Keys.DownloadedUnplayed, json ?? "");
         }
@@ -148,14 +169,14 @@ namespace Game
 
         public static string LoadActivityWorldSleepPopupDate()
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return "";
             return PlayerPrefs.GetString(Keys.ActivityWorldSleepPopupDate, "") ?? "";
         }
 
         public static void TryPersistActivityWorldSleepPopupDateToday(string yyyyMmDd)
         {
-            if (IsGuestSession)
+            if (!AllowsAccountProgressDisk)
                 return;
             PlayerPrefs.SetString(Keys.ActivityWorldSleepPopupDate, yyyyMmDd ?? "");
             PlayerPrefs.Save();

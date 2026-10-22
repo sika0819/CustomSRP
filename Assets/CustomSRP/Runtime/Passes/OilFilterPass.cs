@@ -15,9 +15,16 @@ namespace CustomSRP
         static readonly ProfilingSampler Sampler = new ProfilingSampler("Oil Filter");
         static readonly ProfilerMarker MarkerRender = new ProfilerMarker("OilFilter.Render");
 
+        /// <summary>
+        /// Wet-oil texel radius is authored for this buffer short side.
+        /// Larger buffers (闺蜜机 4K @ scale 1) scale radius down so the smear stays sharp.
+        /// </summary>
+        const float RadiusRefShortSide = 1080f;
+
         static readonly int
             TexelSizeId = Shader.PropertyToID("_OilFilterTexelSize"),
             HasDepthId = Shader.PropertyToID("_OilFilterHasDepth"),
+            RadiusScaleId = Shader.PropertyToID("_OilFilterRadiusScale"),
             DepthCopyId = Shader.PropertyToID("_CameraDepthTexture");
 
         TextureHandle _source;
@@ -26,6 +33,17 @@ namespace CustomSRP
         PostFXStack _stack;
         bool _hasDepth;
         Vector2Int _bufferSize;
+
+        /// <summary>
+        /// Map buffer short side → radius scale. Clamp so phone half-res stays readable
+        /// and large TVs do not get a soft 15px+ smear after upscale.
+        /// </summary>
+        public static float ComputeRadiusScale(int bufferWidth, int bufferHeight)
+        {
+            int shortSide = Mathf.Max(1, Mathf.Min(bufferWidth, bufferHeight));
+            float scale = RadiusRefShortSide / shortSide;
+            return Mathf.Clamp(scale, 0.45f, 1.15f);
+        }
 
         void Render(UnsafeGraphContext context)
         {
@@ -36,6 +54,7 @@ namespace CustomSRP
                 int h = Mathf.Max(1, _bufferSize.y);
                 buffer.SetGlobalVector(TexelSizeId, new Vector4(1f / w, 1f / h, w, h));
                 buffer.SetGlobalFloat(HasDepthId, _hasDepth ? 1f : 0f);
+                buffer.SetGlobalFloat(RadiusScaleId, ComputeRadiusScale(w, h));
                 if (_hasDepth)
                     buffer.SetGlobalTexture(DepthCopyId, _depth);
 

@@ -68,8 +68,9 @@ namespace Game
         static void ApplyDeviceGraphicsPolicy()
         {
 #if !UNITY_EDITOR
-            // Very Low (0): lowest GI/LOD cost; keep CRP + hard shadows (QualitySettings.asset).
+            // Very Low (0): lowest GI / shadow cost; keep CRP + hard shadows (QualitySettings.asset).
             // Clarity comes from DPI×renderScale; FPS from quality + streaming + far clip.
+            // lodBias 不跟 Very Low 的 0.3：见下方覆盖，否则树 LOD 片树会贴脸。
             int veryLow = 0;
             string[] names = QualitySettings.names;
             for (int i = 0; i < names.Length; i++)
@@ -87,6 +88,11 @@ namespace Game
             // stretches onto taller phones (20:9) and flattens UI + game view.
             // Pixel budget = native aspect × DPI scale × CRP render scale.
             QualitySettings.resolutionScalingFixedDPIFactor = 0.7f;
+            // Very Low asset lodBias=0.3 会把树 prefab 的 screenRelativeHeight(0.12)
+            // 片树切入压到 ~20m；拉回 1 与 LOD 作者距离一致（median ~70–90m @fov60）。
+            // GI/阴影等仍用 Very Low；仅恢复 LOD 屏占比标定。
+            QualitySettings.lodBias = 1f;
+            QualitySettings.maximumLODLevel = 0;
             // Keep oil NPR; cut ocean stamps / terrain micro-spec on mobile.
             // Directional hard shadows still sample (see OilNPRLighting).
             Shader.EnableKeyword("OIL_MOBILE_PERF");
@@ -97,6 +103,7 @@ namespace Game
                     : "null")
                 + " res=" + Screen.width + "x" + Screen.height
                 + " dpiScale=" + QualitySettings.resolutionScalingFixedDPIFactor
+                + " lodBias=" + QualitySettings.lodBias
                 + " targetFPS=" + Application.targetFrameRate
                 + " OIL_MOBILE_PERF");
 #endif

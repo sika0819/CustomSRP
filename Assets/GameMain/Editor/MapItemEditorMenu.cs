@@ -378,11 +378,17 @@ namespace Game.Editor
         }
 
         /// <summary>
-        /// 叶片：Alpha Clip + ShadowCaster Clip + 接收阴影。部署前调用，写入材质供 Yoo 打变体。
+        /// 近景叶片：Alpha Clip + ShadowCaster Clip + 接收阴影。
+        /// LOD 广告牌：只保 Clip，默认不投射也不接收阴影（远景省 shadow atlas / PCF）。
+        /// 部署前调用，写入材质供 Yoo 打变体。
         /// </summary>
         [MenuItem("GameMain/Boluo/Ensure Foliage Clip + Shadows", false, 123)]
         public static void EnsureFoliageClipAndShadows()
         {
+            // OilNPR KeywordEnum(On, Clip, Dither, Off) → Off == 3；关 ShadowCaster pass。
+            const float ShadowsOff = 3f;
+            const float ShadowsClip = 1f;
+
             int touched = 0;
             string[] matGuids = AssetDatabase.FindAssets(
                 "t:Material",
@@ -395,10 +401,12 @@ namespace Game.Editor
                     continue;
 
                 string n = mat.name.ToLowerInvariant();
-                bool foliage = n.Contains("shu") || n.Contains("guanmu") || n.Contains("huacao")
+                bool billboard = n.Contains("billboard");
+                bool foliage = billboard
+                               || n.Contains("shu") || n.Contains("guanmu") || n.Contains("huacao")
                                || n.Contains("leaf") || n.Contains("fern") || n.Contains("grass")
                                || n.Contains("bush") || n.Contains("palm") || n.Contains("zacao")
-                               || n.Contains("billboard") || n.Contains("contour")
+                               || n.Contains("contour")
                                || n.StartsWith("sm_env_");
                 bool clip = mat.IsKeywordEnabled("_CLIPPING")
                             || (mat.HasProperty("_Clipping") && mat.GetFloat("_Clipping") > 0.5f);
@@ -418,40 +426,83 @@ namespace Game.Editor
                     dirty = true;
                 }
 
-                if (mat.HasProperty("_Shadows"))
+                if (billboard)
                 {
-                    if (Mathf.Abs(mat.GetFloat("_Shadows") - 1f) > 0.01f)
+                    // Far-tree impostors: no cast, no receive.
+                    if (mat.HasProperty("_Shadows"))
                     {
-                        mat.SetFloat("_Shadows", 1f);
-                        dirty = true;
+                        if (Mathf.Abs(mat.GetFloat("_Shadows") - ShadowsOff) > 0.01f)
+                        {
+                            mat.SetFloat("_Shadows", ShadowsOff);
+                            dirty = true;
+                        }
+
+                        if (mat.IsKeywordEnabled("_SHADOWS_CLIP"))
+                        {
+                            mat.DisableKeyword("_SHADOWS_CLIP");
+                            dirty = true;
+                        }
+
+                        mat.DisableKeyword("_SHADOWS_DITHER");
+                        if (mat.GetShaderPassEnabled("ShadowCaster"))
+                        {
+                            mat.SetShaderPassEnabled("ShadowCaster", false);
+                            dirty = true;
+                        }
                     }
 
-                    if (!mat.IsKeywordEnabled("_SHADOWS_CLIP"))
+                    if (mat.HasProperty("_ReceiveShadows"))
                     {
-                        mat.EnableKeyword("_SHADOWS_CLIP");
-                        dirty = true;
-                    }
+                        if (mat.GetFloat("_ReceiveShadows") > 0.5f)
+                        {
+                            mat.SetFloat("_ReceiveShadows", 0f);
+                            dirty = true;
+                        }
 
-                    mat.DisableKeyword("_SHADOWS_DITHER");
-                    if (!mat.GetShaderPassEnabled("ShadowCaster"))
-                    {
-                        mat.SetShaderPassEnabled("ShadowCaster", true);
-                        dirty = true;
+                        if (mat.IsKeywordEnabled("_RECEIVE_SHADOWS"))
+                        {
+                            mat.DisableKeyword("_RECEIVE_SHADOWS");
+                            dirty = true;
+                        }
                     }
                 }
-
-                if (mat.HasProperty("_ReceiveShadows"))
+                else
                 {
-                    if (mat.GetFloat("_ReceiveShadows") < 0.5f)
+                    if (mat.HasProperty("_Shadows"))
                     {
-                        mat.SetFloat("_ReceiveShadows", 1f);
-                        dirty = true;
+                        if (Mathf.Abs(mat.GetFloat("_Shadows") - ShadowsClip) > 0.01f)
+                        {
+                            mat.SetFloat("_Shadows", ShadowsClip);
+                            dirty = true;
+                        }
+
+                        if (!mat.IsKeywordEnabled("_SHADOWS_CLIP"))
+                        {
+                            mat.EnableKeyword("_SHADOWS_CLIP");
+                            dirty = true;
+                        }
+
+                        mat.DisableKeyword("_SHADOWS_DITHER");
+                        if (!mat.GetShaderPassEnabled("ShadowCaster"))
+                        {
+                            mat.SetShaderPassEnabled("ShadowCaster", true);
+                            dirty = true;
+                        }
                     }
 
-                    if (!mat.IsKeywordEnabled("_RECEIVE_SHADOWS"))
+                    if (mat.HasProperty("_ReceiveShadows"))
                     {
-                        mat.EnableKeyword("_RECEIVE_SHADOWS");
-                        dirty = true;
+                        if (mat.GetFloat("_ReceiveShadows") < 0.5f)
+                        {
+                            mat.SetFloat("_ReceiveShadows", 1f);
+                            dirty = true;
+                        }
+
+                        if (!mat.IsKeywordEnabled("_RECEIVE_SHADOWS"))
+                        {
+                            mat.EnableKeyword("_RECEIVE_SHADOWS");
+                            dirty = true;
+                        }
                     }
                 }
 

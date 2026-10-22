@@ -68,7 +68,6 @@ Material:
     - _GradientAmount: 0.3
     - _InternalEdge: 1
     - _NormalStrength: 0.85
-    - _OilCrossBillboard: 0
     - _OilFoliage: 1
     - _Outline: 1
     - _OutlineBreak: 0.12
