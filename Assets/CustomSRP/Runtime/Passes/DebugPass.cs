@@ -11,7 +11,7 @@ namespace CustomSRP
 
         int _colorLUTResolution;
 
-        [Conditional("DEVELOPMENT_BUILD"), Conditional("UNITY_EDITOR")]
+        [Conditional("UNITY_INCLUDE_INSTRUMENTATION"), Conditional("UNITY_EDITOR")]
         public static void Record(
             RenderGraph renderGraph,
             CustomRenderPipelineSettings settings,

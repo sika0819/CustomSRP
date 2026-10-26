@@ -96,10 +96,10 @@ namespace Game
             }
         }
 
-        static async UniTaskVoid LoadLocalAsync()
+        static UniTaskVoid LoadLocalAsync()
         {
             if (_albums != null || _loading || _fromServer)
-                return;
+                return default;
             _loading = true;
 
             string path = JsonPath();
@@ -107,15 +107,23 @@ namespace Game
             {
                 Debug.LogWarning("[MusicCatalog] JsonPath returned null.");
                 _loading = false;
-                return;
+                return default;
             }
 
 #if UNITY_EDITOR
             LoadJsonFromEditorPath(path);
+            return default;
 #else
-            await LoadJsonFromPlayerAsync(path);
+            return LoadLocalPlayerAsync(path);
 #endif
         }
+
+#if !UNITY_EDITOR
+        static async UniTaskVoid LoadLocalPlayerAsync(string path)
+        {
+            await LoadJsonFromPlayerAsync(path);
+        }
+#endif
 
         /// <summary>Returns album names in load order. Empty array before ready.</summary>
         public static string[] GetAlbumNames()

@@ -21,6 +21,12 @@ namespace Game
         float _phaseRadians;
         bool _shown;
 
+        /// <summary>0 inhale-low … 1 inhale-peak; same curve as glyph scale/alpha.</summary>
+        public float Breath01 { get; private set; }
+
+        /// <summary>Raw phase radians for optional flow-direction drift.</summary>
+        public float BreathPhaseRadians => _phaseRadians;
+
         public bool IsShown => _shown && _el != null && _el.resolvedStyle.display != DisplayStyle.None;
 
         public void Bind(VisualElement breathHint)
@@ -65,6 +71,7 @@ namespace Game
                 return;
             _el.BringToFront();
             _phaseRadians = 0f;
+            Breath01 = 0f;
             ApplyBreath(0f);
             _el.style.display = DisplayStyle.Flex;
             _shown = true;
@@ -89,6 +96,7 @@ namespace Game
                 _phaseRadians -= Mathf.PI * 2f;
 
             float t = (Mathf.Sin(_phaseRadians - Mathf.PI * 0.5f) + 1f) * 0.5f;
+            Breath01 = t;
             ApplyBreath(t);
         }
 

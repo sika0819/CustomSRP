@@ -6,7 +6,17 @@ namespace Game
     public interface IAtmosphereVisualDriver
     {
         void SetTimeOfDayHours(float hours);
+        /// <summary>Snap cloud / rain / foggy visuals to <paramref name="kind"/> + <paramref name="level01To03"/>.</summary>
         void SetWeather(IslandWeatherKind kind, int level01To03);
+        /// <summary>
+        /// Blend cloud / rain / foggy visuals from <paramref name="fromKind"/>/<paramref name="fromLevel"/>
+        /// toward <paramref name="toKind"/>/<paramref name="toLevel"/>. <paramref name="t"/> is 0→1
+        /// (same SmoothStep clock as <see cref="WeatherService"/> weather lerp).
+        /// </summary>
+        void SetWeatherBlend(
+            IslandWeatherKind fromKind, int fromLevel,
+            IslandWeatherKind toKind, int toLevel,
+            float t);
         /// <summary>Absolute ExpSquared density for the active preset look.</summary>
         void SetFogDensity(float exponentialSquaredDensity);
         /// <summary>Optional directional-light color override. Pass null to clear and fall back to the time-of-day table.</summary>

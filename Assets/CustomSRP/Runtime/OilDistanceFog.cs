@@ -65,9 +65,9 @@ namespace CustomSRP
             // Soft mauve wash only — 0.78× chalk TwilightFog erased dusk indigo/amber.
             if (!night && dusk > 0.01f)
                 softened = Color.Lerp(softened, TwilightFog, dusk * 0.34f);
-            // Dawn: keep cool haze — 0.88× MorningFog chalked the upper sky white.
+            // Dawn: warm mist toward MorningFog. 0.28 left haze too blue; 0.88 chalked the dome.
             else if (dawn > 0.01f)
-                softened = Color.Lerp(softened, MorningFog, dawn * 0.28f);
+                softened = Color.Lerp(softened, MorningFog, dawn * 0.58f);
 
             if (night)
             {

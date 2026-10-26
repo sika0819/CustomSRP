@@ -43,6 +43,10 @@ namespace Game
 
         public bool IsReady { get; private set; }
 
+        /// <summary>Forward to streamer trim; no-op on full-spawn path.</summary>
+        public int TrimUnusedPrefabHandles() =>
+            _streamer != null ? _streamer.TrimUnusedPrefabHandles() : 0;
+
         public IEnumerator Run(Transform focus, System.Action<float, string> reportProgress)
         {
             if (_started)
@@ -56,6 +60,8 @@ namespace Game
             yield return LoadAllMapItemBytes();
             if (_allMapItems.Count == 0)
                 Log.Error("[MapItem] AllMapItem empty or failed to load");
+
+            yield return EnvRockShoreWet.PreloadCoroutine(_ownedHandles);
 
             _colliderLod = gameObject.GetComponent<EnvMeshColliderLod>()
                            ?? gameObject.AddComponent<EnvMeshColliderLod>();
@@ -259,7 +265,10 @@ namespace Game
                 instance.transform.localScale = d.Scale;
                 instance.SetActive(d.IsActive);
                 if (EnvStreamingConfig.IsRockCategory(category))
+                {
                     EnvRockColliders.Ensure(instance, d.PrefabName);
+                    EnvRockShoreWet.ApplyIfNearShore(instance);
+                }
                 if (EnvStreamingConfig.IsBridgeCategory(category))
                     EnvBridgePillarFit.Ensure(instance);
                 if (EnvStreamingConfig.IsFarFieldLandmark(d.PrefabName))

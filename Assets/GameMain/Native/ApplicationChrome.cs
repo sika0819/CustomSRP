@@ -44,7 +44,9 @@ namespace Game.Native
 #endif
 
         static States _statusBarState = States.VisibleOverContent;
+#if USE_ANDROID
         static uint _statusBarColor = 0xff000000;
+#endif
         static bool _isStatusBarTranslucent;
         static bool _statusBarIconsDark;
 

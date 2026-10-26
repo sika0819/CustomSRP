@@ -100,6 +100,37 @@ namespace Game
         public static float FinalizePerFrameBudgetMs = 3f;
         public static int SpawnPerFrameBudget = 24;
         public static int DespawnPerFrameBudget = 16;
+
+        /// <summary>
+        /// 揭罩后短时压低 spawn/finalize（不改环半径）。与首转 / PSO 预热错开毛刺。
+        /// </summary>
+        static float _postUncoverQuietUntil = -1f;
+        const float PostUncoverQuietSeconds = 4f;
+        const float PostUncoverSpawnScale = 0.35f;
+        const float PostUncoverFinalizeScale = 0.5f;
+
+        /// <summary>Gmj：揭罩起压低分帧铺装约 <see cref="PostUncoverQuietSeconds"/> 秒。</summary>
+        public static void BeginPostUncoverQuiet()
+        {
+            if (DeviceGraphicsPolicy.Current != DeviceGraphicsClass.Gmj)
+                return;
+            _postUncoverQuietUntil = Time.unscaledTime + PostUncoverQuietSeconds;
+        }
+
+        public static void ClearPostUncoverQuiet() => _postUncoverQuietUntil = -1f;
+
+        static bool InPostUncoverQuiet =>
+            _postUncoverQuietUntil > 0f && Time.unscaledTime < _postUncoverQuietUntil;
+
+        public static int EffectiveSpawnPerFrameBudget =>
+            InPostUncoverQuiet
+                ? Mathf.Max(2, Mathf.RoundToInt(SpawnPerFrameBudget * PostUncoverSpawnScale))
+                : SpawnPerFrameBudget;
+
+        public static float EffectiveFinalizePerFrameBudgetMs =>
+            InPostUncoverQuiet
+                ? Mathf.Max(0.8f, FinalizePerFrameBudgetMs * PostUncoverFinalizeScale)
+                : FinalizePerFrameBudgetMs;
         /// <summary>
         /// 近距启用 MeshCollider。须明显大于走路半秒路程，否则高速接近大石时
         /// 碰撞体尚未打开就会穿进 mesh，再打开也难把 CharacterController 顶出来。
@@ -111,7 +142,7 @@ namespace Game
 
         /// <summary>
         /// 非 Cliff/Cave/Ramp/Spike/Large 的石头：世界空间最长边 ≥ 此值才补 MeshCollider。
-        /// ≈2.5m 可挡住海滩放大的 Rock_Small_01（scale≈7→~2.6m），放过脚边小石。
+        /// 放过脚边过小的石块，只给能挡住角色的大块补碰撞。
         /// </summary>
         public static float RockColliderMinWorldExtent = 2.5f;
 
@@ -519,23 +550,58 @@ namespace Game
         }
 
         /// <summary>
-        /// 真机套 Boluo 标准版（Non4K FillBound）树环：R0=70/90，R1=117/143，keep=180，隔株 stride=6。
-        /// 非树物件仍略收半径保帧。
+        /// 按 <see cref="DeviceGraphicsPolicy"/> 套流式半径。桌面 High 不改（保持 Base 默认）。
         /// </summary>
         public static void ApplyMobileTierDefaults()
         {
-#if !UNITY_EDITOR
-            // 非树环：略收（Lite 无格子驻留，需比 Boluo 通用环紧一点控 fill）。
+            ApplyGraphicsTierDefaults();
+        }
+
+        /// <summary>
+        /// Low≈原真机收紧；Mid 树环放宽；手机 High / Gmj 近 Editor Base；桌面 High 跳过。
+        /// </summary>
+        public static void ApplyGraphicsTierDefaults()
+        {
+            ClearPostUncoverQuiet();
+            DeviceGraphicsProfile profile = DeviceGraphicsPolicy.Profile;
+            if (!profile.ApplyStreamingTune)
+                return;
+
+            switch (DeviceGraphicsPolicy.Current)
+            {
+                case DeviceGraphicsClass.Mid:
+                    ApplyStreamingMid();
+                    break;
+                case DeviceGraphicsClass.High:
+                    ApplyStreamingNearBase();
+                    break;
+                case DeviceGraphicsClass.Gmj:
+                    ApplyStreamingNearBase();
+                    ApplyStreamingGmjDensity();
+                    break;
+                default:
+                    ApplyStreamingLow();
+                    break;
+            }
+
+            Ring1EnterRadius = Mathf.Max(Ring1EnterRadius, TreeRing1EnterRadius);
+            Ring1ExitRadius = Mathf.Max(Ring1ExitRadius, TreeRing1ExitRadius);
+            NativeInstancingEnabled = true;
+            NativeInstancingMaxDist = Mathf.Max(180f, TreeBillboardKeepRadius);
+        }
+
+        /// <summary>原真机 Boluo 标准版 Non4K FillBound 收紧。</summary>
+        static void ApplyStreamingLow()
+        {
             Ring0EnterRadius = 60f;
             Ring0ExitRadius = 78f;
             Ring1EnterRadius = 130f;
             Ring1ExitRadius = 160f;
 
-            // 树：≤160 完整 Prefab+LODGroup；160–180 片树 Native 合批；120 外 stride6 隔株；keep 180。
             TreeRing0EnterRadius = 70f;
             TreeRing0ExitRadius = 90f;
-            TreeRing1EnterRadius = 180f * 0.65f; // ~117
-            TreeRing1ExitRadius = 220f * 0.65f;  // ~143
+            TreeRing1EnterRadius = 180f * 0.65f;
+            TreeRing1ExitRadius = 220f * 0.65f;
             TreeBillboardKeepRadius = 180f;
             TreeFullMeshMaxDist = 160f;
             TreeFullMeshHysteresis = 12f;
@@ -543,39 +609,122 @@ namespace Game
             FillBoundFarTreeSilhouetteStride = 6;
             PrefillTreeBoostRadius = 180f;
 
-            // Boluo FillBoundGuanmu*（标准版不收灌木）
             GuanmuHideDistance = 90f;
             GuanmuShowDistance = 75f;
-
-            // 小物件仍紧收
             SmallRockHideDistance = 75f;
             SmallRockShowDistance = 62f;
             SmallVegHideDistance = 30f;
             SmallVegShowDistance = 24f;
             ClutterHideDistance = 40f;
             ClutterShowDistance = 32f;
-            // 栏杆/稻草人：真机勿跟普通 clutter 32m；盖住农场簇与中距观景点。
             StructuralClutterHideDistance = 120f;
             StructuralClutterShowDistance = 100f;
             BuildingLodHideDistance = 110f;
             BuildingLodShowDistance = 95f;
-            // 帐篷：真机仍须远于 House；配合 prefab LOD 阈值放宽，避免 40–80m 闪没。
             TentLodHideDistance = 200f;
             TentLodShowDistance = 160f;
-            // 真机略收，但仍须大于 MoveSpeed 数帧路程，避免穿进未开碰撞的大石。
             MeshColliderEnableRadius = 72f;
             MeshColliderDisableRadius = 96f;
 
-            // 格子驻留须盖住树环（Boluo：Ring1 >= TreeRing1）
-            Ring1EnterRadius = Mathf.Max(Ring1EnterRadius, TreeRing1EnterRadius);
-            Ring1ExitRadius = Mathf.Max(Ring1ExitRadius, TreeRing1ExitRadius);
-
-            NativeInstancingEnabled = true;
-            NativeInstancingMaxDist = Mathf.Max(180f, TreeBillboardKeepRadius);
             SpawnPerFrameBudget = 8;
             DespawnPerFrameBudget = 8;
             FinalizePerFrameBudgetMs = 2.5f;
-#endif
+        }
+
+        /// <summary>相对 Low 放宽树环（FullMesh ~200、keep ~220、stride 4）。</summary>
+        static void ApplyStreamingMid()
+        {
+            Ring0EnterRadius = 70f;
+            Ring0ExitRadius = 90f;
+            Ring1EnterRadius = 150f;
+            Ring1ExitRadius = 180f;
+
+            TreeRing0EnterRadius = 70f;
+            TreeRing0ExitRadius = 90f;
+            TreeRing1EnterRadius = 150f;
+            TreeRing1ExitRadius = 180f;
+            TreeBillboardKeepRadius = 220f;
+            TreeFullMeshMaxDist = 200f;
+            TreeFullMeshHysteresis = 12f;
+            FillBoundFarTreeSilhouetteMinDistance = 140f;
+            FillBoundFarTreeSilhouetteStride = 4;
+            PrefillTreeBoostRadius = 220f;
+
+            GuanmuHideDistance = 90f;
+            GuanmuShowDistance = 75f;
+            SmallRockHideDistance = 85f;
+            SmallRockShowDistance = 70f;
+            SmallVegHideDistance = 35f;
+            SmallVegShowDistance = 28f;
+            ClutterHideDistance = 48f;
+            ClutterShowDistance = 38f;
+            StructuralClutterHideDistance = 125f;
+            StructuralClutterShowDistance = 105f;
+            BuildingLodHideDistance = 120f;
+            BuildingLodShowDistance = 100f;
+            TentLodHideDistance = 210f;
+            TentLodShowDistance = 170f;
+            MeshColliderEnableRadius = 80f;
+            MeshColliderDisableRadius = 108f;
+
+            SpawnPerFrameBudget = 12;
+            DespawnPerFrameBudget = 10;
+            FinalizePerFrameBudgetMs = 2.8f;
+        }
+
+        /// <summary>手机 High / Gmj：接近 Editor Base，仍开 Native 合批、略控 spawn。</summary>
+        static void ApplyStreamingNearBase()
+        {
+            Ring0EnterRadius = 90f;
+            Ring0ExitRadius = 110f;
+            Ring1EnterRadius = 170f;
+            Ring1ExitRadius = 200f;
+
+            TreeRing0EnterRadius = 70f;
+            TreeRing0ExitRadius = 90f;
+            TreeRing1EnterRadius = 180f;
+            TreeRing1ExitRadius = 220f;
+            TreeBillboardKeepRadius = 280f;
+            TreeFullMeshMaxDist = 200f;
+            TreeFullMeshHysteresis = 12f;
+            FillBoundFarTreeSilhouetteMinDistance = 120f;
+            FillBoundFarTreeSilhouetteStride = 4;
+            PrefillTreeBoostRadius = 220f;
+
+            GuanmuHideDistance = 90f;
+            GuanmuShowDistance = 75f;
+            SmallRockHideDistance = 95f;
+            SmallRockShowDistance = 80f;
+            SmallVegHideDistance = 40f;
+            SmallVegShowDistance = 32f;
+            ClutterHideDistance = 55f;
+            ClutterShowDistance = 45f;
+            StructuralClutterHideDistance = 130f;
+            StructuralClutterShowDistance = 110f;
+            BuildingLodHideDistance = 130f;
+            BuildingLodShowDistance = 110f;
+            TentLodHideDistance = 220f;
+            TentLodShowDistance = 180f;
+            MeshColliderEnableRadius = 90f;
+            MeshColliderDisableRadius = 120f;
+
+            SpawnPerFrameBudget = 16;
+            DespawnPerFrameBudget = 12;
+            FinalizePerFrameBudgetMs = 3f;
+        }
+
+        /// <summary>
+        /// Gmj：保留 NearBase 环半径，只收紧隔株 / 阴影投射距 / spawn 预算（不改 renderScale、LOD）。
+        /// </summary>
+        static void ApplyStreamingGmjDensity()
+        {
+            FillBoundFarTreeSilhouetteStride = 6;
+            FillBoundFarTreeSilhouetteMinDistance = 140f;
+            ShadowCastMaxDist = 18f;
+            ShadowCastRestoreDist = 14f;
+            SpawnPerFrameBudget = 10;
+            DespawnPerFrameBudget = 8;
+            FinalizePerFrameBudgetMs = 2.2f;
         }
     }
 }

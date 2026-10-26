@@ -7,12 +7,11 @@
 CBUFFER_START(UnityPerMaterial)
     float4 _BaseColor;
     float4 _ShallowColor;
-    float4 _IntersectionColor;
-    float4 _AmbientColor;
     float4 _SpecularColor;
     float4 _GlintColor;
     float4 _MeshFlowScale;
-    float4 _BankUv;
+    float4 _BumpTiling;
+    float4 _BumpScroll;
     float _PaintTile;
     float _PaintContrast;
     float _PaintRelief;
@@ -21,46 +20,39 @@ CBUFFER_START(UnityPerMaterial)
     float _StrokeBands;
     float _GlintTile;
     float _GlintStrength;
+    float _ShoreFoamWidth;
     float _IntersectionTiling;
     float _IntersectionSpeed;
     float _IntersectionLength;
     float _IntersectionFalloff;
     float _IntersectionClipping;
     float _IntersectionDistortion;
-    float _ShoreSteep;
+    float _IntersectionAlpha;
+
+// 拍岸沫宽度（米）：优先 _ShoreFoamWidth，旧材质回退 _IntersectionLength。
+float OilRiverShoreFoamWidthM()
+{
+    float w = _ShoreFoamWidth;
+    if (w < 0.05)
+    {
+        w = _IntersectionLength;
+    }
+    return max(w, 0.2);
+}
     float _AlbedoBoost;
     float _ShadeSteps;
     float _SpecularThreshold;
-    float _SpecularBoost;
     float _ReflectStrength;
+    float _BumpScale;
+    float _BumpTile;
 CBUFFER_END
+
+TEXTURE2D(_BumpMap);
+SAMPLER(sampler_BumpMap);
 
 float2 RiverMeshFlowUv(float2 meshUv)
 {
     return meshUv * _MeshFlowScale.xy + _MeshFlowScale.zw;
-}
-
-half RiverJoinFade(float2 meshUv)
-{
-    return (half)smoothstep(0.0, 0.18, min(meshUv.y, 1.0 - saturate(meshUv.y)));
-}
-
-// 仅作 Depth 失败时的窄边兜底。edgeFrac 钳在很小，禁止再刷出大片 UV 白带。
-half RiverThinUvShoreMask(float2 meshUv)
-{
-    float uMin = _BankUv.x;
-    float uMax = max(_BankUv.y, uMin + 1e-4);
-    float edgeFrac = min(max(_BankUv.z, 0.02), 0.08);
-    float channel = uMax - uMin;
-    float u = meshUv.x;
-
-    float edgeDist = min(abs(u - uMin), abs(u - uMax)) / channel;
-    half channelBank = 1.0h - (half)smoothstep(0.0, edgeFrac, edgeDist);
-    channelBank *= (half)(step(uMin, u) * step(u, uMax));
-
-    // mesh 绝对边宽约 4% UV，不再用 BankUv.z（0.32 会盖住大半河面）。
-    half meshEdge = 1.0h - (half)smoothstep(0.0, 0.04, min(u, 1.0 - u));
-    return saturate(max(channelBank, meshEdge));
 }
 
 half3 RiverFlowNormal(float2 flowUv, float t, out half crest)
@@ -70,6 +62,30 @@ half3 RiverFlowNormal(float2 flowUv, float t, out half crest)
     half sy = (half)sin(p.y * 2.1 - p.x * 0.35 + t * 0.8);
     crest = saturate(sx * 0.45h + sy * 0.35h + 0.5h);
     return normalize(half3(sx * 0.14h, 1.0h, sy * 0.11h));
+}
+
+// Bump along Mesh Flow UV so normals follow river bends (not world XZ).
+// Feeds reflect / glint only — same role as OilOceanBumpNormal.
+half3 RiverBumpNormal(float2 flowUv, float2 paintSt, half3 baseN)
+{
+    float tile = max(_BumpTile, 10.0);
+    float2 tiling = max(_BumpTiling.xy, float2(0.01, 0.01));
+    // 同海 / Monet：bump 贴图竖笔，flowUv.yx 转横后再乘非等比 tiling。
+    float2 uv = (flowUv.yx / tile) * tiling + _BumpScroll.xy * _Time.y;
+    half3 nTS = (half3)DecodeNormal(
+        SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uv), _BumpScale);
+    half2 offset = half2(nTS.x, nTS.y);
+#if !defined(OIL_MOBILE_PERF)
+    half3 paintC = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt).rgb;
+    half3 paintDx = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt + float2(0.02, 0.0)).rgb;
+    half3 paintDz = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt + float2(0.0, 0.02)).rgb;
+    half h0 = PaintLuma(paintC);
+    half hx = PaintLuma(paintDx) - h0;
+    half hz = PaintLuma(paintDz) - h0;
+    offset += half2(hx, hz) * (half)_BumpScale * 1.8h;
+#endif
+    half3 bumpN = normalize(half3(offset.x, 1.0h, offset.y));
+    return normalize(lerp(baseN, bumpN, saturate((half)_BumpScale)));
 }
 
 // Monet：横向笔触切片 + 沿流轻微滚动。flowUv 已是米制 Mesh UV。

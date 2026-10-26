@@ -28,14 +28,15 @@ namespace Game
             if (!GameEntry.UI.HasUIGroup("Loading"))
                 return;
 
-#if UNITY_EDITOR
             if (!_loadingRequested)
             {
                 _loadingRequested = true;
+                // Device: lights BootEarlyCover (scene-baked). Editor: also opens LoadingForm via GF.
                 BootLoadingService.Show("正在进入世界...", 0.05f);
                 return;
             }
 
+#if UNITY_EDITOR
             if (!GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
             {
                 _formWait += elapseSeconds;
@@ -46,11 +47,8 @@ namespace Game
                     return;
                 }
 
-                Log.Warning("LoadingForm failed to open — continue boot without cover.");
+                Log.Warning("LoadingForm failed to open — continue boot with early cover only.");
             }
-#else
-            // Device: UI loads via YooAsset — open LoadingForm after ProcedureInitYooAsset binds it.
-            _loadingRequested = true;
 #endif
 
             ChangeState<ProcedureInitYooAsset>(procedureOwner);

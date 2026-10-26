@@ -55,12 +55,23 @@ namespace Game.Native
 
         public static bool TryGetUserToken(out string token)
         {
+            return TryGetUserSession(out token, out _, out _);
+        }
+
+        /// <summary>
+        /// Hybrid 用户票。blob 新格式 <c>expire\ttoken\tisGuest\tuserId</c>；
+        /// 旧格式 <c>token</c> / <c>expire\ttoken</c> → isGuest=true、userId 空（不写进度盘）。
+        /// </summary>
+        public static bool TryGetUserSession(out string token, out bool isGuest, out string userId)
+        {
             token = "";
+            isGuest = true;
+            userId = "";
             int code = NativeBridgeTransport.Query(
                 MsgType.SessionGetToken, MsgType.TokenKindUser, 0, 0, null, out string blob);
             if (code != BridgeCode.Ok)
                 return false;
-            if (!TryParseExpireToken(blob, out _, out token))
+            if (!TryParseUserSessionBlob(blob, out _, out token, out isGuest, out userId))
                 return false;
             return !string.IsNullOrEmpty(token);
         }
@@ -139,22 +150,64 @@ namespace Game.Native
 
         public static bool TryParseExpireToken(string blob, out uint expire, out string token)
         {
+            return TryParseUserSessionBlob(blob, out expire, out token, out _, out _);
+        }
+
+        /// <summary>
+        /// 解析 user token blob。
+        /// 四段：<c>expire\ttoken\tisGuest\tuserId</c>（isGuest 为 0/1）；
+        /// 一段/两段旧格式：仅 token（或 expire+token），isGuest=true。
+        /// </summary>
+        public static bool TryParseUserSessionBlob(
+            string blob, out uint expire, out string token, out bool isGuest, out string userId)
+        {
             expire = 0;
             token = "";
+            isGuest = true;
+            userId = "";
             if (string.IsNullOrEmpty(blob))
                 return false;
 
-            int tab = blob.IndexOf('\t');
-            if (tab < 0)
+            string[] parts = blob.Split('\t');
+            if (parts.Length >= 4)
             {
-                token = blob;
-                return true;
+                uint.TryParse(parts[0], out expire);
+                token = parts[1] ?? "";
+                isGuest = parts[2] != "0";
+                userId = parts[3] ?? "";
+                return !string.IsNullOrEmpty(token);
             }
 
-            string expStr = blob.Substring(0, tab);
-            token = tab + 1 < blob.Length ? blob.Substring(tab + 1) : "";
-            uint.TryParse(expStr, out expire);
-            return !string.IsNullOrEmpty(token);
+            if (parts.Length == 1)
+            {
+                token = parts[0];
+                return !string.IsNullOrEmpty(token);
+            }
+
+            if (parts.Length == 2)
+            {
+                // expire\ttoken 或误传 token\tuserId：首段可解析为 uint 则当 expire
+                if (uint.TryParse(parts[0], out expire))
+                    token = parts[1] ?? "";
+                else
+                {
+                    token = parts[0] ?? "";
+                    userId = parts[1] ?? "";
+                }
+
+                return !string.IsNullOrEmpty(token);
+            }
+
+            // 三段：expire\ttoken\tisGuest（无 userId）
+            if (parts.Length == 3)
+            {
+                uint.TryParse(parts[0], out expire);
+                token = parts[1] ?? "";
+                isGuest = parts[2] != "0";
+                return !string.IsNullOrEmpty(token);
+            }
+
+            return false;
         }
     }
 }

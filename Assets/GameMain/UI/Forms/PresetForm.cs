@@ -16,6 +16,10 @@ namespace Game
     public class PresetForm : GameFormLogic
     {
         protected override bool SlidesUpFromBottom => true;
+        protected override bool HidesBottomHudIcons => true;
+
+        /// <summary>Boluo InGameYuSheView sheet card anchoredY (bottom pivot).</summary>
+        protected override float SheetBottomOffset => 120f;
         public VisualTreeAsset PresetTemplate;
 
         const float ItemWidth = 264f;

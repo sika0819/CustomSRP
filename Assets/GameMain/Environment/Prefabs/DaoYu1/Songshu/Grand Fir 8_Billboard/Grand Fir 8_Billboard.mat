@@ -14,7 +14,6 @@ Material:
   m_ValidKeywords:
   - _CLIPPING
   m_InvalidKeywords:
-  - _CANVAS_ON
   - _OILFOLIAGESKIPDAY_ON
   - _OILFOLIAGE_ON
   - _SHADOWS_OFF
@@ -89,9 +88,9 @@ Material:
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
-    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BaseColor: {r: 1.07257, g: 1.21951, b: 0.79571, a: 1}
     - _BottomColor: {r: 0.380392, g: 0.478431, b: 0.34902, a: 1}
-    - _Color: {r: 1.010235, g: 0.998636, b: 0.976072, a: 1}
+    - _Color: {r: 1.07257, g: 1.21951, b: 0.79571, a: 1}
     - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}
     - _OutlineColor: {r: 0.380392, g: 0.478431, b: 0.34902, a: 1}
     - _ShadowTint: {r: 0.380392, g: 0.478431, b: 0.34902, a: 1}

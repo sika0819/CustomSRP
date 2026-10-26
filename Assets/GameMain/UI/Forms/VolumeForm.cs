@@ -19,6 +19,10 @@ namespace Game
         const float MinFillWidth = 204f;
 
         protected override bool SlidesUpFromBottom => true;
+        protected override bool HidesBottomHudIcons => true;
+
+        /// <summary>Boluo InGameTiaoJieView <c>bg</c> anchoredY (bottom pivot).</summary>
+        protected override float SheetBottomOffset => 120f;
         readonly List<(VisualElement element, EventCallback<GeometryChangedEvent> callback)> _layout = new();
         readonly List<(VisualElement element, EventCallback<PointerDownEvent> down, EventCallback<PointerMoveEvent> move, EventCallback<PointerUpEvent> up, EventCallback<PointerCaptureOutEvent> captureOut)> _pointers = new();
 

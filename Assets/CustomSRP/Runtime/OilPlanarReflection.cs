@@ -11,7 +11,7 @@ namespace CustomSRP
     /// Borrowing the main camera moved its transform / type every frame and made
     /// nearby trees, tents, and LOD thrash.
     /// </summary>
-    public sealed class OilPlanarReflection : MonoBehaviour
+    public sealed class OilPlanarReflection : MonoBehaviour, IOilPlanarReflectionControl
     {
         // Soft oil glaze: tiny RT + shader multi-tap blur (no mips — SRP blit
         // into autoGenerateMips RT leaves higher LODs empty / black).
@@ -19,6 +19,8 @@ namespace CustomSRP
         public const float MobileScale = 0.1f;
         public const int MinSize = 48;
         public const int MaxSize = 192;
+        /// <summary>Gmj 4K：低于桌面 Max，带宽优先。</summary>
+        public const int GmjMaxSize = 64;
         const float RescanSeconds = 1f;
         const float ClipPlaneOffset = 0.04f;
 
@@ -26,18 +28,27 @@ namespace CustomSRP
         // The water shader samples _OilPlanarReflectTex with *current* screen UV,
         // so a stale RT immediately reads as slide / shake / "one frame behind".
         // Rules (pose vs previous frame):
-        //   any meaningful turn              -> every frame (never throttle yaw/pitch)
-        //   walking on mobile, little turn   -> every WalkMirrorInterval frames
-        //   fast move (standing / desktop)   -> every frame
-        //   slow creep, no turn              -> even frames only
+        //   walking / any translation        -> every frame (never interval — slides)
+        //   meaningful turn (non-Gmj)        -> every frame
+        //   Gmj stand turn                   -> every GmjTurnMirrorInterval frames,
+        //                                      or sooner if yaw vs last mirror RT
+        //                                      exceeds GmjTurnStaleDegrees
         //   stationary (below Still*)        -> never (reuse RT)
-        const float SlowMoveThresholdSq = 0.0225f; // 0.15 m²
-        // Below these: treat as fully still — do not re-render (even-frame path
-        // used to fire on zero delta and waste a mirror pass every other frame).
+        // Below these: treat as fully still — do not re-render.
         const float StillMoveThresholdSq = 1e-6f;    // ~1 mm²
         const float StillTurnAngle = 0.05f;          // degrees
-        /// <summary>Mobile walk + little turn: re-render mirror every N frames.</summary>
-        const int WalkMirrorInterval = 6;
+        /// <summary>Preset yaw snap — bypass Gmj turn interval the same way.</summary>
+        const float SnapTurnAngle = 12f;
+        /// <summary>
+        /// Gmj 站立转头隔帧：4K 站立每帧双相机（主 + mirror）是「刚启动右转」尖峰主因。
+        /// 走路 / 位移不走这条——screen-UV + 隔帧 RT 会整块抖。
+        /// </summary>
+        const int GmjTurnMirrorInterval = 2;
+        /// <summary>
+        /// Max yaw (deg) the reused mirror RT may lag behind the live camera on Gmj.
+        /// Continuous look forces a redraw once this accumulates, even mid-interval.
+        /// </summary>
+        const float GmjTurnStaleDegrees = 1.5f;
 
         static readonly int ReflectTexId = Shader.PropertyToID("_OilPlanarReflectTex");
         static readonly int ReflectOnId = Shader.PropertyToID("_OilPlanarReflectOn");
@@ -53,8 +64,22 @@ namespace CustomSRP
         int _rtH;
         float _nextBind;
         float _planeY;
+        float _lastRenderedPlaneY;
         bool _hasPlane;
-        OilOceanSurface _ocean;
+        bool _planeDirty;
+        // Cached water planes (ocean + rivers). Screen-UV planar sampling is only
+        // correct on the chosen Y — locking to ocean while looking at an elevated
+        // river stretches sky into stripes and drops nearby mountain reflections.
+        const int MaxWaterPlanes = 24;
+        struct WaterPlane
+        {
+            public float y;
+            public Vector3 center;
+            public float radiusXZ;
+        }
+
+        readonly WaterPlane[] _waterPlanes = new WaterPlane[MaxWaterPlanes];
+        int _waterPlaneCount;
         Matrix4x4 _cachedView;
         Matrix4x4 _cachedProj;
         bool _hasCachedMatrices;
@@ -63,6 +88,9 @@ namespace CustomSRP
         Vector3 _prevFramePos;
         Quaternion _prevFrameRot;
         bool _hasPrevFramePose;
+        /// <summary>Source rotation at the last successful mirror capture (skip path must not overwrite).</summary>
+        Quaternion _lastMirrorRot;
+        bool _hasLastMirrorRot;
         // Sky TOD / look changed while the camera is idle — force one mirror redraw
         // so a day-blue RT captured at boot cannot stick over the night skybox.
         bool _skyDirty;
@@ -70,6 +98,8 @@ namespace CustomSRP
         // instance (SeedWaterSkyGlobals vs Boot order is undefined). A static bit
         // keeps the request alive so noon cold-start does not freeze a wrong RT.
         static bool _pendingSkyDirty;
+        /// <summary>Idle immersive: RT released; RenderMirror early-outs until Resume.</summary>
+        bool _immersiveSuspended;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void ResetPendingSkyDirty()
@@ -119,12 +149,30 @@ namespace CustomSRP
             }
         }
 
-        void OnEnable() => Shader.SetGlobalFloat(ReflectOnId, 0f);
+        void OnEnable()
+        {
+            OilPlanarReflectionControl.Driver = this;
+            Shader.SetGlobalFloat(ReflectOnId, 0f);
+        }
 
         void OnDisable()
         {
+            if (ReferenceEquals(OilPlanarReflectionControl.Driver, this))
+                OilPlanarReflectionControl.Driver = null;
             Shader.SetGlobalFloat(ReflectOnId, 0f);
             ReleaseReflectionRt();
+        }
+
+        public void SuspendForImmersive()
+        {
+            _immersiveSuspended = true;
+            Shader.SetGlobalFloat(ReflectOnId, 0f);
+            ReleaseReflectionRt();
+        }
+
+        public void ResumeFromImmersive()
+        {
+            _immersiveSuspended = false;
         }
 
         public static void RenderBefore(
@@ -160,6 +208,9 @@ namespace CustomSRP
                 _instance = null;
             }
 
+            if (ReferenceEquals(OilPlanarReflectionControl.Driver, this))
+                OilPlanarReflectionControl.Driver = null;
+
             ReleaseMirrorCam();
             ReleaseReflectionRt();
         }
@@ -172,6 +223,12 @@ namespace CustomSRP
             CustomRenderPipelineSettings settings)
         {
             IslandLocomotionState.MirrorRenderedThisFrame = false;
+
+            if (_immersiveSuspended)
+            {
+                Shader.SetGlobalFloat(ReflectOnId, 0f);
+                return;
+            }
 
             if (_rendering || source == null || !source.enabled)
             {
@@ -186,6 +243,32 @@ namespace CustomSRP
             if (source.pixelWidth < 8 || source.pixelHeight < 8)
             {
                 return;
+            }
+
+            if (Time.unscaledTime >= _nextBind)
+            {
+                _nextBind = Time.unscaledTime + RescanSeconds;
+                // One scene walk shared by layer bind, shore-wet Ys, and plane scan.
+                Renderer[] renderers = Object.FindObjectsByType<Renderer>(
+                    FindObjectsInactive.Exclude);
+                OilWaterLayers.BindWaters(renderers);
+                RescanWaterPlanes(renderers);
+            }
+            else if (_waterPlaneCount == 0)
+            {
+                RescanWaterPlanes(null);
+            }
+
+            // Pick ocean vs river plane *before* throttle — wrong-Y RT must not be reused.
+            SelectPlaneForCamera(source);
+            if (!_hasPlane)
+            {
+                return;
+            }
+
+            if (Mathf.Abs(_planeY - _lastRenderedPlaneY) > 0.35f)
+            {
+                _planeDirty = true;
             }
 
             // Throttle: if the camera hasn't moved or rotated meaningfully since
@@ -208,26 +291,6 @@ namespace CustomSRP
                 _prevFramePos = source.transform.position;
                 _prevFrameRot = source.transform.rotation;
                 _hasPrevFramePose = true;
-                return;
-            }
-
-            if (Time.unscaledTime >= _nextBind)
-            {
-                _nextBind = Time.unscaledTime + RescanSeconds;
-                OilWaterLayers.BindWaters();
-                CachePlane();
-            }
-            else if (!_hasPlane)
-            {
-                CachePlane();
-            }
-            else if (_ocean != null)
-            {
-                _planeY = _ocean.transform.position.y;
-            }
-
-            if (!_hasPlane)
-            {
                 return;
             }
 
@@ -265,6 +328,10 @@ namespace CustomSRP
             _prevFramePos = source.transform.position;
             _prevFrameRot = source.transform.rotation;
             _hasPrevFramePose = true;
+            _lastMirrorRot = _prevFrameRot;
+            _hasLastMirrorRot = true;
+            _lastRenderedPlaneY = _planeY;
+            _planeDirty = false;
             // Only clear after a real draw — early outs (!_hasPlane / no RT) must
             // keep the dirty bit so the next frame still redraws.
             _skyDirty = false;
@@ -280,8 +347,8 @@ namespace CustomSRP
         /// <summary>
         /// Frame budget gate for the mirror render. First frame and any frame
         /// after the RT was (re)created must draw — a stale or empty RT would
-        /// otherwise leak into the water. Afterwards pose delta decides; turn
-        /// always wins over walk-interval / even-frame throttle.
+        /// otherwise leak into the water. Afterwards pose delta decides.
+        /// Translation / walking always draws; Gmj may still throttle stand look.
         /// </summary>
         bool ShouldRenderThisFrame(Camera source)
         {
@@ -293,8 +360,19 @@ namespace CustomSRP
             if (_reflectionRt == null || !_hasPrevFramePose)
                 return true;
 
+            // Cross-assembly one-shot (Game warmup / TOD) — draw even under Gmj turn throttle.
+            if (IslandLocomotionState.ForceMirrorRedraw)
+            {
+                IslandLocomotionState.ForceMirrorRedraw = false;
+                return true;
+            }
+
             // Keep _skyDirty set until RenderMirror finishes a real capture.
             if (_skyDirty)
+                return true;
+
+            // Ocean ↔ river plane switch — previous RT is mirrored on the wrong Y.
+            if (_planeDirty)
                 return true;
 
             // A resolution flip (orientation change / render-scale tweak) resizes the
@@ -312,24 +390,31 @@ namespace CustomSRP
             float dz = pos.z - _prevFramePos.z;
             float moveSq = dx * dx + dy * dy + dz * dz;
             float turn = Quaternion.Angle(source.transform.rotation, _prevFrameRot);
+            bool gmj = DeviceGraphicsPolicy.Current == DeviceGraphicsClass.Gmj;
 
-            // Screen-UV planar sample + stale RT = shake / lag. Never skip on look.
+            // Locomotion: always lock screen-UV to a fresh mirror. Interval reuse
+            // while walking was the "水面倒影剧烈抖动" path.
+            if (IslandLocomotionState.IsWalking || moveSq > StillMoveThresholdSq)
+                return true;
+
+            // Non-Gmj: never skip on look (screen-UV + stale RT = shake).
+            // Gmj stand turn: share hitch budget; large yaw snaps (preset) draw;
+            // continuous look redraws once past GmjTurnStaleDegrees.
             if (turn > StillTurnAngle)
+            {
+                if (gmj && turn < SnapTurnAngle)
+                {
+                    if (_hasLastMirrorRot
+                        && Quaternion.Angle(source.transform.rotation, _lastMirrorRot)
+                            >= GmjTurnStaleDegrees)
+                        return true;
+                    return (Time.frameCount % GmjTurnMirrorInterval) == 0;
+                }
                 return true;
-
-            // Mobile walk, mostly translation: interval reuse (tiny RT hides walk parallax).
-            if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)
-                return (Time.frameCount % WalkMirrorInterval) == 0;
-
-            if (moveSq > SlowMoveThresholdSq)
-                return true;
+            }
 
             // Truly idle: reuse the previous mirror RT (no cull / opaque / skybox).
-            if (moveSq <= StillMoveThresholdSq)
-                return false;
-
-            // Slow creep, no turn: render on even frames only.
-            return (Time.frameCount & 1) == 0;
+            return false;
         }
 
         Camera EnsureMirrorCam()
@@ -358,7 +443,16 @@ namespace CustomSRP
         {
             if (_mirrorCam != null)
             {
-                Destroy(_mirrorCam.gameObject);
+                var go = _mirrorCam.gameObject;
+                if (Application.isPlaying)
+                {
+                    Destroy(go);
+                }
+                else
+                {
+                    DestroyImmediate(go);
+                }
+
                 _mirrorCam = null;
             }
         }
@@ -446,13 +540,13 @@ namespace CustomSRP
             return best != null && camera == best;
         }
 
-        void CachePlane()
+        void RescanWaterPlanes(Renderer[] cachedRenderers)
         {
-            _ocean = null;
+            _waterPlaneCount = 0;
+
             OilOceanSurface[] oceans = Object.FindObjectsByType<OilOceanSurface>(
-                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-            float best = float.MaxValue;
-            for (int i = 0; i < oceans.Length; i++)
+                FindObjectsInactive.Exclude);
+            for (int i = 0; i < oceans.Length && _waterPlaneCount < MaxWaterPlanes; i++)
             {
                 OilOceanSurface ocean = oceans[i];
                 if (ocean == null)
@@ -460,26 +554,18 @@ namespace CustomSRP
                     continue;
                 }
 
-                float score = ocean.gridScale > 0f ? -ocean.gridScale : i;
-                if (score < best)
+                float radius = Mathf.Max(ocean.gridScale * 0.5f, 64f);
+                _waterPlanes[_waterPlaneCount++] = new WaterPlane
                 {
-                    best = score;
-                    _ocean = ocean;
-                }
+                    y = ocean.transform.position.y,
+                    center = ocean.transform.position,
+                    radiusXZ = radius
+                };
             }
 
-            if (_ocean != null)
-            {
-                _planeY = _ocean.transform.position.y;
-                _hasPlane = true;
-                return;
-            }
-
-            Renderer[] renderers = Object.FindObjectsByType<Renderer>(
-                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-            float lowest = float.MaxValue;
-            bool found = false;
-            for (int i = 0; i < renderers.Length; i++)
+            Renderer[] renderers = cachedRenderers
+                ?? Object.FindObjectsByType<Renderer>(FindObjectsInactive.Exclude);
+            for (int i = 0; i < renderers.Length && _waterPlaneCount < MaxWaterPlanes; i++)
             {
                 Renderer renderer = renderers[i];
                 if (renderer == null || !IsOilRiver(renderer))
@@ -487,19 +573,89 @@ namespace CustomSRP
                     continue;
                 }
 
-                float y = renderer.bounds.center.y;
-                if (y < lowest)
+                Bounds b = renderer.bounds;
+                float radius = Mathf.Max(Mathf.Max(b.extents.x, b.extents.z), 8f);
+                _waterPlanes[_waterPlaneCount++] = new WaterPlane
                 {
-                    lowest = y;
-                    found = true;
+                    y = b.center.y,
+                    center = b.center,
+                    radiusXZ = radius
+                };
+            }
+
+            _hasPlane = _waterPlaneCount > 0;
+        }
+
+        /// <summary>
+        /// Screen-UV planar sampling is only valid on one horizontal plane.
+        /// Pick the water the camera is looking at (ray ∩ plane near that water's
+        /// XZ bounds) so inland rivers aren't forced onto the ocean mirror Y.
+        /// </summary>
+        void SelectPlaneForCamera(Camera source)
+        {
+            if (_waterPlaneCount <= 0)
+            {
+                _hasPlane = false;
+                return;
+            }
+
+            if (source == null)
+            {
+                _planeY = _waterPlanes[0].y;
+                _hasPlane = true;
+                return;
+            }
+
+            Vector3 camPos = source.transform.position;
+            Vector3 fwd = source.transform.forward;
+            float bestScore = float.MaxValue;
+            float bestY = _waterPlanes[0].y;
+
+            for (int i = 0; i < _waterPlaneCount; i++)
+            {
+                WaterPlane p = _waterPlanes[i];
+                float score;
+                if (Mathf.Abs(fwd.y) > 1e-4f)
+                {
+                    float t = (p.y - camPos.y) / fwd.y;
+                    if (t > 0.4f && t < 900f)
+                    {
+                        Vector3 hit = camPos + fwd * t;
+                        float dx = hit.x - p.center.x;
+                        float dz = hit.z - p.center.z;
+                        float dist = Mathf.Sqrt(dx * dx + dz * dz);
+                        score = dist;
+                        if (dist > p.radiusXZ)
+                        {
+                            score += (dist - p.radiusXZ) * 3f;
+                        }
+                    }
+                    else
+                    {
+                        float dx = camPos.x - p.center.x;
+                        float dz = camPos.z - p.center.z;
+                        score = Mathf.Sqrt(dx * dx + dz * dz) + 250f;
+                    }
+                }
+                else
+                {
+                    float dx = camPos.x - p.center.x;
+                    float dz = camPos.z - p.center.z;
+                    score = Mathf.Sqrt(dx * dx + dz * dz) + 250f;
+                }
+
+                // Prefer local water near the camera height (river valley vs distant sea).
+                score += Mathf.Abs(camPos.y - p.y) * 0.08f;
+
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestY = p.y;
                 }
             }
 
-            _hasPlane = found;
-            if (found)
-            {
-                _planeY = lowest;
-            }
+            _planeY = bestY;
+            _hasPlane = true;
         }
 
         /// <summary>Mirror RT size for a source resolution. Mirrors
@@ -518,16 +674,20 @@ namespace CustomSRP
             if (aspect <= 1e-4f)
                 return false;
 
-            w = Mathf.Clamp(Mathf.RoundToInt(srcW * scale), MinSize, MaxSize);
+            int maxSize = EffectiveMaxSize();
+            w = Mathf.Clamp(Mathf.RoundToInt(srcW * scale), MinSize, maxSize);
             h = Mathf.Max(MinSize, Mathf.RoundToInt(w / aspect));
-            if (h > MaxSize)
+            if (h > maxSize)
             {
-                h = MaxSize;
+                h = maxSize;
                 w = Mathf.Max(MinSize, Mathf.RoundToInt(h * aspect));
             }
 
             return true;
         }
+
+        static int EffectiveMaxSize() =>
+            DeviceGraphicsPolicy.Current == DeviceGraphicsClass.Gmj ? GmjMaxSize : MaxSize;
 
         void EnsureReflectionRt(int srcW, int srcH, float srcAspect)
         {
@@ -535,12 +695,13 @@ namespace CustomSRP
             // never disagree; srcAspect is passed in for the degenerate case.
             float aspect = srcAspect > 1e-4f ? srcAspect : srcW / (float)Mathf.Max(1, srcH);
             float scale = Application.isMobilePlatform ? MobileScale : Scale;
+            int maxSize = EffectiveMaxSize();
 
-            int w = Mathf.Clamp(Mathf.RoundToInt(srcW * scale), MinSize, MaxSize);
+            int w = Mathf.Clamp(Mathf.RoundToInt(srcW * scale), MinSize, maxSize);
             int h = Mathf.Max(MinSize, Mathf.RoundToInt(w / aspect));
-            if (h > MaxSize)
+            if (h > maxSize)
             {
-                h = MaxSize;
+                h = maxSize;
                 w = Mathf.Max(MinSize, Mathf.RoundToInt(h * aspect));
             }
 
@@ -582,7 +743,15 @@ namespace CustomSRP
             if (_reflectionRt != null)
             {
                 _reflectionRt.Release();
-                Destroy(_reflectionRt);
+                if (Application.isPlaying)
+                {
+                    Destroy(_reflectionRt);
+                }
+                else
+                {
+                    DestroyImmediate(_reflectionRt);
+                }
+
                 _reflectionRt = null;
             }
 

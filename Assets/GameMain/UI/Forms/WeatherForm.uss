@@ -6,10 +6,9 @@
     bottom: 0;
 }
 
-/* Boluo sheet sits 120px above the bottom; raise stage so the 735px card is vertically centered. */
-.game-weather-form__root .game-form-stage {
-    margin-top: -1948.5px; /* -1218 (stage half) - 730.5 (sheet nudge) */
-}
+/* Sheet chrome uses shared .game-form-stage; USS authored for 120px above stage
+   bottom (Boluo InGameTianQiView tianqitanchuang anchoredY=120). Per-form gap:
+   WeatherForm.SheetBottomOffset (GameFormLogic translates stage). */
 
 .game-weather-form__weather-dialog {
     position: absolute;

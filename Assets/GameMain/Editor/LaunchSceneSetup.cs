@@ -199,12 +199,14 @@ namespace Game.Editor
             layout.PhonePanelSettings = phone;
             layout.PadPanelSettings = pad;
 
+            EnsureBootEarlyCover(phone);
+
             Camera camera = Camera.main;
             if (camera != null)
             {
-                // Boot loading uses solid clear; ProcedureIsland switches to Skybox on enter.
+                // Match early-cover root (near-black) so pre-UITK frames never flash white.
                 camera.clearFlags = CameraClearFlags.SolidColor;
-                camera.backgroundColor = new Color(0.55f, 0.72f, 0.78f, 1f);
+                camera.backgroundColor = new Color(0.047f, 0.047f, 0.055f, 1f);
                 camera.allowHDR = false;
                 camera.allowMSAA = false;
                 IslandCameraSrpSetup.EnsureCustomRenderPipelineCamera(camera.gameObject);
@@ -212,6 +214,35 @@ namespace Game.Editor
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddSceneToBuildSettings();
+        }
+
+        static void EnsureBootEarlyCover(PanelSettings phone)
+        {
+            const string coverName = "BootEarlyCover";
+            GameObject go = GameObject.Find(coverName);
+            if (go == null)
+                go = new GameObject(coverName);
+
+            UIDocument document = go.GetComponent<UIDocument>();
+            if (document == null)
+                document = go.AddComponent<UIDocument>();
+            document.panelSettings = phone;
+            document.visualTreeAsset = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
+                "Assets/GameMain/Boot/BootEarlyCover.uxml");
+            document.sortingOrder = BootEarlyCover.SortingOrder;
+
+            BootEarlyCover cover = go.GetComponent<BootEarlyCover>();
+            if (cover == null)
+                cover = go.AddComponent<BootEarlyCover>();
+
+            SerializedObject so = new SerializedObject(cover);
+            so.FindProperty("_portraitStill").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    "Assets/GameMain/Boot/BootEarlyCover_Portrait.png");
+            so.FindProperty("_landscapeStill").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    "Assets/GameMain/Boot/BootEarlyCover_Landscape.png");
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         static void WriteGroup(SerializedProperty groups, int index, string name, int depth)

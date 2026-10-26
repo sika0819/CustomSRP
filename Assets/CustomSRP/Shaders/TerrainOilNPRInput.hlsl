@@ -24,6 +24,7 @@ float4 _Splat1_ST;
 float4 _Splat2_ST;
 float4 _Splat3_ST;
 
+float _Metallic0, _Metallic1, _Metallic2, _Metallic3;
 float _Smoothness0, _Smoothness1, _Smoothness2, _Smoothness3;
 float _NormalScale0, _NormalScale1, _NormalScale2, _NormalScale3;
 float4 _MaskMapRemapScale0, _MaskMapRemapScale1, _MaskMapRemapScale2, _MaskMapRemapScale3;
@@ -51,6 +52,9 @@ CBUFFER_START(UnityPerMaterial)
     float _TerrainHeight;
     float _OilDetail;
     float _HeightTransition;
+    float _ShoreWetY;
+    float _ShoreWetBand;
+    float _ShoreWetStrength;
 CBUFFER_END
 
 #include "OilShadowBrush.hlsl"

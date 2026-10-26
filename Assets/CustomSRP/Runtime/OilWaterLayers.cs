@@ -110,14 +110,20 @@ namespace CustomSRP
         /// camera culls them via <see cref="PlanarReflectionCullingMask"/>.</summary>
         public static void BindWaters()
         {
+            BindWaters(null);
+        }
+
+        /// <summary>Reuse a pre-scanned renderer list (avoids a second FindObjects).</summary>
+        public static void BindWaters(Renderer[] cachedRenderers)
+        {
             int water = LayerIndex;
             if (water < 0)
             {
                 return;
             }
 
-            Renderer[] renderers = Object.FindObjectsByType<Renderer>(
-                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            Renderer[] renderers = cachedRenderers
+                ?? Object.FindObjectsByType<Renderer>(FindObjectsInactive.Exclude);
             for (int i = 0; i < renderers.Length; i++)
             {
                 Renderer renderer = renderers[i];
@@ -161,4 +167,3 @@ namespace CustomSRP
         }
     }
 }
-

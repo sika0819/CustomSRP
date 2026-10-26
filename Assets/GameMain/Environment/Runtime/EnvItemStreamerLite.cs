@@ -152,16 +152,17 @@ namespace Game
                 near.Add(i);
             }
 
-            // 严格按距离升序：先近后远。
-            // _prefabCache 会让重复 LoadPrefab 退化为 Dictionary 查找，无需再按 Location 分组，
-            // 否则一个 prefab 的最远实例会排在另一 prefab 的最近实例之前。
+            // 按有效距离升序：先近后远；出生朝向的前/右扇区略提前（半径不变）。
+            // 闺蜜机启动后右转常扫到尚未首编的视锥内容；Prefill 时相机 yaw 尚未钉死，
+            // 用 IslandSpawnPose.DefaultYaw 近似「刚进岛会先看到」的一侧。
+            // _prefabCache 会让重复 LoadPrefab 退化为 Dictionary 查找，无需再按 Location 分组。
+            Vector3 lookFwd = Quaternion.Euler(0f, IslandSpawnPose.DefaultYawDegrees, 0f) * Vector3.forward;
+            Vector3 lookRight = Quaternion.Euler(0f, IslandSpawnPose.DefaultYawDegrees, 0f) * Vector3.right;
             near.Sort((a, b) =>
             {
-                float dax = _items[a].Pos.x - p.x;
-                float daz = _items[a].Pos.z - p.z;
-                float dbx = _items[b].Pos.x - p.x;
-                float dbz = _items[b].Pos.z - p.z;
-                return (dax * dax + daz * daz).CompareTo(dbx * dbx + dbz * dbz);
+                float sa = PrefillPriorityDistSq(_items[a].Pos, p, lookFwd, lookRight);
+                float sb = PrefillPriorityDistSq(_items[b].Pos, p, lookFwd, lookRight);
+                return sa.CompareTo(sb);
             });
 
             int total = near.Count;
@@ -226,7 +227,7 @@ namespace Game
                 }
 
                 EvaluateQueues();
-                int spawnBudget = EnvStreamingConfig.SpawnPerFrameBudget;
+                int spawnBudget = EnvStreamingConfig.EffectiveSpawnPerFrameBudget;
                 int despawnBudget = EnvStreamingConfig.DespawnPerFrameBudget;
 
                 for (int i = 0; i < _despawnQueue.Count && despawnBudget > 0; i++)
@@ -476,7 +477,10 @@ namespace Game
             if (!isBillboard)
             {
                 if (EnvStreamingConfig.IsRockCategory(item.Category))
+                {
                     EnvRockColliders.Ensure(instance, item.PrefabName);
+                    EnvRockShoreWet.ApplyIfNearShore(instance);
+                }
                 if (EnvStreamingConfig.IsBridgeCategory(item.Category))
                     EnvBridgePillarFit.Ensure(instance);
                 if (EnvStreamingConfig.IsRockCategory(item.Category) &&
@@ -680,7 +684,89 @@ namespace Game
             onDone?.Invoke(prefab);
         }
 
+        /// <summary>
+        /// Prefill 排序键：真实距离平方 × 扇区权重。背后变远、右前变近，环半径不变。
+        /// </summary>
+        static float PrefillPriorityDistSq(
+            Vector3 itemPos, Vector3 focus, Vector3 lookFwd, Vector3 lookRight)
+        {
+            float dx = itemPos.x - focus.x;
+            float dz = itemPos.z - focus.z;
+            float distSq = dx * dx + dz * dz;
+            if (distSq < 1e-4f)
+                return 0f;
+
+            float inv = 1f / Mathf.Sqrt(distSq);
+            float fx = dx * inv;
+            float fz = dz * inv;
+            float facing = fx * lookFwd.x + fz * lookFwd.z;
+            float rightness = fx * lookRight.x + fz * lookRight.z;
+            float weight = 1f;
+            if (facing < -0.15f)
+                weight = 1.55f;
+            else if (rightness > 0.25f && facing > -0.1f)
+                weight = 0.72f;
+            else if (facing > 0.25f)
+                weight = 0.88f;
+            return distSq * weight * weight;
+        }
+
         bool _released;
+
+        /// <summary>
+        /// Release prefab AssetHandles with no visible (or spawn-queued) instances.
+        /// Used by idle immersive soft unload; next Spawn reloads via YooAsset.
+        /// </summary>
+        public int TrimUnusedPrefabHandles()
+        {
+            if (_released || _prefabHandles.Count == 0)
+                return 0;
+
+            var keep = new HashSet<string>();
+            for (int i = 0; i < _items.Count; i++)
+            {
+                Item item = _items[i];
+                if (item.State == StateVisible && !string.IsNullOrEmpty(item.Location))
+                    keep.Add(item.Location);
+            }
+
+            for (int i = 0; i < _spawnQueue.Count; i++)
+            {
+                int idx = _spawnQueue[i];
+                if (idx < 0 || idx >= _items.Count)
+                    continue;
+                string loc = _items[idx].Location;
+                if (!string.IsNullOrEmpty(loc))
+                    keep.Add(loc);
+            }
+
+            var toRemove = new List<string>();
+            foreach (var kv in _prefabHandles)
+            {
+                if (keep.Contains(kv.Key))
+                    continue;
+                kv.Value?.Release();
+                toRemove.Add(kv.Key);
+            }
+
+            for (int i = 0; i < toRemove.Count; i++)
+            {
+                string key = toRemove[i];
+                _prefabHandles.Remove(key);
+                _prefabCache.Remove(key);
+            }
+
+            if (toRemove.Count > 0)
+            {
+                Log.Info(
+                    "[EnvItemStreamerLite] trim unused prefab handles="
+                    + toRemove.Count
+                    + " kept="
+                    + _prefabHandles.Count);
+            }
+
+            return toRemove.Count;
+        }
 
         public void Release()
         {

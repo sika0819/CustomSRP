@@ -35,8 +35,16 @@ Material:
         m_Texture: {fileID: 2800000, guid: c8d2b0f15e3a4b7d9f1c2e4a6b810293, type: 3}
         m_Scale: {x: 0.32, y: 0.32}
         m_Offset: {x: 0, y: 0}
+    - _OilCanvas:
+        m_Texture: {fileID: 2800000, guid: a7c8d9e0f1a20314253647586970b1c2, type: 3}
+        m_Scale: {x: 1.15, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _BrushContrast: 1.6
+    - _BrushRelief: 0.85
+    - _BrushScale: 6
+    - _BrushStrength: 0.72
     - _EdgeIntensity: 1.55
     - _SdfMax: 0.9
     - _SdfMin: 0.48

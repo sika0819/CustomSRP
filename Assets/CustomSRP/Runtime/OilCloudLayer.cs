@@ -48,8 +48,8 @@ namespace CustomSRP
         [Tooltip("World Y of the low-ring belly when followSeaLevel is off, or no ocean exists.")]
         public float seaLevel = 0f;
 
-        [Tooltip("Extra meters to lift the ring after anchoring the belly to sea. Keep 0 for belly on water.")]
-        public float ringHeight = 0f;
+        [Tooltip("Extra meters to lift the ring after anchoring the belly to sea. ~65 clears island ridges.")]
+        public float ringHeight = 65f;
 
         public bool highRing = true;
 
@@ -109,6 +109,19 @@ namespace CustomSRP
         float _yaw;
         int _windFrame = -1;
         OilOceanSurface _ocean;
+
+        /// <summary>Cloud ring yaw in degrees (wind advances this over time).</summary>
+        public float YawDegrees
+        {
+            get => _yaw * Mathf.Rad2Deg;
+            set => _yaw = value * Mathf.Deg2Rad;
+        }
+
+        /// <summary>
+        /// Ring-local azimuth of the seam between card 7 and card 0 (emptiest sky gap).
+        /// Dawn/sleep presets snap this seam toward the sun/moon so opaque cards sit off-axis.
+        /// </summary>
+        public const float GapLocalDegrees = 0f;
 
         public struct Frame
         {
@@ -317,10 +330,7 @@ namespace CustomSRP
         float GetWeatherWindIntensity()
         {
             var weather = WeatherService.Ensure();
-            if (weather.Kind != IslandWeatherKind.Wind)
-                return 0f;
-            // Map weather level (0-3) to wind intensity (0-1)
-            return weather.Level / 3f;
+            return weather.VisualWind01;
         }
 
         float ResolveSeaLevel()

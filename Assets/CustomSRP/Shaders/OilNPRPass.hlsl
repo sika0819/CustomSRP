@@ -116,6 +116,11 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         base = (half4)GetBase(config);
     half3 albedo = base.rgb;
     half alpha = base.a;
+    // Shore rocks use a wet mat (_Wetness > 0); inland mats stay 0.
+    half wet = saturate((half)_Wetness);
+    albedo *= 1.0h - wet * 0.22h;
+    half wetSmooth = saturate((half)_Smoothness + wet * 0.25h);
+    half3 wetSpec = (half3)_SpecColor.rgb * (1.0h + wet * 0.35h);
 
 #if defined(_CLIPPING)
     clip(alpha - (half)GetCutoff(config));
@@ -130,8 +135,21 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     half3 normalWS = geometricNormal;
 
 #if defined(OIL_MOBILE_PERF)
-    half paintRim = 0.0h;
-    half3 viewDir = half3(0.0h, 0.0h, 1.0h);
+    half brushScale = (half)_OilBrushMobileScale;
+    half3 viewDir;
+    half paintRim;
+    if (brushScale > 0.001h)
+    {
+        viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
+        half ndotV = saturate(dot(normalWS, viewDir));
+        // Half of desktop paint rim, then × Mid soft scale.
+        paintRim = (1.0h - ndotV) * (half)_PaintThickness * 0.25h * brushScale;
+    }
+    else
+    {
+        viewDir = half3(0.0h, 0.0h, 1.0h);
+        paintRim = 0.0h;
+    }
 #else
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
     half ndotV = saturate(dot(normalWS, viewDir));
@@ -146,10 +164,10 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     surface.depth = -TransformWorldToView(input.positionWS).z;
     surface.color = (float3)albedo;
     surface.alpha = (float)alpha;
-    surface.metallic = 0.0;
+    surface.metallic = GetMetallic();
     surface.occlusion = 1.0;
-    surface.smoothness = (half)_Smoothness;
-    surface.fresnelStrength = 0.0;
+    surface.smoothness = wetSmooth;
+    surface.fresnelStrength = GetFresnel() * saturate((float)wetSmooth + GetMetallic());
 #if defined(OIL_MOBILE_PERF)
     surface.dither = 0.5;
 #else
@@ -162,19 +180,25 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     // Keep material flags live on Metal fragment stage (vertex-only reads get stripped).
     float foliageFlagFrag = OilEffectiveFoliageFlag(_OilFoliage, _OilFoliageSkipDay);
     float crossBbFrag = _OilCrossBillboard;
+    float yBbFrag = _OilYBillboard;
 
-    // Far cross-card: same OilFoliageLighting as near leaves (BoluoUnity LitAlbedoObject).
-    if (crossBbFrag > 0.5)
+    // Far Cross / Y impostor: baked OS normals → OilFoliageLighting (BoluoUnity LitAlbedoObject).
+    if (crossBbFrag > 0.5 || yBbFrag > 0.5)
     {
 #if !defined(OIL_MOBILE_PERF)
-        half3 viewBb = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
-        half ndotv = abs(dot(normalWS, viewBb));
-        clip(ndotv - (half)_EdgeFade);
+        // EdgeFade only for Cross (Y card already faces camera).
+        if (crossBbFrag > 0.5)
+        {
+            half3 viewBb = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
+            half ndotv = abs(dot(normalWS, viewBb));
+            clip(ndotv - (half)_EdgeFade);
+        }
 #endif
         half3 bakedN = (half3)SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, config.baseUV).rgb;
         half3 bb = OilTreeCrossBillboardShade(
             albedo, bakedN, (half)_NormalStrength, surface, config.fragment.screenUV);
 #if defined(OIL_MOBILE_PERF)
+        bb = OilWeaveTintMobile(bb, input.positionWS.xz * 0.15);
         bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush);
 #else
         bb = OilWeaveTint(bb, input.positionWS.xz * 0.15);
@@ -192,6 +216,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         half3 foliage = OilFoliageLighting(
             surface, albedo, (half)_ShadeSteps, config.fragment.screenUV);
 #if defined(OIL_MOBILE_PERF)
+        foliage = OilWeaveTintMobile(foliage, input.positionWS.xz * 0.15);
         foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush);
 #else
         foliage = OilWeaveTint(foliage, input.positionWS.xz * 0.15);
@@ -206,17 +231,15 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         albedo,
         half3(0.42h, 0.48h, 0.72h),
         half3(0.62h, 0.45h, 0.32h),
-        (half3)_SpecColor.rgb,
+        wetSpec,
         0.0h,
         (half)_ShadeSteps,
-        0.0h,
-        (half)_ShadowLift,
-        (half)_ShadeLift,
+        paintRim,
         brush,
-        (half)_ShadowWobble,
         0.0h,
         surface.smoothness,
         config.fragment.screenUV);
+    color = OilWeaveTintMobile(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush);
 #else
     half3 color = OilNPRLighting(
@@ -224,14 +247,11 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         albedo,
         half3(0.42h, 0.48h, 0.72h),
         half3(0.62h, 0.45h, 0.32h),
-        (half3)_SpecColor.rgb,
+        wetSpec,
         0.0h,
         (half)_ShadeSteps,
         paintRim,
-        (half)_ShadowLift,
-        (half)_ShadeLift,
         brush,
-        (half)_ShadowWobble,
         0.2h,
         surface.smoothness,
         config.fragment.screenUV);
@@ -244,6 +264,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         half3 foliage = OilFoliageLighting(
             surface, albedo, (half)_ShadeSteps, config.fragment.screenUV);
 #if defined(OIL_MOBILE_PERF)
+        foliage = OilWeaveTintMobile(foliage, input.positionWS.xz * 0.15);
         foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush);
 #else
         foliage = OilWeaveTint(foliage, input.positionWS.xz * 0.15);

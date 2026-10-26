@@ -40,6 +40,17 @@ namespace Game
 
         int _musicSerialId = -1;
 
+        /// <summary>Current BGM voice from <see cref="WanosSoundAgentHelper"/> (0 = none).</summary>
+        ulong _musicVoiceId;
+
+        /// <summary>Bumped on attach/detach so stale Ended after Stop/skip is ignored.</summary>
+        int _voiceGeneration;
+
+        /// <summary>Break_Music already posted for this voice (ListLoop / Shuffle).</summary>
+        bool _breakPostedForVoice;
+
+        bool _voiceHooked;
+
         /// <summary>
         /// 用户主动停过曲目（Stop）。回前台恢复时不能把停掉的曲目重新拉起来，
         /// 但「暂停」要恢复（需求：不管什么暂停状态，回前台都恢复音乐）。
@@ -83,11 +94,37 @@ namespace Game
         {
             if (_instance != null)
             {
+                _instance.UnhookVoiceStates();
                 _instance._musicSerialId = -1;
+                _instance._musicVoiceId = 0;
+                _instance._breakPostedForVoice = false;
+                _instance._voiceGeneration++;
                 _instance.IsPlaying = false;
                 _instance._stoppedByUser = false;
             }
             NowPlayingService.CleanupAfterLeaveIsland();
+        }
+
+        /// <summary>
+        /// Called by <see cref="WanosSoundAgentHelper"/> after PostEvent with callback.
+        /// </summary>
+        public void AttachMusicVoice(ulong voiceId)
+        {
+            EnsureVoiceHook();
+            _musicVoiceId = voiceId;
+            _breakPostedForVoice = false;
+            _voiceGeneration++;
+        }
+
+        /// <summary>
+        /// Called before Stop_Music so Ended from stop does not advance the playlist.
+        /// </summary>
+        public void DetachMusicVoice(ulong voiceId)
+        {
+            if (voiceId != 0 && voiceId == _musicVoiceId)
+                _musicVoiceId = 0;
+            _breakPostedForVoice = false;
+            _voiceGeneration++;
         }
 
         // -----------------------------------------------------------------------
@@ -122,11 +159,32 @@ namespace Game
         {
             if (mode < MusicPlayMode.Single || mode > MusicPlayMode.Shuffle)
                 mode = MusicPlayMode.Single;
-            PlayMode = mode;
-            if (GameEntry.Setting == null)
+            if (PlayMode == mode)
                 return;
-            GameEntry.Setting.SetInt(PlayModeKey, PlayMode);
-            GameEntry.Setting.Save();
+
+            // Boluo WanosMusicPlayer.SetPlayMode: Break while playing so native/C# mode
+            // and Break-vs-loop stay in sync (Single keeps engine loop; List/Shuffle Break).
+            if (IsPlaying && _musicVoiceId != 0)
+            {
+                _breakPostedForVoice = true;
+                try
+                {
+                    WanosNative.Instance.PostEvent(0, "Break_Music");
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[MusicPlaylist] Break_Music on SetPlayMode failed: {ex.Message}");
+                }
+            }
+
+            PlayMode = mode;
+            if (GameEntry.Setting != null)
+            {
+                GameEntry.Setting.SetInt(PlayModeKey, PlayMode);
+                GameEntry.Setting.Save();
+            }
+            // Android 负一屏 transport plan 带 mode；切模式后立刻重推，避免仍用旧模式切歌。
+            NowPlayingService.PublishFromPlaylist();
         }
 
         public int CyclePlayMode()
@@ -245,7 +303,8 @@ namespace Game
 
             if (PlayMode == MusicPlayMode.Shuffle)
             {
-                PlayIndex(PickShuffleAlbum(), PickShuffleTrack(), restart: true);
+                PickShuffle(out int album, out int track);
+                PlayIndex(album, track, restart: true);
                 return;
             }
 
@@ -279,7 +338,8 @@ namespace Game
 
             if (PlayMode == MusicPlayMode.Shuffle)
             {
-                PlayIndex(PickShuffleAlbum(), PickShuffleTrack(), restart: true);
+                PickShuffle(out int album, out int track);
+                PlayIndex(album, track, restart: true);
                 return;
             }
 
@@ -290,22 +350,118 @@ namespace Game
             PlayIndex(CurrentAlbumIndex, prev, restart: true);
         }
 
-        int PickShuffleAlbum()
+        void PickShuffle(out int albumIndex, out int trackIndex)
         {
-            if (MusicCatalog.AlbumCount <= 1)
-                return 0;
-            int next;
-            do { next = UnityEngine.Random.Range(0, MusicCatalog.AlbumCount); }
-            while (next == CurrentAlbumIndex);
-            return next;
+            albumIndex = CurrentAlbumIndex;
+            trackIndex = CurrentTrackIndex;
+            if (MusicCatalog.AlbumCount <= 0)
+                return;
+
+            // Prefer another album when possible; always pick track inside the chosen album.
+            if (MusicCatalog.AlbumCount > 1)
+            {
+                int nextAlbum;
+                do { nextAlbum = UnityEngine.Random.Range(0, MusicCatalog.AlbumCount); }
+                while (nextAlbum == CurrentAlbumIndex);
+                albumIndex = nextAlbum;
+            }
+            else
+            {
+                albumIndex = 0;
+            }
+
+            var tracks = MusicCatalog.GetTracks(albumIndex);
+            if (tracks.Count <= 0)
+            {
+                trackIndex = 0;
+                return;
+            }
+
+            if (tracks.Count == 1)
+            {
+                trackIndex = 0;
+                return;
+            }
+
+            int nextTrack;
+            do { nextTrack = UnityEngine.Random.Range(0, tracks.Count); }
+            while (albumIndex == CurrentAlbumIndex && nextTrack == CurrentTrackIndex);
+            trackIndex = nextTrack;
         }
 
-        int PickShuffleTrack()
+        // -----------------------------------------------------------------------
+        // Voice Playing / Ended → Break + auto-next (Boluo WanosMusicPlayer.PlayState)
+        // -----------------------------------------------------------------------
+
+        void EnsureVoiceHook()
         {
-            var tracks = MusicCatalog.GetTracks(CurrentAlbumIndex);
-            if (tracks.Count == 0)
-                return 0;
-            return UnityEngine.Random.Range(0, tracks.Count);
+            if (_voiceHooked)
+                return;
+            _voiceHooked = true;
+            WanosEventCallbackQueue.StateChanged += OnMusicVoiceState;
+        }
+
+        void UnhookVoiceStates()
+        {
+            if (!_voiceHooked)
+                return;
+            WanosEventCallbackQueue.StateChanged -= OnMusicVoiceState;
+            _voiceHooked = false;
+        }
+
+        void OnMusicVoiceState(ulong instanceId, int state)
+        {
+            if (instanceId == 0 || instanceId != _musicVoiceId)
+                return;
+
+            if (state == WanosInstanceState.Playing)
+            {
+                // ListLoop / ListShuffle: Break so the authored loop ends once → Ended → Next.
+                // SingleLoop: no Break → engine keeps looping the same event.
+                if (PlayMode == MusicPlayMode.Loop || PlayMode == MusicPlayMode.Shuffle)
+                {
+                    if (_breakPostedForVoice)
+                        return;
+                    _breakPostedForVoice = true;
+                    try
+                    {
+                        WanosNative.Instance.PostEvent(0, "Break_Music");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[MusicPlaylist] Break_Music failed: {ex.Message}");
+                    }
+                }
+                return;
+            }
+
+            if (state != WanosInstanceState.Ended)
+                return;
+
+            if (_stoppedByUser || NowPlayingService.UserManuallyPaused)
+                return;
+
+            // Drop ownership before Advance (PlayIndex → Stop detaches again safely).
+            _musicVoiceId = 0;
+            _breakPostedForVoice = false;
+            _voiceGeneration++;
+            AdvanceAfterTrackEnded();
+        }
+
+        void AdvanceAfterTrackEnded()
+        {
+            if (!MusicCatalog.IsReady)
+                return;
+
+            if (PlayMode == MusicPlayMode.Single)
+            {
+                // Should rarely hit (Single usually never Ends). Restart same track.
+                if (CurrentAlbumIndex >= 0 && CurrentTrackIndex >= 0)
+                    PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
+                return;
+            }
+
+            Next();
         }
 
         // -----------------------------------------------------------------------

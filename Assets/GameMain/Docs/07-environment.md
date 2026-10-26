@@ -83,7 +83,8 @@ static bool NativeInstancingEnabled = false;  static float NativeInstancingMaxDi
 static bool IsTreeCategory / IsRockCategory / IsSmallTreeCategory / IsClutterCategory
 static bool IsBridgeCategory / IsSmallVegCategory / IsNeverUnloadCategory / IsLargeRockPrefab
 static bool IsFarFieldLandmark / IsBuildingForFarCull / IsSmallRockForFarCull
-static void ApplyMobileTierDefaults();   // #if !UNITY_EDITOR，移动端收紧半径
+static void ApplyMobileTierDefaults();   // → ApplyGraphicsTierDefaults（按 Low/Mid/High/Gmj）
+// 分档表与环半径数值见 12-device-graphics-tiers.md §7.2
 ```
 
 ### EnvMeshColliderLod

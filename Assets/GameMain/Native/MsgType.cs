@@ -20,8 +20,13 @@ namespace Game.Native
         public const int NowPlaying = 105;
         /// <summary>N→U：宿主交权进岛（早挂后 GuestLogin 停 LoadingForm，收到本 Push 再进 ProcedureIsland）。</summary>
         public const int HostArmIslandEntry = 106;
-        /// <summary>N→U：宿主退岛（退登/注销）。复位 Arm / IslandReady，ProcedureIsland → GuestLogin，供再次 Arm。</summary>
+        /// <summary>
+        /// N→U：宿主退岛。复位 Arm / IslandReady，ProcedureIsland → GuestLogin，供再次 Arm。
+        /// <c>a=0</c> 普通退登（保留分桶进度）；<c>a=1</c> 注销成功（清空当前 userId 进度桶）。
+        /// </summary>
         public const int HostLeaveIsland = 107;
+        public const int HostLeaveReasonLogout = 0;
+        public const int HostLeaveReasonAccountDeleted = 1;
 
         public const int MediaPause = 0;
         public const int MediaPlay = 1;

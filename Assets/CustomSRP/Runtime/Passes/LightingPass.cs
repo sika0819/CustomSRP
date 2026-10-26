@@ -58,6 +58,11 @@ namespace CustomSRP
 
         static NativeArray<int> TileData;
 
+        // Planar mirror: 1×1 Forward+ tile whose header light-count is 0.
+        // Metal still requires every StructuredBuffer declared by Lit/Terrain
+        // shaders to be bound — skipping SetGlobalBuffer skips the draw.
+        static readonly int[] ReflectionTileStub = { 0 };
+
         CullingResults _cullingResults;
         int _dirLightCount;
         int _otherLightCount;
@@ -135,7 +140,7 @@ namespace CustomSRP
                 VisibleLight visibleLight = visibleLights[i];
                 Light light = visibleLight.light;
                 bool layerOk = (light.renderingLayerMask & renderingLayerMask) != 0;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || UNITY_INCLUDE_INSTRUMENTATION
                 bool isShadowCapable = light.shadows != LightShadows.None && light.shadowStrength > 0f;
 #endif
                 Vector4 shadowData = default;
@@ -190,7 +195,7 @@ namespace CustomSRP
                 }
 
                 // [SRP][Shadow.Light] 每 60 帧把每个光源过一次,看 ReserveShadows 给的是什么
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || UNITY_INCLUDE_INSTRUMENTATION
                 if ((Time.frameCount & 63) == 0)
                 {
                     Log.Info(string.Format(
@@ -203,7 +208,7 @@ namespace CustomSRP
 #endif
             }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || UNITY_INCLUDE_INSTRUMENTATION
             if ((Time.frameCount & 63) == 0)
             {
                 Log.Info(string.Format(
@@ -274,13 +279,19 @@ namespace CustomSRP
                 _handles.otherBuffer, OtherLightDataArray, 0, 0, _otherLightCount);
             buffer.SetGlobalBuffer(OtherLightDataId, _handles.otherBuffer);
 
-            // Planar mirror skipped tile bucketing; emit a 1×1 tile buffer so
-            // GPU-side Forward+ loops don't read out-of-range indices.
+            // Planar mirror skipped tile bucketing; still bind a 1×1 stub so
+            // Metal/Vulkan see _ForwardPlusTiles and Forward+ loops are no-ops.
             _forwardPlusJobHandle.Complete();
             if (_isReflection)
             {
+                buffer.SetBufferData(_handles.tilesBuffer, ReflectionTileStub);
+                buffer.SetGlobalBuffer(TilesId, _handles.tilesBuffer);
+                // z/w are ints bit-cast to float (see ForwardPlus.hlsl asint).
+                // Plain 1f would asint to 0x3F800000 and index wildly OOB.
                 buffer.SetGlobalVector(TileSettingsId, new Vector4(
-                    1f, 1f, 1f, 1f));
+                    1f, 1f,
+                    1.ReinterpretAsFloat(),
+                    1.ReinterpretAsFloat()));
             }
             else
             {

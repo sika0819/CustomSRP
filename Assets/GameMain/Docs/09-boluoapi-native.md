@@ -152,10 +152,28 @@ static int GetHostAppId(); static string GetHostDeviceId();
 
 // NativeSession
 static bool EnsureDeviceToken(bool forceRefresh = false);
-static bool TryGetUserToken(out string token);
+static bool TryGetUserToken(out string token);  // → TryGetUserSession
+static bool TryGetUserSession(out string token, out bool isGuest, out string userId);
+static bool TryParseUserSessionBlob(blob, out expire, out token, out isGuest, out userId);
 static void SetSignEnvironment(int env);
 static string GenerateSign(string jsonBody, string fixedNonceStr = null);
+```
 
+**User token blob（`SessionGetToken` + `TokenKindUser`）**
+
+| blob | 行为 |
+|---|---|
+| `token` 或 `expire\ttoken` | 旧格式 → `isGuest=true`，无 userId，**不写进度盘** |
+| `expire\ttoken\tisGuest\tuserId` | 新格式；`isGuest` 为 `0`/`1`；正式账号须 `isGuest=0` 且 `userId` 非空 |
+
+**`HostLeaveIsland`（107）**
+
+| `a` | 含义 |
+|---|---|
+| `0`（默认） | 普通退登 → `BoluoLogout.ExecuteLeave()`，保留 `*.{userId}` 进度桶 |
+| `1` | 注销成功 → `BoluoLogout.ExecuteAccountDeleted()`，清空当前桶 |
+
+```csharp
 // NativeBridgeFacade
 static bool OverlayPresent { get; } static bool BottomIconsHidden { get; } static bool BlocksLocomotion { get; }
 static void Init(); static void ResetSession();

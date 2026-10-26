@@ -1,12 +1,13 @@
 Shader "CustomSRP/OilCloudNPR"
 {
     // Cloud ring. Atlas: R belly, G edge, B SDF, A alpha.
-    // Sun-side highlight, far-side zenith, thick-paint strokes on one cloud brush.
+    // Oil stack matches skybox/ocean: canvas ridges, impasto warm/cool, weave tooth.
     Properties
     {
         _CloudMap ("Cloud Map (R belly G edge B SDF A)", 2D) = "black" {}
         _NoiseMap ("Noise (B disturbs UV)", 2D) = "gray" {}
         _CloudBrush ("Cloud Stroke", 2D) = "gray" {}
+        _OilCanvas ("Oil Canvas", 2D) = "gray" {}
 
         [Header(Shape)]
         _UVDisturbance ("UV Disturbance", Range(0, 0.2)) = 0.04
@@ -18,6 +19,12 @@ Shader "CustomSRP/OilCloudNPR"
         _TopShadow ("Far-Side Zenith Mix", Range(0, 1)) = 1
         _TopHighlight ("Near-Side Highlight Mix", Range(0, 1)) = 0.92
         _EdgeIntensity ("Edge Light", Range(0, 3)) = 1.55
+
+        [Header(Oil Brush)]
+        _BrushScale ("Brush Scale", Range(0.5, 8)) = 6
+        _BrushStrength ("Brush Strength", Range(0, 1)) = 0.72
+        _BrushContrast ("Brush Contrast", Range(0.5, 4)) = 1.6
+        _BrushRelief ("Brush Relief", Range(0, 1)) = 0.85
     }
 
     SubShader

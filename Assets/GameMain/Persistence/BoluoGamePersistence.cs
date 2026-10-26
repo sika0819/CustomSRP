@@ -6,15 +6,21 @@ namespace Game
     /// <summary>
     /// 游戏进度 / 本地偏好 PlayerPrefs 统一入口。
     /// 游客：不写岛内进度键，且主存档、位置、首进岛、下载红点、活动弹窗日期等不读磁盘。
+    /// 正式账号：进度键按 userId 分桶（<c>BaseKey.userId</c>）；退登保留，仅注销清该桶。
     /// 账号 token / 设备 token 由 <see cref="BoluoApi.BoluoSession"/> 管理，不在此类。
     /// </summary>
     public static class BoluoGamePersistence
     {
         static bool IsGuestSession => GuestSession.IsGuest;
 
-        /// <summary>正式账号且已登录才读写岛内进度（游客 / 退登后都不碰盘）。</summary>
-        static bool AllowsAccountProgressDisk =>
-            GuestSession.IsLoggedIn && !IsGuestSession;
+        /// <summary>正式账号、已登录且有 userId 才读写岛内进度（游客 / 无 userId / 退登后都不碰盘）。</summary>
+        public static bool AllowsAccountProgressDisk =>
+            GuestSession.IsLoggedIn
+            && !IsGuestSession
+            && !string.IsNullOrEmpty(GuestSession.UserId);
+
+        static string ProgressUserId =>
+            AllowsAccountProgressDisk ? (GuestSession.UserId ?? "") : "";
 
         public static class Keys
         {
@@ -34,21 +40,76 @@ namespace Game
             public const string AccPwPhoneRegistry = "Boluo.AccPwLogin.PhoneRegistry";
         }
 
+        static readonly string[] AccountBoundBaseKeys =
+        {
+            Keys.BoluoSaveData,
+            Keys.PlayerPos,
+            Keys.DaoYuFirstRunComplete,
+            Keys.TutorialType,
+            Keys.GongNengView,
+            Keys.DownloadedUnplayed,
+            Keys.ActivityWorldSleepPopupDate,
+            Keys.AppleUserIdKey,
+        };
+
+        static string BucketKey(string baseKey, string userId) =>
+            string.IsNullOrEmpty(userId) ? baseKey : baseKey + "." + userId;
+
+        static string CurrentBucketKey(string baseKey) =>
+            BucketKey(baseKey, ProgressUserId);
+
         /// <summary>
-        /// 切账号 / 退登：清账号绑定进度（位置、大气存档、首进岛、教程、红点等）。
+        /// 注销：清指定（或当前）账号绑定进度桶；并清无后缀旧键（迁移前遗留）。
         /// 保留设备级键（位置权限、首次联网、密码节流）。
         /// </summary>
-        public static void ClearAccountBoundProgress()
+        public static void ClearAccountBoundProgress(string userId = null)
         {
-            PlayerPrefs.DeleteKey(Keys.BoluoSaveData);
-            PlayerPrefs.DeleteKey(Keys.PlayerPos);
-            PlayerPrefs.DeleteKey(Keys.DaoYuFirstRunComplete);
-            PlayerPrefs.DeleteKey(Keys.TutorialType);
-            PlayerPrefs.DeleteKey(Keys.GongNengView);
-            PlayerPrefs.DeleteKey(Keys.DownloadedUnplayed);
-            PlayerPrefs.DeleteKey(Keys.ActivityWorldSleepPopupDate);
-            PlayerPrefs.DeleteKey(Keys.AppleUserIdKey);
+            string id = userId;
+            if (string.IsNullOrEmpty(id))
+                id = GuestSession.UserId ?? "";
+
+            if (!string.IsNullOrEmpty(id))
+            {
+                for (int i = 0; i < AccountBoundBaseKeys.Length; i++)
+                    PlayerPrefs.DeleteKey(BucketKey(AccountBoundBaseKeys[i], id));
+            }
+
+            // 旧版无后缀键：注销时一并清掉，避免再被迁到别人桶
+            for (int i = 0; i < AccountBoundBaseKeys.Length; i++)
+                PlayerPrefs.DeleteKey(AccountBoundBaseKeys[i]);
+
             PlayerPrefs.Save();
+        }
+
+        /// <summary>
+        /// 若分桶键不存在而旧无后缀键存在，则搬到当前 userId 桶并删旧键。
+        /// </summary>
+        static void MigrateLegacyStringKey(string baseKey)
+        {
+            if (!AllowsAccountProgressDisk)
+                return;
+            string bucket = CurrentBucketKey(baseKey);
+            if (PlayerPrefs.HasKey(bucket))
+                return;
+            if (!PlayerPrefs.HasKey(baseKey))
+                return;
+            string raw = PlayerPrefs.GetString(baseKey, "") ?? "";
+            PlayerPrefs.SetString(bucket, raw);
+            PlayerPrefs.DeleteKey(baseKey);
+        }
+
+        static void MigrateLegacyIntKey(string baseKey)
+        {
+            if (!AllowsAccountProgressDisk)
+                return;
+            string bucket = CurrentBucketKey(baseKey);
+            if (PlayerPrefs.HasKey(bucket))
+                return;
+            if (!PlayerPrefs.HasKey(baseKey))
+                return;
+            int v = PlayerPrefs.GetInt(baseKey, 0);
+            PlayerPrefs.SetInt(bucket, v);
+            PlayerPrefs.DeleteKey(baseKey);
         }
 
         #region BoluoSaveData
@@ -57,77 +118,99 @@ namespace Game
         {
             if (!AllowsAccountProgressDisk)
                 return "";
-            return PlayerPrefs.GetString(Keys.BoluoSaveData, "") ?? "";
+            MigrateLegacyStringKey(Keys.BoluoSaveData);
+            return PlayerPrefs.GetString(CurrentBucketKey(Keys.BoluoSaveData), "") ?? "";
         }
 
         public static void PersistBoluoSaveDataRaw(string json)
         {
             if (!AllowsAccountProgressDisk)
                 return;
-            PlayerPrefs.SetString(Keys.BoluoSaveData, json ?? "");
+            PlayerPrefs.SetString(CurrentBucketKey(Keys.BoluoSaveData), json ?? "");
         }
 
         #endregion
 
         #region 岛屿角色位置 / 首进标记
 
-        public static void PersistPlayerPositionJson(string json)
+        /// <returns>true 表示已写入当前 userId 桶（未 flush；调用方按需 <see cref="PlayerPrefsSave"/>）。</returns>
+        public static bool PersistPlayerPositionJson(string json)
         {
             if (!AllowsAccountProgressDisk)
-                return;
-            PlayerPrefs.SetString(Keys.PlayerPos, json ?? "");
+                return false;
+            PlayerPrefs.SetString(CurrentBucketKey(Keys.PlayerPos), json ?? "");
+            return true;
         }
 
         public static bool HasPlayerPositionSaved()
         {
             if (!AllowsAccountProgressDisk)
                 return false;
-            return PlayerPrefs.HasKey(Keys.PlayerPos);
+            MigrateLegacyStringKey(Keys.PlayerPos);
+            return PlayerPrefs.HasKey(CurrentBucketKey(Keys.PlayerPos));
         }
 
         public static string LoadPlayerPositionJson()
         {
             if (!AllowsAccountProgressDisk)
                 return "";
-            return PlayerPrefs.GetString(Keys.PlayerPos, "") ?? "";
+            MigrateLegacyStringKey(Keys.PlayerPos);
+            return PlayerPrefs.GetString(CurrentBucketKey(Keys.PlayerPos), "") ?? "";
         }
 
         public static bool HasDaoYuFirstRunCompleteMarker()
         {
             if (!AllowsAccountProgressDisk)
                 return false;
-            return PlayerPrefs.HasKey(Keys.DaoYuFirstRunComplete);
+            MigrateLegacyIntKey(Keys.DaoYuFirstRunComplete);
+            return PlayerPrefs.HasKey(CurrentBucketKey(Keys.DaoYuFirstRunComplete));
         }
 
         public static void SetDaoYuFirstRunCompleteMarker()
         {
             if (!AllowsAccountProgressDisk)
                 return;
-            PlayerPrefs.SetInt(Keys.DaoYuFirstRunComplete, 1);
+            PlayerPrefs.SetInt(CurrentBucketKey(Keys.DaoYuFirstRunComplete), 1);
         }
 
         #endregion
 
         #region 教程 / 功能引导
 
-        public static bool HasTutorialTypeMarker() =>
-            PlayerPrefs.HasKey(Keys.TutorialType);
+        public static bool HasTutorialTypeMarker()
+        {
+            if (AllowsAccountProgressDisk)
+            {
+                MigrateLegacyIntKey(Keys.TutorialType);
+                return PlayerPrefs.HasKey(CurrentBucketKey(Keys.TutorialType));
+            }
+
+            return PlayerPrefs.HasKey(Keys.TutorialType);
+        }
 
         public static void TrySetTutorialTypeMarker()
         {
             if (!AllowsAccountProgressDisk)
                 return;
-            PlayerPrefs.SetInt(Keys.TutorialType, 1);
+            PlayerPrefs.SetInt(CurrentBucketKey(Keys.TutorialType), 1);
         }
 
-        public static bool HasGongNengViewMarker() =>
-            PlayerPrefs.HasKey(Keys.GongNengView);
+        public static bool HasGongNengViewMarker()
+        {
+            if (AllowsAccountProgressDisk)
+            {
+                MigrateLegacyIntKey(Keys.GongNengView);
+                return PlayerPrefs.HasKey(CurrentBucketKey(Keys.GongNengView));
+            }
+
+            return PlayerPrefs.HasKey(Keys.GongNengView);
+        }
 
         public static void TrySetGongNengViewMarker()
         {
             if (!AllowsAccountProgressDisk)
                 return;
-            PlayerPrefs.SetInt(Keys.GongNengView, 1);
+            PlayerPrefs.SetInt(CurrentBucketKey(Keys.GongNengView), 1);
         }
 
         #endregion
@@ -153,14 +236,15 @@ namespace Game
         {
             if (!AllowsAccountProgressDisk)
                 return "";
-            return PlayerPrefs.GetString(Keys.DownloadedUnplayed, "") ?? "";
+            MigrateLegacyStringKey(Keys.DownloadedUnplayed);
+            return PlayerPrefs.GetString(CurrentBucketKey(Keys.DownloadedUnplayed), "") ?? "";
         }
 
         public static void PersistDownloadedUnplayedRaw(string json)
         {
             if (!AllowsAccountProgressDisk)
                 return;
-            PlayerPrefs.SetString(Keys.DownloadedUnplayed, json ?? "");
+            PlayerPrefs.SetString(CurrentBucketKey(Keys.DownloadedUnplayed), json ?? "");
         }
 
         #endregion
@@ -171,14 +255,15 @@ namespace Game
         {
             if (!AllowsAccountProgressDisk)
                 return "";
-            return PlayerPrefs.GetString(Keys.ActivityWorldSleepPopupDate, "") ?? "";
+            MigrateLegacyStringKey(Keys.ActivityWorldSleepPopupDate);
+            return PlayerPrefs.GetString(CurrentBucketKey(Keys.ActivityWorldSleepPopupDate), "") ?? "";
         }
 
         public static void TryPersistActivityWorldSleepPopupDateToday(string yyyyMmDd)
         {
             if (!AllowsAccountProgressDisk)
                 return;
-            PlayerPrefs.SetString(Keys.ActivityWorldSleepPopupDate, yyyyMmDd ?? "");
+            PlayerPrefs.SetString(CurrentBucketKey(Keys.ActivityWorldSleepPopupDate), yyyyMmDd ?? "");
             PlayerPrefs.Save();
         }
 
@@ -186,14 +271,25 @@ namespace Game
 
         #region Apple / 首次联网 / Flush
 
-        /// <summary>游客也可写入（登录链路辅助）。</summary>
-        public static void PersistAppleUserId(string userId)
+        /// <summary>游客也可写入（登录链路辅助）；正式账号写入分桶键。</summary>
+        public static void PersistAppleUserId(string appleUserId)
         {
-            PlayerPrefs.SetString(Keys.AppleUserIdKey, userId ?? "");
+            if (AllowsAccountProgressDisk)
+                PlayerPrefs.SetString(CurrentBucketKey(Keys.AppleUserIdKey), appleUserId ?? "");
+            else
+                PlayerPrefs.SetString(Keys.AppleUserIdKey, appleUserId ?? "");
         }
 
-        public static string LoadAppleUserId() =>
-            PlayerPrefs.GetString(Keys.AppleUserIdKey, "") ?? "";
+        public static string LoadAppleUserId()
+        {
+            if (AllowsAccountProgressDisk)
+            {
+                MigrateLegacyStringKey(Keys.AppleUserIdKey);
+                return PlayerPrefs.GetString(CurrentBucketKey(Keys.AppleUserIdKey), "") ?? "";
+            }
+
+            return PlayerPrefs.GetString(Keys.AppleUserIdKey, "") ?? "";
+        }
 
         public static bool HasFirstNetworkProbeComplete() =>
             PlayerPrefs.HasKey(Keys.FirstNetworkProbeComplete);
@@ -220,17 +316,19 @@ namespace Game
         {
             var sb = new StringBuilder(512);
             sb.Append("[BoluoGamePersistence] IsGuestSession=").Append(IsGuestSession)
-                .Append(" GameProgressDisk=").Append(IsGuestSession ? "isolated" : "read/write")
+                .Append(" userId=").Append(GuestSession.UserId ?? "")
+                .Append(" GameProgressDisk=").Append(AllowsAccountProgressDisk ? "read/write" : "isolated")
                 .AppendLine();
-            AppendKeyLine(sb, Keys.BoluoSaveData, maxValuePreviewChars);
-            AppendKeyLine(sb, Keys.PlayerPos, maxValuePreviewChars);
-            AppendKeyLine(sb, Keys.DaoYuFirstRunComplete, maxValuePreviewChars);
-            AppendKeyLine(sb, Keys.TutorialType, maxValuePreviewChars);
-            AppendKeyLine(sb, Keys.GongNengView, maxValuePreviewChars);
+            string uid = ProgressUserId;
+            for (int i = 0; i < AccountBoundBaseKeys.Length; i++)
+            {
+                string baseKey = AccountBoundBaseKeys[i];
+                AppendKeyLine(sb, baseKey, maxValuePreviewChars);
+                if (!string.IsNullOrEmpty(uid))
+                    AppendKeyLine(sb, BucketKey(baseKey, uid), maxValuePreviewChars);
+            }
+
             AppendKeyLine(sb, Keys.LocationPermissionRequested, maxValuePreviewChars);
-            AppendKeyLine(sb, Keys.DownloadedUnplayed, maxValuePreviewChars);
-            AppendKeyLine(sb, Keys.ActivityWorldSleepPopupDate, maxValuePreviewChars);
-            AppendKeyLine(sb, Keys.AppleUserIdKey, maxValuePreviewChars);
             AppendKeyLine(sb, Keys.FirstNetworkProbeComplete, maxValuePreviewChars);
             return sb.ToString();
         }

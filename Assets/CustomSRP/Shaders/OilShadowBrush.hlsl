@@ -1,6 +1,12 @@
 #ifndef CUSTOM_OIL_SHADOW_BRUSH_INCLUDED
 #define CUSTOM_OIL_SHADOW_BRUSH_INCLUDED
 
+// Mid soft-restore under OIL_MOBILE_PERF (0=hard cut, 0.5=half brush). Set by DeviceGraphicsPolicy.
+#ifndef CUSTOM_OIL_BRUSH_MOBILE_SCALE_DECLARED
+#define CUSTOM_OIL_BRUSH_MOBILE_SCALE_DECLARED
+float _OilBrushMobileScale;
+#endif
+
 // Caller declares _OutlineBrushMap, sampler_OutlineBrushMap,
 // _OutlineBrushMap_ST, and _ShadowBrushScale.
 // worldFrequency is UV per meter. Plane and terrain receivers both use 0.25.

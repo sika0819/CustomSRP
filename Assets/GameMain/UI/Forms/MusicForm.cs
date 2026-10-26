@@ -13,6 +13,10 @@ namespace Game
     public class MusicForm : GameFormLogic
     {
         protected override bool SlidesUpFromBottom => true;
+        protected override bool HidesBottomHudIcons => true;
+
+        /// <summary>Boluo InGameYinYueView <c>yinyuetanchuangkapian</c> anchoredY (bottom pivot).</summary>
+        protected override float SheetBottomOffset => 120f;
 
         // -----------------------------------------------------------------------
         // Runtime state
@@ -167,8 +171,16 @@ namespace Game
                 SetupAlbumDrag();
             }
 
-            // Play mode button.
+            // Play mode button (Boluo InGameYinYueView MODE_BTN: yy_danqu/list/suiji).
             _modeIcon = Root.Q("modeIcon");
+            VisualElement modeButton = Root.Q("modeButton");
+            if (modeButton != null)
+            {
+                modeButton.pickingMode = PickingMode.Position;
+                modeButton.BringToFront();
+            }
+            if (_modeIcon != null)
+                _modeIcon.pickingMode = PickingMode.Ignore;
             OnClick("modeButton", OnClickPlayMode);
             UpdateModeButton(MusicPlaylist.Instance.PlayMode);
 
@@ -1030,25 +1042,47 @@ namespace Game
         }
 
         // Sprite names for the 3 play modes (yy_danqu / yy_list / yy_suiji).
-        // Loaded from `Assets/GameMain/Resources/MusicForm/` so they survive
-        // the runtime build without needing an Addressables or AssetDatabase
-        // dependency.
+        // Loaded from `Assets/GameMain/Resources/MusicForm/` (Texture2D fallback —
+        // importer may still be Default, same as status icons).
         static readonly string[] ModeSpriteNames = { "yy_danqu", "yy_list", "yy_suiji" };
+        static Sprite[] _modeSprites;
 
         void UpdateModeButton(int mode)
         {
             if (_modeIcon == null)
                 return;
+            EnsureModeSpritesLoaded();
             int idx = mode switch
             {
-                (int)MusicPlayMode.Single => 0,
-                (int)MusicPlayMode.Loop => 1,
-                (int)MusicPlayMode.Shuffle => 2,
+                MusicPlayMode.Single => 0,
+                MusicPlayMode.Loop => 1,
+                MusicPlayMode.Shuffle => 2,
                 _ => 0,
             };
-            var sprite = Resources.Load<Sprite>($"MusicForm/{ModeSpriteNames[idx]}");
+            var sprite = _modeSprites != null && idx < _modeSprites.Length
+                ? _modeSprites[idx]
+                : null;
             if (sprite != null)
                 _modeIcon.style.backgroundImage = new StyleBackground(sprite);
+        }
+
+        static void EnsureModeSpritesLoaded()
+        {
+            if (_modeSprites != null && _modeSprites.Length == ModeSpriteNames.Length)
+                return;
+            _modeSprites = new Sprite[ModeSpriteNames.Length];
+            int found = 0;
+            for (int i = 0; i < ModeSpriteNames.Length; i++)
+            {
+                _modeSprites[i] = LoadMusicStatusSprite(ModeSpriteNames[i]);
+                if (_modeSprites[i] != null)
+                    found++;
+            }
+            if (found == 0)
+            {
+                Log.Warning("[MusicForm] Play-mode icons missing under Resources/MusicForm/ "
+                    + "(yy_danqu / yy_list / yy_suiji)");
+            }
         }
 
         // -----------------------------------------------------------------------

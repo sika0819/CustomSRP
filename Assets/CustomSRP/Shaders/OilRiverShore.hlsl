@@ -22,8 +22,8 @@ half2 OilRiverShoreFoamMask(
         return half2(0.0h, 0.0h);
     }
 
-    // 窄带宽：过宽会在岸缘拖出跟着镜头走的半透白带。
-    float lipReach = max(_IntersectionLength * 0.72, 0.2);
+    // 带宽由 _ShoreFoamWidth（米，眼深）直接控制；过宽会拖出跟镜头走的半透白带。
+    float lipReach = OilRiverShoreFoamWidthM();
     float interSecGradient = 1.0 - smoothstep(0.02, lipReach, viewDepth);
     interSecGradient = pow(saturate(interSecGradient), 2.1);
 
@@ -37,13 +37,14 @@ half2 OilRiverShoreFoamMask(
     noise = saturate(noise * (half)(dist * 1.35) + (half)(dist * 0.28));
     half softLo = (half)max(_IntersectionClipping - 0.14, 0.0);
     half softHi = (half)min(_IntersectionClipping + 0.18, 1.0);
+    half foamA = (half)saturate(_IntersectionAlpha);
     half intersection = smoothstep(softLo, softHi, noise)
-        * (half)_IntersectionColor.a
+        * foamA
         * (half)saturate(interSecGradient * 1.25);
 
     // 浅水 wash 只给一点点浅绿，不作奶白渐变。
     half shoreWash = (half)saturate(interSecGradient * interSecGradient * interSecGradient)
-        * (half)_IntersectionColor.a
+        * foamA
         * 0.22h;
 
     float inFrontOfWater = saturate((surfaceEye - sceneEye) * 4.0);

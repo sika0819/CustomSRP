@@ -1,0 +1,12 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="BootEarlyCover.uss" />
+    <ui:VisualElement name="root" class="boot-early-cover__root">
+        <ui:VisualElement name="still" class="boot-early-cover__still" picking-mode="Ignore" />
+        <ui:VisualElement name="chrome" class="boot-early-cover__chrome" picking-mode="Ignore">
+            <ui:VisualElement name="track" class="boot-early-cover__track">
+                <ui:VisualElement name="fill" class="boot-early-cover__fill" />
+            </ui:VisualElement>
+            <ui:Label name="tip" class="boot-early-cover__tip" text="正在进入世界..." />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

@@ -52,6 +52,11 @@ namespace Game
         public const string CampfireNoiseFireMatPath =
             "Assets/GameMain/Environment/FX/UnityFire/Materials/Campfire_NoiseFire.mat";
 
+        /// <summary>河岸/海边石头独立材质（调 _Wetness；AddressByFileName）。</summary>
+        public const string ShiTouShoreLocation = "ShiTou_Shore";
+        public const string ShiTouShoreMatPath =
+            "Assets/GameMain/Environment/Materials/ShiTou_Shore.mat";
+
         /// <summary>
         /// Yoo address：与 Collector <c>AddressByFolderAndFileName</c> 对齐
         /// （例：Lvshu_Maple 1；根目录预制体用文件名）。

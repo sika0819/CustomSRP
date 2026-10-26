@@ -182,8 +182,15 @@ namespace WanosAudio
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "RegisterEventStateCallback")]
         static extern WanosResult RegisterEventStateCallbackNative(IntPtr callback);
 
+        // Boluo WIAEngine: RemoveEventStateCallback(ulong instance_id) — per-voice, not global.
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "RemoveEventStateCallback")]
-        static extern void RemoveEventStateCallbackNative();
+        static extern int RemoveEventStateCallbackNative(ulong instanceId);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "PostEvent")]
+        static extern ulong PostEventNativeWithCallback(
+            ulong objId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string eventName,
+            WanosEventCallbackQueue.NativeEntry callback);
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         static extern void EngineStart();
 
@@ -507,6 +514,15 @@ namespace WanosAudio
 
         public ulong PostEvent(ulong objId, string eventName)
         {
+            return PostEvent(objId, eventName, callback: null);
+        }
+
+        /// <summary>
+        /// Post an event; when <paramref name="callback"/> is set, native reports Playing/Ended
+        /// for that voice (Boluo music Break / auto-next path).
+        /// </summary>
+        public ulong PostEvent(ulong objId, string eventName, WanosEventCallbackQueue.NativeEntry callback)
+        {
             if (string.IsNullOrEmpty(eventName))
                 return 0;
             if (!WanosEngine.ShouldAllowPostEvent(eventName))
@@ -516,8 +532,10 @@ namespace WanosAudio
             }
             try
             {
-                ulong voice = PostEventNative(objId, eventName, IntPtr.Zero);
-                Debug.Log($"[{LogTag}] PostEvent objId={objId} event={eventName} -> voice={voice}");
+                ulong voice = callback != null
+                    ? PostEventNativeWithCallback(objId, eventName, callback)
+                    : PostEventNative(objId, eventName, IntPtr.Zero);
+                Debug.Log($"[{LogTag}] PostEvent objId={objId} event={eventName} cb={(callback != null)} -> voice={voice}");
                 return voice;
             }
             catch (Exception e)
@@ -1071,8 +1089,13 @@ namespace WanosAudio
             });
         }
 
-        public void RemoveEventStateCallback() =>
-            TryCallOptional("RemoveEventStateCallback", RemoveEventStateCallbackNative);
+        /// <summary>Detach Playing/Ended callback for one voice (Boluo <c>RemoveEventStateCallback(instance)</c>).</summary>
+        public void RemoveEventStateCallback(ulong instanceId)
+        {
+            if (instanceId == 0)
+                return;
+            TryCallOptional("RemoveEventStateCallback", () => RemoveEventStateCallbackNative(instanceId));
+        }
 
         // ---- Utility ----
 

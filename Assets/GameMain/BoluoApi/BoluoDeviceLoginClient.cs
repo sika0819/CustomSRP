@@ -107,11 +107,14 @@ namespace Game.BoluoApi
             // Hybrid：宿主 SSOT 优先。退登后 Prefs 可能仍有旧票，或 Leave 已清票；
             // 若先 short-circuit Prefs，二次登录会沿用脏 token / 跳过 JNI 新票。
             if (Game.Native.NativeSession.IsHybridAvailable()
-                && Game.Native.NativeSession.TryGetUserToken(out string hybridToken)
+                && Game.Native.NativeSession.TryGetUserSession(
+                    out string hybridToken, out bool hybridGuest, out string hybridUserId)
                 && !string.IsNullOrEmpty(hybridToken))
             {
-                BoluoSession.ApplyUserSession(new UserSession { token = hybridToken }, isGuest: true);
-                Log.Info($"[DeviceLogin] hybrid userToken len={hybridToken.Length}");
+                Game.GuestSession.ApplyUserSession(hybridToken, hybridUserId, hybridGuest);
+                Log.Info(
+                    $"[DeviceLogin] hybrid userToken len={hybridToken.Length} " +
+                    $"guest={hybridGuest} userId={hybridUserId}");
                 return true;
             }
 
@@ -163,13 +166,14 @@ namespace Game.BoluoApi
                         $"[DeviceLogin] hybrid native token len={BoluoSession.DeviceToken.Length} " +
                         $"expire={BoluoSession.DeviceTokenExpireTime}");
                     if (string.IsNullOrEmpty(BoluoSession.UserToken)
-                        && Game.Native.NativeSession.TryGetUserToken(out string userToken)
+                        && Game.Native.NativeSession.TryGetUserSession(
+                            out string userToken, out bool userGuest, out string userId)
                         && !string.IsNullOrEmpty(userToken))
                     {
-                        BoluoSession.ApplyUserSession(
-                            new UserSession { token = userToken },
-                            isGuest: true);
-                        Log.Info($"[DeviceLogin] hybrid guest userToken len={userToken.Length}");
+                        Game.GuestSession.ApplyUserSession(userToken, userId, userGuest);
+                        Log.Info(
+                            $"[DeviceLogin] hybrid userToken len={userToken.Length} " +
+                            $"guest={userGuest} userId={userId}");
                     }
 
                     return true;

@@ -6,10 +6,9 @@
     bottom: 0;
 }
 
-/* Boluo sheet sits 120px above the bottom; raise stage so the 1437px card is vertically centered. */
-.game-music-form__root .game-form-stage {
-    margin-top: -1597.5px; /* -1218 (stage half) - 379.5 (sheet nudge) */
-}
+/* Sheet chrome uses shared .game-form-stage; USS authored for 120px above stage
+   bottom (Boluo InGameYinYueView yinyuetanchuangkapian anchoredY=120). Per-form gap:
+   MusicForm.SheetBottomOffset (GameFormLogic translates stage). */
 
 /* Boluo TipWindows (UICanvasTip tip.png); size/position refined in MusicForm.cs. */
 .game-music-form__hintwindows {
@@ -164,14 +163,14 @@
     width: 180px;
     margin-bottom: 0;
     height: 84px;
-    /* Background-transparent clickable container; click events fall through to
-       the icon so the whole 180×84 hit area works. */
+    /* Transparent hit target; icon is Ignore so clicks land on this button. */
     background-color: rgba(0, 0, 0, 0);
     border-width: 0;
     padding: 0;
+    picking-mode: Position;
 }
 
-/* Inner icon: Image backed by yy_danqu / yy_list / yy_suiji sprite. */
+/* Inner icon: yy_danqu / yy_list / yy_suiji (set in MusicForm.UpdateModeButton). */
 .game-music-form__mode-icon {
     position: absolute;
     left: 0;
@@ -182,6 +181,7 @@
     height: auto;
     -unity-background-scale-mode: scale-to-fit;
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    picking-mode: Ignore;
 }
 /* TextElement (not Label) — same hover-wash fix as album strip labels.
    Match InGameYinYueView title TMP: size 42, characterSpacing 0. */

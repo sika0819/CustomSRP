@@ -64,7 +64,6 @@ namespace Game
         float _toastFadeTo;
         float _toastFadeDuration;
         float _toastFadeElapsed = -1f;
-        bool _toastVisible;
         IslandVirtualJoystick _joystick;
         readonly IslandLocomotionInput _locomotion = new IslandLocomotionInput();
         readonly IslandIdleImmersive _idle = new IslandIdleImmersive();
@@ -75,6 +74,8 @@ namespace Game
         VisualElement _presetVeil;
         VisualElement _hudHeader;
         VisualElement _hudIcons;
+        VisualElement _presetIcon;
+        VisualElement _healthIcon;
         Label _presetLabel;
         IVisualElementScheduledItem _presetLabelHide;
         float _presetLabelAlpha;
@@ -100,13 +101,15 @@ namespace Game
             // 健康入口仅 iOS（及 Editor）展示；Android 真机隐藏。
             OnClick("profile", () => NativeBridgeFacade.HudProfile());
             OnClick("timerBackground", () => NativeBridgeFacade.HudTimer());
-            VisualElement healthIcon = Root.Q("defaultState2");
+            _presetIcon = Root.Q("presetIcon");
+            _healthIcon = Root.Q("defaultState2");
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (healthIcon != null)
-                healthIcon.style.display = DisplayStyle.None;
+            if (_healthIcon != null)
+                _healthIcon.style.display = DisplayStyle.None;
 #else
             OnClick("defaultState2", () => NativeBridgeFacade.HudHealth());
 #endif
+            HudBottomIcons.Bind(ApplyBottomIconsVisible);
             OnClick("timeBackground2", CycleTimePeriod);
 
             _timeHand = Root.Q("timeHand");
@@ -204,8 +207,30 @@ namespace Game
             _joystick?.Dispose();
             _joystick = null;
 
+            HudBottomIcons.Reset();
+            HudBottomIcons.Unbind(ApplyBottomIconsVisible);
+            _presetIcon = null;
+            _healthIcon = null;
+
             UnsubscribeHudEvents();
             base.OnClose(isShutdown, userData);
+        }
+
+        /// <summary>
+        /// Boluo ShowHideIcon：仅底部预设 + 健康；Android 健康入口始终隐藏。
+        /// </summary>
+        void ApplyBottomIconsVisible(bool visible)
+        {
+            if (_presetIcon != null)
+                _presetIcon.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+
+            if (_healthIcon == null)
+                return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _healthIcon.style.display = DisplayStyle.None;
+#else
+            _healthIcon.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+#endif
         }
 
         void ResubscribeHudEvents()
@@ -403,14 +428,20 @@ namespace Game
         void OnApplicationPause(bool paused)
         {
             if (paused)
+            {
                 IslandPlayerPosSave.TrySaveCurrentAndFlush();
+                // Drop joystick capture so a mid-drag pause cannot leave _active stuck.
+                _locomotion.ForceEnd();
+            }
             else
                 _idle.ExitOnReturnFromForeground();
         }
 
         void OnApplicationFocus(bool focused)
         {
-            if (focused)
+            if (!focused)
+                _locomotion.ForceEnd();
+            else
                 _idle.ExitOnReturnFromForeground();
         }
 
@@ -861,7 +892,6 @@ namespace Game
 
             ApplyToastContent(period);
             _toastHide?.Pause();
-            _toastVisible = true;
             StartToastFade(_toastAlpha, 1f, TimeToastFadeSeconds);
             _toastHide = Root.schedule.Execute(() =>
             {
@@ -873,7 +903,6 @@ namespace Game
         {
             _toastHide?.Pause();
             _toastHide = null;
-            _toastVisible = false;
             _toastFadeElapsed = -1f;
             _toastAlpha = 0f;
             ApplyToastOpacity(0f);
@@ -950,7 +979,6 @@ namespace Game
             _toastFadeElapsed = -1f;
             if (_toastAlpha <= 0.001f)
             {
-                _toastVisible = false;
                 if (_timeDial != null)
                     _timeDial.style.display = DisplayStyle.None;
             }

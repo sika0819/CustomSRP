@@ -370,6 +370,9 @@ namespace CustomSRP.Editor
         public const string OilOceanFoamPath = TexturesPath + "/OilOceanFoam.png";
         public const string OilOceanGlintPath = TexturesPath + "/OilOceanGlint.png";
         public const string OilSunStrokePath = TexturesPath + "/OilSunStroke.png";
+        // 与河 OilRiverNPR 同款岸沫噪波。
+        public const string IntersectionNoisePath =
+            "Assets/GameMain/Environment/ThirdParty/StylizedWater2/Materials/Textures/IntersectionNoise.png";
 
         /// <summary>
         /// Soft blotchy albedo for oil dabs (sRGB). Prefer authored OilAlbedo.png.
@@ -510,11 +513,7 @@ namespace CustomSRP.Editor
             material.SetColor("_BaseColor", color);
             material.SetFloat("_Cutoff", 0.5f);
             material.SetFloat("_ShadeSteps", 4f);
-            material.SetFloat("_ShadeLift", 0.42f);
-            material.SetFloat("_ShadowLift", 0.95f);
-            material.SetFloat("_ShadowWobble", 0.45f);
             material.SetFloat("_ShadowBrushScale", 1.8f);
-            material.SetColor("_AmbientColor", new Color(0.55f, 0.5f, 0.44f, 1f));
             material.SetFloat("_PaintThickness", 0.18f);
             Texture2D brush = EnsureOilBrushTexture();
             if (brush != null)
@@ -522,6 +521,8 @@ namespace CustomSRP.Editor
                 material.SetTexture("_OutlineBrushMap", brush);
                 material.SetTextureScale("_OutlineBrushMap", new Vector2(2.2f, 2.2f));
             }
+
+            material.SetShaderPassEnabled("Outline", false);
 
             if (baseMap != null)
             {
@@ -535,8 +536,6 @@ namespace CustomSRP.Editor
             ApplyShadowMode(material, ShadowMode.On);
             material.SetFloat("_ReceiveShadows", 1f);
             material.EnableKeyword("_RECEIVE_SHADOWS");
-            material.DisableKeyword("_CANVAS_ON");
-            material.DisableKeyword("_INTERNAL_EDGE_ON");
 
             material.enableInstancing = false;
             EditorUtility.SetDirty(material);
@@ -569,13 +568,25 @@ namespace CustomSRP.Editor
             return AssetDatabase.LoadAssetAtPath<Texture2D>(OilOceanFoamPath);
         }
 
+        public static Texture2D EnsureIntersectionNoiseTexture()
+        {
+            if (!File.Exists(IntersectionNoisePath))
+            {
+                Log.Error(
+                    "[CustomSRP] Missing IntersectionNoise.png. Expected at " + IntersectionNoisePath);
+                return null;
+            }
+
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(IntersectionNoisePath);
+        }
+
         public static Texture2D EnsureOilOceanGlintTexture()
         {
             if (!File.Exists(OilOceanGlintPath))
             {
                 Log.Error(
                     "[CustomSRP] Missing OilOceanGlint.png. Expected at " + OilOceanGlintPath);
-                return EnsureOilOceanFoamTexture();
+                return EnsureOilBrushTexture();
             }
 
             ConfigureSrgbTextureImporter(OilOceanGlintPath);
@@ -608,28 +619,55 @@ namespace CustomSRP.Editor
                 material.shader = ocean;
             }
 
-            // 对齐 OilRiverNPR：深/浅水色 + Monet 笔触 + 钛白岸沫；浅滩保留折射。
-            material.SetColor("_BaseColor", new Color(0.176f, 0.396f, 0.573f, 0.88f));
-            material.SetColor("_ShallowColor", new Color(0.275f, 0.404f, 0.576f, 0.72f));
+            // 深灰蓝水体（非死黑）+ 鹅黄/橘高光 + Monet 笔触 + 破碎岸沫。
+            material.SetColor("_BaseColor", new Color(0.14f, 0.18f, 0.36f, 0.96f));
+            material.SetColor("_ShallowColor", new Color(0.22f, 0.24f, 0.42f, 0.90f));
             material.SetColor("_FoamColor", new Color(0.94f, 0.97f, 1f, 1f));
-            material.SetColor("_GlintColor", new Color(1f, 0.92f, 0.55f, 1f));
+            material.SetColor("_GlintColor", new Color(0.92f, 0.78f, 0.42f, 1f));
+            material.SetColor("_TintShallow", new Color(0.78f, 0.68f, 0.48f, 1f));
+            material.SetColor("_TintDeep", new Color(0.28f, 0.24f, 0.42f, 1f));
+            material.SetColor("_TintHighlight", new Color(1f, 0.62f, 0.22f, 1f));
+            material.SetFloat("_TintStrength", 0.4f);
             material.SetFloat("_FoamStrength", 1.55f);
+            material.SetFloat("_IntersectionClipping", 0.2f);
+            material.SetFloat("_IntersectionTiling", 0.2f);
+            material.SetFloat("_IntersectionSpeed", 0.3f);
+            material.SetFloat("_IntersectionFalloff", 1f);
+            material.SetFloat("_IntersectionDistortion", 0.12f);
             material.SetFloat("_ShoreFoamWidth", 16f);
             material.SetFloat("_RefractionStrength", 0.55f);
             material.SetFloat("_DepthVertical", 1.35f);
             material.SetFloat("_SunPathStrength", 2.4f);
             material.SetFloat("_SunPathWidth", 4.5f);
+            material.SetFloat("_ReflectDistort", 0.35f);
+            material.SetFloat("_ReflectSteps", 3f);
+            material.SetFloat("_ReflectStrength", 1f);
+            material.SetFloat("_BumpScale", 0.9f);
+            material.SetFloat("_BumpTile", 80f);
+            material.SetFloat("_BumpCross", 0.85f);
+            // A=(1,2) 横笔拉长；B=(2,1) 轴交换交叉；Scroll zw 对向。
+            material.SetVector("_BumpTiling", new Vector4(1f, 2f, 2f, 1f));
+            material.SetVector("_BumpScroll", new Vector4(0.03f, -0.02f, -0.025f, 0.018f));
+            Texture2D waveNormal = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                TexturesPath + "/waternorma.jpg");
+            if (waveNormal != null)
+            {
+                material.SetTexture("_BumpMap", waveNormal);
+            }
+
             Texture2D paint = EnsureOilOceanTexture();
             if (paint != null)
             {
                 material.SetTexture("_PaintMap", paint);
             }
 
-            Texture2D foam = EnsureOilOceanFoamTexture();
-            if (foam != null)
+            Texture2D intersectionNoise = EnsureIntersectionNoiseTexture();
+            if (intersectionNoise != null)
             {
-                material.SetTexture("_FoamMap", foam);
+                material.SetTexture("_IntersectionNoise", intersectionNoise);
             }
+
+            material.SetTexture("_FoamMap", null);
 
             Texture2D glint = EnsureOilOceanGlintTexture();
             if (glint != null)
@@ -651,21 +689,15 @@ namespace CustomSRP.Editor
             material.SetFloat("_StrokeSlice", 0.72f);
             material.SetFloat("_StrokeWarp", 1.05f);
             material.SetFloat("_StrokeBands", 52f);
-            material.SetFloat("_AlbedoBoost", 1.08f);
+            material.SetFloat("_AlbedoBoost", 1f);
             material.SetFloat("_ShadeSteps", 3f);
-            material.SetFloat("_ShadeLift", 0.52f);
-            material.SetFloat("_ShadowLift", 1.05f);
-            material.SetFloat("_ShadowWobble", 0.48f);
-            material.SetColor("_AmbientColor", new Color(0.72f, 0.76f, 0.82f, 1f));
 
             _ = canvasMap;
             _ = brushMap;
 
             ApplySurface(material, SurfaceType.TransparentPremultiply);
-            // Flat sea + cascade culling sphere → camera-sliding 圆影. NPR shade only.
-            material.SetFloat("_ReceiveShadows", 0f);
+            // Flat sea + cascade → 圆影; never define _RECEIVE_SHADOWS on ocean.
             material.DisableKeyword("_RECEIVE_SHADOWS");
-            material.DisableKeyword("_CANVAS_ON");
             material.DisableKeyword("_SHADOWS_DITHER");
             material.enableInstancing = false;
             EditorUtility.SetDirty(material);
@@ -716,7 +748,6 @@ namespace CustomSRP.Editor
                 material.shader = sky;
             }
 
-            // canvasMap is the terrain canvas. The sky samples Textures/OilCanvas.png.
             _ = canvasMap;
 
             material.DisableKeyword("_CANVAS_ON");
@@ -825,6 +856,13 @@ namespace CustomSRP.Editor
                 material.SetTexture("_CloudBrush", brush);
             }
 
+            Texture2D oilCanvas = LoadSkyboxTexture(SkyOilCanvasPath);
+            if (oilCanvas != null && material.HasProperty("_OilCanvas"))
+            {
+                material.SetTexture("_OilCanvas", oilCanvas);
+                material.SetTextureScale("_OilCanvas", new Vector2(1.15f, 1f));
+            }
+
             material.SetFloat("_UVDisturbance", 0.04f);
             material.SetFloat("_SdfSoftness", 0.14f);
             material.SetFloat("_SdfMin", 0.48f);
@@ -832,6 +870,14 @@ namespace CustomSRP.Editor
             material.SetFloat("_TopShadow", 1f);
             material.SetFloat("_TopHighlight", 0.92f);
             material.SetFloat("_EdgeIntensity", 1.55f);
+            if (material.HasProperty("_BrushScale"))
+                material.SetFloat("_BrushScale", 6f);
+            if (material.HasProperty("_BrushStrength"))
+                material.SetFloat("_BrushStrength", 0.72f);
+            if (material.HasProperty("_BrushContrast"))
+                material.SetFloat("_BrushContrast", 1.6f);
+            if (material.HasProperty("_BrushRelief"))
+                material.SetFloat("_BrushRelief", 0.85f);
             material.enableInstancing = false;
             EditorUtility.SetDirty(material);
             return material;
@@ -856,11 +902,8 @@ namespace CustomSRP.Editor
             material.SetColor("_BaseColor", new Color(0.92f, 0.88f, 0.78f, 1f));
             material.SetFloat("_PaintThickness", 0.12f);
             material.SetFloat("_ShadeSteps", 3f);
-            material.SetFloat("_ShadeLift", 0.48f);
-            material.SetFloat("_ShadowLift", 1.05f);
-            material.SetFloat("_ShadowWobble", 0.55f);
             material.SetFloat("_ShadowBrushScale", 1.35f);
-            material.SetColor("_AmbientColor", new Color(0.5f, 0.52f, 0.44f, 1f));
+            material.SetShaderPassEnabled("Outline", false);
             EditorUtility.SetDirty(material);
         }
 
@@ -878,8 +921,6 @@ namespace CustomSRP.Editor
 
                 bool isGround = material.name.Contains("Ground");
                 material.SetFloat("_PaintThickness", isGround ? 0.1f : 0.14f);
-                material.DisableKeyword("_CANVAS_ON");
-                material.DisableKeyword("_INTERNAL_EDGE_ON");
                 EditorUtility.SetDirty(material);
             }
         }

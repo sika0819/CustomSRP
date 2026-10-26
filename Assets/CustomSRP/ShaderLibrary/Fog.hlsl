@@ -59,10 +59,10 @@ float OilFoggyBoost()
     return 1.0 + saturate(_FogDensity) * 0.35;
 }
 
-// Authored ExpSquared density (~0.0002..0.002) + Foggy weather → 0..1 concentration.
+// Authored ExpSquared density (~0.002..0.02) + Foggy weather → 0..1 concentration.
 float AtmosphereConcentration()
 {
-    float dens = 0.001;
+    float dens = 0.01;
     if (_CustomFogMode >= 1.5)
     {
         dens = _CustomFogParams.x * (1.0 / 1.20112240879);
@@ -72,8 +72,8 @@ float AtmosphereConcentration()
         dens = _CustomFogParams.y * (1.0 / 1.44269504089);
     }
 
-    // 0.0002 → low band, 0.001 → mid, 0.002+ → climbs high.
-    float n = saturate((dens - 0.00015) / 0.00185);
+    // 0.002 → low band, 0.01 → mid, 0.02+ → climbs high.
+    float n = saturate((dens - 0.0015) / 0.0185);
     n = saturate(n + saturate(_FogDensity) * 0.4);
     return n;
 }

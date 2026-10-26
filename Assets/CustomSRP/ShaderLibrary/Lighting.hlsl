@@ -1,6 +1,8 @@
 #ifndef CUSTOM_LIGHTING_INCLUDED
 #define CUSTOM_LIGHTING_INCLUDED
 
+#include "OilBrdfCommon.hlsl"
+
 bool RenderingLayersOverlap(Surface surface, Light light)
 {
     return (surface.renderingLayerMask & light.renderingLayerMask) != 0;
@@ -8,8 +10,14 @@ bool RenderingLayersOverlap(Surface surface, Light light)
 
 float3 IncomingLight(Surface surface, Light light)
 {
-    return saturate(dot(surface.normal, light.direction) * light.attenuation) *
-        light.color;
+    // Half-Lambert → oil shade bands; keep attenuation raw (no hash warp —
+    // world-noise on att made self-shadow read as concentric rings).
+    float ndotL = saturate(dot(surface.normal, light.direction));
+    float halfLambert = ndotL * 0.5 + 0.5;
+    float band = (float)OilQuantizeNdotL((half)halfLambert, OilBrdfShadeSteps());
+    // More continuous mix — strong poster steps read as concentric rings on spheres.
+    float lit = lerp(band, halfLambert, 0.42) * light.attenuation;
+    return lit * light.color;
 }
 
 float3 GetLighting(Surface surface, BRDF brdf, Light light)

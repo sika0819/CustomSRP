@@ -1,6 +1,8 @@
 #ifndef CUSTOM_OIL_WATER_REFLECT_INCLUDED
 #define CUSTOM_OIL_WATER_REFLECT_INCLUDED
 
+#include "../ShaderLibrary/OilBrdfCommon.hlsl"
+
 // ReflectionRT — low-res oil glaze (planar cam matches main FOV/aspect).
 TEXTURE2D(_OilPlanarReflectTex);
 SAMPLER(sampler_OilPlanarReflectTex);
@@ -211,37 +213,19 @@ void OilWaterSkyAnchors(
 
 half3 OilWaterSkyColor(float y, half stroke, half3 zenith, half3 mid, half3 horizon, half3 ground)
 {
+    // 水面釉：地平别跟天空一样爆亮，掠射只取偏中层的色带。
+    horizon = lerp(mid, horizon, 0.45h);
     float above = saturate(y * 0.85 + 0.12);
-    half3 col = lerp(horizon, mid, smoothstep(0.0, 0.28, above));
-    col = lerp(col, zenith, smoothstep(0.16, 0.82, above));
+    half3 col = lerp(horizon, mid, smoothstep(0.0, 0.32, above));
+    col = lerp(col, zenith, smoothstep(0.20, 0.88, above));
     col = lerp(col, ground, smoothstep(0.02, -0.28, y));
-    half shift = (stroke - 0.5h) * 0.28h;
-    half3 carried = lerp(horizon, zenith, saturate((half)above + shift));
-    return lerp(col, carried, 0.55h);
+    half shift = (stroke - 0.5h) * 0.22h;
+    half3 carried = lerp(horizon, mid, saturate((half)above + shift));
+    return lerp(col, carried, 0.40h);
 }
 
-half3 OilWaterBodyGlint(half3 sky, float3 rayDir, float3 bodyDir, half size, half intensity, half glowAmt, half3 disc, half3 glow)
-{
-    if (intensity < 0.05h || dot(bodyDir, bodyDir) < 1e-4)
-    {
-        return sky;
-    }
-
-    bodyDir = normalize(bodyDir);
-    half vis = (half)smoothstep(-0.04, 0.12, bodyDir.y);
-    if (vis < 0.001h)
-    {
-        return sky;
-    }
-
-    half facing = (half)dot(rayDir, bodyDir);
-    half discR = saturate((facing - (1.0h - size * 3.2h)) / max(size * 3.2h, 0.02h));
-    discR = discR * discR;
-    half glowR = saturate((facing - (1.0h - size * 9.0h)) / max(size * 9.0h, 0.04h));
-    sky = lerp(sky, glow, glowR * glowAmt * vis * 0.55h);
-    return lerp(sky, disc, discR * vis);
-}
-
+// 倒影天空：只叠色带，不跟太阳/月亮方向。
+// 太阳光痕只走 OilOceanSunGlint / OilRiverSunGlint（太阳→相机车道）。
 half3 OilWaterAnalyticSky(float3 rayDir, half stroke)
 {
     half3 zenith, mid, horizon, ground, sunDisc, sunGlow, moonDisc, moonGlow;
@@ -254,9 +238,16 @@ half3 OilWaterAnalyticSky(float3 rayDir, half stroke)
         moonSize, moonIntensity, moonGlowAmt);
 
     half3 sky = OilWaterSkyColor(rayDir.y, stroke, zenith, mid, horizon, ground);
-    sky = OilWaterBodyGlint(sky, rayDir, _OilSkySunDir, sunSize, sunIntensity, sunGlowAmt, sunDisc, sunGlow);
-    sky = OilWaterBodyGlint(sky, rayDir, _OilSkyMoonDir, moonSize, moonIntensity, moonGlowAmt, moonDisc, moonGlow);
+    // 峰值再压一档，避免中午/日出色带把釉面刷成粉笔。
+    half peak = max(sky.r, max(sky.g, sky.b));
+    sky *= lerp(1.0h, 0.70h, saturate((peak - 0.55h) / 0.45h));
     return sky;
+}
+
+// Compat alias — shared OilPosterizeLuma lives in OilBrdfCommon.
+half3 OilWaterPosterizeLuma(half3 c, half steps)
+{
+    return OilPosterizeLuma(c, steps);
 }
 
 half3 ApplyOilWaterReflection(
@@ -266,8 +257,11 @@ half3 ApplyOilWaterReflection(
     half3 viewDir,
     half stroke,
     half openWater,
-    float2 screenUV)
+    float2 screenUV,
+    half distort,
+    half reflectSteps)
 {
+    // strength 用入参路径的材质常量；俯视时也要能明显拉开 0↔1（旧 nadir×0.2 体感「没反应」）。
     half strength = (half)_ReflectStrength * saturate(openWater);
     if (strength < 0.01h)
     {
@@ -277,62 +271,80 @@ half3 ApplyOilWaterReflection(
     half facing = saturate(dot(viewDir, half3(0.0h, 1.0h, 0.0h)));
     half fresnel = saturate(1.0h - facing);
     fresnel = fresnel * fresnel * (3.0h - 2.0h * fresnel);
-    // Soft glaze — 掠射上限收紧，避免宽 FOV 屏幕边缘刷成奶白。
-    half mix = strength * lerp(0.18h, 0.52h, fresnel);
+    // Soft glaze — 连续 mix；nadir 也给足，Reflection Glaze 滑条才跟手。
+    half mix = strength * lerp(0.48h, 0.82h, fresnel);
     mix *= lerp(0.9h, 1.0h, stroke);
 
-    // 屏幕边缘：FOV 角上 viewDir 更掠射，解析天空被 Fresnel 拉满 → 跟镜头边走的白带。
-    // 边框压 mix，画面中心倒影仍叠天空色。
-    float2 frame = saturate(min(screenUV, 1.0 - screenUV) * 4.5);
+    // 侧缘略压，挡住掠射发白；别压死，否则山倒影跟着没。
+    float2 frame = saturate(min(screenUV, 1.0 - screenUV) * 5.0);
     half inFrame = saturate(frame.x * frame.y);
-    mix *= lerp(0.38h, 1.0h, inFrame);
+    half sideFrame = saturate(min(screenUV.x, 1.0 - screenUV.x) * 5.5);
+    inFrame *= lerp(0.65h, 1.0h, sideFrame);
+    mix *= lerp(0.55h, 1.0h, inFrame);
 
-    float3 n = normalize(lerp(float3(0.0, 1.0, 0.0), (float3)normalWS, 0.35));
+    // 解析天空仍用偏平法线；UV 扭曲另走 waveN（见下）——混在一起会让 Distort≈noop。
+    float3 n = normalize(lerp(float3(0.0, 1.0, 0.0), (float3)normalWS, 0.28));
     float3 rayDir = reflect(-(float3)viewDir, n);
+    // 解析天空：色带 only（无太阳盘）；太阳光痕另走 glint。
     half3 reflectCol = OilWaterAnalyticSky(rayDir, stroke);
 
-    // 倒影保留天空色相；高亮（含微彩过曝灰天）往水体本色收。
+    // 解析天空略往水体收；过亮压 chalk。平面山体倒影叠在后面，不受 keep 冲掉。
+    half3 waterTint = lerp(
+        (half3)_BaseColor.rgb,
+        (half3)_ShallowColor.rgb,
+        saturate(fresnel * 1.3h + 0.25h));
     {
-        half3 waterTint = lerp(
-            (half3)_BaseColor.rgb,
-            (half3)_ShallowColor.rgb,
-            saturate(fresnel * 1.4h + 0.25h));
         half rb = (waterTint.r + waterTint.b) * 0.5h;
         waterTint.g = lerp(waterTint.g, rb, 0.35h);
-        half keep = lerp(0.40h, 0.62h, fresnel);
-        keep *= lerp(0.72h, 1.0h, inFrame);
+        half keep = lerp(0.42h, 0.68h, fresnel);
+        keep *= lerp(0.75h, 1.0h, inFrame);
 
         half reflL = max(reflectCol.r, max(reflectCol.g, reflectCol.b));
         half reflC = reflL - min(reflectCol.r, min(reflectCol.g, reflectCol.b));
-        half chalk = saturate((reflL - 0.68h) * 3.2h) * saturate(1.0h - reflC * 7.0h);
-        // 灰白天也算热：亮度够高就压一档，不只砍零彩度。
-        half hot = saturate((reflL - 0.78h) * 4.5h);
+        half chalk = saturate((reflL - 0.62h) * 2.8h) * saturate(1.0h - reflC * 6.0h);
+        half hot = saturate((reflL - 0.72h) * 4.0h);
         chalk = saturate(max(chalk, hot * 0.55h));
         half sunrise = (half)saturate(_OilSkySunrise);
-        chalk = saturate(chalk * lerp(0.7h, 1.15h, sunrise));
+        chalk = saturate(chalk * lerp(0.7h, 1.1h, sunrise));
         reflectCol = lerp(reflectCol, waterTint, chalk * 0.5h);
         reflectCol *= lerp(1.0h, 0.78h, chalk);
-
         reflectCol = lerp(waterTint, reflectCol, keep);
     }
+
+    // Cap = OilOceanNPR _ReflectDistort Range max。
+    half distortAmt = min(max(distort, 0.0h), 0.35h) * lerp(0.55h, 1.0h, inFrame);
 
     if (_OilPlanarReflectOn > 0.5)
     {
         float2 uv = screenUV;
-        uv += float2(n.x, n.z) * 0.035;
-        uv += float2(stroke - 0.5h, 0.5h - stroke) * 0.01h;
+        // 波浪法线直接进 UV（0.85），再加笔触底噪——平静处也能糊掉低分辨率锯齿。
+        float3 nWarp = normalize(lerp(float3(0.0, 1.0, 0.0), (float3)normalWS, 0.85));
+        float3 nFlat = float3(nWarp.x, 0.0, nWarp.z);
+        float3 lookH = float3(viewDir.x, 0.0, viewDir.z);
+        float lookLen = length(lookH);
+        lookH = lookLen > 1e-4 ? lookH / lookLen : float3(0.0, 0.0, 1.0);
+        float3 rightH = cross(float3(0.0, 1.0, 0.0), lookH);
+        float rightLen = length(rightH);
+        rightH = rightLen > 1e-4 ? rightH / rightLen : float3(1.0, 0.0, 0.0);
+        // 主扭曲在 U（横）：acrossReflect → 左右涟漪；V 只留很淡的沿倒影起伏。
+        float alongReflect = dot(nFlat, lookH);
+        float acrossReflect = dot(nFlat, rightH);
+        float2 warp = float2(acrossReflect, alongReflect * 0.28) * ((float)distortAmt * 2.4);
+        float strokeWobble = (float)(stroke - 0.5h);
+        warp += float2(strokeWobble, strokeWobble * 0.25) * (float)distortAmt;
+        uv += warp;
         float2 edge = saturate(min(uv, 1.0 - uv) * 6.0);
         half edgeFade = (half)(edge.x * edge.y);
         if (edgeFade > 0.001h)
         {
 #if defined(OIL_MOBILE_PERF)
-            // RT is already ≤192px soft glaze — 5-tap smear is invisible at 0.5 scale.
             half3 planar = (half3)SAMPLE_TEXTURE2D_LOD(
                 _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv, 0.0).rgb;
 #else
-            // Low-res RT + wide 5-tap smear at mip0 (no auto-mips — those were black).
+            // smear 横宽竖窄，跟主扭曲轴向一致。
             float2 texel = max(_OilPlanarReflectTex_TexelSize.xy, float2(1.0 / 160.0, 1.0 / 160.0));
-            texel *= 4.5;
+            float smear = 2.0 + (float)distortAmt * 18.0;
+            texel *= float2(smear, smear * 0.4);
             half3 planar = (half3)SAMPLE_TEXTURE2D_LOD(
                 _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv, 0.0).rgb;
             planar += (half3)SAMPLE_TEXTURE2D_LOD(
@@ -340,21 +352,26 @@ half3 ApplyOilWaterReflection(
             planar += (half3)SAMPLE_TEXTURE2D_LOD(
                 _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv - float2(texel.x, 0.0), 0.0).rgb;
             planar += (half3)SAMPLE_TEXTURE2D_LOD(
-                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv + float2(0.0, texel.y), 0.0).rgb;
+                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv + float2(0.0, texel.y), 0.0).rgb * 0.55h;
             planar += (half3)SAMPLE_TEXTURE2D_LOD(
-                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv - float2(0.0, texel.y), 0.0).rgb;
-            planar *= 0.2h;
+                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv - float2(0.0, texel.y), 0.0).rgb * 0.55h;
+            planar *= 1.0h / 4.1h;
 #endif
-            // 青苔山 / 树叶在 0.1× 反射 RT 里糊成一片绿；只削「G 高于 R/B」的植被溢色，
-            // 直视山体与 analytic sky 路径不动。
+            // 植被溢绿削一档；山体轮廓保留。
             half maxRB = max(planar.r, planar.b);
             half gPush = saturate((planar.g - maxRB) * 2.4h);
             planar.g = lerp(planar.g, maxRB, gPush * 0.72h);
             planar.b = saturate(planar.b + gPush * 0.12h);
+            // 平面相机倒影（山/岸）拉满 edgeFade，不再 ×0.32 冲没。
             reflectCol = lerp(reflectCol, planar, edgeFade);
         }
     }
 
+    // 极轻柔化即可；强 posterize / 阶梯 mix 会在釉面上拉条带。
+    // reflectSteps 仍接材质，但只作很淡的 luma 分档。
+    half steps = max(reflectSteps, 2.0h);
+    half3 posterized = OilWaterPosterizeLuma(reflectCol, steps);
+    reflectCol = lerp(reflectCol, posterized, 0.18h);
     return lerp(color, reflectCol, saturate(mix));
 }
 

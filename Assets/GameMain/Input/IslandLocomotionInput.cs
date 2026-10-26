@@ -21,6 +21,7 @@ namespace Game
         public void ForceEnd()
         {
             _joystick?.ForceEnd();
+            _lookPointerId = -1;
             LocomotionInput.ClearAll();
             IsMoveInputActive = false;
         }

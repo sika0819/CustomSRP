@@ -148,8 +148,8 @@ SkyPeriodLook PeriodLookFallback(int index)
         p.sunSize = 0.07;
         p.sunIntensity = 0.9;
         p.sunGlow = 0.24;
-        p.moonDisc = float3(0.7800, 0.8200, 0.9000);
-        p.moonGlowColor = float3(0.4500, 0.5200, 0.7000);
+        p.moonDisc = float3(0.8784, 0.9098, 0.9490);
+        p.moonGlowColor = float3(0.7843, 0.8471, 0.9255);
         p.moonSize = 0.05;
         p.moonIntensity = 0.12;
         p.moonGlow = 0.06;
@@ -186,12 +186,12 @@ SkyPeriodLook PeriodLookFallback(int index)
         p.sunSize = 0.08;
         p.sunIntensity = 0.75;
         p.sunGlow = 0.28;
-        p.moonDisc = float3(0.7000, 0.7400, 0.8600);
-        p.moonGlowColor = float3(0.3500, 0.4000, 0.5800);
+        p.moonDisc = float3(0.88, 0.92, 0.96);
+        p.moonGlowColor = float3(0.68, 0.76, 0.88);
         p.moonSize = 0.055;
         p.moonIntensity = 0.45;
-        p.moonGlow = 0.14;
-        p.starIntensity = 0.12;
+        p.moonGlow = 0.22;
+        p.starIntensity = 0.15;
     }
     else
     {
@@ -204,12 +204,13 @@ SkyPeriodLook PeriodLookFallback(int index)
         p.sunSize = 0.05;
         p.sunIntensity = 0.08;
         p.sunGlow = 0.02;
-        p.moonDisc = float3(0.6200, 0.6800, 0.8200);
-        p.moonGlowColor = float3(0.2800, 0.3400, 0.5200);
+        // Cool-white halo — softer than sun glare.
+        p.moonDisc = float3(0.92, 0.94, 0.98);
+        p.moonGlowColor = float3(0.72, 0.80, 0.90);
         p.moonSize = 0.07;
         p.moonIntensity = 0.85;
-        p.moonGlow = 0.22;
-        p.starIntensity = 0.58;
+        p.moonGlow = 0.32;
+        p.starIntensity = 1.0;
     }
 
     p.sunDir = float3(0, 1, 0);
@@ -366,19 +367,54 @@ half3 PaintSky(float y, half stroke, SkyPeriodLook look)
     return lerp(col, painted, depth);
 }
 
+// Shared celestial halo: ring from disc rim → 1.85× disc radius (sun & moon).
+half3 PaintCelestialHalo(
+    half3 sky,
+    float3 viewDir,
+    float3 bodyDir,
+    float bodySize,
+    float glow,
+    float visibility,
+    float3 glowColor,
+    half mixAmt,
+    half allowHdr)
+{
+    half amt = (half)glow * (half)visibility;
+    if (amt < 0.01h)
+    {
+        return sky;
+    }
+
+    bodyDir = normalize(bodyDir);
+    float discR = max(bodySize, 1e-4);
+    float haloR = discR * 1.85;
+    float ang = acos(clamp(dot(viewDir, bodyDir), -1.0, 1.0));
+    float3 upRef = abs(bodyDir.y) > 0.95 ? float3(1.0, 0.0, 0.0) : float3(0.0, 1.0, 0.0);
+    float3 t = normalize(cross(upRef, bodyDir));
+    float3 b = cross(bodyDir, t);
+    float2 angUv = float2(dot(viewDir, t), dot(viewDir, b));
+    float n = (OilFbm(angUv * 9.0 + bodyDir.xz * 2.1) - 0.5) * discR * 0.18;
+
+    half ring = (half)smoothstep(discR * 0.78 + n, discR * 0.98 + n, ang)
+        * (1.0h - (half)smoothstep(discR * 1.05 + n, haloR + n, ang));
+    half3 tint = (half3)glowColor;
+    if (allowHdr > 0.5h)
+    {
+        // Sun: push halo above 1 so bloom/HDR reads as bright oil glare.
+        tint = tint * (1.35h + amt * 0.85h);
+        sky = sky + tint * saturate(ring * amt * mixAmt);
+    }
+    else
+    {
+        // Moon: soft cool wash — keep mix modest so the ring is a veil, not a lamp.
+        sky = lerp(sky, tint, saturate(ring * amt * mixAmt));
+    }
+    return sky;
+}
+
 half3 PaintAir(half3 sky, float3 viewDir, SkyPeriodLook look)
 {
-    float3 sunDir = normalize(look.sunDir);
-    float sunDot = dot(viewDir, sunDir);
-    half sunAir = (half)smoothstep(0.2, 0.92, sunDot) * (half)look.sunGlow * (half)look.sunVisibility;
-    sky = lerp(sky, lerp(sky, (half3)look.sunGlowColor, 0.5h), saturate(sunAir * 0.4h));
-
-    float3 moonDir = normalize(look.moonDir);
-    float moonDot = dot(viewDir, moonDir);
-    half moonFacing = saturate(moonDot);
-    half moonSq = moonFacing * moonFacing;
-    half moonAir = moonSq * moonSq * moonFacing * (half)look.moonGlow * (half)look.moonVisibility;
-    sky = lerp(sky, lerp(sky, (half3)look.moonGlowColor, 0.35h), saturate(moonAir));
+    // Sun/moon 1.85× halos are applied after fog (PaintCelestialHalo) so they stay visible.
     return sky;
 }
 
@@ -476,7 +512,8 @@ half3 PaintStars(half3 sky, float3 viewDir, float yaw, float pitch, float starIn
     half3 tint = tintPick > 0.5
         ? half3(1.08h, 0.96h, 0.7h)
         : half3(0.74h, 0.86h, 1.14h);
-    return s.rgb * tint;
+    // starIntensity from C# look table: day=0, dusk fade-in, night=1.
+    return lerp(sky, s.rgb * tint, saturate(starIntensity));
 }
 
 half3 StampBody(
@@ -491,7 +528,8 @@ half3 StampBody(
     float3 discColor,
     float3 glowColor,
     half3 sky,
-    half impasto)
+    half impasto,
+    float2 positionSS)
 {
     // On/off only. Dawn sun sits at y≈0 → SoftVisibility≈0.29; a 0.5 gate hid it.
     // Partial visibility must NOT scale coverage (that was the glass look).
@@ -502,7 +540,9 @@ half3 StampBody(
 
     bodyDir = normalize(bodyDir);
     float facing = dot(viewDir, bodyDir);
-    if (facing < 1.0 - size * 2.4)
+    // Cull pad covers disc + 1.85× circular halo (angular, not the texture square).
+    float glowReach = size * 3.8;
+    if (facing < 1.0 - glowReach)
     {
         return sky;
     }
@@ -516,44 +556,101 @@ half3 StampBody(
     // quad blows up implicit mip derivatives and smears the square border.
     float2 uvDx = ddx(uv);
     float2 uvDy = ddy(uv);
-    float r = length(uv - 0.5) * 2.0;
-    if (r > 1.35 || any(uv < 0.0) || any(uv > 1.0))
+    float2 centered = uv - 0.5;
+    float r = length(centered) * 2.0;
+    // Circular cull only — never open the UV square past the disc (Sun_Oil
+    // touches mid-edges at alpha 255; clamp-to-edge there paints a white box).
+    float rimPad = 0.10 * (float)impasto;
+    if (r > 1.85 + rimPad)
     {
         return sky;
     }
 
-    // Paint ends near r=0.9. Past that, only the square texture border is left.
-    half4 c = 0.0;
-    if (r <= 0.98)
+    float2 radialDir = centered / max(length(centered), 1e-4);
+    float ang = atan2(centered.y, centered.x);
+    // Multi-frequency angular tooth — stronger toward the rim (sun via impasto).
+    float rimAmt = saturate((r - 0.48) / 0.50);
+    float angN = OilFbm(float2(ang * 1.65, ang * 2.55 + 4.2));
+    float angN2 = OilValueNoise(float2(ang * 5.1 + 1.3, ang * 3.7));
+    float rJitter = ((angN - 0.5) * 0.11 + (angN2 - 0.5) * 0.06) * rimAmt * (float)impasto;
+    // Radial UV warp: jagged silhouette without stretching the center.
+    float2 warpedUv = uv - radialDir * (rJitter * 0.5);
+    float rEff = r + rJitter;
+
+    // Sample only inside the circle AND inside the atlas. Never clamp UV from
+    // outside onto the opaque mid-edge texels (that was the white square).
+    half4 c = 0.0h;
+    bool inDisc = rEff <= 1.02;
+    bool inAtlas = all(warpedUv > 0.002) && all(warpedUv < 0.998);
+    if (inDisc && inAtlas)
     {
 #if defined(OIL_MOBILE_PERF)
-        float2 sampleUv = clamp(uv, 0.001, 0.999);
-        c = SAMPLE_TEXTURE2D(tex, samp, sampleUv);
+        c = SAMPLE_TEXTURE2D(tex, samp, warpedUv);
 #else
-        // A wide sine shove turns the round stamp into an egg. Keep only a shiver.
-        float2 sampleUv = uv + float2(
-            sin(uv.y * 17.0 + uv.x * 5.0),
-            sin(uv.x * 13.0 - uv.y * 4.0)) * 0.006 * (float)impasto;
-        sampleUv = clamp(sampleUv, 0.001, 0.999);
-        c = SAMPLE_TEXTURE2D_GRAD(tex, samp, sampleUv, uvDx, uvDy);
+        // Rim shiver + cheap radial blur (3 taps) — soft oil edge, not a geometric disc.
+        float shiver = lerp(0.006, 0.018, rimAmt) * (float)impasto;
+        float2 sampleUv = warpedUv + float2(
+            sin(warpedUv.y * 17.0 + warpedUv.x * 5.0),
+            sin(warpedUv.x * 13.0 - warpedUv.y * 4.0)) * shiver;
+        if (all(sampleUv > 0.002) && all(sampleUv < 0.998))
+        {
+            c = SAMPLE_TEXTURE2D_GRAD(tex, samp, sampleUv, uvDx, uvDy);
+            if (impasto > 0.5h && rimAmt > 0.15)
+            {
+                float blurAmt = 0.014 * rimAmt;
+                float2 uIn = sampleUv - radialDir * blurAmt;
+                float2 uOut = sampleUv + radialDir * blurAmt;
+                half4 cIn = (all(uIn > 0.002) && all(uIn < 0.998))
+                    ? SAMPLE_TEXTURE2D_GRAD(tex, samp, uIn, uvDx, uvDy) : c;
+                half4 cOut = (all(uOut > 0.002) && all(uOut < 0.998))
+                    ? SAMPLE_TEXTURE2D_GRAD(tex, samp, uOut, uvDx, uvDy) : c;
+                c = (c * 0.45h + cIn * 0.30h + cOut * 0.25h);
+            }
+        }
 #endif
     }
-    // Fully opaque disc. SoftVisibility / intensity already gated above — never scale alpha.
-    // Binary cut: Sun_Oil is already 0/255; bilinear fringe stays out of the body.
-    half coverage = step(0.5h, c.a);
+    // SoftVisibility / intensity already gated above — never scale body by intensity.
+    // Noise + screen dither on coverage: impressionist ragged rim, not a perfect disc.
+    half edgeN = (half)OilValueNoise(uv * 28.0 + float2(rEff * 3.1, rEff * 1.7)) - 0.5h;
+    half dither = (half)InterleavedGradientNoise(positionSS, 0) - 0.5h;
+    half coverage = smoothstep(
+        0.28h, 0.68h,
+        c.a + edgeN * lerp(0.14h, 0.34h, impasto) + dither * 0.14h * impasto);
+    // Hard circular gate — kills square mid-edge alpha (texture disc fills to r≈1).
+    coverage *= 1.0h - smoothstep(0.90h, 1.0h, (half)rEff);
     half3 paint = c.rgb;
     half wobble = saturate(sin(uv.x * 9.0 + uv.y * 7.0) * 0.5h + 0.5h);
     half3 thick = lerp(half3(1.0h, 0.45h, 0.22h), half3(1.0h, 0.88h, 0.35h), wobble);
     thick = lerp(thick, half3(1.0h, 0.58h, 0.72h), saturate(sin(uv.y * 11.0) * 0.5h + 0.5h) * 0.4h);
-    paint = saturate(paint * lerp((half3)discColor, thick, impasto * 0.22h));
-    // Punch the disc pigment so it reads over the fogged sky wash.
-    paint = min(paint * 1.08h, half3(1.2h, 1.2h, 1.2h));
-    // Rim only. A center-filled glow out to r=1.15 was the soft pancake around the disc.
-    half glowBand = smoothstep(0.58h, 0.84h, (half)r) * (1.0h - smoothstep(0.84h, 1.02h, (half)r));
+    paint = paint * lerp((half3)discColor, thick, impasto * 0.22h);
+    // Sun (impasto): HDR punch via intensity — values may exceed 1 for bloom.
+    // Moon: keep LDR clamp so night disc stays oil paint, not a flare.
+    if (impasto > 0.5h)
+    {
+        half hdr = max((half)intensity, 1.0h) * 1.45h;
+        paint = paint * hdr;
+    }
+    else
+    {
+        paint = saturate(paint * 1.08h);
+    }
+    // Circular rim glow to 1.85× (no texture) — PaintCelestialHalo also covers this.
+    const half glowOut = 1.85h;
+    half glowBand = smoothstep(0.78h, 0.98h, (half)rEff)
+        * (1.0h - smoothstep(1.05h, glowOut, (half)rEff));
+    glowBand *= (half)lerp(1.0, 0.82 + angN * 0.36, (float)impasto);
     half glowMask = glowBand * (half)glow * (1.0h - coverage);
-    half3 glowTint = lerp(sky, (half3)glowColor, 0.45h);
+    half3 glowTint = (half3)glowColor;
+    if (impasto > 0.5h)
+    {
+        glowTint = glowTint * (1.25h + (half)intensity * 0.55h);
+        half3 stamp = lerp(sky, paint, coverage);
+        return stamp + glowTint * saturate(glowMask * 0.55h);
+    }
+    // Moon rim: softer than sun — was reading as a bright lamp.
     half3 stamp = lerp(sky, paint, coverage);
-    return lerp(stamp, glowTint, saturate(glowMask * 0.28h));
+    glowTint = lerp(sky, glowTint, 0.38h);
+    return lerp(stamp, glowTint, saturate(glowMask * 0.22h));
 }
 
 Varyings OilSkyboxNPRVertex(Attributes input)
@@ -572,21 +669,30 @@ half4 OilSkyboxNPRFragment(Varyings input) : SV_TARGET
     SkyPeriodLook look = EvaluatePeriodLook(_Period);
     half stroke = CanvasStroke(yaw, pitch);
     // Layered air: paint → sky haze → opaque stamps → light celestial veil.
-    // Same height/color as object fog; stamps never fully erase, never fully lucid.
     half3 sky = PaintAir(PaintSky(viewDir.y, stroke, look), viewDir, look);
     sky = OilWeaveTint(sky, viewDir.xz * 6.0);
     sky = (half3)ApplyOilSkyFog((float3)sky, viewDir, stroke);
     sky = PaintStars(sky, viewDir, yaw, pitch, look.starIntensity);
+    float2 positionSS = input.positionCS.xy;
     sky = StampBody(
         _SunTex, sampler_SunTex, viewDir, look.sunDir,
         look.sunSize, look.sunIntensity, look.sunVisibility, look.sunGlow,
-        look.sunDisc, look.sunGlowColor, sky, 1.0h);
+        look.sunDisc, look.sunGlowColor, sky, 1.0h, positionSS);
+    // Mild impasto: sun-like rim path; cool-white glow driven by moonGlow look params.
     sky = StampBody(
         _MoonTex, sampler_MoonTex, viewDir, look.moonDir,
         look.moonSize, look.moonIntensity, look.moonVisibility, look.moonGlow,
-        look.moonDisc, look.moonGlowColor, sky, 0.0h);
+        look.moonDisc, look.moonGlowColor, sky, 0.55h, positionSS);
     sky = (half3)ApplyOilCelestialFog((float3)sky, viewDir, stroke);
-    return half4(saturate(sky), 1.0h);
+    // Matching 1.85× disc halos after fog — sun HDR additive, moon soft cool veil.
+    sky = PaintCelestialHalo(
+        sky, viewDir, look.sunDir, look.sunSize,
+        look.sunGlow, look.sunVisibility, look.sunGlowColor, 0.55h, 1.0h);
+    sky = PaintCelestialHalo(
+        sky, viewDir, look.moonDir, look.moonSize,
+        look.moonGlow, look.moonVisibility, look.moonGlowColor, 0.28h, 0.0h);
+    // Allow sun HDR >1 for bloom; clamp only negatives.
+    return half4(max(sky, 0.0h), 1.0h);
 }
 
 #endif

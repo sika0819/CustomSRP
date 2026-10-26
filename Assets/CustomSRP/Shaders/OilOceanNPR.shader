@@ -2,11 +2,16 @@ Shader "CustomSRP/OilOceanNPR"
 {
     Properties
     {
-        // 配色对齐 OilRiverNPR：深水 / 浅水 / 岸沫。
-        _BaseColor ("Deep", Color) = (0.10, 0.22, 0.36, 0.96)
-        _ShallowColor ("Shallow", Color) = (0.18, 0.28, 0.36, 0.90)
-        _FoamColor ("Titanium White", Color) = (0.78, 0.84, 0.88, 1)
+        // 深灰蓝水体；近岸叠色略暖，高光鹅黄/橘。
+        _BaseColor ("Deep", Color) = (0.14, 0.18, 0.36, 0.96)
+        _ShallowColor ("Shallow", Color) = (0.22, 0.24, 0.42, 0.90)
+        _FoamColor ("Titanium White", Color) = (0.94, 0.97, 1.0, 1)
         _GlintColor ("Ochre Sun Dash", Color) = (0.92, 0.78, 0.42, 1)
+        _TintShallow ("Tint Shallow", Color) = (0.78, 0.68, 0.48, 1)
+        _TintDeep ("Tint Deep", Color) = (0.28, 0.24, 0.42, 1)
+        _TintHighlight ("Tint Highlight", Color) = (1.0, 0.62, 0.22, 1)
+        _TintStrength ("Tint Strength", Range(0, 1)) = 0.4
+
         // 与河 _GlintMap 相同：单列竖带光痕，勿用横笔印章。
         _SparkleBrush ("Sun Glint Column", 2D) = "black" {}
         _PaintMap ("Water Paint (Monet)", 2D) = "gray" {}
@@ -16,16 +21,25 @@ Shader "CustomSRP/OilOceanNPR"
         _StrokeSlice ("Horizontal Slice", Range(0, 1)) = 0.72
         _StrokeWarp ("Stroke Warp", Range(0, 2)) = 1.05
         _StrokeBands ("Stroke Bands", Range(8, 128)) = 52
-        _AlbedoBoost ("Albedo Boost", Range(0.6, 2)) = 0.85
+        _AlbedoBoost ("Albedo Boost", Range(0.6, 2)) = 1.0
 
+        [NoScaleOffset] _BumpMap ("Wave Normal", 2D) = "bump" {}
+        _BumpScale ("Bump Scale", Range(0, 2)) = 0.9
+        _BumpTile ("Bump Tile (m)", Range(20, 200)) = 80
+        // xy = 层A 非等比 tiling；zw = 层B（0,0 时自动用 xy 轴交换 → 交叉笔触）。
+        _BumpTiling ("Bump Tiling (A.xy / B.zw)", Vector) = (1, 2, 2, 1)
+        // xy = 层A 流速；zw = 层B（0,0 时自动对向 -xy）。
+        _BumpScroll ("Bump Scroll (A.xy / B.zw)", Vector) = (0.03, -0.02, -0.025, 0.018)
+        _BumpCross ("Bump Cross Blend", Range(0, 1)) = 0.85
+
+        // 对齐河：Intersection Noise × Depth × Shore Clip 画岸沫（无 Foam 笔刷贴图）。
+        _IntersectionNoise ("Intersection Noise", 2D) = "white" {}
         _FoamStrength ("Foam Strength", Range(0, 2)) = 1.55
-        _FoamMap ("Foam Brush", 2D) = "white" {}
-        _IntersectionTiling ("Foam Tile", Range(0.02, 0.25)) = 0.1
-        _IntersectionSpeed ("Foam Drift (m/s)", Range(0, 4)) = 1.6
-        _IntersectionClipping ("Foam Clip", Range(0.05, 0.9)) = 0.15
-        _IntersectionDistortion ("Foam Distort (m)", Range(0, 40)) = 2
-        // 岸沫探针系数：实际探针米 ≈ Length×11（约 5~8m），edge 收窄后带宽接近。
-        _IntersectionLength ("Foam Width Scale", Range(0.3, 1.0)) = 0.55
+        _IntersectionClipping ("Shore Clip", Range(0, 1)) = 0.2
+        _IntersectionTiling ("Intersection Tiling", Float) = 0.2
+        _IntersectionSpeed ("Intersection Speed", Float) = 0.3
+        _IntersectionFalloff ("Intersection Falloff", Float) = 1
+        _IntersectionDistortion ("Intersection Distort", Float) = 0.12
         _RefractionStrength ("Refraction", Range(0, 1)) = 0.55
         _DepthVertical ("Depth Absorption", Range(0.3, 4)) = 1.35
         _ShoreFoamWidth ("Shore Foam Width (m)", Range(8, 28)) = 16
@@ -34,15 +48,10 @@ Shader "CustomSRP/OilOceanNPR"
         _SunPathWidth ("Sun Path Narrowness", Range(0.1, 40)) = 4.5
 
         _ShadeSteps ("Shade Steps", Range(2, 8)) = 3
-        _SpecularColor ("Specular", Color) = (0.78, 0.74, 0.52, 1)
-        _SpecularThreshold ("Specular Threshold", Range(0, 1)) = 0.84
-        _AmbientColor ("Ambient", Color) = (0.48, 0.54, 0.62, 1)
-        _ReflectStrength ("Reflection Glaze", Range(0, 1)) = 1
+        _ReflectStrength ("Reflection Glaze (Amount)", Range(0, 1)) = 1
+        _ReflectDistort ("Reflection Distort (Warp)", Range(0, 0.35)) = 0.35
+        _ReflectSteps ("Reflection Steps", Range(2, 6)) = 3
 
-        // Ocean must not receive cascade/object shadows (flat sea → 圆影).
-        [Toggle(_RECEIVE_SHADOWS)] _ReceiveShadows ("Receive Shadows", Float) = 0
-        // Same as river: no violet umbra, or night water goes magenta under moon fill.
-        [Toggle(_OIL_NO_VIOLET_UMBRA)] _NoVioletUmbra ("No Violet Umbra", Float) = 1
         [Toggle(_PREMULTIPLY_ALPHA)] _PremulAlpha ("Premultiply Alpha", Float) = 1
 
         [Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Src Blend", Float) = 1
@@ -76,7 +85,6 @@ Shader "CustomSRP/OilOceanNPR"
             #pragma target 3.5
             #pragma multi_compile _ OIL_MOBILE_PERF
             #pragma shader_feature_local _PREMULTIPLY_ALPHA
-            #pragma shader_feature_local _OIL_NO_VIOLET_UMBRA
             #pragma vertex OilOceanNPRPassVertex
             #pragma fragment OilOceanNPRPassFragment
             // Reflect path reads global _OilSkySunrise.

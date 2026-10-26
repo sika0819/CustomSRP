@@ -90,7 +90,7 @@ bool IsHeightTransitioning { get; }
 void RefreshNearbyColliders();
 ```
 
-Inspector 关键值：`MoveSpeed=18`、`StickYawSpeed=120`、`Pitch=12`、`EyeHeight=3`、`Gravity=28`、
+Inspector 默认值：`MoveSpeed=9`、`StickYawSpeed=70`、`Pitch=12`、`EyeHeight=3`、`Gravity=28`、
 `BodyRadius=1.1`、`HeadClearance=0.5`、`SlopeLimit=50`、`StepOffset=0.35`、
 `HeightTransitionDuration=0.5`、`UseNavMeshClamp=true`、`BlockWaterWalking=true`。
 
@@ -98,24 +98,26 @@ Inspector 关键值：`MoveSpeed=18`、`StickYawSpeed=120`、`Pitch=12`、`EyeHe
 ```
 ApplyAspectFov
 → 若 _transitionDriven（预设过场）只更新旋转
-→ ConsumeLookInput（yaw += look.x × 0.18）/ ConsumeMoveInput（MoveTowards 平滑，InputSmooth=10）
+→ ConsumeLookInput（yaw += look.x × 0.11）/ ConsumeMoveInput（MoveTowards 平滑，InputSmooth=7）
 → _holdPresetFraming 时只转不位移
 → EnsureBody / ApplyRenderScale / TickHeightTransition / ComputeMotion / IntegrateVertical / MoveBody
 ```
 
 - 移动被切成**最多 8 个子步**，避免高速穿 `MeshCollider`。
 - 地面采样优先 `EnvGroundFit.TrySnapY`（高度图），否则 `Physics.RaycastNonAlloc`（24 命中，取法线朝上且最低的一个）。
-- 渲染缩放（`IslandCameraSrpSetup`）：
-  `弹窗 0.25` / `闲置沉浸 0.25` / `走动 0.375` / `静止 0.5`。
-- 水面禁行：海面（`oceanY - 0.25` 以下）、河流（XZ 5m 内且 Y 差 ±4m，除非站在水面上方 0.5m）。
+- 渲染缩放（`IslandCameraSrpSetup` ← `DeviceGraphicsPolicy.Profile`）：
+  全档 `弹窗/沉浸 0.375` / `走动 0.375` / `静止 0.5`；桌面 High 为 Inherit CRP。分档见 [12](12-device-graphics-tiers.md)。
+- 水面禁行：仅海面（`oceanY - 0.25` 以下）。河可走；近河（XZ 5m / Y ±4m）跳过 NavMesh 钳位。
+- 悬崖 / 大石顶：下方 80m 内有可站立落点（非海）时允许走出蓝面往下跳；下落途中不把 XZ 钳回崖边。
 
 ### 相机 → SRP 桥（`IslandCameraSrpSetup`）
 
 ```csharp
-const float DefaultRenderScale = 0.5f;
-const float WalkingRenderScale = 0.375f;
-const float PopupRenderScale = 0.25f;
-const float ImmersiveRenderScale = 0.25f;
+// Default/Walking/ImmersiveRenderScale ← DeviceGraphicsPolicy.Profile
+static float DefaultRenderScale => …StandRenderScale;
+static float WalkingRenderScale => …WalkRenderScale;
+static float ImmersiveRenderScale => …ImmersiveRenderScale;
+static float PopupRenderScale => ImmersiveRenderScale;
 
 static void ApplyForIsland(Camera camera);
 static Component EnsureCustomRenderPipelineCamera(GameObject cameraGo);
@@ -123,7 +125,7 @@ static void SetRenderScale(GameObject cameraGo, float scale);
 ```
 
 反射目标：`Type.GetType("CustomSRP.CustomRenderPipelineCamera, Assembly-CSharp")`，
-设置 `copyColor/copyDepth/postFXSettings/renderScaleMode=2/renderScale/allowFXAA/keepAlpha/maskLights`。
+设置 `copyColor/copyDepth/postFXSettings/renderScaleMode`（桌面 Inherit / 手机 Override）`/renderScale/allowFXAA/keepAlpha/maskLights`。
 
 ## 日志 tag
 

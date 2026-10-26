@@ -47,15 +47,36 @@ Varyings OilRiverNPRPassVertex(Attributes input)
     return output;
 }
 
+// 天空太阳优先（与海一致），否则方向光。光痕跟太阳；倒影不跟。
+bool OilRiverResolveSun(out float3 L)
+{
+    float3 sky = _OilSkySunDir;
+    float skyLen = length(sky);
+    if (skyLen > 0.05 && sky.y > -0.08)
+    {
+        L = sky / skyLen;
+        return true;
+    }
+
+    if (GetDirectionalLightCount() <= 0)
+    {
+        L = float3(0.0, 1.0, 0.0);
+        return false;
+    }
+
+    L = _DirectionalLightData[0].directionAndMask.xyz;
+    return length(L) > 0.05;
+}
+
 // 相机→太阳只一道：世界侧向映射到贴图中心竖带，禁止 Monet 横向平铺出多列。
 half OilRiverSunGlint(float3 positionWS, half3 normalWS, float t, half stroke)
 {
-    if (GetDirectionalLightCount() <= 0)
+    float3 L;
+    if (!OilRiverResolveSun(L))
     {
         return 0.0h;
     }
 
-    half3 L = (half3)_DirectionalLightData[0].directionAndMask.xyz;
     float elev = saturate(L.y);
     float2 sunXZ = float2(L.x, L.z);
     float sunLen = length(sunXZ);
@@ -107,6 +128,10 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     half3 flowN = RiverFlowNormal(input.flowUv, t, crest);
     half3 geoN = normalize((half3)input.normalWS);
     half3 normalWS = normalize(lerp(geoN, flowN, 0.55h));
+
+    float2 paintSt = RiverMonetPaintUv(
+        input.flowUv, t, _PaintTile, _StrokeBands);
+    normalWS = RiverBumpNormal(input.flowUv, paintSt, normalWS);
     normalWS = ApplyRainRippleNormal(normalWS, input.positionWS);
     half3 lightN = half3(0.0h, 1.0h, 0.0h);
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
@@ -115,8 +140,6 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     half3 albedo = lerp(_ShallowColor.rgb, _BaseColor.rgb, 0.45h);
     albedo *= (half)_AlbedoBoost;
 
-    float2 paintSt = RiverMonetPaintUv(
-        input.flowUv, t, _PaintTile, _StrokeBands);
     half3 paint = SampleRiverPaint(paintSt);
     half stroke = PaintStroke(PaintLuma(paint), (half)_PaintContrast);
     half relief = saturate((half)_PaintRelief);
@@ -140,7 +163,7 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     albedo = lerp(albedo, _ShallowColor.rgb, shoreWash * 0.18h);
 
     float viewDepth = max(fragment.bufferDepth - fragment.depth, 0.0);
-    float clearReach = max((float)_IntersectionLength * 1.15, 1.2);
+    float clearReach = max(OilRiverShoreFoamWidthM() * 1.15, 1.2);
     half glass = (half)(1.0 - smoothstep(0.06, clearReach, viewDepth));
     glass = saturate(glass);
 
@@ -169,12 +192,13 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
         surface,
         albedo,
         OilNPRAmbient(surface),
+        half3(0.36h, 0.42h, 0.52h),
+        half3(0.50h, 0.44h, 0.36h),
         (half3)_SpecularColor.rgb,
         (half)_SpecularThreshold,
         max((half)_ShadeSteps, 3.0h),
         0.0h,
         stroke,
-        0.0h,
         1.0h,
         0.0h,
         surface.smoothness,
@@ -191,7 +215,7 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     color = (half3)ApplyOilFog((float3)color, surface.depth, stroke, input.positionWS);
 #endif
 
-    // 对齐海：雾后叠天空/平面倒影，岸沫区压 openWater，否则大气把釉面冲掉。
+    // 对齐海：雾后叠天空/平面倒影（山/岸来自镜子 RT）；岸沫区压 openWater。
     color = ApplyOilWaterReflection(
         color,
         input.positionWS,
@@ -199,7 +223,9 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
         viewDir,
         stroke,
         (1.0h - shoreMask) * (1.0h - shoreWash),
-        fragment.screenUV);
+        fragment.screenUV,
+        0.35h,
+        3.0h);
 
     half glint = OilRiverSunGlint(input.positionWS, normalWS, t, stroke);
     glint *= (1.0h - shoreMask * 0.85h);

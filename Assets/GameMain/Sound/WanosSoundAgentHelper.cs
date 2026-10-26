@@ -133,7 +133,18 @@ namespace Game
                 return;
             }
 
-            _instanceId = WanosNative.Instance.PostEvent(0, _asset.EventName);
+            // Music BGM: PostEvent with Playing/Ended callback so MusicPlaylist can Break / auto-next.
+            if (IsMusicAsset())
+            {
+                _instanceId = WanosNative.Instance.PostEvent(
+                    0, _asset.EventName, WanosEventCallbackQueue.Entry);
+                MusicPlaylist.Instance.AttachMusicVoice(_instanceId);
+            }
+            else
+            {
+                _instanceId = WanosNative.Instance.PostEvent(0, _asset.EventName);
+            }
+
             _playing = _instanceId != 0 || WanosEngine.IsEventPostAllowed;
             ApplyVolumeToEngine();
             if (_playing && fadeInSeconds <= 0f && WanosEngine.IsPlaybackEnabled)
@@ -142,19 +153,30 @@ namespace Game
 
         public override void Stop(float fadeOutSeconds)
         {
-            if (_asset != null && !string.IsNullOrEmpty(_asset.EventName))
+            if (IsMusicAsset())
             {
-                // Music BGM: always Stop_Music so a new Play_* cannot stack.
-                if (_asset.EventName.IndexOf("Music", StringComparison.OrdinalIgnoreCase) >= 0
-                    || (!string.IsNullOrEmpty(_asset.BankName)
-                        && _asset.BankName.IndexOf("Music", StringComparison.OrdinalIgnoreCase) >= 0))
+                // Detach before Stop_Music so Ended from stop does not auto-next.
+                if (_instanceId != 0)
                 {
-                    WanosNative.Instance.PostEvent(0, "Stop_Music");
+                    MusicPlaylist.Instance.DetachMusicVoice(_instanceId);
+                    WanosNative.Instance.RemoveEventStateCallback(_instanceId);
                 }
+                WanosNative.Instance.PostEvent(0, "Stop_Music");
             }
 
             _playing = false;
             _instanceId = 0;
+        }
+
+        bool IsMusicAsset()
+        {
+            if (_asset == null)
+                return false;
+            if (!string.IsNullOrEmpty(_asset.EventName)
+                && _asset.EventName.IndexOf("Music", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            return !string.IsNullOrEmpty(_asset.BankName)
+                && _asset.BankName.IndexOf("Music", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         public override void Pause(float fadeOutSeconds)
@@ -180,6 +202,11 @@ namespace Game
 
         public override void Reset()
         {
+            if (_instanceId != 0)
+            {
+                MusicPlaylist.Instance.DetachMusicVoice(_instanceId);
+                WanosNative.Instance.RemoveEventStateCallback(_instanceId);
+            }
             _cachedTransform.localPosition = Vector3.zero;
             _asset = null;
             _bindingEntity = null;

@@ -11,11 +11,14 @@ using UnityGameFramework.Runtime;
 namespace CustomSRP.Editor
 {
     /// <summary>
-    /// 按 AllMapItem LOD0 mesh XZ 轮廓烤草地禁种遮罩。花草/特效不挡。
+    /// 按 AllMapItem + MapItemExtras LOD0 mesh XZ 轮廓烤草地禁种遮罩。
+    /// 花草/特效不挡；Huodui（篝火，仅在 Extras）额外盖圆盘。
     /// </summary>
     public static class OilTerrainGrassKeepOutBakeTool
     {
         const int Res = OilTerrainGrassKeepOutBake.DefaultRes;
+        /// <summary>篝火木堆 footprint 外再清一圈，避免草种进火堆。</summary>
+        const float HuoduiKeepOutRadiusMeters = 2.8f;
 
         static readonly HashSet<string> SkipParents = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -45,24 +48,24 @@ namespace CustomSRP.Editor
                 return false;
             }
 
-            var text = AssetDatabase.LoadAssetAtPath<TextAsset>(SceneAssets.AllMapItemAssetPath);
-            if (text == null)
+            var items = new List<MapItemData>(2600);
+            if (!TryAppendMapItems(SceneAssets.AllMapItemAssetPath, items))
             {
-                Log.Error("[OilTerrainGrass] missing " + SceneAssets.AllMapItemAssetPath);
+                Log.Error("[OilTerrainGrass] AllMapItem empty or missing");
                 return false;
             }
 
-            var items = new List<MapItemData>(2560);
-            if (!MapItemData.ReadBinaryTo(text.bytes, items) || items.Count == 0)
-            {
-                Log.Error("[OilTerrainGrass] AllMapItem empty");
-                return false;
-            }
+            // Huodui / 河面等只在 Extras；禁种必须一起烤，否则火堆脚下仍会种草。
+            int extrasBefore = items.Count;
+            if (!TryAppendMapItems(SceneAssets.MapItemExtrasAssetPath, items))
+                Log.Warning("[OilTerrainGrass] MapItemExtras missing — Huodui keep-out skipped");
+            int extrasCount = items.Count - extrasBefore;
+
             float cell = worldSize / Res;
             var grid = new byte[Res * Res];
             var cache = new Dictionary<string, Lod0Mesh[]>(64);
             var worldScratch = Array.Empty<Vector3>();
-            int used = 0, skipped = 0, noMesh = 0, missingPrefab = 0;
+            int used = 0, skipped = 0, noMesh = 0, missingPrefab = 0, huoduiDisks = 0;
 
             try
             {
@@ -83,7 +86,14 @@ namespace CustomSRP.Editor
                         continue;
                     }
 
-                    string path = SceneAssets.DaoYu1EditorPath(item.Parent, item.PrefabName);
+                    bool isHuodui = string.Equals(
+                        item.PrefabName, "Huodui", StringComparison.OrdinalIgnoreCase);
+                    // Extras 里 Huodui 的 Parent 已是 Other；兼容旧数据再兜底一次。
+                    string parent = item.Parent;
+                    if (isHuodui && (string.IsNullOrEmpty(parent) || parent == "null"))
+                        parent = "Other";
+
+                    string path = SceneAssets.DaoYu1EditorPath(parent, item.PrefabName);
                     if (string.IsNullOrEmpty(path))
                     {
                         skipped++;
@@ -97,23 +107,39 @@ namespace CustomSRP.Editor
                         {
                             missingPrefab++;
                             cache[path] = Array.Empty<Lod0Mesh>();
-                            continue;
+                            meshes = cache[path];
                         }
-
-                        meshes = ExtractLod0(prefab);
-                        cache[path] = meshes;
+                        else
+                        {
+                            meshes = ExtractLod0(prefab);
+                            cache[path] = meshes;
+                        }
                     }
 
-                    if (meshes == null || meshes.Length == 0)
+                    if (meshes != null && meshes.Length > 0)
+                    {
+                        var trs = Matrix4x4.TRS(item.Pos, Quaternion.Euler(item.Rotation), item.Scale);
+                        for (int m = 0; m < meshes.Length; m++)
+                            RasterizeMesh(grid, Res, originX, originZ, cell, meshes[m], trs, ref worldScratch);
+                        used++;
+                    }
+                    else if (!isHuodui)
                     {
                         noMesh++;
                         continue;
                     }
+                    else
+                    {
+                        noMesh++;
+                    }
 
-                    var trs = Matrix4x4.TRS(item.Pos, Quaternion.Euler(item.Rotation), item.Scale);
-                    for (int m = 0; m < meshes.Length; m++)
-                        RasterizeMesh(grid, Res, originX, originZ, cell, meshes[m], trs, ref worldScratch);
-                    used++;
+                    if (isHuodui)
+                    {
+                        StampDisk(
+                            grid, Res, originX, originZ, cell,
+                            item.Pos.x, item.Pos.z, HuoduiKeepOutRadiusMeters);
+                        huoduiDisks++;
+                    }
                 }
             }
             finally
@@ -152,9 +178,47 @@ namespace CustomSRP.Editor
 
             Log.Info(
                 $"[OilTerrainGrass] KeepOut wrote {OilTerrainGrassKeepOutBake.EditorPath} " +
-                $"items={used} skip={skipped} noMesh={noMesh} missing={missingPrefab} " +
+                $"items={used} extras={extrasCount} huoduiDisks={huoduiDisks} " +
+                $"skip={skipped} noMesh={noMesh} missing={missingPrefab} " +
                 $"rivers={rivers} cells={marked}/{grid.Length} cell={cell:F2}");
             return true;
+        }
+
+        static bool TryAppendMapItems(string assetPath, List<MapItemData> items)
+        {
+            var text = AssetDatabase.LoadAssetAtPath<TextAsset>(assetPath);
+            if (text == null)
+                return false;
+            int before = items.Count;
+            if (!MapItemData.ReadBinaryTo(text.bytes, items) || items.Count <= before)
+                return false;
+            return true;
+        }
+
+        static void StampDisk(
+            byte[] grid, int res, float originX, float originZ, float cell,
+            float centerX, float centerZ, float radiusMeters)
+        {
+            if (grid == null || res <= 0 || cell < 1e-4f || radiusMeters <= 0f)
+                return;
+            float r2 = radiusMeters * radiusMeters;
+            int x0 = Mathf.Clamp(Mathf.FloorToInt((centerX - radiusMeters - originX) / cell), 0, res - 1);
+            int x1 = Mathf.Clamp(Mathf.FloorToInt((centerX + radiusMeters - originX) / cell), 0, res - 1);
+            int z0 = Mathf.Clamp(Mathf.FloorToInt((centerZ - radiusMeters - originZ) / cell), 0, res - 1);
+            int z1 = Mathf.Clamp(Mathf.FloorToInt((centerZ + radiusMeters - originZ) / cell), 0, res - 1);
+            for (int z = z0; z <= z1; z++)
+            {
+                float cz = originZ + (z + 0.5f) * cell;
+                float dz = cz - centerZ;
+                int row = z * res;
+                for (int x = x0; x <= x1; x++)
+                {
+                    float cx = originX + (x + 0.5f) * cell;
+                    float dx = cx - centerX;
+                    if (dx * dx + dz * dz <= r2)
+                        grid[row + x] = 1;
+                }
+            }
         }
 
         /// <summary>河面外再留一圈岸，避免草种进浅水和泥岸。</summary>

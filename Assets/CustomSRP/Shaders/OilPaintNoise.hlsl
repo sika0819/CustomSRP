@@ -1,6 +1,11 @@
 #ifndef CUSTOM_OIL_PAINT_NOISE_INCLUDED
 #define CUSTOM_OIL_PAINT_NOISE_INCLUDED
 
+#ifndef CUSTOM_OIL_BRUSH_MOBILE_SCALE_DECLARED
+#define CUSTOM_OIL_BRUSH_MOBILE_SCALE_DECLARED
+float _OilBrushMobileScale;
+#endif
+
 // Two-octave value noise. Used to drag UVs and tilt paint, not as a normal map.
 
 float OilHash21(float2 p)
@@ -42,6 +47,15 @@ half3 OilWeaveTint(half3 color, float2 p)
 {
     half w = (half)sin(p.x * 1.7 + p.y * 0.8) * 0.5h + 0.5h;
     return color * lerp(0.94h, 1.04h, w);
+}
+
+// Mobile soft path: blend toward weave by _OilBrushMobileScale (0 = skip).
+half3 OilWeaveTintMobile(half3 color, float2 p)
+{
+    half scale = (half)_OilBrushMobileScale;
+    if (scale <= 0.001h)
+        return color;
+    return lerp(color, OilWeaveTint(color, p), scale);
 }
 
 // Hundreds of meters. Peaks drift warm, hollows drift cool, without replacing the splat hue.

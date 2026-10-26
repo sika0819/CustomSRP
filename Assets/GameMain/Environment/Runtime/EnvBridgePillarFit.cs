@@ -6,6 +6,8 @@ namespace Game
     /// <summary>
     /// Qiao（SWS_DemoPier）桥柱贴地：按柱子聚类拉伸 mesh 底部顶点到 Terrain。
     /// 桥面/栏杆顶点不动；只改柱身 Y。每实例 Clone 一份 mesh，不改共享 FBX。
+    /// 同时强制桥段始终渲染：码头由多段 ~5m prefab 拼接，LODGroup 屏占比裁切
+    /// 会让远段消失，看起来像「桥按距离只显示一部分」。
     /// </summary>
     public static class EnvBridgePillarFit
     {
@@ -49,6 +51,8 @@ namespace Game
             if (go == null)
                 return;
 
+            EnsureAlwaysVisible(go);
+
             MeshFilter[] filters = go.GetComponentsInChildren<MeshFilter>(true);
             for (int i = 0; i < filters.Length; i++)
             {
@@ -59,6 +63,26 @@ namespace Game
                     continue;
 
                 TryFitFilter(mf);
+            }
+        }
+
+        /// <summary>
+        /// 关掉按屏占比裁切：单段码头只有 LOD0，LODGroup 阈值过高等于远距整段消失。
+        /// Prefab 已把阈值收到 0.001（对齐 Dock）；运行时 ForceLOD(0) 兜底已生成实例。
+        /// </summary>
+        public static void EnsureAlwaysVisible(GameObject go)
+        {
+            if (go == null)
+                return;
+
+            LODGroup[] lodGroups = go.GetComponentsInChildren<LODGroup>(true);
+            for (int i = 0; i < lodGroups.Length; i++)
+            {
+                LODGroup lod = lodGroups[i];
+                if (lod == null)
+                    continue;
+                // 强制最高档；单 LOD prefab 即永不因屏占比关掉 Renderer。
+                lod.ForceLOD(0);
             }
         }
 

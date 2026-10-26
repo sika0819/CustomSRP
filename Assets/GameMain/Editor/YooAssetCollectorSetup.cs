@@ -210,6 +210,14 @@ namespace Game.Editor
                 nameof(AddressByFileName),
                 nameof(PackDirectory),
                 nameof(CollectAll));
+            // 河岸/海边石头湿材质（运行时按水位 Y 换到 ShiTou_Shore）
+            AddGroup(
+                package,
+                "ShiTouShoreMat",
+                "Assets/GameMain/Environment/Materials/ShiTou_Shore.mat",
+                nameof(AddressByFileName),
+                nameof(PackDirectory),
+                nameof(CollectAll));
 
             return package;
         }

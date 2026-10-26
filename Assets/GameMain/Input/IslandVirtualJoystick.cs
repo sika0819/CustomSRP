@@ -56,6 +56,7 @@ namespace Game
                 _hit.UnregisterCallback<PointerMoveEvent>(OnMove);
                 _hit.UnregisterCallback<PointerUpEvent>(OnUp);
                 _hit.UnregisterCallback<PointerCancelEvent>(OnCancel);
+                _hit.UnregisterCallback<PointerCaptureOutEvent>(OnCaptureOut);
             }
 
             _paint?.RemoveFromHierarchy();
@@ -106,8 +107,34 @@ namespace Game
 
         public void TickFrame(bool allowBegin)
         {
+            // Android 偶发丢 Up/Cancel，但 UITK 仍占着 capture → _active 卡死，
+            // 下一笔 OnDown 被拒（再次滑动无效）。手指已离开就强制回收，不论 capture。
+            if (_active && !IsPointerContactAlive(_pointerId))
+                ForceEnd();
+
             if (!allowBegin && _active)
                 ForceEnd();
+        }
+
+        static bool IsPointerContactAlive(int pointerId)
+        {
+            if (pointerId < 0)
+                return false;
+
+            for (int i = 0; i < Input.touchCount; i++)
+            {
+                Touch touch = Input.GetTouch(i);
+                if (touch.fingerId != pointerId)
+                    continue;
+                return touch.phase != TouchPhase.Ended && touch.phase != TouchPhase.Canceled;
+            }
+
+#if UNITY_EDITOR || UNITY_STANDALONE
+            // UITK mouse id is PointerId.mousePointerId (0).
+            if (pointerId == PointerId.mousePointerId)
+                return Input.GetMouseButton(0);
+#endif
+            return false;
         }
 
         public bool TryGetMove(out Vector2 direction, out float speedRatio)
@@ -132,9 +159,15 @@ namespace Game
 
         public void ForceEnd()
         {
-            if (_active && _hit != null && _pointerId >= 0 && _hit.HasPointerCapture(_pointerId))
-                _hit.ReleasePointer(_pointerId);
+            int pointerId = _pointerId;
+            bool hadCapture = _active
+                && _hit != null
+                && pointerId >= 0
+                && _hit.HasPointerCapture(pointerId);
+            // Clear first so CaptureOut from ReleasePointer is a no-op.
             End();
+            if (hadCapture)
+                _hit.ReleasePointer(pointerId);
         }
 
         public bool OwnsPointer(int fingerId) =>
@@ -176,6 +209,7 @@ namespace Game
             _hit.RegisterCallback<PointerMoveEvent>(OnMove);
             _hit.RegisterCallback<PointerUpEvent>(OnUp);
             _hit.RegisterCallback<PointerCancelEvent>(OnCancel);
+            _hit.RegisterCallback<PointerCaptureOutEvent>(OnCaptureOut);
 
             ApplyLayoutScale();
             HideGlyphs();
@@ -207,7 +241,7 @@ namespace Game
             el.pickingMode = PickingMode.Ignore;
             el.style.position = Position.Absolute;
             el.style.backgroundColor = fill;
-            el.style.unityBackgroundScaleMode = ScaleMode.ScaleToFit;
+            el.style.backgroundSize = new BackgroundSize(BackgroundSizeType.Contain);
             el.style.overflow = Overflow.Visible;
             el.style.flexShrink = 0;
             el.style.display = DisplayStyle.None;
@@ -253,8 +287,16 @@ namespace Game
 
         void OnDown(PointerDownEvent evt)
         {
-            if (_active || evt.button != 0)
+            // Touch reports button 0; ignore right/middle mouse only.
+            // （旧逻辑 evt.button != 0 会在部分 Android 上报 button=-1 时整笔丢掉）
+            if (evt.button > 0)
                 return;
+
+            // 任何新的 Down 都必须能接手。卡在 _active / 僵死 capture 时直接 ForceEnd，
+            // 禁止「仍占 capture → return」——那是再次滑动偶发无效的根因。
+            if (_active)
+                ForceEnd();
+
             if (HudOverlayGate.BlocksLocomotion())
                 return;
             if (!ShouldBegin(evt))
@@ -288,9 +330,7 @@ namespace Game
         {
             if (!_active || evt.pointerId != _pointerId)
                 return;
-            if (_hit.HasPointerCapture(_pointerId))
-                _hit.ReleasePointer(_pointerId);
-            End();
+            ReleaseAndEnd();
             evt.StopPropagation();
         }
 
@@ -298,9 +338,25 @@ namespace Game
         {
             if (!_active || evt.pointerId != _pointerId)
                 return;
-            if (_hit.HasPointerCapture(_pointerId))
-                _hit.ReleasePointer(_pointerId);
+            ReleaseAndEnd();
+        }
+
+        void OnCaptureOut(PointerCaptureOutEvent evt)
+        {
+            if (!_active || evt.pointerId != _pointerId)
+                return;
             End();
+        }
+
+        void ReleaseAndEnd()
+        {
+            int pointerId = _pointerId;
+            bool hadCapture = _hit != null
+                && pointerId >= 0
+                && _hit.HasPointerCapture(pointerId);
+            End();
+            if (hadCapture)
+                _hit.ReleasePointer(pointerId);
         }
 
         bool ShouldBegin(PointerDownEvent evt)

@@ -282,7 +282,6 @@ public class ReflectScript : MonoBehaviour
                 reflectionCamera.enabled = false;
                 reflectionCamera.transform.position = transform.position;
                 reflectionCamera.transform.rotation = transform.rotation;
-                reflectionCamera.gameObject.AddComponent<FlareLayer>();
                 go.hideFlags = HideFlags.HideAndDontSave;
                 m_ReflectionCameras[currentCamera] = reflectionCamera;
             }
@@ -314,7 +313,6 @@ public class ReflectScript : MonoBehaviour
                 refractionCamera.enabled = false;
                 refractionCamera.transform.position = transform.position;
                 refractionCamera.transform.rotation = transform.rotation;
-                refractionCamera.gameObject.AddComponent<FlareLayer>();
                 go.hideFlags = HideFlags.HideAndDontSave;
                 m_RefractionCameras[currentCamera] = refractionCamera;
             }

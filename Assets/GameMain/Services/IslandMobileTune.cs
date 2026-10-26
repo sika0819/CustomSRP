@@ -13,8 +13,14 @@ namespace Game
         public static void ApplyAfterTerrainSpawn(GameObject terrainInstance)
         {
             DisableLaunchDirectionalLights();
-            TuneLightsForMobileOil();
-            TuneCloudsForMobile();
+
+            DeviceGraphicsProfile profile = DeviceGraphicsPolicy.Profile;
+            if (!profile.ApplyMobileIslandTune)
+                return;
+
+            TuneLightsForMobileOil(profile);
+            if (profile.DisableCloudHighRing)
+                TuneCloudsForMobile();
             TuneTerrainForMobile(terrainInstance);
             TuneTerrainShadowReceive(terrainInstance);
         }
@@ -38,13 +44,17 @@ namespace Game
 
         public static void TuneLightsForMobileOil()
         {
-#if !UNITY_EDITOR
+            TuneLightsForMobileOil(DeviceGraphicsPolicy.Profile);
+        }
+
+        public static void TuneLightsForMobileOil(DeviceGraphicsProfile profile)
+        {
+            if (!profile.ApplyMobileIslandTune)
+                return;
+
             if (QualitySettings.shadows == ShadowQuality.Disable)
                 QualitySettings.shadows = ShadowQuality.HardOnly;
-            // Shorter than Ultra's 40; matches CRP maxDistance for near contact shadows.
-            // Match CRP maxDistance; slightly longer so near trees paint ground contact.
-            // Match CRP maxDistance; keep contact for near trees without filling atlas with far casters.
-            QualitySettings.shadowDistance = 26f;
+            QualitySettings.shadowDistance = profile.ShadowDistance;
             QualitySettings.shadowResolution = ShadowResolution.Low;
 
             Light[] lights = Object.FindObjectsByType<Light>();
@@ -59,7 +69,6 @@ namespace Game
                     if (light.shadows == LightShadows.None || light.shadows == LightShadows.Soft)
                         light.shadows = LightShadows.Hard;
                     light.shadowStrength = Mathf.Max(light.shadowStrength, 0.9f);
-                    // Casters = trees; lower normalBias so contact umbra sits on flat ground.
                     light.shadowBias = Mathf.Clamp(light.shadowBias, 0.02f, 0.045f);
                     light.shadowNormalBias = Mathf.Clamp(light.shadowNormalBias, 0.2f, 0.35f);
                 }
@@ -70,16 +79,15 @@ namespace Game
             }
 
             Log.Info(
-                "[IslandMobileTune] lights quality=" +
+                "[IslandMobileTune] tier=" + DeviceGraphicsPolicy.Current +
+                " lights quality=" +
                 QualitySettings.names[QualitySettings.GetQualityLevel()] +
                 " shadows=" + QualitySettings.shadows +
                 " dist=" + QualitySettings.shadowDistance);
-#endif
         }
 
         public static void TuneCloudsForMobile()
         {
-#if !UNITY_EDITOR
             // Budget: keep low ring (weather-driven coverage + OIL_MOBILE_PERF fragment).
             // Drop high ring so CloudPass does one transparent Draw/Load-Store, not two.
             // Reflect — Game.asmdef must not reference Assembly-CSharp (OilCloudLayer).
@@ -99,7 +107,6 @@ namespace Game
                 if (layers[i] != null)
                     highRing.SetValue(layers[i], false);
             }
-#endif
         }
 
         public static void TuneTerrainForMobile(GameObject terrainRoot)
@@ -158,10 +165,6 @@ namespace Game
                 // Instance so we do not dirty the shared project asset from every device session.
                 Material runtime = Object.Instantiate(mat);
                 runtime.name = mat.name + " (MobileShadow)";
-                if (runtime.HasProperty("_ShadowLift"))
-                    runtime.SetFloat("_ShadowLift", 0.62f);
-                // _ShadowWobble / _AmbientColor are authored but unused by OilNPRLightingEx
-                // (ambient = SH; brush/wobble ignored) — do not write dead props.
 
                 if (runtime.HasProperty("_ReceiveShadows"))
                     runtime.SetFloat("_ReceiveShadows", 1f);

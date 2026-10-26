@@ -60,6 +60,10 @@ namespace Game
             ApplySpawnPriority(cam);
             _armed = true;
             _nextSaveAt = Time.unscaledTime + SaveStartDelaySeconds;
+            Log.Info(
+                $"[IslandPlayerPosSave] armed disk={BoluoGamePersistence.AllowsAccountProgressDisk} " +
+                $"guest={GuestSession.IsGuest} userId={GuestSession.UserId ?? ""} " +
+                $"hasPos={BoluoGamePersistence.HasPlayerPositionSaved()}");
         }
 
         public static void Tick()
@@ -69,16 +73,37 @@ namespace Game
             if (Time.unscaledTime < _nextSaveAt)
                 return;
             _nextSaveAt = Time.unscaledTime + SaveIntervalSeconds;
-            TrySaveCurrent();
+            TrySaveCurrent(flush: true);
         }
 
-        public static void TrySaveCurrent()
+        /// <param name="flush">true 时立刻 <c>PlayerPrefs.Save</c>（周期 / 退登 / 进后台）。</param>
+        /// <param name="ignoreSuppress">退登/杀进程路径忽略下载抑制，避免最后一刀落空。</param>
+        public static bool TrySaveCurrent(bool flush = false, bool ignoreSuppress = false)
         {
-            if (ShouldSuppressSave)
-                return;
+            if (!ignoreSuppress && ShouldSuppressSave)
+            {
+                Log.Info($"[IslandPlayerPosSave] skip save (suppress={_suppressCount})");
+                return false;
+            }
+
+            if (!_armed && !ignoreSuppress)
+                return false;
+
+            if (!BoluoGamePersistence.AllowsAccountProgressDisk)
+            {
+                Log.Info(
+                    $"[IslandPlayerPosSave] skip save — disk gated " +
+                    $"loggedIn={GuestSession.IsLoggedIn} guest={GuestSession.IsGuest} " +
+                    $"userId={GuestSession.UserId ?? ""}");
+                return false;
+            }
+
             var cam = IslandJoystickCamera.Current;
             if (cam == null)
-                return;
+            {
+                Log.Info("[IslandPlayerPosSave] skip save — no camera");
+                return false;
+            }
 
             Transform t = cam.transform;
             var prop = new IslandPlayerProp
@@ -90,15 +115,33 @@ namespace Game
                 roty = t.eulerAngles.y,
                 rotz = t.eulerAngles.z,
             };
-            BoluoGamePersistence.PersistPlayerPositionJson(JsonUtility.ToJson(prop));
+            string json = JsonUtility.ToJson(prop);
+            if (!BoluoGamePersistence.PersistPlayerPositionJson(json))
+            {
+                Log.Warning("[IslandPlayerPosSave] PersistPlayerPositionJson returned false");
+                return false;
+            }
+
+            // 同周期一并落盘天气与 BGM（游客门控在 Persist / Capture 内）
+            var weather = GameEntry.Weather;
+            if (weather != null)
+                BoluoGameSave.CaptureIslandAtmosphere(
+                    weather.Kind, weather.Level, weather.Hours,
+                    weather.Period, weather.LookKind, weather.FogDensity);
+            BoluoGameSave.CaptureMusicFromPlaylist(GameEntry.Music);
+
+            if (flush)
+                BoluoGamePersistence.PlayerPrefsSave();
+
+            Log.Info(
+                $"[IslandPlayerPosSave] saved ok pos=({prop.posx:F1},{prop.posy:F1},{prop.posz:F1}) " +
+                $"yaw={prop.roty:F1} flush={flush} key=PlayerPos.{GuestSession.UserId}");
+            return true;
         }
 
-        /// <summary>写当前坐标并立刻 flush（进后台 / 离岛）。</summary>
-        public static void TrySaveCurrentAndFlush()
-        {
-            TrySaveCurrent();
-            BoluoGamePersistence.PlayerPrefsSave();
-        }
+        /// <summary>写当前坐标并立刻 flush（进后台 / 离岛 / 退登前）。忽略 suppress。</summary>
+        public static bool TrySaveCurrentAndFlush() =>
+            TrySaveCurrent(flush: true, ignoreSuppress: true);
 
         static void ApplySpawnPriority(IslandJoystickCamera cam)
         {
@@ -117,6 +160,7 @@ namespace Game
             {
                 ApplyDefault();
                 BoluoGamePersistence.SetDaoYuFirstRunCompleteMarker();
+                BoluoGamePersistence.PlayerPrefsSave();
                 Log.Info("[IslandPlayerPosSave] default spawn (first run)");
                 return;
             }
@@ -147,7 +191,10 @@ namespace Game
             }
 
             ApplyDefault();
-            Log.Info("[IslandPlayerPosSave] default spawn (no save)");
+            Log.Info(
+                $"[IslandPlayerPosSave] default spawn (no save) " +
+                $"disk={BoluoGamePersistence.AllowsAccountProgressDisk} " +
+                $"guest={GuestSession.IsGuest} userId={GuestSession.UserId ?? ""}");
         }
     }
 }

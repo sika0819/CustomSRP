@@ -1,7 +1,12 @@
 #ifndef CUSTOM_OIL_CLOUD_NPR_PASS_INCLUDED
 #define CUSTOM_OIL_CLOUD_NPR_PASS_INCLUDED
 
-// Ring of atlas cards. Shape is the cloud-map SDF. Paint is two stroke maps.
+// Ring of atlas cards. Shape is the cloud-map SDF.
+// Paint language matches skybox (canvas groove/ridge) + ocean (impasto warm/cool).
+
+#include "OilPaintNoise.hlsl"
+#include "OilImpasto.hlsl"
+#include "../ShaderLibrary/OilBrdfCommon.hlsl"
 
 struct CloudAttributes
 {
@@ -58,20 +63,57 @@ half CloudBrushAmount(half4 stroke)
     return saturate((ridge - 0.28h) / 0.52h);
 }
 
-// Thick-paint value only. Lighting weights stay in the color passed in.
-half3 CloudPainterly(half3 litColor, half4 strokeA, half edge)
+// Canvas ridges along yaw / elevation — same layout as OilSkybox CanvasStroke.
+half CloudCanvasStroke(float3 dirW)
 {
-    if (max(strokeA.r, strokeA.a) < 1e-4h)
+    float yaw = atan2(dirW.x, dirW.z);
+    float elev = asin(clamp(dirW.y, -1.0, 1.0));
+    float scale = max(_BrushScale, 0.5);
+    float turns = max(round(scale * _OilCanvas_ST.x), 1.0);
+    float2 uv = float2(
+        yaw * (turns / (2.0 * PI)) + _OilCanvas_ST.z,
+        elev * (scale * 0.16) * _OilCanvas_ST.y + _OilCanvas_ST.w);
+
+#if defined(OIL_MOBILE_PERF)
+    half canvas = (half)SAMPLE_TEXTURE2D(_OilCanvas, sampler_OilCanvas, uv).r;
+#else
+    float2 f = frac(uv);
+    float2 edge = min(f, 1.0 - f);
+    half w = (half)smoothstep(0.0, 0.16, min(edge.x, edge.y));
+    half a = (half)SAMPLE_TEXTURE2D(_OilCanvas, sampler_OilCanvas, uv).r;
+    half b = (half)SAMPLE_TEXTURE2D(_OilCanvas, sampler_OilCanvas, uv + 0.5).r;
+    half canvas = lerp(b, a, w);
+#endif
+    half contrast = max((half)_BrushContrast, 0.5h);
+    return saturate((canvas - 0.5h) * contrast + 0.5h);
+}
+
+// Lighter than skybox PaintSky — cloud pigment is already set by TOD tables.
+half3 PaintCloudBody(half3 color, half stroke)
+{
+    half strength = saturate((half)_BrushStrength) * 0.72h;
+    half depth = max(saturate((half)_BrushRelief), 0.55h) * strength;
+    half3 groove = color * half3(0.48h, 0.58h, 0.78h);
+    half3 ridge = min(color * half3(1.22h, 1.10h, 0.96h) + 0.035h, half3(1.15h, 1.15h, 1.15h));
+    half3 painted = lerp(groove, ridge, smoothstep(0.12h, 0.88h, stroke));
+    return lerp(color, painted, depth);
+}
+
+// Thick-paint warm ridge / cool groove from cloud brush + canvas.
+half3 CloudOilPaint(half3 litColor, half4 strokeA, half canvasStroke, half edge)
+{
+    half brushStroke = 0.5h;
+    if (max(strokeA.r, strokeA.a) >= 1e-4h)
     {
-        return litColor;
+        brushStroke = PaintStroke(CloudLuma(strokeA.rgb), max((half)_BrushContrast, 0.5h));
     }
 
-    half ridge = saturate(CloudLuma(strokeA.rgb));
-    half n = saturate((ridge - 0.28h) / 0.52h);
-    half grain = lerp(0.78h, 1.22h, n);
-    half chop = saturate(edge) * lerp(0.16h, 0.38h, saturate(strokeA.b));
-    half3 color = litColor * grain;
-    color *= lerp(1.0h, lerp(0.88h, 1.10h, saturate(strokeA.g)), chop);
+    half relief = max(saturate((half)_BrushRelief), 0.55h);
+    half3 color = ImpastoDeviation(litColor, brushStroke, relief * 0.65h);
+    color = PaintCloudBody(color, canvasStroke);
+
+    half chop = saturate(edge) * lerp(0.12h, 0.28h, saturate(strokeA.b));
+    color = lerp(color, ImpastoDeviation(color, brushStroke, 1.0h), chop);
     return saturate(color);
 }
 
@@ -126,8 +168,8 @@ half4 CloudFragment(CloudVaryings input) : SV_Target
     float soft = _SdfSoftness * lerp(1.0, 1.75, dawn);
     half4 stroke = SampleCloudStroke(cloudUV);
     half brush = CloudBrushAmount(stroke);
-    // Contour bristle is color-only. Alpha is a hard oil fill from the map.
-    float threshold = sdfThreshold + ((float)brush - 0.5) * 0.5 * aa;
+    // Bristle-cut contour (was 0.5×aa — airbrush soft). Alpha stays a hard oil fill.
+    float threshold = sdfThreshold + ((float)brush - 0.5) * 2.0 * aa;
     float aaRim = aa * 0.3;
     float shape = smoothstep(threshold - aaRim, threshold + aaRim, sdf);
     // Padding gate only — never use atlas.a as a soft opacity multiply.
@@ -172,12 +214,14 @@ half4 CloudFragment(CloudVaryings input) : SV_Target
     half3 shadowTop = lerp(body, zenithCol, shadowW * (1.0h - belly * 0.35h));
 
     float thick = saturate((sdf - sdfThreshold) / max(soft * 2.6, 0.20));
+    // Light oil shade steps — chunky masses, soft feather between bands.
+    thick = (float)OilQuantizeNdotL((half)thick, OilBrdfShadeSteps());
     float shade = saturate(thick * (1.12 - (float)belly));
     half3 color = shadowTop * (half)lerp(1.0, lerp(0.60, 0.92, (float)belly), shade * 0.72);
 
     // Cloud body takes the highlight even when the sun is on the horizon.
     // The sun-facing side takes more.
-    half facing = (half)saturate(dot(dirW, lightDir));
+    half facing = OilQuantizeNdotL((half)saturate(dot(dirW, lightDir)), 3.0h);
     half top = saturate(max(belly, (half)thick));
     half topMask = saturate(top * 0.85h + facing * 0.7h);
     color = lerp(color, highlight, saturate(topMask * lightW));
@@ -193,9 +237,15 @@ half4 CloudFragment(CloudVaryings input) : SV_Target
     color += half3(1.00h, 0.96h, 0.86h) * rim * (half)dawn * 0.35h;
     // Rim light stays on color only — do not re-feather alpha with a soft halo.
 
+    half canvasStroke = CloudCanvasStroke(dirW);
     color = CloudHorizonWash(color, dirW);
-    color = CloudPainterly(color, stroke, (half)baseMap.g);
-    color = (half3)ApplyOilCloudFog((float3)color, dirW, brush);
+    color = CloudOilPaint(color, stroke, canvasStroke, (half)baseMap.g);
+#if defined(OIL_MOBILE_PERF)
+    color = OilWeaveTintMobile(color, dirW.xz * 6.0);
+#else
+    color = OilWeaveTint(color, dirW.xz * 6.0);
+#endif
+    color = (half3)ApplyOilCloudFog((float3)color, dirW, canvasStroke);
     // Night: gentle NightFog tip — keep brush grain (was 0.85 and milky).
     if (nightAmt > 1e-3h)
     {

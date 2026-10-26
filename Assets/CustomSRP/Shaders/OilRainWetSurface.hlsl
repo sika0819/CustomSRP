@@ -3,9 +3,9 @@
 
 // =============================================================================
 // OilRainWetSurface.hlsl
-// NPR shader injection for wet ground / surface enhancement.
-// Include this file AFTER the main BRDF in OilNPRPass.hlsl or OilTerrainNPRPass.hlsl,
-// then call ApplyWetSurface() in the fragment shader.
+// Orphan helper — not included by any pass yet.
+// When wiring rain wet: include AFTER lighting in OilNPRPass / TerrainOilNPRPass,
+// then call ApplyWetSurface() on the lit color.
 // =============================================================================
 
 // Shader variables set by OilRainGPUParticles.cs via Shader.SetGlobalFloat/Color

@@ -6,10 +6,9 @@
     bottom: 0;
 }
 
-/* Boluo sheet sits 120px above the bottom; raise stage so the 1098px card is vertically centered. */
-.game-volume-form__root .game-form-stage {
-    margin-top: -1767px; /* -1218 (stage half) - 549 (sheet nudge) */
-}
+/* Sheet chrome uses shared .game-form-stage; USS authored for 120px above stage
+   bottom (Boluo InGameTiaoJieView bg anchoredY=120). Per-form gap:
+   VolumeForm.SheetBottomOffset (GameFormLogic translates stage). */
 
 #effectVolume #knob {
     position: absolute;

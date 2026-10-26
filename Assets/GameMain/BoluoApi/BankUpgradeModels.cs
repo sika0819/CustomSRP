@@ -24,9 +24,11 @@ namespace Game.BoluoApi
         public string studioVersion;
         public string runMode;
         /// <summary>后台开关：true=一树全景 SkyDome，false=进 3D 岛。缺省时看 yishu / runMode。</summary>
-        public bool? panorama;
+        [JsonProperty("panorama")]
+        public bool? panorama { get; set; }
         /// <summary>后台开关别名，与 panorama 二选一。</summary>
-        public bool? yishu;
+        [JsonProperty("yishu")]
+        public bool? yishu { get; set; }
         public string lastModifiedTimestamp;
         public string buildTimestamp;
         public string buildGuid;

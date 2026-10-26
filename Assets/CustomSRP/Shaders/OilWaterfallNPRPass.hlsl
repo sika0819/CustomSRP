@@ -1,6 +1,8 @@
 #ifndef CUSTOM_OIL_WATERFALL_NPR_PASS_INCLUDED
 #define CUSTOM_OIL_WATERFALL_NPR_PASS_INCLUDED
 
+// Grey shade bands (was material toggle _OIL_NO_VIOLET_UMBRA — always on for water).
+#define OIL_WATER_GREY_UMBRA
 #include "OilNPRLighting.hlsl"
 #include "OilPaintNoise.hlsl"
 
@@ -126,12 +128,13 @@ half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
         s,
         sheet,
         OilNPRAmbient(s),
+        half3(0.36h, 0.42h, 0.52h),
+        half3(0.50h, 0.44h, 0.36h),
         (half3)_SpecularColor.rgb,
         (half)_SpecularThreshold,
         max((half)_ShadeSteps, 3.0h),
         0.0h,
         stroke,
-        0.0h,
         1.0h,
         0.0h,
         s.smoothness,

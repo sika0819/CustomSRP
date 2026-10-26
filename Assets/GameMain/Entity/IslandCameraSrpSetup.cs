@@ -1,6 +1,5 @@
 using System;
 using System.Reflection;
-using Game.BoluoApi;
 using Game.Native;
 using UnityEngine;
 
@@ -15,21 +14,17 @@ namespace Game
     {
         const string CrpTypeName = "CustomSRP.CustomRenderPipelineCamera, Assembly-CSharp";
 
-        /// <summary>
-        /// 站立 renderScale。手机 0.5；闺蜜机大屏默认 1（锐度优先）。
-        /// </summary>
-        public static float DefaultRenderScale => BoluoDeviceInfo.IsSkyworthGmj() ? 1f : 0.5f;
+        /// <summary>站立 renderScale（来自 <see cref="DeviceGraphicsPolicy.Profile"/>）。</summary>
+        public static float DefaultRenderScale => DeviceGraphicsPolicy.Profile.StandRenderScale;
 
-        /// <summary>
-        /// 走路略压一档省带宽。手机 0.375；闺蜜机 0.5。起停会重建中间 RT，可接受。
-        /// </summary>
-        public static float WalkingRenderScale => BoluoDeviceInfo.IsSkyworthGmj() ? 0.5f : 0.375f;
+        /// <summary>走路略压一档省带宽。起停会重建中间 RT，可接受。</summary>
+        public static float WalkingRenderScale => DeviceGraphicsPolicy.Profile.WalkRenderScale;
 
         /// <summary>Unity Panel/Dialog 或原生半层（OverlayPresent）打开时，与沉浸同档。</summary>
         public static float PopupRenderScale => ImmersiveRenderScale;
 
-        /// <summary>Idle 沉浸（HUD 隐去）：手机 0.25；闺蜜机 0.5。</summary>
-        public static float ImmersiveRenderScale => BoluoDeviceInfo.IsSkyworthGmj() ? 0.5f : 0.25f;
+        /// <summary>Idle 沉浸（HUD 隐去）。</summary>
+        public static float ImmersiveRenderScale => DeviceGraphicsPolicy.Profile.ImmersiveRenderScale;
 
         /// <summary>默认目标帧率（与 GameEntry / Base.FrameRate 一致）。</summary>
         public const int DefaultFrameRate = 60;
@@ -133,18 +128,21 @@ namespace Game
                 return;
 
             int fps = IslandIdleImmersive.IsActive ? ImmersiveFrameRate : DefaultFrameRate;
+            int baseFps = GameEntry.Base != null ? GameEntry.Base.FrameRate : fps;
             if (fps == _appliedFrameRate
-                && Application.targetFrameRate == fps)
+                && Application.targetFrameRate == fps
+                && baseFps == fps)
                 return;
 
             _appliedFrameRate = fps;
             if (GameEntry.Base != null)
                 GameEntry.Base.FrameRate = fps;
-            else
+            // Base.FrameRate 会写 Application；再兜一次，避免只改了 m_FrameRate 缓存不同步。
+            if (Application.targetFrameRate != fps)
                 Application.targetFrameRate = fps;
         }
 
-        /// <summary>overlay 让帧结束后强制按当前岛面状态重算（清缓存）。</summary>
+        /// <summary>强制按当前岛面状态重算（清缓存）。沉浸退出 / overlay 让帧后调用。</summary>
         public static void ReapplyTargetFrameRateAfterOverlay()
         {
             _appliedFrameRate = int.MinValue;
@@ -172,9 +170,17 @@ namespace Game
             object existingPostFx = GetField(settingsType, settings, "postFXSettings");
             SetField(settingsType, settings, "overridePostFX", existingPostFx != null);
 
-            // CameraSettings.RenderScaleMode.Override == 2
-            SetField(settingsType, settings, "renderScaleMode", 2);
-            SetField(settingsType, settings, "renderScale", DefaultRenderScale);
+            // Desktop High：Inherit CRP asset。手机 / Gmj：Override 策略表 scale。
+            if (DeviceGraphicsPolicy.IsDesktopHigh)
+            {
+                SetField(settingsType, settings, "renderScaleMode", 0); // Inherit
+            }
+            else
+            {
+                SetField(settingsType, settings, "renderScaleMode", 2); // Override
+                SetField(settingsType, settings, "renderScale", DefaultRenderScale);
+            }
+
             SetField(settingsType, settings, "allowFXAA", false);
             SetField(settingsType, settings, "keepAlpha", false);
             SetField(settingsType, settings, "maskLights", false);

@@ -180,12 +180,95 @@ Shader "Hidden/CustomSRP/Post FX Stack"
 
         Pass
         {
+            Name "Oil Filter HQ"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilFilterPassFragmentHQ
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Oil Filter Half"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilFilterPassFragmentHalf
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Oil Filter Compose"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilFilterPassFragmentCompose
+            ENDHLSL
+        }
+
+        Pass
+        {
             Name "Oil Rain Post"
 
             HLSLPROGRAM
             #pragma target 3.5
             #pragma vertex DefaultPassVertex
             #pragma fragment OilRainPassFragment
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Oil Filter Compose Final"
+
+            Blend [_FinalSrcBlend] [_FinalDstBlend]
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilFilterPassFragmentComposeFinal
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Oil Filter HQ Final"
+
+            Blend [_FinalSrcBlend] [_FinalDstBlend]
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilFilterPassFragmentHQFinal
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Oil Rain Final"
+
+            Blend [_FinalSrcBlend] [_FinalDstBlend]
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilRainFinalPassFragment
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Oil Warp"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilWarpPassFragment
             ENDHLSL
         }
     }

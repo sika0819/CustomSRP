@@ -62,7 +62,8 @@ namespace Game
                 $"healthTip={_data.healthTip} recommend={_data.recommend} " +
                 $"bgm={_data.bgmVolume} voice={_data.voiceVolume} " +
                 $"atm={_data.hasIslandAtmosphere} kind={_data.weatherKind} lv={_data.weatherLevel} " +
-                $"hours={_data.hours:F1} period={_data.period}");
+                $"hours={_data.hours:F1} period={_data.period} " +
+                $"music={_data.hasMusicTrack} bank={_data.musicBankName}");
         }
 
         /// <summary>无主存档时，从既有 Setting 音量键迁移一次（正式账号）。</summary>
@@ -230,6 +231,42 @@ namespace Game
             weather.ApplyAtmosphereSnapshot(kind, level, hours, look, fog, fireEvent: false);
             Log.Info(
                 $"[BoluoGameSave] restored atmosphere kind={kind} lv={level} hours={hours:F1} look={look}");
+            return true;
+        }
+
+        /// <summary>写入当前 BGM bank/event（游客不落盘）。</summary>
+        public static void CaptureMusicTrack(string bankName, string eventName)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                return;
+            EnsureLoaded();
+            _data.hasMusicTrack = true;
+            _data.musicBankName = bankName ?? "";
+            _data.musicEventName = eventName ?? "";
+            Persist();
+        }
+
+        /// <summary>从 playlist 捕获当前曲（无播放则跳过）。</summary>
+        public static void CaptureMusicFromPlaylist(MusicPlaylist music)
+        {
+            if (music == null || !music.HasRestorableTrack)
+                return;
+            var track = MusicCatalog.GetTrack(music.CurrentAlbumIndex, music.CurrentTrackIndex);
+            if (!track.HasValue || string.IsNullOrEmpty(track.Value.BankName))
+                return;
+            CaptureMusicTrack(track.Value.BankName, track.Value.EventName);
+        }
+
+        /// <summary>若有曲目快照则输出 bank/event。</summary>
+        public static bool TryGetSavedMusicTrack(out string bankName, out string eventName)
+        {
+            bankName = "";
+            eventName = "";
+            EnsureLoaded();
+            if (!_data.hasMusicTrack || string.IsNullOrEmpty(_data.musicBankName))
+                return false;
+            bankName = _data.musicBankName;
+            eventName = _data.musicEventName ?? "";
             return true;
         }
     }

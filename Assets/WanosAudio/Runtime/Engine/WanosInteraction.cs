@@ -55,6 +55,7 @@ namespace WanosAudio
             _nextDynamicId = DynamicObjectIdStart;
             _listenerSource = null;
             VoiceStateChanged = null;
+            WanosEventCallbackQueue.ResetSession();
         }
 
         /// <summary>Register listener + fixed 2D/weather object IDs after playback is enabled.</summary>
@@ -135,7 +136,12 @@ namespace WanosAudio
 
         sealed class ListenerFollowDriver : MonoBehaviour
         {
-            void LateUpdate() => TickListener();
+            void LateUpdate()
+            {
+                TickListener();
+                // Music Playing/Ended → main thread (Boluo WanosCallBackManager FixedUpdate).
+                WanosEventCallbackQueue.Pump();
+            }
         }
 
         public static void EnsureObject(ulong objectId, string debugName)

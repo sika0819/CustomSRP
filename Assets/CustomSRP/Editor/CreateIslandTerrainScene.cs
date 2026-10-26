@@ -327,8 +327,6 @@ namespace CustomSRP.Editor
 
             Texture2D brush = TestSceneUtility.EnsureOilBrushTexture();
             material.SetColor("_BaseColor", Color.white);
-            material.DisableKeyword("_CANVAS_ON");
-            material.DisableKeyword("_INTERNAL_EDGE_ON");
             material.SetFloat("_ShadeSteps", 4f);
             material.SetFloat("_ShadeLift", 0.42f);
             material.SetFloat("_ShadowLift", 1.05f);
@@ -376,7 +374,7 @@ namespace CustomSRP.Editor
             RenderSettings.skybox = skyMat;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogDensity = 0.001f;
+            RenderSettings.fogDensity = 0.003f;
             RenderSettings.fogColor = new Color(0.67f, 0.76f, 0.82f, 1f);
             RenderSettings.sun = sun;
             var driver = sun.gameObject.AddComponent<OilSkyboxTime>();
@@ -407,7 +405,7 @@ namespace CustomSRP.Editor
                 AssetDatabase.LoadAssetAtPath<PostFXSettings>(
                     "Assets/CustomSRP/Settings/PostFXSettings.asset");
             settings.FindPropertyRelative("renderScaleMode").enumValueIndex = 2;
-            // Runtime IslandCameraSrpSetup overrides by device (GMJ 1/0.75, else 0.5/0.375).
+            // Runtime IslandCameraSrpSetup overrides by device (stand/walk/immersive scales).
             settings.FindPropertyRelative("renderScale").floatValue = 1f;
             settings.FindPropertyRelative("allowFXAA").boolValue = false;
             settings.FindPropertyRelative("keepAlpha").boolValue = false;
@@ -460,7 +458,7 @@ namespace CustomSRP.Editor
             layer.ringScale = 1.85f;
             layer.followSeaLevel = true;
             layer.seaLevel = 0f;
-            layer.ringHeight = 0f;
+            layer.ringHeight = 50f;
             layer.highRing = true;
             layer.Apply();
         }

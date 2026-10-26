@@ -375,7 +375,11 @@ namespace Game
             _fireLight.color = lightColor;
             _fireLight.intensity = 0f;
             _fireLight.range = Mathf.Max(minRangeOnIgnite, lightRange);
-            _fireLight.shadows = LightShadows.Soft;
+            // Mobile Oil NPR never samples other-shadow atlas (OIL_MOBILE_PERF) —
+            // Soft point = 6 atlas tiles/frame for free. Desktop keeps Soft for Lit/NPR PCF.
+            _fireLight.shadows = Application.isMobilePlatform
+                ? LightShadows.None
+                : LightShadows.Soft;
             _fireLight.renderMode = LightRenderMode.Auto;
             _fireLight.enabled = false;
             lightMaxIntensity = Mathf.Max(lightMaxIntensity, 4f);
@@ -509,6 +513,10 @@ namespace Game
             if (_factor > 0f)
                 _fireLight.range = Mathf.Max(minRangeOnIgnite, lightRange);
             _fireLight.intensity = target;
+            // Re-assert: ignite path must not revive Soft on mobile after IslandMobileTune.
+            _fireLight.shadows = Application.isMobilePlatform
+                ? LightShadows.None
+                : LightShadows.Soft;
         }
     }
 }

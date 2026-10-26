@@ -62,11 +62,8 @@ namespace CustomSRP
                 return 0f;
 
             var weather = WeatherService.Ensure();
-            if (weather.Kind != IslandWeatherKind.Wind)
-                return 0f;
-            // Map weather level (0-3) to wind strength (0-defaultWindStrength)
-            float levelFactor = weather.Level / 3f;
-            return Mathf.Lerp(0f, defaultWindStrength, levelFactor);
+            // VisualWind01 lerps during weather transitions (Kind snaps immediately).
+            return Mathf.Lerp(0f, defaultWindStrength, weather.VisualWind01);
         }
     }
 }

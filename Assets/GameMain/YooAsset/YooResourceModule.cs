@@ -276,6 +276,17 @@ namespace Game
             onDone?.Invoke(true, null);
         }
 
+        /// <summary>
+        /// Release unused AB providers (ref-count 0). Fire-and-forget; safe mid-session.
+        /// Distinct from GF <c>Resources.UnloadUnusedAssets</c>.
+        /// </summary>
+        public static void UnloadUnusedAssets(int loopCount = 10)
+        {
+            if (!IsInitialized || DefaultPackage == null)
+                return;
+            DefaultPackage.UnloadUnusedAssetsAsync(loopCount);
+        }
+
         /// <summary>Load an addressed asset; caller owns the handle (Release when done).</summary>
         public static IEnumerator LoadAssetCoroutine<T>(
             string location,

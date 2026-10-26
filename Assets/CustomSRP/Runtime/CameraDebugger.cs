@@ -21,7 +21,7 @@ namespace CustomSRP
         public static bool IsActive =>
             (_showTiles && _opacity > 0f) || _showColorLUT;
 
-        [Conditional("DEVELOPMENT_BUILD"), Conditional("UNITY_EDITOR")]
+        [Conditional("UNITY_INCLUDE_INSTRUMENTATION"), Conditional("UNITY_EDITOR")]
         public static void Initialize(Shader shader)
         {
             if (shader == null)
@@ -56,14 +56,14 @@ namespace CustomSRP
                 });
         }
 
-        [Conditional("DEVELOPMENT_BUILD"), Conditional("UNITY_EDITOR")]
+        [Conditional("UNITY_INCLUDE_INSTRUMENTATION"), Conditional("UNITY_EDITOR")]
         public static void Cleanup()
         {
             CoreUtils.Destroy(_material);
             DebugManager.instance.RemovePanel(PanelName);
         }
 
-        [Conditional("DEVELOPMENT_BUILD"), Conditional("UNITY_EDITOR")]
+        [Conditional("UNITY_INCLUDE_INSTRUMENTATION"), Conditional("UNITY_EDITOR")]
         public static void Render(UnsafeGraphContext context, int colorLUTResolution)
         {
             if (_material == null)

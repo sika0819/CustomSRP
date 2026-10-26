@@ -69,7 +69,6 @@ Shader "CustomSRP/OilWaterfallNPR"
             #pragma target 3.5
             #pragma multi_compile _ OIL_MOBILE_PERF
             #pragma shader_feature_local _PREMULTIPLY_ALPHA
-            #pragma shader_feature_local _OIL_NO_VIOLET_UMBRA
             #pragma vertex OilWaterfallNPRPassVertex
             #pragma fragment OilWaterfallNPRPassFragment
             #include "OilWaterfallNPRPass.hlsl"

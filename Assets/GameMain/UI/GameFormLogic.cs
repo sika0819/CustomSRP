@@ -17,12 +17,33 @@ namespace Game
         protected virtual bool SlidesUpFromBottom => false;
 
         /// <summary>
+        /// Design-px gap from stage bottom to sheet card bottom when open (Boluo
+        /// <c>anchoredPosition.y</c> with bottom pivot). USS cards are authored for
+        /// <see cref="UssAuthoredSheetBottom"/>; override per form for a different rest gap
+        /// without rewriting every <c>margin-top: -(height + N)</c>. Applied as a
+        /// <c>translate</c> on <c>.game-form-stage</c> so the full-screen backdrop stays put.
+        /// </summary>
+        protected virtual float SheetBottomOffset => UssAuthoredSheetBottom;
+
+        /// <summary>
+        /// When true, hide HUD preset + health icons while this form is open
+        /// (Boluo <c>OpenPopupWithIconHide</c>). Volume / Weather / Music override.
+        /// </summary>
+        protected virtual bool HidesBottomHudIcons => false;
+
+        /// <summary>
         /// Tap empty area (game visible, no panel chrome) to dismiss. Default: all bottom sheets.
         /// </summary>
         protected virtual bool CloseOnBackdropClick => SlidesUpFromBottom;
 
         const float SlideDuration = 0.32f;
         const float SlideDistance = 2436f;
+
+        /// <summary>
+        /// Bottom inset baked into sheet USS (<c>top: 100%; margin-top: -(height + 120)</c>),
+        /// matching Boluo volume / weather / music / preset cards.
+        /// </summary>
+        protected const float UssAuthoredSheetBottom = 120f;
 
         readonly List<(VisualElement element, EventCallback<ClickEvent> callback)> _clicks = new();
         // PointerDown / PointerUp gate callbacks aren't ClickEvents so they
@@ -32,6 +53,7 @@ namespace Game
         IVisualElementScheduledItem _slide;
         float _slideY;
         bool _closing;
+        bool _hidBottomIcons;
         // Track whether the pointer-down that *could* trigger backdrop dismiss
         // started on the backdrop itself. Without this, a press that begins on
         // panel chrome (a list row, a button, a draggable strip) and ends with
@@ -46,6 +68,7 @@ namespace Game
             base.OnOpen(userData);
             // Forms are pooled: clear close/slide state from the previous life.
             _closing = false;
+            _hidBottomIcons = false;
             _slide?.Pause();
             _slide = null;
             _backdropDownActive = false;
@@ -55,6 +78,13 @@ namespace Game
             ScreenLayout.Apply(document);
             Root = document.rootVisualElement;
             ScreenLayout.Changed += OnScreenChanged;
+            ApplySheetBottomOffset();
+
+            if (HidesBottomHudIcons)
+            {
+                HudBottomIcons.PushHide();
+                _hidBottomIcons = true;
+            }
 
             if (SlidesUpFromBottom)
             {
@@ -80,6 +110,12 @@ namespace Game
 
         public override void OnClose(bool isShutdown, object userData)
         {
+            if (_hidBottomIcons)
+            {
+                _hidBottomIcons = false;
+                HudBottomIcons.PopShow();
+            }
+
             ScreenLayout.Changed -= OnScreenChanged;
             ClearClicks();
             _slide?.Pause();
@@ -287,6 +323,27 @@ namespace Game
         {
             UIDocument document = GetComponent<UIDocument>();
             ScreenLayout.Apply(document);
+            ApplySheetBottomOffset();
+        }
+
+        /// <summary>
+        /// Lift / lower <c>.game-form-stage</c> so the open sheet gap matches
+        /// <see cref="SheetBottomOffset"/>. USS stays authored at
+        /// <see cref="UssAuthoredSheetBottom"/> (Boluo 120).
+        /// </summary>
+        void ApplySheetBottomOffset()
+        {
+            if (Root == null)
+                return;
+
+            float ty = UssAuthoredSheetBottom - SheetBottomOffset;
+            Root.Query(className: "game-form-stage").ForEach(stage =>
+            {
+                if (Mathf.Approximately(ty, 0f))
+                    stage.style.translate = StyleKeyword.Null;
+                else
+                    stage.style.translate = new Translate(0, ty);
+            });
         }
 
         void PlaySlide(float targetY, Action onComplete = null)

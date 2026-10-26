@@ -49,9 +49,9 @@ namespace Game.Native
             {
                 HostIslandEntryGate.Arm();
             });
-            MessageRouter.Register(MsgType.HostLeaveIsland, (_, __, ___) =>
+            MessageRouter.Register(MsgType.HostLeaveIsland, (a, __, ___) =>
             {
-                HostIslandEntryGate.Leave();
+                HostIslandEntryGate.Leave(a);
             });
 
             Log.Info("[IMP] NativeBridgeBootstrap handlers registered");

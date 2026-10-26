@@ -82,7 +82,6 @@ namespace Game.Native
         public static event System.Action Changed;
 
         static int _fpsBeforeYield = int.MinValue;
-        static int _intervalBeforeYield = 1;
 
         /// <summary>雨强度变化时调用；若正 YieldsGpu 则重算 fps/interval。</summary>
         public static void SetRainActiveForYield(bool active)
@@ -109,10 +108,7 @@ namespace Game.Native
             if (YieldsGpu)
             {
                 if (_fpsBeforeYield == int.MinValue)
-                {
                     _fpsBeforeYield = Application.targetFrameRate;
-                    _intervalBeforeYield = Mathf.Max(1, OnDemandRendering.renderFrameInterval);
-                }
 
                 // 不 UnityPause：pause 清 GL，关页会闪相机蓝。隔帧提交，Surface 留最后一帧。
                 // 雨天：30fps / interval 2，雨帘可滚且仍让出 GPU（配合 renderScale 0.25）。

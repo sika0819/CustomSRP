@@ -13,8 +13,8 @@ namespace Game
         // ─── Inspector ─────────────────────────────────────────────────────────────
 
         [Header("Locomotion")]
-        public float MoveSpeed = 18f;
-        public float StickYawSpeed = 120f;
+        public float MoveSpeed = 9f;
+        public float StickYawSpeed = 70f;
         public float Pitch = 12f;
         /// <summary>
         /// Eye above ground. Boluo <c>Player.selfHeight</c> / preset <c>playerHeight</c> is 6;
@@ -39,29 +39,33 @@ namespace Game
         public float HeightTransitionDuration = 0.5f;
 
         [Header("NavMesh clamp")]
-        [Tooltip("Clamp horizontal motion to baked IslandNavMesh (sea/river/cliff edges). Off or missing data = no clamp.")]
+        [Tooltip("Clamp horizontal motion to baked IslandNavMesh (sea/cliff edges; rivers skipped). Off or missing data = no clamp.")]
         public bool UseNavMeshClamp = true;
-        [Tooltip("Reject moves onto seabed (below ocean surface) or into river channels.")]
+        [Tooltip("Reject moves onto seabed (below ocean surface). Rivers stay walkable.")]
         public bool BlockWaterWalking = true;
 
         // ─── Constants ─────────────────────────────────────────────────────────────
 
         /// <summary>Stick magnitude above this counts as walking for render-scale drop.</summary>
         const float WalkRenderScaleThreshold = 0.05f;
-        const float InputSmooth = 10f;
+        const float InputSmooth = 7f;
         const float GroundStickSpeed = 2f;
         /// <summary>Degrees per pixel at <see cref="RefLookWidth"/> (portrait design 1125).</summary>
-        const float LookSensitivity = 0.18f;
+        const float LookSensitivity = 0.11f;
         /// <summary>Portrait design width; wider screens scale look down so full-width swipes feel similar.</summary>
         const float RefLookWidth = 1125f;
         const float ColliderRefreshMinRadius = 48f;
         const float GroundNormalMinY = 0.45f;
         /// <summary>脚底低于海平面超过此值视为走进海里（允许湿沙滩浅滩）。</summary>
         const float OceanBelowSurfaceBan = 0.25f;
-        /// <summary>河面水平距离 / 竖直容差（米）。</summary>
-        const float RiverBanRadiusXZ = 5f;
-        const float RiverBanRadiusY = 4f;
+        /// <summary>近河判定：跳过 NavMesh 钳位（旧烤盘河洞），允许沿河道行走。</summary>
+        const float RiverWalkRadiusXZ = 5f;
+        const float RiverWalkRadiusY = 4f;
         const float RiverQueryRadius = 8f;
+        /// <summary>悬崖 / 大石顶允许落下的最大高度；超出仍钳回蓝面，避免掉进虚空。</summary>
+        const float MaxDropHeight = 80f;
+        /// <summary>落点须明显低于当前脚底，才算「往下跳」而非同平面蓝面修正。</summary>
+        const float DropMinDeltaY = 0.45f;
 
         static readonly RaycastHit[] GroundHits = new RaycastHit[24];
 
@@ -146,6 +150,19 @@ namespace Game
         public void ApplySpawnPose() =>
             Teleport(IslandSpawnPose.DefaultPos, IslandSpawnPose.DefaultYawDegrees);
 
+        /// <summary>Current horizontal look (degrees). Used by startup look warmup.</summary>
+        public float YawDegrees => _yaw;
+
+        /// <summary>
+        /// Look-only pose tweak (no ground resample / collider refresh). Used under the
+        /// loading cover to force a few frusta through CRP before first player turn.
+        /// </summary>
+        public void PeekYaw(float yawDegrees)
+        {
+            _yaw = yawDegrees;
+            transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
+        }
+
         public void Teleport(Vector3 worldPos, float yawDegrees)
         {
             _holdPresetFraming = false;
@@ -175,6 +192,9 @@ namespace Game
 
             SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
             RefreshNearbyColliders();
+            // Screen-UV planar mirror is pose-locked; Gmj throttle can swallow the
+            // snap then idle-reuse the old RT → water shows no reflection.
+            IslandLocomotionState.ForceMirrorRedraw = true;
         }
 
         /// <summary>Iris exit: plant dolly from current eye toward a closer point along look.</summary>
@@ -242,6 +262,7 @@ namespace Game
                 _enterDollyActive = false;
                 SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
                 RefreshNearbyColliders();
+                IslandLocomotionState.ForceMirrorRedraw = true;
                 return;
             }
 
@@ -257,6 +278,7 @@ namespace Game
 
             SetPose(farPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
             RefreshNearbyColliders();
+            IslandLocomotionState.ForceMirrorRedraw = true;
         }
 
         public void SampleEnterDolly(float t01)
@@ -282,6 +304,8 @@ namespace Game
             _holdPresetFraming = true;
             _verticalSpeed = 0f;
             EnsureBody();
+            // Final plant after iris enter-dolly — refresh planar RT before idle hold.
+            IslandLocomotionState.ForceMirrorRedraw = true;
         }
 
         /// <summary>
@@ -659,7 +683,8 @@ namespace Game
 
         /// <summary>
         /// 水平位移后把脚底 XZ 钳回 NavMesh；采样失败则整帧水平位移回滚到 <paramref name="beforeEye"/>。
-        /// Y 仍由 CC / SampleGround 负责。
+        /// 近河跳过（河道预期可走；旧烤盘可能仍挖了河洞）。Y 仍由 CC / SampleGround 负责。
+        /// 悬崖 / 大石顶：下方有可站立落点（非海）时允许走出蓝面下落；下落途中不再把 XZ 拽回崖边。
         /// </summary>
         void ApplyNavMeshClampXZ(Vector3 beforeEye)
         {
@@ -671,6 +696,13 @@ namespace Game
 
             Vector3 eye = transform.position;
             Vector3 foot = eye - Vector3.up * EyeHeight;
+            if (IsFootNearRiver(foot))
+                return;
+
+            // 已离地下落：禁止把 XZ 钳回高处蓝面（否则会贴回崖边落不下去）。
+            if (IsFalling())
+                return;
+
             float maxDist = Mathf.Max(0.5f, BodyRadius * 2f);
 
             if (IslandNavMeshService.TryClampFootXZ(foot, maxDist, out Vector3 clampedFoot))
@@ -679,19 +711,69 @@ namespace Game
                 float dz = clampedFoot.z - foot.z;
                 if (dx * dx + dz * dz < 1e-8f)
                     return;
+                // 会被拽回崖边：若脚下方有落点则放行，让重力接下落。
+                if (CanDropToGroundBelow(foot))
+                    return;
                 eye.x = clampedFoot.x;
                 eye.z = clampedFoot.z;
                 transform.position = eye;
                 return;
             }
 
-            // 走出蓝面：保留竖直分量，水平回到本帧起点。
+            // 走出蓝面：有落点则允许往下跳；否则水平回到本帧起点。
+            if (CanDropToGroundBelow(foot))
+                return;
+
             eye.x = beforeEye.x;
             eye.z = beforeEye.z;
             transform.position = eye;
         }
 
-        /// <summary>海上（脚底落在海平面下的海底）/ 河里：水平位移回滚。</summary>
+        bool IsFalling()
+        {
+            if (_verticalSpeed >= -GroundStickSpeed)
+                return false;
+            if (_cc != null && _cc.enabled)
+                return !_cc.isGrounded;
+            return true;
+        }
+
+        /// <summary>
+        /// 脚底下方 <see cref="MaxDropHeight"/> 内有更低的朝上可站立面（跳过当前石顶/崖面），且落点不是禁走海床。
+        /// </summary>
+        bool CanDropToGroundBelow(Vector3 foot)
+        {
+            Vector3 origin = foot + Vector3.up * 0.25f;
+            float dist = MaxDropHeight + 0.25f;
+            int count = Physics.RaycastNonAlloc(
+                origin, Vector3.down, GroundHits, dist, GroundMask,
+                QueryTriggerInteraction.Ignore);
+            // 取「明显低于脚底」的最高落点，避免把当前大石顶当成落点而误判不能跳。
+            float bestY = float.NegativeInfinity;
+            bool found = false;
+            for (int i = 0; i < count; i++)
+            {
+                if (GroundHits[i].normal.y < GroundNormalMinY)
+                    continue;
+                if (IsWaterSurfaceCollider(GroundHits[i].collider))
+                    continue;
+                float y = GroundHits[i].point.y;
+                if (foot.y - y < DropMinDeltaY)
+                    continue;
+                if (y <= bestY)
+                    continue;
+                bestY = y;
+                found = true;
+            }
+
+            if (!found)
+                return false;
+
+            Vector3 landing = new Vector3(foot.x, bestY, foot.z);
+            return !IsFootInForbiddenWater(landing);
+        }
+
+        /// <summary>海上（脚底落在海平面下的海底）：水平位移回滚。河不禁。</summary>
         void ApplyWaterWalkBan(Vector3 beforeEye)
         {
             if (!BlockWaterWalking)
@@ -714,6 +796,8 @@ namespace Game
                 return eye;
 
             Vector3 foot = eye - Vector3.up * EyeHeight;
+            if (IsFootNearRiver(foot))
+                return eye;
             // 传送 / 预设允许更大搜索半径，避免出生点略偏蓝面外。
             float maxDist = Mathf.Max(8f, BodyRadius * 8f);
             if (!IslandNavMeshService.TryClampFootXZ(foot, maxDist, out Vector3 clampedFoot))
@@ -728,10 +812,22 @@ namespace Game
             Vector3 foot = eye - Vector3.up * EyeHeight;
             if (!IsFootInForbiddenWater(foot))
                 return eye;
-            // 传送落点在水里：抬到水面以上（海）或保持原样让 NavMesh 先钳；优先抬出海平面。
+            // 传送落点在海里：抬出海平面。
             if (TryGetOceanSurfaceY(out float oceanY) && foot.y < oceanY)
                 return new Vector3(eye.x, oceanY + EyeHeight + 0.5f, eye.z);
             return eye;
+        }
+
+        /// <summary>近河：旧烤盘河洞不再钳走；河床由 CC / 高度图贴地。</summary>
+        bool IsFootNearRiver(Vector3 foot)
+        {
+            if (!WaterSurfaceProbe.TryNearestRiver(
+                    foot, RiverQueryRadius, out Vector3 nearest, out _))
+                return false;
+            float dx = foot.x - nearest.x;
+            float dz = foot.z - nearest.z;
+            return dx * dx + dz * dz <= RiverWalkRadiusXZ * RiverWalkRadiusXZ
+                && Mathf.Abs(foot.y - nearest.y) <= RiverWalkRadiusY;
         }
 
         bool IsFootInForbiddenWater(Vector3 foot)
@@ -739,29 +835,12 @@ namespace Game
             // 站立面优先用物理朝上碰撞（码头/桥面）；高度图在桥下是海底，不能当站立面。
             bool hasStand = TryGetHighestStandY(foot, out float standY);
 
-            // 海：站立面（或无碰撞时的高度图）低于海平面 → 海底。
+            // 海：站立面（或无碰撞时的高度图）低于海平面 → 海底。河允许走。
             if (TryGetOceanSurfaceY(out float oceanY))
             {
                 float groundY = hasStand ? standY : SampleGround(foot).y;
                 if (groundY < oceanY - OceanBelowSurfaceBan)
                     return true;
-            }
-
-            // 河：水平近河道且竖直也在河面容差内；已站在桥/码头甲板（明显高于河面）则放行。
-            if (WaterSurfaceProbe.TryNearestRiver(
-                    foot, RiverQueryRadius, out Vector3 nearest, out _))
-            {
-                float dx = foot.x - nearest.x;
-                float dz = foot.z - nearest.z;
-                float xzSq = dx * dx + dz * dz;
-                if (xzSq <= RiverBanRadiusXZ * RiverBanRadiusXZ
-                    && Mathf.Abs(foot.y - nearest.y) <= RiverBanRadiusY)
-                {
-                    const float deckAboveRiver = 0.5f;
-                    if (hasStand && standY >= nearest.y + deckAboveRiver)
-                        return false;
-                    return true;
-                }
             }
 
             return false;

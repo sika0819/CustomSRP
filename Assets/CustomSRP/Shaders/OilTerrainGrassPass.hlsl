@@ -6,7 +6,7 @@
 #include "../ShaderLibrary/Light.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
 #include "OilTerrainGrassWind.hlsl"
-#include "OilVegetationLighting.hlsl"
+#include "OilNPRLighting.hlsl"
 
 StructuredBuffer<float4> _AllInstancesPosWSBuffer;
 StructuredBuffer<uint> _VisibleInstanceOnlyTransformIDBuffer;
@@ -28,13 +28,32 @@ CBUFFER_START(UnityPerMaterial)
     float4 _GrassAtlasRects[16];
 CBUFFER_END
 
-half3 OilTerrainGrassVertexLit(half3 albedo, half3 normalWS, float3 positionWS)
+half3 OilTerrainGrassVertexLit(
+    half3 albedo,
+    half3 normalWS,
+    float3 positionWS,
+    float2 screenUV)
 {
     half3 N = normalize((half3)normalWS);
     half3 lightColor = 0.0h;
     half3 L = half3(0.0h, 1.0h, 0.0h);
     half attenuation = 0.0h;
     half lightLum = 0.0h;
+
+    Surface surface;
+    surface.position = positionWS;
+    surface.normal = (float3)N;
+    surface.interpolatedNormal = (float3)N;
+    surface.viewDirection = normalize(_WorldSpaceCameraPos - positionWS);
+    surface.depth = -TransformWorldToView(positionWS).z;
+    surface.color = (float3)albedo;
+    surface.alpha = 1.0;
+    surface.metallic = 0.0;
+    surface.occlusion = 1.0;
+    surface.smoothness = 0.0;
+    surface.fresnelStrength = 0.0;
+    surface.dither = 0.5;
+    surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
 
     if (GetDirectionalLightCount() > 0)
     {
@@ -46,20 +65,6 @@ half3 OilTerrainGrassVertexLit(half3 albedo, half3 normalWS, float3 positionWS)
 #if defined(OIL_MOBILE_PERF)
         attenuation = 1.0h;
 #else
-        Surface surface;
-        surface.position = positionWS;
-        surface.normal = (float3)N;
-        surface.interpolatedNormal = (float3)N;
-        surface.viewDirection = normalize(_WorldSpaceCameraPos - positionWS);
-        surface.depth = -TransformWorldToView(positionWS).z;
-        surface.color = (float3)albedo;
-        surface.alpha = 1.0;
-        surface.metallic = 0.0;
-        surface.occlusion = 1.0;
-        surface.smoothness = 0.0;
-        surface.fresnelStrength = 0.0;
-        surface.dither = 0.5;
-        surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
         ShadowData shadowData = GetShadowData(surface);
         Light light = GetDirectionalLight(0, surface, shadowData);
         lightColor = (half3)light.color;
@@ -71,6 +76,8 @@ half3 OilTerrainGrassVertexLit(half3 albedo, half3 normalWS, float3 positionWS)
 
     // Same OilVegetationDirect + NightKeep as near leaves / far tree cross-cards.
     half3 lit = OilVegetationDirect(albedo, N, lightColor, L, attenuation, lightLum);
+    // Campfire / point fill — match foliage OtherLights path.
+    lit += OilNPROtherLights(surface, albedo, N, (half)_ShadeSteps, screenUV);
     return OilVegetationNightKeep(lit, albedo, N, lightLum);
 }
 
@@ -171,7 +178,9 @@ half4 OilTerrainGrassPassFragment(Varyings input) : SV_TARGET
     half clipT = input.useTex > 0.5h ? min((half)_AlphaClip, 0.34h) : (half)_AlphaClip;
     clip(alpha - clipT);
 
-    half3 rgb = OilTerrainGrassVertexLit(tex.rgb, input.normalWS, input.positionWS);
+    Fragment frag = GetFragment(input.positionCS_SS);
+    half3 rgb = OilTerrainGrassVertexLit(
+        tex.rgb, input.normalWS, input.positionWS, frag.screenUV);
 
     float viewZ = -TransformWorldToView(input.positionWS).z;
 #if defined(OIL_MOBILE_PERF)

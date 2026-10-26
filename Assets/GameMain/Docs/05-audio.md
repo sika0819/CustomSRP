@@ -14,8 +14,12 @@
 
 ```
 前台起播：
-MusicPlaylist ──> GameEntry.Sound.PlaySound ──> WanosSoundAgentHelper ──> WanosNative.PostEvent
-                └─ Unmute + PushVolumes + EnsureAudibleForUnityPlayback（Android）
+MusicPlaylist ──> GameEntry.Sound.PlaySound ──> WanosSoundAgentHelper
+  └─ PostEvent(+ Playing/Ended callback) → AttachMusicVoice
+       ├─ Playing + 列表/随机 → Break_Music（本曲播完进 Ended）
+       ├─ Playing + 单曲循环 → 不 Break（引擎自循环）
+       └─ Ended → Single 重播本曲 / Loop·Shuffle → Next()
+  └─ Unmute + PushVolumes + EnsureAudibleForUnityPlayback（Android）
 
 后台（Unity 已被 pause）：
 NowPlayingService.PublishPlan ──> BackgroundTransportSync ──> AndroidBackgroundTransport.SetPlan
@@ -63,8 +67,10 @@ static void ResetSession();
 void ApplySavedVolumes();               // 存档音量 → 引擎 RTPC
 void SetMusicVolume(float v01);         // UI 0–1
 void SetEffectVolume(float v01);
-void SetPlayMode(int mode);
+void SetPlayMode(int mode);                 // 持久化 + 重推负一屏 plan；播放中会 Break 同步模式
 int CyclePlayMode();
+void AttachMusicVoice(ulong voiceId);       // SoundAgent 起播后挂 Playing/Ended
+void DetachMusicVoice(ulong voiceId);       // Stop_Music 前摘掉，避免误 auto-next
 
 void PlayIndex(int albumIndex, int trackIndex, bool restart = false);
 void PlayIndex(int trackIndex, bool restart = false);   // ⚠ 平铺旧接口，重载易误用

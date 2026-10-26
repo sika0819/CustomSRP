@@ -12,13 +12,10 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
-  - _CANVAS_ON
-  - _INTERNAL_EDGE_ON
   - _RECEIVE_SHADOWS
   m_InvalidKeywords:
   - _BASEMAP
   - _EMISSION
-  - _OUTLINE_ON
   - _SHADOWS_ON
   m_LightmapFlags: 2
   m_EnableInstancingVariants: 1

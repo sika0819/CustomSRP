@@ -7,6 +7,10 @@ namespace Game
     public class WeatherForm : GameFormLogic
     {
         protected override bool SlidesUpFromBottom => true;
+        protected override bool HidesBottomHudIcons => true;
+
+        /// <summary>Boluo InGameTianQiView <c>tianqitanchuang</c> anchoredY (bottom pivot).</summary>
+        protected override float SheetBottomOffset => 120f;
 
         const float KnobAnimSeconds = 0.5f;
         const float ToastSeconds = 1.6f;
@@ -183,8 +187,7 @@ namespace Game
             _applying = true;
             try
             {
-                weather.SetWeather(WeatherKinds[_editingIndex], _knobLevel);
-                weather.BeginPanelTransitionLock();
+                weather.SetWeather(WeatherKinds[_editingIndex], _knobLevel, fireEvent: true, animate: true);
             }
             finally
             {

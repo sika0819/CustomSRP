@@ -272,7 +272,7 @@ namespace Game
             {
                 OnConfirm = () =>
                 {
-                    BoluoLogout.Execute();
+                    BoluoLogout.ExecuteLeave();
                     onConfirm?.Invoke();
                 },
                 OnCancel = onCancel,

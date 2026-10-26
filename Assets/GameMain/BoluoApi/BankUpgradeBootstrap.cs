@@ -115,11 +115,58 @@ namespace Game.BoluoApi
                 }
                 else
                 {
-                    // 首装/揭罩默认必须播 Music1_1（勿用扁平索引：服务端专辑顺序可能不是本地归息）。
-                    if (MusicCatalog.TryFindByBankName(defaultBank, out int album, out int track))
-                        GameEntry.Music.PlayIndex(album, track, restart: true);
-                    else
-                        GameEntry.Music.PlayIndex(0, 0, restart: true);
+                    // 正式账号有曲目存档则恢复；否则默认 Music1_1（勿用扁平索引）。
+                    string cueBank = defaultBank;
+                    int album = 0;
+                    int track = 0;
+                    bool restored = false;
+                    if (BoluoGameSave.TryGetSavedMusicTrack(out string savedBank, out string savedEvent)
+                        && !string.IsNullOrEmpty(savedBank))
+                    {
+                        if (!string.IsNullOrEmpty(savedEvent)
+                            && MusicCatalog.TryFindByEventName(savedEvent, out album, out track))
+                        {
+                            cueBank = savedBank;
+                            restored = true;
+                        }
+                        else if (MusicCatalog.TryFindByBankName(savedBank, out album, out track))
+                        {
+                            cueBank = savedBank;
+                            restored = true;
+                        }
+                    }
+
+                    if (!restored)
+                    {
+                        if (MusicCatalog.TryFindByBankName(defaultBank, out album, out track))
+                            cueBank = defaultBank;
+                        else
+                        {
+                            album = 0;
+                            track = 0;
+                        }
+                    }
+
+                    // 确保存档曲 bank 已加载再 Play
+                    if (!string.Equals(cueBank, defaultBank, System.StringComparison.OrdinalIgnoreCase)
+                        && !WanosAudio.WanosBankStore.IsLoaded(cueBank)
+                        && !WanosAudio.WanosBankStore.Load(cueBank)
+                        && !TryLoadBankFromDisk(cueBank))
+                    {
+                        Log.Warning(
+                            $"[BankUpgradeBootstrap] saved bank not ready bank={cueBank} — fallback {defaultBank}");
+                        cueBank = defaultBank;
+                        if (!MusicCatalog.TryFindByBankName(defaultBank, out album, out track))
+                        {
+                            album = 0;
+                            track = 0;
+                        }
+                    }
+
+                    GameEntry.Music.PlayIndex(album, track, restart: true);
+                    Log.Info(
+                        $"[BankUpgradeBootstrap] cue restored={restored} bank={cueBank} " +
+                        $"album={album} track={track}");
                 }
 
                 bool criticalDone = _criticalTcs.Task.Status.IsCompleted();

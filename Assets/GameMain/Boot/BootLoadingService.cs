@@ -25,7 +25,8 @@ namespace Game
         static Coroutine _fade;
         static LoadingForm _form;
 
-        public static bool IsVisible => _visible && !_hiding && AliveForm() != null;
+        public static bool IsVisible =>
+            _visible && !_hiding && (AliveForm() != null || BootEarlyCover.IsShowing);
 
         public static bool HasForm =>
             GameEntry.UI != null && GameEntry.UI.HasUIForm(UiAssets.LoadingForm);
@@ -33,6 +34,7 @@ namespace Game
         /// <summary>
         /// Clears static fade/progress state. Required when Domain Reload is off,
         /// or when a previous FadeHide was interrupted by exiting Play Mode.
+        /// Does not hide <see cref="BootEarlyCover"/> — Launch Awake owns first paint.
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         public static void ResetSession()
@@ -56,6 +58,8 @@ namespace Game
             _visible = true;
             _form.SetCoverAlpha(1f);
             ApplyImmediate(_shownProgress, _tip);
+            // Same frame: drop scene early cover so still→video handoff has no double stack.
+            BootEarlyCover.HideIfAny();
         }
 
         public static void Show(string tip = "正在进入世界...", float progress = 0.08f)
@@ -74,6 +78,8 @@ namespace Game
             _targetProgress = p;
             EnsureForm();
             AliveForm()?.RestoreCover();
+            if (AliveForm() == null)
+                BootEarlyCover.Instance?.Show(_tip, _shownProgress);
             ApplyImmediate(_shownProgress, _tip);
             EnsureSmoothRunner();
         }
@@ -124,7 +130,7 @@ namespace Game
             LoadingForm form = AliveForm();
             if (host == null || form == null)
             {
-                // _form 假死但 UIManager 仍挂着 LoadingForm：必须按组关，不能只清静态。
+                // No LoadingForm yet (early cover only) or host gone — drop everything.
                 Hide();
                 return;
             }
@@ -163,6 +169,7 @@ namespace Game
 
             // 核选项：场景里残留的 LoadingForm（UIManager 已关但 UITK 仍画）
             ForceDestroyAllLoadingForms();
+            BootEarlyCover.HideIfAny();
 
             _form = null;
             _visible = false;
@@ -289,7 +296,14 @@ namespace Game
 
         static void ApplyImmediate(float progress, string tip)
         {
-            AliveForm()?.SetProgress(progress, tip);
+            LoadingForm form = AliveForm();
+            if (form != null)
+            {
+                form.SetProgress(progress, tip);
+                return;
+            }
+
+            BootEarlyCover.Instance?.SetProgress(progress, tip);
         }
 
         static void StopRoutines()

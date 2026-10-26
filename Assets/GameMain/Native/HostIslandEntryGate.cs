@@ -22,7 +22,7 @@ namespace Game.Native
         {
             _armed = 0;
             MessageRouter.Register(MsgType.HostArmIslandEntry, (_, __, ___) => Arm());
-            MessageRouter.Register(MsgType.HostLeaveIsland, (_, __, ___) => Leave());
+            MessageRouter.Register(MsgType.HostLeaveIsland, (a, __, ___) => Leave(a));
         }
 
         public static bool ShouldWaitForHost()
@@ -49,14 +49,22 @@ namespace Game.Native
         /// 宿主退登/注销：Disarm + 清 IslandReady 一次性 + 松 overlay 触控 + 清会话镜像，
         /// 并请求 ProcedureIsland 退回 GuestLogin（下次 Arm 才能再进岛 / 再发 Notify(2)）。
         /// </summary>
-        public static void Leave()
+        /// <param name="leaveReason">
+        /// <see cref="MsgType.HostLeaveReasonLogout"/> 保留分桶进度；
+        /// <see cref="MsgType.HostLeaveReasonAccountDeleted"/> 清空当前 userId 桶。
+        /// </param>
+        public static void Leave(int leaveReason = MsgType.HostLeaveReasonLogout)
         {
             Reset();
             NativeMessages.ResetIslandReadyFlag();
             NativeOverlayGate.Apply(present: 0, touchEnabled: 1, bottomHidden: 0);
-            Game.BoluoLogout.Execute();
+            if (leaveReason == MsgType.HostLeaveReasonAccountDeleted)
+                Game.BoluoLogout.ExecuteAccountDeleted();
+            else
+                Game.BoluoLogout.ExecuteLeave();
             Game.ProcedureIsland.RequestReturnToGuestLogin();
-            Log.Info("[IMP] HostLeaveIsland — gates reset, return to GuestLogin requested");
+            Log.Info(
+                $"[IMP] HostLeaveIsland reason={leaveReason} — gates reset, return to GuestLogin requested");
         }
     }
 }

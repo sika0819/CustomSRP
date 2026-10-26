@@ -12,7 +12,7 @@ namespace CustomSRP
 
         static readonly CameraSettings DefaultCameraSettings = new CameraSettings();
 
-#if !(UNITY_EDITOR || DEVELOPMENT_BUILD)
+#if !(UNITY_EDITOR || UNITY_INCLUDE_INSTRUMENTATION)
         static readonly ProfilingSampler DefaultReleaseBuildProfilingSampler =
             new ProfilingSampler("Other Camera");
 #endif
@@ -44,7 +44,7 @@ namespace CustomSRP
             LightingPass.Cleanup();
         }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || UNITY_INCLUDE_INSTRUMENTATION
         static ProfilingSampler GetDefaultProfileSampler(Camera camera) =>
             ProfilingSampler.Get(camera.cameraType);
 #else
@@ -189,8 +189,9 @@ namespace CustomSRP
             if (useScaledRendering)
             {
                 renderScale = Mathf.Clamp(renderScale, renderScaleMin, renderScaleMax);
-                bufferSize.x = Mathf.Max(1, (int)(camera.pixelWidth * renderScale));
-                bufferSize.y = Mathf.Max(1, (int)(camera.pixelHeight * renderScale));
+                // Align to 8: odd sizes (e.g. 0.375×1176=441) stress Mali TBDR / resolve.
+                bufferSize.x = AlignBufferExtent((int)(camera.pixelWidth * renderScale));
+                bufferSize.y = AlignBufferExtent((int)(camera.pixelHeight * renderScale));
             }
             else
             {
@@ -203,8 +204,6 @@ namespace CustomSRP
                 IslandLocomotionState.BufferWidth = bufferSize.x;
                 IslandLocomotionState.BufferHeight = bufferSize.y;
             }
-
-            bufferSettings.fxaa.enabled &= cameraSettings.allowFXAA;
 
             var copier = new CameraRendererCopier(
                 _material, camera, cameraSettings.finalBlendMode);
@@ -309,6 +308,7 @@ namespace CustomSRP
                         _postFXStack.Camera = camera;
                         _postFXStack.FinalBlendMode = cameraSettings.finalBlendMode;
                         _postFXStack.Settings = postFXSettings;
+                        _postFXStack.AllowFXAA = cameraSettings.allowFXAA;
                         // OilRain screen-space ripples run AFTER OilFilter (in PostFXPass.Record)
                         // when rain settings exist. We do nothing here — the post pass owns the
                         // integration point so it sees the OilFilter output.
@@ -353,5 +353,7 @@ namespace CustomSRP
                 CommandBufferPool.Release(commandBuffer);
             }
         }
+
+        static int AlignBufferExtent(int v) => Mathf.Max(8, (v + 7) & ~7);
     }
 }

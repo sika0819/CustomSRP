@@ -30,13 +30,15 @@
 ```csharp
 // GameEntry.cs
 [DefaultExecutionOrder(100)] public partial class GameEntry : MonoBehaviour
-void Awake()      // 复位 9 个静态会话 → ApplyDeviceGraphicsPolicy()
+void Awake()      // 复位静态会话 → DeviceGraphicsPolicy.DetectAndApplyBoot()
 void Start()      // InitBuiltinComponents → EditorResourceMode → InitCustomComponents → EnsureUiGroups
 void OnDestroy()  // ResetSession → AudioInteractionBootstrap.Shutdown → WanosEngine.Unload → Clear*Components
 
-static void ApplyDeviceGraphicsPolicy();  // 非 Editor：Quality=2 / targetFPS=60 / vSync=0
-                                           // resolutionScalingFixedDPIFactor=0.7 / OIL_MOBILE_PERF
-                                           // 明确不做 Screen.SetResolution（16:9 缓冲会被拉到 20:9 真机）
+// DeviceGraphicsPolicy.cs — Low/Mid/High/Gmj
+// Detect：Gmj 渠道优先 → 桌面 High → ScoreAndroid / ScoreIos
+// Boot：手机档 Very Low + DPI/lodBias + OIL_MOBILE_PERF（High 手机关 keyword）；桌面 High 跳过
+// 明确不做 Screen.SetResolution
+// 全链路文档：12-device-graphics-tiers.md
 ```
 
 ```csharp
@@ -109,7 +111,7 @@ BoluoApiEnvironment.ClearCached()
 WanosSoundSetup.ResetSession()
 MusicPlaylist.ResetSession()
 AudioInteractionBootstrap.ResetSession()
-ApplyDeviceGraphicsPolicy()
+DeviceGraphicsPolicy.DetectAndApplyBoot()
 ```
 
 > `WanosSoundSetup.ConfigureHelpersBeforeSoundStart()` 必须在 `SoundComponent.Start` 之前执行，

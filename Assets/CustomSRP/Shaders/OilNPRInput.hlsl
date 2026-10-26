@@ -15,16 +15,15 @@ CBUFFER_START(UnityPerMaterial)
     float4 _BaseMap_ST;
     float4 _OutlineBrushMap_ST;
     float4 _BaseColor;
-    float4 _AmbientColor;
     float4 _SpecColor;
     float _Cutoff;
     float _Clipping;
     float _ShadeSteps;
+    float _Metallic;
     float _Smoothness;
+    float _Fresnel;
+    float _Wetness;
     float _PaintThickness;
-    float _ShadowLift;
-    float _ShadeLift;
-    float _ShadowWobble;
     float _ShadowBrushScale;
     // 0=Mesh UV, 1=World, 2=Object — matches Boluo LitStrokeRock / wood mat authoring
     float _WorldTriplanar;
@@ -83,8 +82,12 @@ float OilEffectiveFoliageFlag(float foliageFlag, float skipDay)
 half SampleShadowBrush(float3 positionWS, float2 baseUV)
 {
 #if defined(OIL_MOBILE_PERF)
-    // LightingEx ignores brush/wobble; SoftFogStroke(0.5) is identity. Skip the tex tap.
-    return 0.5h;
+    // Low/Gmj: scale 0 → identity 0.5. Mid: cheap 1-tap brush at half strength.
+    half scale = (half)_OilBrushMobileScale;
+    if (scale <= 0.001h)
+        return 0.5h;
+    half brush = SampleOilShadowBrushCheap(positionWS, baseUV, 0.25);
+    return lerp(0.5h, brush, scale);
 #else
     return SampleOilShadowBrush(positionWS, baseUV, 0.25);
 #endif
@@ -178,6 +181,16 @@ float4 GetBase(InputConfig c)
 float GetCutoff(InputConfig c)
 {
     return _Cutoff;
+}
+
+float GetMetallic()
+{
+    return _Metallic;
+}
+
+float GetFresnel()
+{
+    return _Fresnel;
 }
 
 #endif

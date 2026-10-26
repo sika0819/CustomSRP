@@ -25,6 +25,39 @@ namespace Game
         const float TintMax = 1.55f;
         const int MaxSampleEdge = 512;
 
+        const string BakeFlagRelPath = "Temp/sync_billboard_colors_from_leaf.flag";
+        static bool _flagSyncQueued;
+
+        [InitializeOnLoadMethod]
+        static void WatchSyncFlag()
+        {
+            EditorApplication.update -= PollSyncFlag;
+            EditorApplication.update += PollSyncFlag;
+        }
+
+        static void PollSyncFlag()
+        {
+            if (_flagSyncQueued || EditorApplication.isCompiling || EditorApplication.isUpdating
+                || EditorApplication.isPlaying)
+                return;
+
+            string flag = Path.GetFullPath(Path.Combine(Application.dataPath, "..", BakeFlagRelPath));
+            if (!File.Exists(flag))
+                return;
+            try { File.Delete(flag); } catch { return; }
+
+            _flagSyncQueued = true;
+            Debug.Log("[SyncBillboardColors] Flag detected — syncing billboard colors from LOD0 leaf");
+            try
+            {
+                ExecuteMethodEntry();
+            }
+            finally
+            {
+                _flagSyncQueued = false;
+            }
+        }
+
         [MenuItem("Window/Game/Sync Billboard Colors From Leaf")]
         public static void RunFromMenu()
         {
@@ -35,6 +68,15 @@ namespace Game
                 "Sync Billboard Colors",
                 $"已同步 {n} 个 Billboard 材质（次要色 + atlas 主色 tint 对齐 LOD0 树叶）。",
                 "OK");
+        }
+
+        /// <summary>Batchmode / flag: -executeMethod Game.SyncBillboardColorsFromLeaf.ExecuteMethodEntry</summary>
+        public static void ExecuteMethodEntry()
+        {
+            int n = SyncAll();
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log($"[SyncBillboardColors] done updated={n}");
         }
 
         public static int SyncAll()

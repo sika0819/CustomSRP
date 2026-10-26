@@ -1,0 +1,54 @@
+.boot-early-cover__root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background-color: rgb(12, 12, 14);
+}
+
+.boot-early-cover__still {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    -unity-background-scale-mode: stretch-to-fill;
+}
+
+.boot-early-cover__chrome {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 180px;
+    justify-content: flex-end;
+    align-items: center;
+    padding-bottom: 72px;
+}
+
+.boot-early-cover__track {
+    width: 70%;
+    max-width: 885px;
+    height: 10px;
+    background-color: rgba(255, 255, 255, 0.18);
+    overflow: hidden;
+    border-radius: 5px;
+}
+
+.boot-early-cover__fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: rgba(255, 255, 255, 0.92);
+    transform-origin: 0% 50%;
+}
+
+.boot-early-cover__tip {
+    margin-top: 18px;
+    color: rgb(255, 255, 255);
+    font-size: 28px;
+    -unity-text-align: middle-center;
+}

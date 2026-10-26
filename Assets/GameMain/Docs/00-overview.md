@@ -29,6 +29,7 @@
 | `YooAsset/` | [02](02-yooasset.md) | 资源包生命周期、GF 资源管理器 |
 | `Persistence/` | [03](03-persistence.md) | 存档、坐标保存、游客隔离 |
 | `Services/` | [04](04-services.md) | 天气 / 预设 / 氛围 / 世界 / 草地 / 移动端调优 |
+| `Services/DeviceGraphicsPolicy*` | [12](12-device-graphics-tiers.md) | 机型四档 Detect / Profile / Boot 与下游消费 |
 | `Services/Audio/` + `Sound/` | [05](05-audio.md) | BGM、环境音、天气音、雨水面采样 |
 | `UI/` | [06](06-ui.md) | UI Toolkit 表单框架与 7 个运行时表单 |
 | `Environment/Runtime/` | [07](07-environment.md) | MapItem 流式加载、碰撞体 LOD、篝火、原生合批 |
@@ -36,6 +37,7 @@
 | `BoluoApi/` + `Native/` | [09](09-boluoapi-native.md) | 登录换票、签名、Bank 下载、原生桥 |
 | （跨模块坑） | [10](10-bug-index.md) | 已知坑总表与排障流程 |
 | （雨视觉） | [11](11-rain-device-visual.md) | 真机雨丝 Editor 有 / 真机无 |
+| （机型分档） | [12](12-device-graphics-tiers.md) | Low/Mid/High/Gmj 全链路 |
 
 ## 3. 启动时序
 
@@ -127,6 +129,8 @@ handler 内 `Release`，调用方不 `Release`。
 | tag | 模块 | 出现场景 |
 |---|---|---|
 | `[GameEntry]` | 启动 | 画质 / 分辨率 / 移动端策略 |
+| `[DeviceGraphicsPolicy]` | 分档 | Detect / Boot / DPI / OIL_MOBILE_PERF |
+| `[IslandMobileTune]` | 分档 | 进岛灯 / 云 / 地形调参 |
 | `[InitYooAsset]` | 启动 | YooAsset 初始化、LoadingForm 打开结果 |
 | `[GuestLogin]` | 登录 | boot.json、游客登录、换票结果 |
 | `[ProcedureIsland]` | 流程 | 相机位姿、HUD 打开、超时 |
@@ -162,7 +166,9 @@ handler 内 `Release`，调用方不 `Release`。
 | 没声音 / 音量条能动但引擎不变 | [05](05-audio.md) | `.cursor/rules/wanos-audio.mdc` |
 | 进岛后 HUD 不出现 | [06](06-ui.md) | [01](01-boot-procedure.md) |
 | 走不动 / 掉出地面 / 穿石�� | [08](08-input-camera.md) | [07](07-environment.md) |
-| 帧率掉、内存涨 | [07](07-environment.md) | [04](04-services.md) |
+| 帧率掉、内存涨 | [07](07-environment.md) | [12](12-device-graphics-tiers.md)、[04](04-services.md) |
+| 画质档不对 / Editor 像手机 | [12](12-device-graphics-tiers.md) | [01](01-boot-procedure.md) |
+| 闺蜜机（Gmj）站立掉帧 | [12](12-device-graphics-tiers.md) | [CustomSRP/doc/gmj-perf.md](../../CustomSRP/doc/gmj-perf.md)、[07](07-environment.md) |
 | 存档丢失 / 红点不出现 | [03](03-persistence.md) | — |
 | 预设切换卡住 / 传送异常 | [04](04-services.md) | [08](08-input-camera.md) |
 | 真机资源加载失败 | [02](02-yooasset.md) | [01](01-boot-procedure.md) |

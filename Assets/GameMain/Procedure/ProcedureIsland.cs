@@ -36,6 +36,10 @@ namespace Game
         /// <summary>递增以作废进行中的 <see cref="UncoverAsync"/>（退登时勿再 Hide 加载罩）。</summary>
         static int _uncoverGeneration;
 
+        /// <summary>供 <see cref="IslandStartupWarmup"/> 检测揭罩是否已作废。</summary>
+        public static int UncoverGeneration =>
+            System.Threading.Interlocked.CompareExchange(ref _uncoverGeneration, 0, 0);
+
         public static void RequestReturnToGuestLogin()
         {
             System.Threading.Interlocked.Exchange(ref _returnToGuestLogin, 1);
@@ -156,8 +160,9 @@ namespace Game
                 _worldLoadRoutine = null;
             }
 
-            // 杀进程 / 正常离岛都尽量落盘坐标（大气已在变更时 Persist，此处一并 flush）。
-            IslandPlayerPosSave.TrySaveCurrentAndFlush();
+            // 杀进程 / 正常离岛落盘。退登路径已在 ExecuteLeave 清会话前 flush；此处会话仍在时再兜底一刀。
+            if (BoluoGamePersistence.AllowsAccountProgressDisk)
+                IslandPlayerPosSave.TrySaveCurrentAndFlush();
 
             if (!isShutdown)
             {
@@ -285,6 +290,12 @@ namespace Game
             BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();
             if (gen != _uncoverGeneration)
                 return;
+
+            // Gmj：揭罩前扫视向预热 PSO；随后压低 spawn 与首转错开。
+            await IslandStartupWarmup.RunAsync(gen);
+            if (gen != _uncoverGeneration)
+                return;
+            EnvStreamingConfig.BeginPostUncoverQuiet();
 
             // 二次进岛：清 Panel 残留 + 预设/相机闩，避免有声但不能走。
             UnlockLocomotionAfterUncover();

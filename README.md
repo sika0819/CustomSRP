@@ -109,6 +109,19 @@ doc/                 # 场景与管线文档 + images/presets
 
 ---
 
+## Hub 油画 CustomSRP 模版
+
+从本仓打一个**精简** Unity Hub 工程模版（不含 GameMain / 岛屿内容），方便新建油画 NPR 项目：
+
+```bash
+python3 Tools/OilCustomSrpTemplate/pack.py
+```
+
+输出：`~/Unity user templates/3d-customsrp-oil-npr/`（`unity` 字段必须是完整版本如 `6000.6.4f1`）。  
+**完全退出并重开 Unity Hub** → New project（选 **6000.6.4f1**）→ 搜 **3D CustomSRP Oil NPR**。说明见 [`Tools/OilCustomSrpTemplate/README.md`](Tools/OilCustomSrpTemplate/README.md)。
+
+---
+
 ## 能力摘要
 
 - **风格**：OilNPR（物体 + Outline）、TerrainOilNPR、OilSkyboxNPR（黎明 / 白天 / 黄昏 / 夜晚）

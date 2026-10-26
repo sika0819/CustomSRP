@@ -1,7 +1,8 @@
 /* Design column: Boluo content is authored for 1125×2436.
    Pad Expand can make the panel taller/wider than the design canvas — keep a fixed
-   1125×2436 stage centered so bottom-anchored sheets and top:px rows stay aligned
-   and sit in the middle of the screen. */
+   1125×2436 stage centered in the panel so bottom-anchored sheets (USS baseline
+   120px above stage bottom, matching Boluo; override via GameFormLogic.SheetBottomOffset)
+   and top:px rows stay aligned on every aspect. */
 .game-form-stage {
     position: absolute;
     left: 50%;

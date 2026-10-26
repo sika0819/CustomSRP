@@ -26,12 +26,17 @@ namespace Game
         public bool hasIslandAtmosphere;
         /// <summary><see cref="IslandWeatherKind"/> 整型（Clear = -1）。</summary>
         public int weatherKind = (int)IslandWeatherKind.Cloud;
-        public int weatherLevel = 1;
+        public int weatherLevel = 0;
         public float hours = 12f;
         /// <summary><see cref="IslandTimePeriod"/> 整型。</summary>
         public int period = (int)IslandTimePeriod.Noon;
         /// <summary><see cref="IslandLookKind"/> 整型。</summary>
         public int lookKind = (int)IslandLookKind.Canonical;
-        public float fogDensity = 0.001f;
+        public float fogDensity = 0.003f;
+
+        /// <summary>是否已写入过 BGM 曲目快照（bank/event，避免专辑顺序漂移）。</summary>
+        public bool hasMusicTrack;
+        public string musicBankName = "";
+        public string musicEventName = "";
     }
 }

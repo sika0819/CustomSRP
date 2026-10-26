@@ -60,7 +60,7 @@ namespace Game.Editor
             EditorUtility.DisplayDialog(
                 "Rebuild + Bake NavMesh",
                 ok
-                    ? $"walkItems={n}\n海/河已 Not Walkable。\n{msg}"
+                    ? $"walkItems={n}\n海已 Not Walkable（河可走）。\n{msg}"
                     : $"walkItems={n}\n失败: {msg}",
                 "OK");
         }
@@ -89,17 +89,16 @@ namespace Game.Editor
             GameObject inland = InstantiatePrefab(
                 SceneAssets.IslandInlandWaterPrefabPath, root.transform, "IslandInlandWater");
 
+            // 只挖海：河预期可走（河床 / 河面保持 Walkable）。
             if (ocean != null)
                 PrepareWaterForCarve(ocean);
-            if (inland != null)
-                PrepareWaterForCarve(inland);
 
             var mapRoot = new GameObject(MapItemsName);
             mapRoot.transform.SetParent(root.transform, false);
             int spawned = SpawnWalkAffectingMapItems(mapRoot.transform);
 
-            // 码头/桥甲板紧贴水面时，NotWalkable 会按 agentHeight 合并挖穿蓝面。
-            PunchWaterUnderWalkDecks(ocean, inland, mapRoot.transform);
+            // 码头/桥甲板紧贴海面时，NotWalkable 会按 agentHeight 合并挖穿蓝面。
+            PunchWaterUnderWalkDecks(ocean, null, mapRoot.transform);
 
             EnsureNavMeshSurface(root);
 
@@ -142,12 +141,11 @@ namespace Game.Editor
             EditorUtility.DisplayProgressBar("Island NavMesh", "Baking…", 0.4f);
             try
             {
-                // 场景若已建过，再补一次开孔（幂等：已开孔的 mesh 名带后缀则跳过）。
+                // 场景若已建过，再补一次海面开孔（幂等：已开孔的 mesh 名带后缀则跳过）。河不挖洞。
                 GameObject ocean = GameObject.Find("IslandOcean");
-                GameObject inland = GameObject.Find("IslandInlandWater");
                 Transform mapRoot = root.transform.Find(MapItemsName);
                 if (mapRoot != null)
-                    PunchWaterUnderWalkDecks(ocean, inland, mapRoot);
+                    PunchWaterUnderWalkDecks(ocean, null, mapRoot);
 
                 surface.RemoveData();
                 surface.BuildNavMesh();
@@ -193,7 +191,7 @@ namespace Game.Editor
 
             surface = root.AddComponent<NavMeshSurface>();
             surface.collectObjects = CollectObjects.Children;
-            // RenderMeshes：海/河无 Collider 也能被 Not Walkable 挖洞（PhysicsColliders 采不到水面）。
+            // RenderMeshes：海面无 Collider 也能被 Not Walkable 挖洞（PhysicsColliders 采不到水面）。
             surface.useGeometry = NavMeshCollectGeometry.RenderMeshes;
             surface.defaultArea = 0; // Walkable
             surface.layerMask = ~0;
@@ -205,8 +203,8 @@ namespace Game.Editor
         }
 
         /// <summary>
-        /// 水面标 Not Walkable，并补 MeshCollider（便于检视 / 若改回 PhysicsColliders 仍能挖洞）。
-        /// 河流是嵌套 PrefabInstance，每个带 MeshFilter 的子节点也要单独打标。
+        /// 海面标 Not Walkable，并补 MeshCollider（便于检视 / 若改回 PhysicsColliders 仍能挖洞）。
+        /// 仅用于海；河保持可走，不要对 InlandWater 调用。子节点 MeshFilter 也要单独打标。
         /// </summary>
         static void PrepareWaterForCarve(GameObject go)
         {
@@ -651,8 +649,12 @@ namespace Game.Editor
         {
             if (category == "JianZhu" || category == "Qiao")
                 return true;
+            // 栏杆/稻草人：运行时有碰撞，若不进烤盘蓝面会穿栏 → 过桥上岸被 CC 卡住。
+            if (EnvStreamingConfig.IsStructuralClutter(prefabName))
+                return true;
+            // 全部石头进烤盘（含 Rock_Pile_*）。只烤 Large/Cliff 时，桥边石堆会蓝面可走、运行时撞死。
             if (category == "ShiTou")
-                return EnvStreamingConfig.IsLargeRockPrefab(prefabName);
+                return true;
             if (category == "Other")
             {
                 return EnvStreamingConfig.IsFarFieldLandmark(prefabName)

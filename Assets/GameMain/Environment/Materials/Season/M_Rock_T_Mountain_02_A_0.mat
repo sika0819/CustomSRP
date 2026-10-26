@@ -14,8 +14,6 @@ Material:
   m_ValidKeywords:
   - _SHADOWS_CLIP
   m_InvalidKeywords:
-  - _CANVAS_ON
-  - _OUTLINE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0

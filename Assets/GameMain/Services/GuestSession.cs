@@ -50,12 +50,12 @@ namespace Game
             BoluoSession.LoadFromPrefs();
             string prevId = BoluoSession.UserId ?? "";
             string nextId = userId ?? "";
-            // 未走退登的热切账号：旧 userId → 新 userId 时清掉上一账号本地配置。
+            // 热切账号：只重置内存，旧 userId 分桶进度保留；新账号读自己的桶。
             if (!string.IsNullOrEmpty(prevId)
                 && !string.IsNullOrEmpty(nextId)
                 && !string.Equals(prevId, nextId, StringComparison.Ordinal))
             {
-                BoluoLogout.ClearAccountLocalProgress("userId switched");
+                BoluoLogout.ResetInMemoryForAccountSwitch("userId switched");
             }
 
             BoluoSession.ApplyUserSession(
