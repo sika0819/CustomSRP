@@ -151,6 +151,7 @@ namespace Game
             InlandWaterReady = _inlandWaterInstance != null;
             OnInlandWaterReady?.Invoke(_inlandWaterInstance != null);
 
+            Log.Info("[Hitch] prefill begin reclaimBusy=" + IslandLeaveAssetReclaim.IsBusy);
             reportProgress?.Invoke(0.80f, "正在铺装环境...");
             yield return SpawnMapItems(reportProgress);
 

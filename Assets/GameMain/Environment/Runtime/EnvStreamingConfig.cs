@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Game
@@ -38,11 +39,13 @@ namespace Game
         public static float TreeBillboardKeepRadius = 380f;
 
         /// <summary>
-        /// 大树完整 Prefab 最远距离；超出后改用 Billboard 代理（Native 合批）。
-        /// 须 ≥ 树 LOD 片树切入距离（prefab screenRelativeHeight≈0.12 × lodBias=1 → ~70–90m），
-        /// 只在 LOD 已进片树后再换成合批代理，避免比 LOD 更早贴脸。
+        /// 大树完整 Prefab 距离上限。实际换广告牌用
+        /// <see cref="GetTreeFullMeshDistance"/>：按该树 LOD 片树切入，夹在 48 米和此上限之间。
         /// </summary>
         public static float TreeFullMeshMaxDist = 160f;
+
+        /// <summary>完整网格换广告牌的最近距离。再近会在片树 LOD 之前拆掉树冠。</summary>
+        public const float TreeFullMeshHandoffFloor = 48f;
 
         /// <summary>Full↔Billboard 切换迟滞（米），避免边界来回换档。</summary>
         public static float TreeFullMeshHysteresis = 12f;
@@ -378,32 +381,131 @@ namespace Game
         public static bool IsBigTreeCategory(string category) =>
             IsTreeCategory(category) && !IsSmallTreeCategory(category);
 
-        /// <summary>距焦点超过 Full 半径 → 应驻留 Billboard 代理（不含迟滞）。</summary>
-        public static bool ShouldSpawnAsTreeBillboard(string category, float distSq)
+        struct BillboardLodMetric
+        {
+            public float Size;
+            public float Threshold;
+        }
+
+        static readonly Dictionary<string, BillboardLodMetric> BillboardLodMetrics =
+            new Dictionary<string, BillboardLodMetric>(64);
+
+        /// <summary>
+        /// 记下这棵树的 LOD 尺寸和片树阈值，换档时再用当前相机算距离。
+        /// </summary>
+        public static void RememberTreeBillboardDistance(GameObject prefab, string prefabName)
+        {
+            if (prefab == null || !TryMeasureBillboardLod(prefab, out BillboardLodMetric metric))
+                return;
+            StoreBillboardLod(prefab.name, metric);
+            StoreBillboardLod(prefabName, metric);
+        }
+
+        /// <summary>
+        /// 这棵大树换成广告牌代理的距离。无 LOD 数据时用 <see cref="TreeFullMeshMaxDist"/>。
+        /// </summary>
+        public static float GetTreeFullMeshDistance(string prefabName, Vector3 instanceScale, GameObject lodSource)
+        {
+            float cap = TreeFullMeshMaxDist;
+            BillboardLodMetric metric = default;
+            bool found = !string.IsNullOrEmpty(prefabName)
+                && BillboardLodMetrics.TryGetValue(prefabName, out metric);
+            if (!found && lodSource != null && TryMeasureBillboardLod(lodSource, out metric))
+            {
+                found = true;
+                StoreBillboardLod(prefabName, metric);
+            }
+
+            if (!found)
+                return cap;
+
+            float unit = BillboardEnterDistanceAtUnitScale(metric);
+            if (unit <= 0f)
+                return cap;
+
+            float s = Mathf.Max(
+                Mathf.Abs(instanceScale.x),
+                Mathf.Abs(instanceScale.y),
+                Mathf.Abs(instanceScale.z));
+            if (s < 1e-3f)
+                s = 1f;
+            return Mathf.Clamp(unit * s, TreeFullMeshHandoffFloor, cap);
+        }
+
+        static void StoreBillboardLod(string key, BillboardLodMetric metric)
+        {
+            if (string.IsNullOrEmpty(key) || metric.Threshold < 1e-4f)
+                return;
+            BillboardLodMetrics[key] = metric;
+        }
+
+        static bool TryMeasureBillboardLod(GameObject source, out BillboardLodMetric metric)
+        {
+            metric = default;
+            if (source == null)
+                return false;
+            LODGroup lod = source.GetComponentInChildren<LODGroup>(true);
+            if (lod == null)
+                return false;
+            LOD[] lods = lod.GetLODs();
+            if (lods == null || lods.Length < 2)
+                return false;
+            float threshold = lods[lods.Length - 2].screenRelativeTransitionHeight;
+            if (threshold < 1e-4f || lod.size < 1e-3f)
+                return false;
+            metric.Size = lod.size;
+            metric.Threshold = threshold;
+            return true;
+        }
+
+        /// <summary>
+        /// scale=1 时，相对高度落到片树上一级阈值的距离。
+        /// Unity：relativeHeight = size * 0.5 / (distance * tan(fov/2))，比较前再乘 lodBias。
+        /// lodBias 为 1 时与 (size * 0.5) / (threshold * tan(fov/2)) 相同。
+        /// </summary>
+        static float BillboardEnterDistanceAtUnitScale(BillboardLodMetric metric)
+        {
+            float fov = 60f;
+            Camera cam = Camera.main;
+            if (cam != null && cam.fieldOfView > 1f)
+                fov = cam.fieldOfView;
+            float bias = Mathf.Max(QualitySettings.lodBias, 0.01f);
+            float tanHalf = Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
+            if (tanHalf < 1e-4f)
+                return 0f;
+            return (metric.Size * 0.5f * bias) / (metric.Threshold * tanHalf);
+        }
+
+        /// <summary>距焦点超过该树换档距离 → 应驻留 Billboard 代理（不含迟滞）。</summary>
+        public static bool ShouldSpawnAsTreeBillboard(
+            string category, float distSq, string prefabName, Vector3 scale, GameObject lodSource)
         {
             if (!IsBigTreeCategory(category))
                 return false;
-            float max = TreeFullMeshMaxDist;
+            float max = GetTreeFullMeshDistance(prefabName, scale, lodSource);
             return distSq > max * max;
         }
 
         /// <summary>
-        /// Visible Full 走出 Full+hysteresis → 降为 Billboard。
-        /// Visible Billboard 进入 Full−hysteresis → 升为 Full。
+        /// Visible Full 走出换档距离+hysteresis → 降为 Billboard。
+        /// Visible Billboard 进入换档距离−hysteresis → 升为 Full。
         /// </summary>
-        public static bool ShouldDowngradeTreeToBillboard(string category, float distSq)
+        public static bool ShouldDowngradeTreeToBillboard(
+            string category, float distSq, string prefabName, Vector3 scale, GameObject lodSource)
         {
             if (!IsBigTreeCategory(category))
                 return false;
-            float lim = TreeFullMeshMaxDist + TreeFullMeshHysteresis;
+            float lim = GetTreeFullMeshDistance(prefabName, scale, lodSource) + TreeFullMeshHysteresis;
             return distSq > lim * lim;
         }
 
-        public static bool ShouldUpgradeTreeToFull(string category, float distSq)
+        public static bool ShouldUpgradeTreeToFull(
+            string category, float distSq, string prefabName, Vector3 scale, GameObject lodSource)
         {
             if (!IsBigTreeCategory(category))
                 return false;
-            float lim = Mathf.Max(1f, TreeFullMeshMaxDist - TreeFullMeshHysteresis);
+            float handoff = GetTreeFullMeshDistance(prefabName, scale, lodSource);
+            float lim = Mathf.Max(1f, handoff - TreeFullMeshHysteresis);
             return distSq <= lim * lim;
         }
 
@@ -647,7 +749,8 @@ namespace Game
             TreeRing1EnterRadius = 180f * 0.65f;
             TreeRing1ExitRadius = 220f * 0.65f;
             TreeBillboardKeepRadius = 180f;
-            TreeFullMeshMaxDist = 42f;
+            // 上限。实际换档见 GetTreeFullMeshDistance，不早于该树片树 LOD。
+            TreeFullMeshMaxDist = 160f;
             TreeFullMeshHysteresis = 12f;
             FillBoundFarTreeSilhouetteMinDistance = 120f;
             FillBoundFarTreeSilhouetteStride = 6;
@@ -677,7 +780,7 @@ namespace Game
             FinalizePerFrameBudgetMs = 2.5f;
         }
 
-        /// <summary>相对 Low 放宽树环（FullMesh ~200、keep ~220、stride 4）。</summary>
+        /// <summary>相对 Low 放宽树环（keep ~220）。隔株 stride 6，完整网格上限 160。</summary>
         static void ApplyStreamingMid()
         {
             Ring0EnterRadius = 70f;
@@ -690,26 +793,24 @@ namespace Game
             TreeRing1EnterRadius = 150f;
             TreeRing1ExitRadius = 180f;
             TreeBillboardKeepRadius = 220f;
-            // 手机 Mid：200 米内都实例化完整树（含 MeshCollider）。游客退登再进正式号时
-            // 这批克隆堆在主线程上，帧时间约 250ms，人在岛上也走不动。近处保留完整网格，其余用广告牌。
-            TreeFullMeshMaxDist = 42f;
+            TreeFullMeshMaxDist = 160f;
             TreeFullMeshHysteresis = 12f;
             FillBoundFarTreeSilhouetteMinDistance = 140f;
-            FillBoundFarTreeSilhouetteStride = 4;
+            FillBoundFarTreeSilhouetteStride = 6;
             PrefillTreeBoostRadius = 220f;
 
             GuanmuHideDistance = 90f;
             GuanmuShowDistance = 75f;
-            SmallRockHideDistance = 85f;
-            SmallRockShowDistance = 70f;
-            SmallVegHideDistance = 35f;
-            SmallVegShowDistance = 28f;
-            ClutterHideDistance = 48f;
-            ClutterShowDistance = 38f;
-            StructuralClutterHideDistance = 125f;
-            StructuralClutterShowDistance = 105f;
-            BuildingLodHideDistance = 120f;
-            BuildingLodShowDistance = 100f;
+            SmallRockHideDistance = 75f;
+            SmallRockShowDistance = 62f;
+            SmallVegHideDistance = 30f;
+            SmallVegShowDistance = 24f;
+            ClutterHideDistance = 40f;
+            ClutterShowDistance = 32f;
+            StructuralClutterHideDistance = 120f;
+            StructuralClutterShowDistance = 100f;
+            BuildingLodHideDistance = 110f;
+            BuildingLodShowDistance = 95f;
             TentLodHideDistance = 210f;
             TentLodShowDistance = 170f;
             MeshColliderEnableRadius = 80f;
@@ -722,7 +823,7 @@ namespace Game
             FinalizePerFrameBudgetMs = 2.8f;
         }
 
-        /// <summary>手机 High / Gmj：接近 Editor Base，仍开 Native 合批、略控 spawn。完整树留到 200 米。</summary>
+        /// <summary>手机 High / Gmj：树 keep 仍 280。完整网格上限 160，隔株 stride 6。Gmj 再收投射距离。</summary>
         static void ApplyStreamingNearBase()
         {
             Ring0EnterRadius = 90f;
@@ -735,24 +836,24 @@ namespace Game
             TreeRing1EnterRadius = 180f;
             TreeRing1ExitRadius = 220f;
             TreeBillboardKeepRadius = 280f;
-            TreeFullMeshMaxDist = 200f;
+            TreeFullMeshMaxDist = 160f;
             TreeFullMeshHysteresis = 12f;
             FillBoundFarTreeSilhouetteMinDistance = 120f;
-            FillBoundFarTreeSilhouetteStride = 4;
+            FillBoundFarTreeSilhouetteStride = 6;
             PrefillTreeBoostRadius = 220f;
 
             GuanmuHideDistance = 90f;
             GuanmuShowDistance = 75f;
-            SmallRockHideDistance = 95f;
-            SmallRockShowDistance = 80f;
-            SmallVegHideDistance = 40f;
-            SmallVegShowDistance = 32f;
-            ClutterHideDistance = 55f;
-            ClutterShowDistance = 45f;
-            StructuralClutterHideDistance = 130f;
-            StructuralClutterShowDistance = 110f;
-            BuildingLodHideDistance = 130f;
-            BuildingLodShowDistance = 110f;
+            SmallRockHideDistance = 75f;
+            SmallRockShowDistance = 62f;
+            SmallVegHideDistance = 30f;
+            SmallVegShowDistance = 24f;
+            ClutterHideDistance = 40f;
+            ClutterShowDistance = 32f;
+            StructuralClutterHideDistance = 120f;
+            StructuralClutterShowDistance = 100f;
+            BuildingLodHideDistance = 110f;
+            BuildingLodShowDistance = 95f;
             TentLodHideDistance = 220f;
             TentLodShowDistance = 180f;
             MeshColliderEnableRadius = 90f;

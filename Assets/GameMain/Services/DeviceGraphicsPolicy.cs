@@ -199,13 +199,14 @@ namespace Game
                         26f, true, true, true, true);
                 case DeviceGraphicsClass.Mid:
                     return new DeviceGraphicsProfile(
-                        0.85f, 1f, true,
+                        0.7f, 1f, true,
                         0.5f, 0.375f, 0.375f,
                         32f, true, true, true, true);
                 case DeviceGraphicsClass.High:
-                    // Phone High (flagship)
+                    // Phone High (flagship). Same DPI and OIL_MOBILE_PERF as 416c485;
+                    // renderScale stays 0.5 / 0.375 / 0.375.
                     return new DeviceGraphicsProfile(
-                        1f, 1f, false,
+                        0.7f, 1f, true,
                         0.5f, 0.375f, 0.375f,
                         40f, true, true, true, true);
                 case DeviceGraphicsClass.Gmj:
@@ -253,7 +254,7 @@ namespace Game
                 Shader.DisableKeyword("OIL_MOBILE_PERF");
 
             // Soft brush restore under OIL_MOBILE_PERF (no extra keyword / variants).
-            // Mid/Gmj: half brush+weave; Low: hard cut (0); phone High has keyword off.
+            // Mid/Gmj: half brush+weave; Low and phone High: hard cut (0).
             float brushScale = 0f;
             if (profile.OilMobilePerf
                 && (_current == DeviceGraphicsClass.Mid

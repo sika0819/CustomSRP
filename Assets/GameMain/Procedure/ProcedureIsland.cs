@@ -303,8 +303,16 @@ namespace Game
         {
             int gen = System.Threading.Interlocked.CompareExchange(ref _uncoverGeneration, 0, 0);
 
-            // bank 解压 / Critical 不挡揭罩（地形就绪即可进）；音效后台补上。
-            StartAudioAfterBanksAsync(gen).Forget();
+            // 起播（StartEngine 约 0.4–0.6s、封面解码）在罩下做完再 FadeHide。
+            // 与远场 Prefill 叠在揭罩帧上时，主线程会打出可见卡顿。
+            try
+            {
+                await StartAudioBeforeUncover(gen);
+            }
+            catch (System.Exception e)
+            {
+                Log.Warning("[Hitch] audio before uncover failed: " + e.Message);
+            }
 
             if (gen != _uncoverGeneration)
                 return;
@@ -351,6 +359,8 @@ namespace Game
 
         static async UniTaskVoid PostUncoverWarmupAndRelockAsync(int gen)
         {
+            float wallStart = Time.realtimeSinceStartup;
+            Log.Info("[Hitch] PostUncoverWarmup begin");
             IslandStartupWarmup.RunAsync(gen).Forget();
             await UniTask.Delay(200, DelayType.UnscaledDeltaTime);
             if (gen != _uncoverGeneration)
@@ -360,27 +370,53 @@ namespace Game
             if (gen != _uncoverGeneration)
                 return;
             UnlockLocomotionAfterUncover();
+            Log.Info(
+                "[Hitch] PostUncoverWarmup end wallMs="
+                + ((Time.realtimeSinceStartup - wallStart) * 1000f).ToString("F0"));
         }
 
-        static async UniTaskVoid StartAudioAfterBanksAsync(int gen)
+        static async UniTask StartAudioBeforeUncover(int gen)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             await BankUpgradeBootstrap.EnsureLocalBanksReadyAsync();
+            Log.Info("[Hitch] audio banks ms=" + sw.ElapsedMilliseconds);
             if (gen != _uncoverGeneration)
                 return;
 
+            sw.Restart();
             WanosAudio.WanosEngine.EnablePlayback("ProcedureIsland.Uncover");
+            Log.Info("[Hitch] audio EnablePlayback ms=" + sw.ElapsedMilliseconds);
+            if (gen != _uncoverGeneration)
+                return;
+
+            sw.Restart();
             WanosAudio.WanosEngine.StartEngine("ProcedureIsland.Uncover");
+            Log.Info("[Hitch] audio native StartEngine ms=" + sw.ElapsedMilliseconds);
+            if (gen != _uncoverGeneration)
+                return;
+
+            sw.Restart();
             WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover");
             GameEntry.Music?.ApplySavedVolumes();
+            Log.Info("[Hitch] audio Unmute+volumes ms=" + sw.ElapsedMilliseconds);
+            if (gen != _uncoverGeneration)
+                return;
+
+            sw.Restart();
             AudioInteractionBootstrap.StartAfterUncover();
+            Log.Info("[Hitch] audio interaction ms=" + sw.ElapsedMilliseconds);
             // 一出声就推负一屏：须先显式 Arm（PublishPlayingForced 不再自动 Arm，避免退登拆除后
             // 残留回调重开闸拉 FGS → ForegroundServiceDidNotStartInTimeException）。
             if (gen != _uncoverGeneration)
                 return;
+            sw.Restart();
             NowPlayingService.ArmSession();
+            Log.Info("[Hitch] audio ArmSession ms=" + sw.ElapsedMilliseconds);
             if (gen != _uncoverGeneration)
                 return;
+            sw.Restart();
             NowPlayingService.PublishPlayingForced();
+            Log.Info("[Hitch] audio PublishPlayingForced ms=" + sw.ElapsedMilliseconds);
             BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();
         }
 

@@ -20,6 +20,25 @@ namespace Game
         float _refreshInterval = 0.25f;
         Coroutine _loop;
 
+        /// <summary>
+        /// 松 / 绿 / 椰 / 灌木不参与 PhysX。实例上若带 Collider，生成后立刻卸掉。
+        /// </summary>
+        public static void StripTreeColliders(GameObject go)
+        {
+            if (go == null)
+                return;
+
+            Collider[] cols = go.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < cols.Length; i++)
+            {
+                Collider c = cols[i];
+                if (c == null)
+                    continue;
+                c.enabled = false;
+                Object.Destroy(c);
+            }
+        }
+
         public void Begin(Transform focus)
         {
             _focus = focus;

@@ -315,7 +315,10 @@ namespace Game
                     EnvBridgePillarFit.Ensure(instance);
                 if (EnvStreamingConfig.IsFarFieldLandmark(d.PrefabName))
                     EnvLandmarkColliders.Ensure(instance, d.PrefabName);
-                _colliderLod?.Register(instance, pos);
+                if (EnvStreamingConfig.IsTreeCategory(category))
+                    EnvMeshColliderLod.StripTreeColliders(instance);
+                else
+                    _colliderLod?.Register(instance, pos);
                 _fullSpawnedCount++;
 
                 if (sw.ElapsedMilliseconds >= EnvStreamingConfig.EffectiveFinalizePerFrameBudgetMs)

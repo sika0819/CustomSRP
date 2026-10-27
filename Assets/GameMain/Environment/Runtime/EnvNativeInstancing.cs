@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityGameFramework.Runtime;
 
 namespace Game
 {
@@ -34,6 +35,11 @@ namespace Game
         float _shadowCastMaxDist = EnvStreamingConfig.ShadowCastMaxDist;
         Camera _cachedCam;
         int _cachedCamFrame = -1;
+        float _hitchDrawLogAt = -1000f;
+#if UNITY_ANDROID && !UNITY_EDITOR
+        float _hitchProtoLogAt = -1000f;
+        float _hitchBbLogAt = -1000f;
+#endif
 
         sealed class Prototype
         {
@@ -228,17 +234,24 @@ namespace Game
             if (_assetIdToIndex.TryGetValue(assetId, out int existing))
                 return existing;
 
+            var hitchSw = System.Diagnostics.Stopwatch.StartNew();
             if (!TryExtractLod0(
                     prefabAsset, out Mesh mesh, out Material shared, out Bounds localBounds,
                     out Matrix4x4 meshLocalToRoot))
+            {
+                NoteHitch(ref _hitchProtoLogAt, "AddPrototype", prefabAsset.name, hitchSw);
                 return -1;
+            }
 
             // 私有副本：不要改共享材质的 enableInstancing。
             // 共享材质还挂在大树 / 未进合批的 MeshRenderer 上，SRP Batcher 和
             // RenderMeshInstanced 不能共用同一份 Material，否则真机会叠一层或整批丢。
             Material material = CreateInstancedMaterial(shared);
             if (material == null)
+            {
+                NoteHitch(ref _hitchProtoLogAt, "AddPrototype", prefabAsset.name, hitchSw);
                 return -1;
+            }
 
             int index = _prototypes.Count;
             var proto = new Prototype
@@ -257,6 +270,7 @@ namespace Game
             _assetIdToIndex[assetId] = index;
             if (!_nameToIndex.ContainsKey(proto.Name))
                 _nameToIndex[proto.Name] = index;
+            NoteHitch(ref _hitchProtoLogAt, "AddPrototype", proto.Name, hitchSw);
             return index;
 #else
             return -1;
@@ -276,15 +290,22 @@ namespace Game
             if (_bbAssetIdToIndex.TryGetValue(assetId, out int existing))
                 return existing;
 
+            var hitchSw = System.Diagnostics.Stopwatch.StartNew();
             if (!EnvTreeBillboardUtil.TryExtractBillboard(
                     prefabAsset, out Mesh mesh, out Material sharedMat, out Bounds localBounds))
+            {
+                NoteHitch(ref _hitchBbLogAt, "AddBillboardPrototype", prefabAsset.name, hitchSw);
                 return -1;
+            }
 
             // 近树 LOD_Billboard 的 MeshRenderer 用缓存那份（SRP）。合批再拷一份。
             Material cross = EnvTreeBillboardUtil.CreateCrossBillboardMaterial(sharedMat);
             Material material = CreateInstancedMaterial(cross);
             if (mesh == null || material == null)
+            {
+                NoteHitch(ref _hitchBbLogAt, "AddBillboardPrototype", prefabAsset.name, hitchSw);
                 return -1;
+            }
 
             int index = _prototypes.Count;
             string protoName = prefabAsset.name + "#bb";
@@ -305,6 +326,7 @@ namespace Game
             _bbAssetIdToIndex[assetId] = index;
             if (!_bbNameToIndex.ContainsKey(prefabAsset.name))
                 _bbNameToIndex[prefabAsset.name] = index;
+            NoteHitch(ref _hitchBbLogAt, "AddBillboardPrototype", protoName, hitchSw);
             return index;
 #else
             return -1;
@@ -385,6 +407,7 @@ namespace Game
 
         void DrawAll()
         {
+            var hitchSw = System.Diagnostics.Stopwatch.StartNew();
             Camera cam = ResolveCamera();
             if (cam == null)
                 return;
@@ -458,6 +481,20 @@ namespace Game
                     FlushBatch(cam, proto, _batch, batchCount, ShadowCastingMode.Off);
                 }
             }
+
+            NoteHitch(ref _hitchDrawLogAt, "DrawAll", "protos=" + _prototypes.Count, hitchSw);
+        }
+
+        void NoteHitch(ref float lastLogAt, string kind, string name, System.Diagnostics.Stopwatch sw)
+        {
+            long ms = sw.ElapsedMilliseconds;
+            if (ms < 16)
+                return;
+            float now = Time.realtimeSinceStartup;
+            if (now - lastLogAt < 0.5f)
+                return;
+            lastLogAt = now;
+            Log.Info("[Hitch] " + kind + " name=" + name + " ms=" + ms);
         }
 
         static void FlushBatch(

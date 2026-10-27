@@ -28,15 +28,17 @@ namespace CustomSRP
         // The water shader samples _OilPlanarReflectTex with *current* screen UV,
         // so a stale RT immediately reads as slide / shake / "one frame behind".
         // Rules (pose vs previous frame):
-        //   walking / any translation        -> every frame (never interval — slides)
         //   meaningful turn (non-Gmj)        -> every frame
         //   Gmj stand turn                   -> every GmjTurnMirrorInterval frames,
         //                                      or sooner if yaw vs last mirror RT
         //                                      exceeds GmjTurnStaleDegrees
+        //   mobile walk, little turn         -> every WalkMirrorInterval frames
+        //   translation above SlowMove       -> every frame
         //   stationary (below Still*)        -> never (reuse RT)
-        // Below these: treat as fully still — do not re-render.
+        const float SlowMoveThresholdSq = 0.0225f; // 0.15 m²
         const float StillMoveThresholdSq = 1e-6f;    // ~1 mm²
         const float StillTurnAngle = 0.05f;          // degrees
+        const int WalkMirrorInterval = 6;
         /// <summary>Preset yaw snap — bypass Gmj turn interval the same way.</summary>
         const float SnapTurnAngle = 12f;
         /// <summary>
@@ -392,14 +394,8 @@ namespace CustomSRP
             float turn = Quaternion.Angle(source.transform.rotation, _prevFrameRot);
             bool gmj = DeviceGraphicsPolicy.Current == DeviceGraphicsClass.Gmj;
 
-            // Locomotion: always lock screen-UV to a fresh mirror. Interval reuse
-            // while walking was the "水面倒影剧烈抖动" path.
-            if (IslandLocomotionState.IsWalking || moveSq > StillMoveThresholdSq)
-                return true;
-
-            // Non-Gmj: never skip on look (screen-UV + stale RT = shake).
-            // Gmj stand turn: share hitch budget; large yaw snaps (preset) draw;
-            // continuous look redraws once past GmjTurnStaleDegrees.
+            // Turn first. Non-Gmj never skips on look. Gmj stand turn stays on
+            // the 2-frame interval unless the yaw snap or stale angle forces a draw.
             if (turn > StillTurnAngle)
             {
                 if (gmj && turn < SnapTurnAngle)
@@ -413,8 +409,17 @@ namespace CustomSRP
                 return true;
             }
 
-            // Truly idle: reuse the previous mirror RT (no cull / opaque / skybox).
-            return false;
+            // Mobile walk with little turn: one mirror every 6 frames (416c485).
+            if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)
+                return (Time.frameCount % WalkMirrorInterval) == 0;
+
+            if (moveSq > SlowMoveThresholdSq)
+                return true;
+
+            if (moveSq <= StillMoveThresholdSq)
+                return false;
+
+            return (Time.frameCount & 1) == 0;
         }
 
         Camera EnsureMirrorCam()

@@ -89,7 +89,9 @@ namespace WanosAudio
         {
             if (!WanosNative.Instance.IsCreated)
                 return;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             bool ok = WanosNative.Instance.StartEngine();
+            Debug.Log("[Hitch] WanosNative.StartEngine ms=" + sw.ElapsedMilliseconds + " ok=" + ok);
             Debug.Log($"[{LogTag}] StartEngine ({reason ?? "<no-reason>"}) ok={ok}");
         }
 
@@ -118,7 +120,10 @@ namespace WanosAudio
 
             try
             {
-                if (!WanosNative.Instance.OpenDefaultPlaybackDevice())
+                var deviceSw = System.Diagnostics.Stopwatch.StartNew();
+                bool deviceOk = WanosNative.Instance.OpenDefaultPlaybackDevice();
+                Debug.Log("[Hitch] OpenDefaultPlaybackDevice ms=" + deviceSw.ElapsedMilliseconds + " ok=" + deviceOk);
+                if (!deviceOk)
                 {
                     Debug.LogError($"[{LogTag}] EnablePlayback ({reason}) aborted — playback device failed");
                     _playbackEnabled = false;

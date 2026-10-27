@@ -12,6 +12,7 @@ import android.graphics.Bitmap;
 import android.media.session.MediaSession;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.util.Log;
 
 /**
@@ -33,6 +34,7 @@ public class WanosMediaPlaybackForegroundService extends Service {
     public static final String ACTION_TRANSPORT_PREV = "com.wanos.app.health.action.MEDIA_TRANSPORT_PREV";
 
     private static volatile boolean sRunning;
+    private static volatile long sLastStartElapsedRealtime;
 
     /** 探针只读，不改变 start/stop。 */
     public static boolean isRunning() {
@@ -41,6 +43,13 @@ public class WanosMediaPlaybackForegroundService extends Service {
 
     public static void start(Context context) {
         if (context == null) return;
+        long t = SystemClock.elapsedRealtime();
+        sLastStartElapsedRealtime = t;
+        Log.i(TAG, "[Hitch] FGS start t=" + t
+                + " sRunning=" + sRunning
+                + " playing=" + WIAEngineJNI.getLastIsPlaying()
+                + " playbackActive=" + WIAEngineJNI.isPlaybackActive()
+                + " thread=" + Thread.currentThread().getName());
         Intent i = new Intent(context, WanosMediaPlaybackForegroundService.class);
         i.setAction(ACTION_START);
         try {
@@ -93,6 +102,13 @@ public class WanosMediaPlaybackForegroundService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : ACTION_START;
+        long now = SystemClock.elapsedRealtime();
+        long queueMs = sLastStartElapsedRealtime == 0L ? -1L : now - sLastStartElapsedRealtime;
+        Log.i(TAG, "[Hitch] FGS onStartCommand t=" + now
+                + " queueMs=" + queueMs
+                + " sRunning=" + sRunning
+                + " action=" + action
+                + " thread=" + Thread.currentThread().getName());
         if (ACTION_STOP.equals(action)) {
             sRunning = false;
             stopForeground(true);

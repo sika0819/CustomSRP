@@ -157,6 +157,9 @@ namespace Game
                 instance.transform.localScale = d.Scale;
                 instance.SetActive(d.IsActive);
 
+                if (EnvStreamingConfig.IsTreeCategory(d.Parent))
+                    EnvMeshColliderLod.StripTreeColliders(instance);
+
                 if (d.PrefabName == "Huodui")
                     yield return EnsureFireControllerCoroutine(instance, ownedHandles);
 

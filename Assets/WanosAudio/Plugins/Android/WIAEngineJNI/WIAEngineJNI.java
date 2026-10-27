@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.KeyEvent;
 
@@ -211,12 +212,18 @@ public class WIAEngineJNI {
      * 进岛 Arm / InitializeAfterLogin 再置 true。
      */
     public static void setPlaybackActive(boolean active) {
+        long t0 = SystemClock.elapsedRealtime();
         if (active) {
             sPlaybackActive = true;
             Log.i(TAG, "setPlaybackActive: true");
+            Log.i(TAG, "[Hitch] setPlaybackActive active=1 ms="
+                    + (SystemClock.elapsedRealtime() - t0)
+                    + " thread=" + Thread.currentThread().getName());
             return;
         }
         sPlaybackActive = false;
+        sArtKey = null;
+        sArtBitmap = null;
         synchronized (sSessionLock) {
             sLastTrackTitle = "";
             sLastIsPlaying = false;
@@ -241,6 +248,9 @@ public class WIAEngineJNI {
             sendNowPlayingBroadcast(ctx, "", "", false);
         }
         Log.i(TAG, "setPlaybackActive: false — session cleared, FGS stopped");
+        Log.i(TAG, "[Hitch] setPlaybackActive active=0 ms="
+                + (SystemClock.elapsedRealtime() - t0)
+                + " thread=" + Thread.currentThread().getName());
     }
 
     /** FGS / 负一屏大图；可能为 null（解码失败时系统会回退 App 图标）。 */
@@ -510,7 +520,7 @@ public class WIAEngineJNI {
                         .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE, title)
                         .putLong(MediaMetadata.METADATA_KEY_DURATION, -1);
 
-                Bitmap art = scaleArtwork(decodeCoverBitmap(ctx, coverUrl));
+                Bitmap art = artworkForCover(ctx, coverUrl);
                 sLastArtBitmap = art;
                 if (art != null) {
                     // 部分 OEM 负一屏读 ART，部分读 ALBUM_ART；两份都写避免默认系统图标。
@@ -551,11 +561,33 @@ public class WIAEngineJNI {
         }
     }
 
+    private static String sArtKey;
+    private static Bitmap sArtBitmap;
+
+    /** 同一 coverUrl 只解码+缩放一次。Arm 与 Publish 会连打三次 NowPlaying。 */
+    private static Bitmap artworkForCover(Context ctx, String coverUrl) {
+        String key = coverUrl == null ? "" : coverUrl;
+        if (sArtBitmap != null && !sArtBitmap.isRecycled() && key.equals(sArtKey)) {
+            Log.i(TAG, "[Hitch] decodeCoverBitmap cacheHit thread="
+                    + Thread.currentThread().getName());
+            return sArtBitmap;
+        }
+
+        long t0 = SystemClock.elapsedRealtime();
+        Bitmap scaled = scaleArtwork(decodeCoverBitmapBody(ctx, coverUrl));
+        long ms = SystemClock.elapsedRealtime() - t0;
+        Log.i(TAG, "[Hitch] decodeCoverBitmap cacheMiss ms=" + ms
+                + " thread=" + Thread.currentThread().getName());
+        sArtKey = key;
+        sArtBitmap = scaled;
+        return scaled;
+    }
+
     /**
      * 解码 NowPlaying 封面。Android StreamingAssets 常为 jar:file://...!/assets/...，
      * BitmapFactory.decodeFile 会失败；此时从 AssetManager 读默认/相对路径。
      */
-    private static Bitmap decodeCoverBitmap(Context ctx, String coverUrl) {
+    private static Bitmap decodeCoverBitmapBody(Context ctx, String coverUrl) {
         if (coverUrl != null && !coverUrl.isEmpty()) {
             // 直接相对 asset 路径（Unity 侧推荐传这个，避开 jar Path.Combine）
             if (!coverUrl.contains("://") && !coverUrl.startsWith("/")

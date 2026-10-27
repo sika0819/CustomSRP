@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using Game.BoluoApi;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 using WanosAudio;
@@ -141,6 +142,14 @@ namespace Game
 
         /// <summary>因 bank 未就绪而被拒绝的 bank 名（收到 OnBankLoaded 时清掉并重 Evaluate）。</summary>
         static readonly HashSet<string> _pendingRetryBanks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>本地没有这个 bank：停 Load，等下载灌入后再 Evaluate。</summary>
+        static readonly HashSet<string> _bankLoadPaused = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>这次走进区域已经排过下载，避免每轮 Evaluate 再发起。</summary>
+        static readonly HashSet<string> _downloadPrompted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static readonly List<string> _pausedScratch = new List<string>(4);
 
         /// <summary>标记 inland water 已就绪（收到 OnInlandWaterReady 时设为 true，无需重复设）。</summary>
         static bool _inlandWaterReady;
@@ -341,6 +350,8 @@ namespace Game
             Sources.Clear();
             VoiceToSource.Clear();
             _pendingRetryBanks.Clear();
+            _bankLoadPaused.Clear();
+            _downloadPrompted.Clear();
             _catalogBuilt = false;
             _contentAudioPaused = false;
             _presetTransitionHeld = false;
@@ -394,6 +405,7 @@ namespace Game
                 return;
             if (string.IsNullOrEmpty(bankName))
                 return;
+            _bankLoadPaused.Remove(bankName);
             if (!_pendingRetryBanks.Remove(bankName))
                 return;
             Log.Info($"[AmbienceZone] bank ready={bankName} — retry Evaluate");
@@ -732,6 +744,7 @@ namespace Game
             CollapseExclusiveSharedPlayWants(n);
             ApplyLakeWaterfallExclusion(n);
             TransferExclusiveSharedPlays(n);
+            ReleasePausedBanksOutside(n);
 
             for (int i = 0; i < n; i++)
             {
@@ -740,7 +753,7 @@ namespace Game
                 {
                     if (src.SoftStopping)
                         CancelSoftStop(src);
-                    if (!src.Playing)
+                    if (!src.Playing && !_bankLoadPaused.Contains(src.Spec.Bank))
                         Log.Info($"[AmbienceZone] want->keep id={src.Spec.Id} bank={src.Spec.Bank} event={src.Spec.PlayEvent}");
                     KeepSourcePlaying(src, _posScratch[i], _distScratch[i]);
                 }
@@ -1389,14 +1402,24 @@ namespace Game
         static void StartSource(RuntimeSource src, Vector3 pos, float dist)
         {
             var spec = src.Spec;
+            if (!src.BankHeld && _bankLoadPaused.Contains(spec.Bank))
+                return;
+
             Log.Info($"[AmbienceZone] StartSource enter id={spec.Id} bank={spec.Bank}");
 
             if (!src.BankHeld)
             {
+                if (!WanosBankStore.CanResolve(spec.Bank))
+                {
+                    PauseMissingBank(spec);
+                    return;
+                }
+
                 if (!WanosBankStore.Retain(spec.Bank))
                 {
                     Log.Warning($"[AmbienceZone] StartSource Retain FAIL id={spec.Id} bank={spec.Bank} (added to retry)");
                     _pendingRetryBanks.Add(spec.Bank);
+                    _bankLoadPaused.Add(spec.Bank);
                     return;
                 }
 
@@ -1450,6 +1473,78 @@ namespace Game
                 Log.Error($"[AmbienceZone] StartSource EXC id={spec.Id}: {e}");
                 src.Playing = false;
             }
+        }
+
+        /// <summary>人已经离开该 bank 的全部区域：下次再走进来可以再提示一次，期间不 Load。</summary>
+        static void ReleasePausedBanksOutside(int n)
+        {
+            if (_bankLoadPaused.Count == 0)
+                return;
+
+            _pausedScratch.Clear();
+            foreach (string bank in _bankLoadPaused)
+                _pausedScratch.Add(bank);
+
+            for (int b = 0; b < _pausedScratch.Count; b++)
+            {
+                string bank = _pausedScratch[b];
+                bool stillWant = false;
+                for (int i = 0; i < n; i++)
+                {
+                    if (!_wantScratch[i])
+                        continue;
+                    if (!string.Equals(Sources[i].Spec.Bank, bank, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    stillWant = true;
+                    break;
+                }
+
+                if (stillWant)
+                    continue;
+
+                _bankLoadPaused.Remove(bank);
+                _downloadPrompted.Remove(bank);
+            }
+        }
+
+        static void PauseMissingBank(AmbienceEmitterSpec spec)
+        {
+            string bank = spec.Bank;
+            _bankLoadPaused.Add(bank);
+            _pendingRetryBanks.Add(bank);
+            Log.Info($"[AmbienceZone] bank missing id={spec.Id} bank={bank} — stop load, download");
+            EnqueueMissingBankNextFrame(bank).Forget();
+        }
+
+        /// <summary>
+        /// 本帧只停 Load。下载放到下一帧，避免走进区域的这一帧做校验或灌引擎。
+        /// 已经在队列里的不重复发起。
+        /// </summary>
+        static async UniTaskVoid EnqueueMissingBankNextFrame(string bank)
+        {
+            if (!_downloadPrompted.Add(bank))
+                return;
+
+            await UniTask.Yield(PlayerLoopTiming.Update);
+            if (!_started || !_bankLoadPaused.Contains(bank))
+                return;
+
+            if (BankDownloader.TryGetActiveItem(bank, out BankDownloadItem active)
+                && active != null
+                && (active.State == BankDownloadState.Pending
+                    || active.State == BankDownloadState.Downloading))
+            {
+                Log.Info("[AmbienceZone] bank already queued " + bank + " state=" + active.State);
+                return;
+            }
+
+            if (!PresetBankCatalog.TryGet(bank, out BankRemoteInfo remote) || remote == null)
+            {
+                Log.Warning("[AmbienceZone] download skipped, catalog miss bank=" + bank);
+                return;
+            }
+
+            BankDownloader.DownloadBank(remote, loadIntoEngine: true, prioritize: true).Forget();
         }
 
         static void RepostSource(RuntimeSource src, Vector3 pos, float dist)

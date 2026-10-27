@@ -715,10 +715,13 @@ public class WanosMusicPlayerNative {
      * 不在此处 unmute（揭幕仍走 ProcedureIsland.Uncover / ensureAudibleForUnityPlayback）。
      */
     public void clearLogoutStopLatch() {
+        long t0 = SystemClock.elapsedRealtime();
         shouldStop = false;
         userPaused = false;
         WIAEngineJNI.setPlaybackActive(true);
         Log.i(TAG, "clearLogoutStopLatch");
+        Log.i(TAG, "[Hitch] clearLogoutStopLatch ms=" + (SystemClock.elapsedRealtime() - t0)
+                + " thread=" + Thread.currentThread().getName());
     }
 
     /**
@@ -727,6 +730,7 @@ public class WanosMusicPlayerNative {
      * 否则残留 mainHandler 推送会在主线程拥堵时误拉起 FGS 超时杀进程。
      */
     public void teardownForLogout() {
+        long t0 = SystemClock.elapsedRealtime();
         ++playGeneration;
         shouldStop = true;
         userPaused = true;
@@ -739,6 +743,8 @@ public class WanosMusicPlayerNative {
         stopMediaPlaybackForegroundService();
         WIAEngineJNI.setPlaybackActive(false);
         Log.i(TAG, "teardownForLogout");
+        Log.i(TAG, "[Hitch] teardownForLogout ms=" + (SystemClock.elapsedRealtime() - t0)
+                + " thread=" + Thread.currentThread().getName());
     }
 
     /**

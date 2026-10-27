@@ -148,6 +148,7 @@ namespace Game
 
         public static void Hide()
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             StopRoutines();
             // 绝不依赖 AliveForm：退登重登后 _form 常假死，HasUIForm 仍为 true，跳过 Close 会黑屏卡「正在铺装草地」。
             if (GameEntry.UI != null)
@@ -183,6 +184,7 @@ namespace Game
             _hiding = false;
             _shownProgress = 0f;
             _targetProgress = 0f;
+            Log.Info("[Hitch] BootLoading Hide ms=" + sw.ElapsedMilliseconds);
         }
 
         /// <summary>
@@ -238,8 +240,10 @@ namespace Game
 
         static void ReleaseUnusedUiInstancesNow()
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             ObjectPoolComponent pools = UGF.GetComponent<ObjectPoolComponent>();
             pools?.ReleaseAllUnused();
+            Log.Info("[Hitch] ReleaseAllUnused ms=" + sw.ElapsedMilliseconds);
         }
 
         static IEnumerator FadeHideRoutine(float duration)

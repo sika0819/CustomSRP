@@ -62,6 +62,12 @@ namespace Game
         bool _catchUpBusy;
         int _evalCursor;
         int _spawnedCount;
+        int _hitchSpikeCount;
+        int _hitchFarSkipFrames;
+        int _hitchFarSlowFrames;
+        float _hitchFarMaxFrameMs;
+        long _hitchSlowestMs;
+        string _hitchSlowestName;
 
         public int ItemCount => _items.Count;
         public int SpawnedCount => _spawnedCount;
@@ -232,6 +238,12 @@ namespace Game
 
             int total = candidates.Count;
             int done = 0;
+            _hitchSpikeCount = 0;
+            _hitchFarSkipFrames = 0;
+            _hitchFarSlowFrames = 0;
+            _hitchFarMaxFrameMs = 0f;
+            _hitchSlowestMs = 0;
+            _hitchSlowestName = null;
             float progressMid = Mathf.Lerp(progressMin, progressMax, 0.55f);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var nearClock = System.Diagnostics.Stopwatch.StartNew();
@@ -281,7 +293,22 @@ namespace Game
                 + " capped=" + uncoverCapped
                 + " uncoverR=" + EnvStreamingConfig.PrefillUncoverRadius.ToString("0"));
 
+            // 揭罩路径：远场先让出主线程，等加载罩撤掉（起播在罩下完成），再按帧时间限速。
+            if (onNearReady != null)
+            {
+                float holdStart = Time.realtimeSinceStartup;
+                const float holdCapSec = 2.5f;
+                while ((BootLoadingService.IsVisible || BootLoadingService.HasForm)
+                       && Time.realtimeSinceStartup - holdStart < holdCapSec)
+                    yield return null;
+                Log.Info(
+                    "[Hitch] far prefill resume holdMs="
+                    + ((Time.realtimeSinceStartup - holdStart) * 1000f).ToString("F0")
+                    + " coverVisible=" + BootLoadingService.IsVisible);
+            }
+
             // --- Far：其余 PrefillShow 半径，Quiet 预算 ---
+            var farClock = System.Diagnostics.Stopwatch.StartNew();
             for (int k = 0; k < candidates.Count; k++)
             {
                 int idx = candidates[k];
@@ -289,7 +316,21 @@ namespace Game
                 if (item.State == StateVisible && item.Go != null)
                     continue;
 
+                // 上一帧已经超过 22ms 就空让一帧，避免远场 Instantiate 把揭罩后帧时间钉在 40ms+。
+                if (onNearReady != null
+                    && EnvStreamingConfig.IsPostUncoverQuiet
+                    && Time.unscaledDeltaTime > 0.022f)
+                {
+                    _hitchFarSkipFrames++;
+                    yield return null;
+                }
+
                 yield return PrefillSpawnOne(idx, p, sw);
+                float frameMs = Time.unscaledDeltaTime * 1000f;
+                if (frameMs > _hitchFarMaxFrameMs)
+                    _hitchFarMaxFrameMs = frameMs;
+                if (frameMs >= 33f)
+                    _hitchFarSlowFrames++;
                 done++;
                 if (reportFar)
                 {
@@ -300,7 +341,16 @@ namespace Game
 
             if (reportFar)
                 report?.Invoke(progressMax, "正在铺装环境...");
+            long farMs = farClock.ElapsedMilliseconds;
             Log.Info($"[EnvItemStreamerLite] prefill done spawned={_spawnedCount}/{_items.Count} candidates={total}");
+            Log.Info(
+                "[Hitch] prefill done farMs=" + farMs
+                + " spikes=" + _hitchSpikeCount
+                + " skipFrames=" + _hitchFarSkipFrames
+                + " slowFrames=" + _hitchFarSlowFrames
+                + " maxFrameMs=" + _hitchFarMaxFrameMs.ToString("F0")
+                + " slowestMs=" + _hitchSlowestMs
+                + " slowest=" + (_hitchSlowestName ?? ""));
         }
 
         IEnumerator PrefillSpawnOne(int idx, Vector3 focusPos, System.Diagnostics.Stopwatch sw)
@@ -321,12 +371,18 @@ namespace Game
 
             // Item 是 struct：Create 前再读一次，避免 LoadPrefab yield 后陈旧副本。
             item = _items[idx];
+            EnvStreamingConfig.RememberTreeBillboardDistance(prefab, item.PrefabName);
             byte tier = ResolveSpawnTier(item, DistSqXZ(item.Pos, focusPos));
+            var spawnSw = System.Diagnostics.Stopwatch.StartNew();
             var spawned = CreateInstanceForTier(item, prefab, tier);
             if (spawned.Go == null)
+            {
+                NotePrefillSpike(item, tier, spawnSw);
                 yield break;
+            }
 
             FinalizeSpawned(idx, spawned.Go, prefab, spawned.Tier);
+            NotePrefillSpike(item, spawned.Tier, spawnSw);
 
             // Quiet（远场 Prefill / 揭罩后）：缓存命中时 LoadPrefab 不 yield，
             // 必须每实例让帧，否则二次进岛会把主线程打到个位数 FPS。
@@ -336,6 +392,25 @@ namespace Game
                 yield return null;
                 sw.Restart();
             }
+        }
+
+        void NotePrefillSpike(Item item, byte tier, System.Diagnostics.Stopwatch spawnSw)
+        {
+            long ms = spawnSw.ElapsedMilliseconds;
+            if (ms < 16)
+                return;
+            _hitchSpikeCount++;
+            if (ms > _hitchSlowestMs)
+            {
+                _hitchSlowestMs = ms;
+                _hitchSlowestName = item.PrefabName;
+            }
+
+            Log.Info(
+                "[Hitch] PrefillSpawnOne cat=" + item.Category
+                + " name=" + item.PrefabName
+                + " tier=" + tier
+                + " ms=" + ms);
         }
 
         /// <summary>
@@ -507,6 +582,7 @@ namespace Game
             if (prefab == null)
                 yield break;
 
+            EnvStreamingConfig.RememberTreeBillboardDistance(prefab, item.PrefabName);
             byte tier = item.PendingTier;
             if (tier != TierFull && tier != TierBillboard)
                 tier = ResolveSpawnTier(item, DistSqToFocus(item.Pos));
@@ -520,7 +596,8 @@ namespace Game
 
         static byte ResolveSpawnTier(Item item, float distSq)
         {
-            if (EnvStreamingConfig.ShouldSpawnAsTreeBillboard(item.Category, distSq))
+            if (EnvStreamingConfig.ShouldSpawnAsTreeBillboard(
+                    item.Category, distSq, item.PrefabName, item.Scale, item.Go))
                 return TierBillboard;
             return TierFull;
         }
@@ -535,7 +612,8 @@ namespace Game
                 return false;
 
             if (item.LodTier == TierFull
-                && EnvStreamingConfig.ShouldDowngradeTreeToBillboard(item.Category, distSq))
+                && EnvStreamingConfig.ShouldDowngradeTreeToBillboard(
+                    item.Category, distSq, item.PrefabName, item.Scale, item.Go))
             {
                 item.PendingTier = TierBillboard;
                 if (_despawnQueued.Add(index))
@@ -544,7 +622,8 @@ namespace Game
             }
 
             if (item.LodTier == TierBillboard
-                && EnvStreamingConfig.ShouldUpgradeTreeToFull(item.Category, distSq))
+                && EnvStreamingConfig.ShouldUpgradeTreeToFull(
+                    item.Category, distSq, item.PrefabName, item.Scale, item.Go))
             {
                 item.PendingTier = TierFull;
                 if (_despawnQueued.Add(index))
@@ -662,7 +741,10 @@ namespace Game
                 if (EnvStreamingConfig.IsBigTreeCategory(item.Category))
                     EnvTreeBillboardUtil.ApplyCrossBillboardToLodBillboardChildren(instance);
 
-                _colliderLod?.Register(instance, pos);
+                if (EnvStreamingConfig.IsTreeCategory(item.Category))
+                    EnvMeshColliderLod.StripTreeColliders(instance);
+                else
+                    _colliderLod?.Register(instance, pos);
             }
 
             int proto = -1;

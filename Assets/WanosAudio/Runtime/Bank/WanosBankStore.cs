@@ -130,6 +130,18 @@ namespace WanosAudio
                 return Loaded.Contains(Strip(bankName));
         }
 
+        /// <summary>路径表里有这个 bank，或已经灌进引擎。没有文件时不要拿它去 Load。</summary>
+        public static bool CanResolve(string bankName)
+        {
+            string stem = Strip(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return false;
+            if (IsLoaded(stem))
+                return true;
+            IWanosBankPaths paths = _paths;
+            return paths != null && paths.TryResolve(stem, out _);
+        }
+
         /// <summary>
         /// Cheap pre-check before calling native LoadBank.
         /// WIAEngine throws C++ on bad/unsupported headers (uncaught → SIGABRT).
@@ -452,7 +464,9 @@ namespace WanosAudio
 
             try
             {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 byte[] data = File.ReadAllBytes(path);
+                long bytes = data.LongLength;
                 // Field layout: type(1) + nameLen(u16 LE) + name + value(i64 LE)
                 byte[] key = Encoding.ASCII.GetBytes("sample_count");
                 for (int i = 0; i + 1 + 2 + key.Length + 8 <= data.Length; i++)
@@ -480,8 +494,11 @@ namespace WanosAudio
                     durationMs = (int)(samples * 1000L / sampleRateHz);
                     if (durationMs < 1000)
                         continue;
+                    LogEstimateHitch(stem, bytes, sw);
                     return true;
                 }
+
+                LogEstimateHitch(stem, bytes, sw);
             }
             catch (Exception e)
             {
@@ -489,6 +506,14 @@ namespace WanosAudio
             }
 
             return false;
+        }
+
+        static void LogEstimateHitch(string stem, long bytes, System.Diagnostics.Stopwatch sw)
+        {
+            long ms = sw.ElapsedMilliseconds;
+            if (ms < 16)
+                return;
+            Debug.Log("[Hitch] TryEstimateDurationMs stem=" + stem + " bytes=" + bytes + " ms=" + ms);
         }
 
         static string Strip(string name)

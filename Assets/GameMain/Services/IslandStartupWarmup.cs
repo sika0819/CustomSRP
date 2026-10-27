@@ -22,15 +22,21 @@ namespace Game
         public static async UniTask RunAsync(int uncoverGeneration)
         {
             if (DeviceGraphicsPolicy.Current != DeviceGraphicsClass.Gmj)
+            {
+                Log.Info("[Hitch] IslandStartupWarmup skip class=" + DeviceGraphicsPolicy.Current);
                 return;
+            }
 
             IslandJoystickCamera cam = IslandJoystickCamera.Current;
             if (cam == null)
             {
                 Log.Warning("[IslandStartupWarmup] skip — no IslandJoystickCamera");
+                Log.Info("[Hitch] IslandStartupWarmup skip no-camera");
                 return;
             }
 
+            float wallStart = Time.realtimeSinceStartup;
+            Log.Info("[Hitch] IslandStartupWarmup begin");
             float baseYaw = cam.YawDegrees;
             IslandPlayerPosSave.PushSaveSuppress();
             BootLoadingService.ReportProgress(
@@ -58,6 +64,9 @@ namespace Game
             {
                 cam.PeekYaw(baseYaw);
                 IslandPlayerPosSave.PopSaveSuppress();
+                Log.Info(
+                    "[Hitch] IslandStartupWarmup end wallMs="
+                    + ((Time.realtimeSinceStartup - wallStart) * 1000f).ToString("F0"));
             }
 
             Log.Info(
