@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -98,10 +99,16 @@ namespace Game
         /// Runtime material instance: Cross front/side snap + yaw to camera.
         /// Does not dirty the shared asset. Far impostors skip shadow cast/receive.
         /// </summary>
+        static readonly Dictionary<EntityId, Material> CrossBillboardCache = new Dictionary<EntityId, Material>(8);
+
         public static Material CreateCrossBillboardMaterial(Material shared)
         {
             if (shared == null)
                 return null;
+            EntityId key = shared.GetEntityId();
+            if (CrossBillboardCache.TryGetValue(key, out Material cached) && cached != null)
+                return cached;
+
             Material inst = Object.Instantiate(shared);
             inst.name = shared.name + " (CrossBillboard)";
 
@@ -114,7 +121,10 @@ namespace Game
                 inst.SetFloat(CullId, (float)CullMode.Off);
 
             ApplyNoShadows(inst);
-            inst.enableInstancing = true;
+            // 这份给近树 LOD_Billboard 的 MeshRenderer，走 SRP Batcher。
+            // RenderMeshInstanced 另拷材质再开 Instancing，两边不能共用。
+            inst.enableInstancing = false;
+            CrossBillboardCache[key] = inst;
             return inst;
         }
 
@@ -148,6 +158,20 @@ namespace Game
                 return;
             mr.shadowCastingMode = ShadowCastingMode.Off;
             mr.receiveShadows = false;
+        }
+
+        /// <summary>
+        /// Full-prefab LOD_Billboard uses the same contour mesh as far proxies.
+        /// Keep it off the planar mirror; nearby bark/leaf still reflect.
+        /// </summary>
+        public static void ExcludeLodBillboardFromReflection(GameObject instance)
+        {
+            if (instance == null)
+                return;
+            Transform bb = FindChildNamed(instance.transform, "LOD_Billboard");
+            if (bb == null)
+                return;
+            EnvStreamerReflectionSkip.ApplySubtree(bb);
         }
 
         /// <summary>Swap LOD_Billboard mats to Cross camera-facing instances (keep contour mesh).</summary>

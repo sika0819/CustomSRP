@@ -26,10 +26,9 @@ Shader "CustomSRP/OilOceanNPR"
         [NoScaleOffset] _BumpMap ("Wave Normal", 2D) = "bump" {}
         _BumpScale ("Bump Scale", Range(0, 2)) = 0.9
         _BumpTile ("Bump Tile (m)", Range(20, 200)) = 80
-        // xy = 层A 非等比 tiling；zw = 层B（0,0 时自动用 xy 轴交换 → 交叉笔触）。
-        _BumpTiling ("Bump Tiling (A.xy / B.zw)", Vector) = (1, 2, 2, 1)
-        // xy = 层A 流速；zw = 层B（0,0 时自动对向 -xy）。
-        _BumpScroll ("Bump Scroll (A.xy / B.zw)", Vector) = (0.03, -0.02, -0.025, 0.018)
+        // xy = 单层 tiling。zw / _BumpCross 保留材质布局，着色器不再采第二层。
+        _BumpTiling ("Bump Tiling (xy)", Vector) = (1, 2, 2, 1)
+        _BumpScroll ("Bump Scroll (xy)", Vector) = (0.03, -0.02, -0.025, 0.018)
         _BumpCross ("Bump Cross Blend", Range(0, 1)) = 0.85
 
         // 对齐河：Intersection Noise × Depth × Shore Clip 画岸沫（无 Foam 笔刷贴图）。

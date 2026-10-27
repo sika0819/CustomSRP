@@ -135,8 +135,9 @@ namespace Game
         public static bool IsPostUncoverQuiet => InPostUncoverQuiet;
 
         public static int EffectiveSpawnPerFrameBudget =>
+            // 揭罩后每帧只铺 1 个。Mid 上两个完整树 Instantiate 就能把帧时间打到 ~250ms，摇杆完全跟不上。
             InPostUncoverQuiet
-                ? Mathf.Max(1, Mathf.RoundToInt(SpawnPerFrameBudget * PostUncoverSpawnScale))
+                ? 1
                 : SpawnPerFrameBudget;
 
         public static float EffectiveFinalizePerFrameBudgetMs =>
@@ -646,7 +647,7 @@ namespace Game
             TreeRing1EnterRadius = 180f * 0.65f;
             TreeRing1ExitRadius = 220f * 0.65f;
             TreeBillboardKeepRadius = 180f;
-            TreeFullMeshMaxDist = 160f;
+            TreeFullMeshMaxDist = 42f;
             TreeFullMeshHysteresis = 12f;
             FillBoundFarTreeSilhouetteMinDistance = 120f;
             FillBoundFarTreeSilhouetteStride = 6;
@@ -689,7 +690,9 @@ namespace Game
             TreeRing1EnterRadius = 150f;
             TreeRing1ExitRadius = 180f;
             TreeBillboardKeepRadius = 220f;
-            TreeFullMeshMaxDist = 200f;
+            // 手机 Mid：200 米内都实例化完整树（含 MeshCollider）。游客退登再进正式号时
+            // 这批克隆堆在主线程上，帧时间约 250ms，人在岛上也走不动。近处保留完整网格，其余用广告牌。
+            TreeFullMeshMaxDist = 42f;
             TreeFullMeshHysteresis = 12f;
             FillBoundFarTreeSilhouetteMinDistance = 140f;
             FillBoundFarTreeSilhouetteStride = 4;
@@ -719,7 +722,7 @@ namespace Game
             FinalizePerFrameBudgetMs = 2.8f;
         }
 
-        /// <summary>手机 High / Gmj：接近 Editor Base，仍开 Native 合批、略控 spawn。</summary>
+        /// <summary>手机 High / Gmj：接近 Editor Base，仍开 Native 合批、略控 spawn。完整树留到 200 米。</summary>
         static void ApplyStreamingNearBase()
         {
             Ring0EnterRadius = 90f;

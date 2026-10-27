@@ -89,6 +89,7 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
     half near = (half)saturate((along - nearStart) / max(nearRange, 1e-3));
     half elevGate = (half)saturate(elev * 2.2 + 0.28);
     lane *= near * lit * stable * elevGate;
+    [branch]
     if (lane < 1e-4h)
     {
         return 0.0h;
@@ -102,20 +103,27 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
     float glintSpeed = 0.05 + max(_OilOceanWindStrength, 0.0) * 0.12;
     float v = frac(alongPaint / tileM + t * glintSpeed);
     float2 st = float2(u, v);
+    // LOD（不用隐式导数）让车道外的 [branch] 真能跳过采样。外海大部分像素不在光痕里。
+    float dist = length(_WorldSpaceCameraPos - positionWS);
+    float glintMip = saturate((dist - 40.0) / 700.0) * 3.0;
 #if defined(OIL_MOBILE_PERF)
-    half3 g = (half3)SAMPLE_TEXTURE2D(_SparkleBrush, sampler_SparkleBrush, st).rgb;
+    half3 g = (half3)SAMPLE_TEXTURE2D_LOD(_SparkleBrush, sampler_SparkleBrush, st, glintMip).rgb;
 #else
-    half3 g0 = (half3)SAMPLE_TEXTURE2D(_SparkleBrush, sampler_SparkleBrush, st).rgb;
-    half3 g1 = (half3)SAMPLE_TEXTURE2D(
-        _SparkleBrush, sampler_SparkleBrush, st + float2(0.0, 0.37)).rgb;
-    half3 g = max(g0, g1 * 0.7h);
+    half3 g0 = (half3)SAMPLE_TEXTURE2D_LOD(_SparkleBrush, sampler_SparkleBrush, st, glintMip).rgb;
+    half3 g = g0;
+    [branch]
+    if (dist < 380.0)
+    {
+        half3 g1 = (half3)SAMPLE_TEXTURE2D_LOD(
+            _SparkleBrush, sampler_SparkleBrush, st + float2(0.0, 0.37), glintMip).rgb;
+        g = max(g0, g1 * 0.7h);
+    }
 #endif
     half dab = saturate((PaintLuma(g) - 0.12h) * 2.6h);
     dab *= lerp(0.55h, 1.15h, stroke);
     dab *= (1.0h - foam * 0.85h);
     // 低太阳略加强；远距不灭。
     dab *= lerp(1.35h, 0.9h, (half)elev);
-    float dist = length(_WorldSpaceCameraPos - positionWS);
     dab *= (half)saturate((4800.0 - dist) / 2800.0);
     return dab * lane * (half)max(_SunPathStrength, 0.0);
 }
@@ -147,6 +155,8 @@ void SampleShoreBrush(
 {
     half g = saturate((half)gradient);
     half strength = saturate((half)_FoamStrength);
+    // 外海 gradient≈0。LOD 采样才能让这个分支在整片海里真正不取贴图。
+    [branch]
     if (g * strength < 1e-4h)
     {
         mask = 0.0h;
@@ -163,14 +173,15 @@ void SampleShoreBrush(
     float2 interTime = float2(t * 0.08, -t * 0.22) * speed;
     float dist = saturate((float)g / max(_IntersectionFalloff, 1e-4));
     float2 nUV = interUv * max(_IntersectionTiling, 0.02);
-    half n0 = (half)SAMPLE_TEXTURE2D(
-        _IntersectionNoise, sampler_IntersectionNoise, nUV + interTime).r;
+    float shoreMip = saturate(distance(_WorldSpaceCameraPos.xz, worldXZ) / 350.0) * 3.0;
+    half n0 = (half)SAMPLE_TEXTURE2D_LOD(
+        _IntersectionNoise, sampler_IntersectionNoise, nUV + interTime, shoreMip).r;
 #if defined(OIL_MOBILE_PERF)
     half noise = n0;
 #else
-    half n1 = (half)SAMPLE_TEXTURE2D(
+    half n1 = (half)SAMPLE_TEXTURE2D_LOD(
         _IntersectionNoise, sampler_IntersectionNoise,
-        nUV * 1.37 + interTime * float2(-0.61, 0.47) + 0.17).r;
+        nUV * 1.37 + interTime * float2(-0.61, 0.47) + 0.17, shoreMip).r;
     half noise = max(n0, n1 * 0.85h);
 #endif
     noise = saturate(noise * (half)(dist * 1.15) + (half)(dist * 0.42));
@@ -193,53 +204,18 @@ half3 SineWaveNormal(float2 worldXZ, out half crest)
     return normalize(half3(s0 * 0.16h, 1.0h, s1 * 0.12h));
 }
 
-// Dual-layer bump：层A/B 非等比笔触交叉 + 对向滚动 → 一节一节交错，非单条长横线。
-// _BumpTiling.zw / _BumpScroll.zw 为 0 时自动轴交换 tiling、对向 scroll。
-half3 OilOceanBumpNormal(float2 worldXZ, float2 paintSt, half3 baseN)
+// 单层波浪法线。层 B（_BumpTiling.zw / _BumpScroll.zw）不再采样。
+half3 OilOceanBumpNormal(float2 worldXZ, half3 baseN)
 {
     float tile = max(_BumpTile, 20.0);
     float2 tilingA = max(_BumpTiling.xy, float2(0.01, 0.01));
     float2 scrollA = _BumpScroll.xy;
-    float t = _Time.y;
     // 同 Monet：竖笔贴图经 worldXZ.yx 转横。
-    float2 uvA = (worldXZ.yx / tile) * tilingA + scrollA * t;
-#if defined(OIL_MOBILE_PERF)
-    // Gmj / mobile floor: single bump sample (desktop keeps dual-layer cross).
+    float2 uvA = (worldXZ.yx / tile) * tilingA + scrollA * _Time.y;
     half3 nA = (half3)DecodeNormal(
         SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvA), _BumpScale);
-    half2 offset = half2(nA.x, nA.y);
-#else
-    float2 tilingB = _BumpTiling.zw;
-    if (tilingB.x + tilingB.y < 1e-4)
-    {
-        tilingB = tilingA.yx;
-    }
-    tilingB = max(tilingB, float2(0.01, 0.01));
-    float2 scrollB = _BumpScroll.zw;
-    if (abs(scrollB.x) + abs(scrollB.y) < 1e-6)
-    {
-        scrollB = -scrollA;
-    }
-    // 层B 换周期 + 相位，避免两层锁成网格。
-    float2 uvB = (worldXZ.yx / (tile * 1.37)) * tilingB + scrollB * t + float2(0.37, 0.19);
-    half3 nA = (half3)DecodeNormal(
-        SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvA), _BumpScale);
-    half3 nB = (half3)DecodeNormal(
-        SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvB), _BumpScale);
-    half crossW = saturate((half)_BumpCross);
-    half2 offset = (half2(nA.x, nA.y) + half2(nB.x, nB.y) * crossW)
-        / max(1.0h + crossW, 1.0h);
-    // Paint relief as supplemental chop when bump is flat / unset.
-    half3 paintC = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt).rgb;
-    half3 paintDx = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt + float2(0.02, 0.0)).rgb;
-    half3 paintDz = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt + float2(0.0, 0.02)).rgb;
-    half h0 = PaintLuma(paintC);
-    half hx = PaintLuma(paintDx) - h0;
-    half hz = PaintLuma(paintDz) - h0;
-    offset += half2(hx, hz) * (half)_BumpScale * 1.8h;
-#endif
     // Horizontal sea: tangent ≈ X, bitangent ≈ Z.
-    half3 bumpN = normalize(half3(offset.x, 1.0h, offset.y));
+    half3 bumpN = normalize(half3(nA.x, 1.0h, nA.y));
     return normalize(lerp(baseN, bumpN, saturate((half)_BumpScale)));
 }
 
@@ -253,13 +229,21 @@ float OceanColumnFromDepth(Fragment fragment)
     return max(fragment.bufferDepth - fragment.depth, 0.0);
 }
 
-// 岸缘 depth 用 5-tap 最近点（线性眼深 min），压住 point 采样在沙/天边界的像素闪。
-float OilOceanStableSceneEyeDepth(float2 screenUV)
+// 岸缘才补十字 depth（线性眼深 min），压住沙/天交界的像素闪。
+// 外海 center 已深过泡沫窗且四元组深度连续，邻域 min 改不了结果，不再每像素多采 4 次全分辨率 depth。
+float OilOceanStableSceneEyeDepth(
+    float2 screenUV, float centerEye, float surfaceEye, float foamReachM)
 {
+    float reach = max(foamReachM, 0.55);
+    float gap = centerEye - surfaceEye;
+    float edge = abs(ddx(centerEye)) + abs(ddy(centerEye));
+    [branch]
+    if (centerEye > 1e-3 && gap > reach * 2.5 && edge < reach)
+    {
+        return centerEye;
+    }
+
     float2 texel = _CameraBufferSize.xy;
-    float d0 = LinearEyeDepth(
-        SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, sampler_point_clamp, screenUV, 0),
-        _ZBufferParams);
     float d1 = LinearEyeDepth(
         SAMPLE_DEPTH_TEXTURE_LOD(
             _CameraDepthTexture, sampler_point_clamp, screenUV + float2(texel.x, 0.0), 0),
@@ -276,7 +260,7 @@ float OilOceanStableSceneEyeDepth(float2 screenUV)
         SAMPLE_DEPTH_TEXTURE_LOD(
             _CameraDepthTexture, sampler_point_clamp, screenUV - float2(0.0, texel.y), 0),
         _ZBufferParams);
-    return min(d0, min(min(d1, d2), min(d3, d4)));
+    return min(centerEye, min(min(d1, d2), min(d3, d4)));
 }
 
 // surfaceEye：用静止海面眼深（restEyeDepth），不跟波浪上下抖。
@@ -349,15 +333,15 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     half3 waveN = SineWaveNormal(input.worldXZ, crest);
     half3 geoN = normalize((half3)input.normalWS);
     half3 normalWS = normalize(lerp(geoN, waveN, 0.55h));
+    float camDist = length(_WorldSpaceCameraPos - input.positionWS);
 
     float2 paintSt = OceanMonetPaintUv(
         input.worldXZ, t, _PaintTile, _StrokeBands);
-    normalWS = OilOceanBumpNormal(input.worldXZ, paintSt, normalWS);
+    normalWS = OilOceanBumpNormal(input.worldXZ, normalWS);
     normalWS = ApplyRainRippleNormal(normalWS, input.positionWS);
 
     // 光照仍 flat，避免 cascade 圆影；bump 只喂反射/折射/glint。
     half3 lightN = half3(0.0h, 1.0h, 0.0h);
-    float camDist = length(_WorldSpaceCameraPos - input.positionWS);
     half overlook = (half)smoothstep(120.0, 420.0, camDist);
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
 
@@ -370,12 +354,22 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
 #if defined(OIL_MOBILE_PERF)
         paint = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt).rgb;
 #else
-        float2 f = frac(paintSt);
-        float2 e = min(f, 1.0 - f);
-        half w = (half)smoothstep(0.0, 0.14, min(e.x, e.y));
-        half3 c0 = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt).rgb;
-        half3 c1 = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt + 0.5).rgb;
-        paint = lerp(c1, c0, w);
+        float2 paintDx = ddx(paintSt);
+        float2 paintDy = ddy(paintSt);
+        half3 c0 = (half3)SAMPLE_TEXTURE2D_GRAD(
+            _PaintMap, sampler_PaintMap, paintSt, paintDx, paintDy).rgb;
+        paint = c0;
+        // 半张图的接缝混合只在近处看得见。地平线上海面不再第二采。
+        [branch]
+        if (camDist < 320.0)
+        {
+            float2 f = frac(paintSt);
+            float2 e = min(f, 1.0 - f);
+            half w = (half)smoothstep(0.0, 0.14, min(e.x, e.y));
+            half3 c1 = (half3)SAMPLE_TEXTURE2D_GRAD(
+                _PaintMap, sampler_PaintMap, paintSt + 0.5, paintDx, paintDy).rgb;
+            paint = lerp(c1, c0, w);
+        }
 #endif
     }
     half stroke = PaintStroke(PaintLuma(paint), (half)_PaintContrast);
@@ -399,7 +393,8 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     // 移动端：单样 + 静止面深度已压掉波浪闪；省 4 次 depth tap。
     float shoreSceneEye = fragment.bufferDepth;
 #else
-    float shoreSceneEye = OilOceanStableSceneEyeDepth(fragment.screenUV);
+    float shoreSceneEye = OilOceanStableSceneEyeDepth(
+        fragment.screenUV, fragment.bufferDepth, input.restEyeDepth, max(foamReach, 0.55));
 #endif
     half lipGrad = OilOceanDepthFoamRim(input.restEyeDepth, shoreSceneEye, foamReach);
     lipGrad = saturate(lipGrad * 1.35h);
@@ -461,25 +456,27 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     SampleShoreBrush(input.worldXZ, shoreGrad, columnN, shoreMask, shoreWash);
 
 #if !defined(OIL_MOBILE_PERF)
-    float2 refractOffset = float2(normalWS.x, normalWS.z) * (_RefractionStrength * 0.045);
-    float2 edgeUv = saturate(min(fragment.screenUV, 1.0 - fragment.screenUV) * 8.0);
-    refractOffset *= edgeUv.x * edgeUv.y;
-    float rawDepth = SAMPLE_DEPTH_TEXTURE_LOD(
-        _CameraDepthTexture, sampler_point_clamp, fragment.screenUV + refractOffset, 0);
-    float sceneEye = LinearEyeDepth(rawDepth, _ZBufferParams);
-    float inFront = saturate((fragment.depth - sceneEye) * 4.0);
-    half3 sceneCol = (half3)GetBufferColor(fragment, refractOffset).rgb;
-    half refractMix = glass * (half)(1.0 - inFront) * lerp(0.5h, 0.25h, overlook);
-    half3 refractTint = lerp(half3(0.22h, 0.20h, 0.38h), half3(0.10h, 0.08h, 0.22h), night);
-    sceneCol *= refractTint;
-    color = lerp(color, sceneCol, refractMix);
+    // 折射只在浅滩 glass 窗口。外海 glass≈0，不要每像素再采一张全分辨率颜色。
+    [branch]
+    if (glass > 0.02h)
+    {
+        float2 refractOffset = float2(normalWS.x, normalWS.z) * (_RefractionStrength * 0.045);
+        float2 edgeUv = saturate(min(fragment.screenUV, 1.0 - fragment.screenUV) * 8.0);
+        refractOffset *= edgeUv.x * edgeUv.y;
+        float rawDepth = SAMPLE_DEPTH_TEXTURE_LOD(
+            _CameraDepthTexture, sampler_point_clamp, fragment.screenUV + refractOffset, 0);
+        float sceneEye = LinearEyeDepth(rawDepth, _ZBufferParams);
+        float inFront = saturate((fragment.depth - sceneEye) * 4.0);
+        half3 sceneCol = (half3)GetBufferColor(fragment, refractOffset).rgb;
+        half refractMix = glass * (half)(1.0 - inFront) * lerp(0.5h, 0.25h, overlook);
+        half3 refractTint = lerp(half3(0.22h, 0.20h, 0.38h), half3(0.10h, 0.08h, 0.22h), night);
+        sceneCol *= refractTint;
+        color = lerp(color, sceneCol, refractMix);
+    }
 #endif
 
-#if defined(OIL_MOBILE_PERF)
+    // 海面铺满画面。雾画布是两次世界空间采样，水上只留 stroke 软雾（与移动端同一条）。
     color = (half3)ApplyOilFog((float3)color, surface.depth, stroke);
-#else
-    color = (half3)ApplyOilFog((float3)color, surface.depth, stroke, input.positionWS);
-#endif
 
     color = ApplyOilWaterReflection(
         color,

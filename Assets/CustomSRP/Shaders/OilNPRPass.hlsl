@@ -60,6 +60,18 @@ Varyings OilNPRPassVertex(Attributes input)
     {
         positionOS = OilTreeCrossBillboardRotateYaw(
             input.positionOS, input.normalOS, normalOS, normalWS, keep);
+        if (keep < 0.5)
+        {
+            // Dropped card: a single clip-space point so the triangle has no area and no fragment.
+            output.positionWS = float3(0.0, 0.0, 0.0);
+            output.positionOS = float3(0.0, 0.0, 0.0);
+            output.positionCS_SS = float4(0.0, 0.0, 0.0, 1.0);
+            output.normalWS = normalWS;
+            output.normalOS = normalOS;
+            output.baseUV = float2(0.0, 0.0);
+            output.keepCard = 0.0;
+            return output;
+        }
     }
     else if (yBb > 0.5)
     {
@@ -123,10 +135,10 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     half3 wetSpec = (half3)_SpecColor.rgb * (1.0h + wet * 0.35h);
 
 #if defined(_CLIPPING)
-    // Boluo TreeCrossBillboard: contour mesh hugs atlas alpha — do not clip
-    // billboard cards (mip-averaged alpha punches holes + black fringe when walking).
-    if (crossBbEarly < 0.5 && yBbEarly < 0.5)
-        clip(alpha - (half)GetCutoff(config));
+    // Coarse contour cells (12×16) enclose the crown plus transparent texels.
+    // Those texels are dark grey; without clip they draw as slabs and the
+    // crown silhouette disappears. Bias above still keeps mip edges from punching holes.
+    clip(alpha - (half)GetCutoff(config));
 #endif
 
     half3 geometricNormal = normalize((half3)input.normalWS);

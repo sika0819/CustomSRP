@@ -395,8 +395,12 @@ namespace Game
                 _despawnQueue.Clear();
                 _despawnQueued.Clear();
 
+                var spawnSw = System.Diagnostics.Stopwatch.StartNew();
                 for (int i = 0; i < _spawnQueue.Count && spawnBudget > 0; i++)
                 {
+                    // 上一件已经把本帧吃满就留到下一帧，把 Update 还给摇杆。
+                    if (i > 0 && spawnSw.ElapsedMilliseconds >= 6)
+                        break;
                     yield return SpawnItem(_spawnQueue[i]);
                     spawnBudget--;
                 }
@@ -630,8 +634,16 @@ namespace Game
 
             instance.SetActive(item.IsActive);
 
-            if (!isBillboard)
+            if (isBillboard)
             {
+                // Far impostors blur into the water and their contour verts
+                // would be drawn again by the mirror camera while walking.
+                EnvStreamerReflectionSkip.Apply(instance);
+            }
+            else
+            {
+                if (EnvStreamingConfig.IsBigTreeCategory(item.Category))
+                    EnvTreeBillboardUtil.ExcludeLodBillboardFromReflection(instance);
                 if (EnvStreamingConfig.IsRockCategory(item.Category))
                 {
                     EnvRockColliders.Ensure(instance, item.PrefabName);

@@ -157,8 +157,8 @@ namespace CustomSRP.Editor
                     return false;
                 }
 
-                OilTreeBillboardContourMesh.FillSilhouetteAndDilate(
-                    albedo, OilTreeBillboardContourMesh.DefaultCutoff);
+                // Atlases are already dilated. Re-running dilate only bleeds RGB
+                // further and rewrites every PNG. Mesh rebuild reads alpha only.
                 Mesh generated = OilTreeBillboardContourMesh.Build(
                     albedo, quadSize, yPivot, OilTreeBillboardContourMesh.DefaultCutoff);
                 if (generated == null || generated.vertexCount < 4)
@@ -174,10 +174,6 @@ namespace CustomSRP.Editor
                 existing.name = generated.name;
                 Object.DestroyImmediate(generated);
                 EditorUtility.SetDirty(existing);
-
-                // Persist dilated RGB into PNG so mip/clip edges stay clean.
-                WriteAlbedoPng(albedo, albedoPath);
-                EnsureMipPreserveCoverage(albedoPath);
 
                 sb.AppendLine(
                     $"OK {baseName} verts={existing.vertexCount} size={quadSize.x:F1}x{quadSize.y:F1}");
@@ -195,22 +191,26 @@ namespace CustomSRP.Editor
                 return null;
 
             var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            bool prevReadable = false;
+            var prevCompression = TextureImporterCompression.Compressed;
+            bool touched = false;
             if (importer != null)
             {
-                bool dirty = false;
+                prevReadable = importer.isReadable;
+                prevCompression = importer.textureCompression;
                 if (!importer.isReadable)
                 {
                     importer.isReadable = true;
-                    dirty = true;
+                    touched = true;
                 }
 
                 if (importer.textureCompression != TextureImporterCompression.Uncompressed)
                 {
                     importer.textureCompression = TextureImporterCompression.Uncompressed;
-                    dirty = true;
+                    touched = true;
                 }
 
-                if (dirty)
+                if (touched)
                     importer.SaveAndReimport();
             }
 
@@ -221,43 +221,15 @@ namespace CustomSRP.Editor
             var copy = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, false);
             copy.SetPixels32(src.GetPixels32());
             copy.Apply(false, false);
-            return copy;
-        }
 
-        static void WriteAlbedoPng(Texture2D tex, string assetPath)
-        {
-            string abs = Path.GetFullPath(Path.Combine(Application.dataPath, "..", assetPath));
-            File.WriteAllBytes(abs, tex.EncodeToPNG());
-            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
-        }
-
-        static void EnsureMipPreserveCoverage(string assetPath)
-        {
-            var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
-            if (importer == null)
-                return;
-            bool dirty = false;
-            if (!importer.mipMapsPreserveCoverage)
+            if (importer != null && touched)
             {
-                importer.mipMapsPreserveCoverage = true;
-                importer.alphaTestReferenceValue = 0.35f;
-                dirty = true;
-            }
-
-            if (!importer.alphaIsTransparency)
-            {
-                importer.alphaIsTransparency = true;
-                dirty = true;
-            }
-
-            if (importer.isReadable)
-            {
-                importer.isReadable = false;
-                dirty = true;
-            }
-
-            if (dirty)
+                importer.isReadable = prevReadable;
+                importer.textureCompression = prevCompression;
                 importer.SaveAndReimport();
+            }
+
+            return copy;
         }
     }
 }

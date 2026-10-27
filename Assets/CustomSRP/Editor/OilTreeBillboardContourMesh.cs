@@ -14,8 +14,11 @@ namespace CustomSRP.Editor
     {
         public const float DefaultCutoff = 0.32f;
         const int DilatePx = 10;
-        const int GridX = 56;
-        const int GridY = 72;
+        // Coarse cells: 56×72 put ~12k verts on each impostor and the vertex
+        // shader yaws every one of them. 12×16 keeps the crown silhouette
+        // while dropping the grid about 20×.
+        const int GridX = 12;
+        const int GridY = 16;
 
         public static void FillSilhouetteAndDilate(Texture2D tex, float cutoff = DefaultCutoff)
         {
@@ -90,9 +93,10 @@ namespace CustomSRP.Editor
 
             // Prefer legacy 8-vert full cards; contour meshes still expose crown AABB.
             var b = source.bounds;
-            if (b.size.x < 0.01f || b.size.y < 0.01f)
-                return false;
+            // Side-only contours sit on X=0, so size.x can be 0 while size.z is the card width.
             float horiz = Mathf.Max(b.size.x, b.size.z);
+            if (horiz < 0.01f || b.size.y < 0.01f)
+                return false;
             quadSize = new Vector2(horiz, b.size.y);
             yPivotOffset = -b.min.y;
             return true;

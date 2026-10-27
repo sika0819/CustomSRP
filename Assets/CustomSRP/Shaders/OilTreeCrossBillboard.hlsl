@@ -21,10 +21,20 @@ float3 OilTreeCrossBillboardRotateYaw(
     // Per-tree ~7° snap jitter (Boluo): avoid whole stands flipping on the same frame.
     float snapJitter = (frac(sin(dot(pivotWS.xz, float2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.08;
     float snapIdx = round(yaw * 0.6366197723675814 + snapJitter);
-    float snapped = snapIdx * 1.5707963267948966;
     // 0°/180° keep front card (normal −Z); ±90° keep side card (normal −X).
     bool wantSide = abs(snapIdx) == 1.0;
     bool dropCard = wantSide ? (normalOS.z < -0.5) : (normalOS.x < -0.5);
+    if (dropCard)
+    {
+        // Orthogonal card is discarded. Skip sin/cos and the position rotate;
+        // the vertex shader collapses these to one clip-space point.
+        rotatedNormalOS = normalOS;
+        normalWS = float3(0.0, 1.0, 0.0);
+        keep = 0.0;
+        return float3(0.0, 0.0, 0.0);
+    }
+
+    float snapped = snapIdx * 1.5707963267948966;
     float rot = yaw - snapped;
     float c = cos(rot);
     float s = sin(rot);
@@ -40,10 +50,7 @@ float3 OilTreeCrossBillboardRotateYaw(
     n.z = -normalOS.x * s + normalOS.z * c;
     rotatedNormalOS = n;
     normalWS = TransformObjectToWorldNormal(n);
-
-    keep = dropCard ? 0.0 : 1.0;
-    if (dropCard)
-        p = float3(0.0, 0.0, 0.0);
+    keep = 1.0;
     return p;
 }
 
