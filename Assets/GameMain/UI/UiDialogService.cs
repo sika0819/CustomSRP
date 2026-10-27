@@ -1,7 +1,4 @@
 using System;
-using UnityEngine;
-using UnityEngine.UIElements;
-using UnityGameFramework.Runtime;
 
 namespace Game
 {
@@ -22,41 +19,19 @@ namespace Game
         #region Toast
 
         /// <summary>
-        /// Show a brief info toast (white bubble). Host is typically the IslandMainForm root.
+        /// Show a brief info toast on the global tip layer.
         /// </summary>
-        public static void ShowToast(string message, VisualElement host = null)
+        public static void ShowToast(string message)
         {
-            if (host == null)
-            {
-                Debug.LogWarning("[UiDialogService] ShowToast requires a host VisualElement.");
-                return;
-            }
-            VisualElement toast = UiTipToast.Ensure(host, "dialogToast");
-            UiTipToast.ResetToNormalStyle(toast);
-            UiTipToast.Show(toast, message);
-            // Auto-hide after 3 seconds.
-            host.schedule.Execute(() => UiTipToast.Hide(toast))
-                .ExecuteLater(3000);
+            UiTipToast.ShowMessage(message, 3f);
         }
 
         /// <summary>
-        /// Show an error toast (red-tinted bubble). Host is typically the IslandMainForm root.
+        /// Show an error toast (red-tinted bubble) on the global tip layer.
         /// </summary>
-        public static void ShowErrorToast(string message, VisualElement host = null)
+        public static void ShowErrorToast(string message)
         {
-            if (host == null)
-            {
-                Debug.LogWarning("[UiDialogService] ShowErrorToast requires a host VisualElement.");
-                return;
-            }
-            VisualElement toast = UiTipToast.Ensure(host, "dialogErrorToast");
-            UiTipToast.ApplyErrorStyle(toast);
-            UiTipToast.Show(toast, message);
-            host.schedule.Execute(() =>
-            {
-                UiTipToast.Hide(toast);
-                UiTipToast.ResetToNormalStyle(toast);
-            }).ExecuteLater(4000);
+            UiTipToast.ShowMessage(message, 4f, error: true);
         }
 
         #endregion

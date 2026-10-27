@@ -77,7 +77,6 @@ namespace Game
         Scroller _vScroller;
         IVisualElementScheduledItem _hideSchedule;
         IVisualElementScheduledItem _fadeSchedule;
-        IVisualElementScheduledItem _tipHide;
         float _scrollerAlpha;
         float _fadeFrom;
         float _fadeTo;
@@ -95,8 +94,6 @@ namespace Game
         float _listDragStartY;
         float _listScrollStartY;
         bool _suppressTrackClick;
-        VisualElement _hintWindows;
-        Label _hintLabel;
         /// <summary>「全部歌曲N首」— TextElement only; Label :hover washes grey to white.</summary>
         TextElement _title;
 
@@ -154,12 +151,6 @@ namespace Game
 
             DownloadedUnplayedManager.EnsureLoaded();
 
-            // Cache frequently used elements.
-            _hintWindows = Root.Q("hintwindows");
-            _hintLabel = Root.Q<Label>("labeltmp");
-            if (_hintWindows != null)
-                _hintWindows.style.opacity = 0f;
-
             // Force TextElement title — pooled forms may still carry a Label from an
             // older UXML, and slide-up under the cursor re-triggers :hover → white.
             EnsureTitleElement();
@@ -189,6 +180,10 @@ namespace Game
             if (_list != null)
                 _list.pickingMode = PickingMode.Position;
 
+            // Pooled form: drop a stale handler before re-subscribing.
+            MusicPlaylist.Instance.TrackChanged -= OnPlaylistTrackChanged;
+            MusicPlaylist.Instance.TrackChanged += OnPlaylistTrackChanged;
+
             EnsurePlayingFramesLoaded();
             EnsureStatusIconsLoaded();
             StartPlayingAnimLoop();
@@ -209,9 +204,8 @@ namespace Game
 
         public override void OnClose(bool isShutdown, object userData)
         {
+            MusicPlaylist.Instance.TrackChanged -= OnPlaylistTrackChanged;
             MusicCatalog.OnCatalogReady -= OnCatalogReady;
-            _tipHide?.Pause();
-            _tipHide = null;
             StopPlayingAnimLoop();
             StopDownloadSpinLoop();
             UnbindScrollbarReveal();
@@ -1002,43 +996,7 @@ namespace Game
 
         void ShowModeTip(string text)
         {
-            ShowHintToast(text, (long)((ModeTipSeconds + ModeTipFadeSeconds) * 1000f));
-        }
-
-        void ShowHintToast(string text, long hideAfterMs)
-        {
-            if (_hintWindows == null)
-                return;
-            if (_hintLabel != null)
-                _hintLabel.text = text ?? string.Empty;
-
-            // TipWindows sizing: TipWindow.ShowTip pad + max width.
-            if (_hintLabel != null)
-            {
-                _hintLabel.style.whiteSpace = WhiteSpace.NoWrap;
-                float fontSize = _hintLabel.resolvedStyle.fontSize;
-                if (fontSize < 1f)
-                    fontSize = 36f;
-                float textW = (_hintLabel.text != null ? _hintLabel.text.Length : 0) * fontSize * 0.62f;
-                float width = Mathf.Clamp(
-                    textW + UiTipToast.PadHorizontal * 2f,
-                    UiTipToast.MinWidth,
-                    UiTipToast.MaxWidth);
-                _hintWindows.style.width = width;
-                _hintWindows.style.marginLeft = -width * 0.5f;
-                _hintLabel.style.whiteSpace = WhiteSpace.Normal;
-                _hintLabel.style.maxWidth = width - UiTipToast.PadHorizontal * 2f;
-            }
-
-            _hintWindows.style.opacity = 1f;
-            _hintWindows.BringToFront();
-            _tipHide?.Pause();
-            _tipHide = Root.schedule.Execute(() =>
-            {
-                if (_hintWindows != null)
-                    _hintWindows.style.opacity = 0f;
-                _tipHide = null;
-            }).StartingIn(hideAfterMs);
+            UiTipToast.ShowMessage(text, ModeTipSeconds + ModeTipFadeSeconds);
         }
 
         // Sprite names for the 3 play modes (yy_danqu / yy_list / yy_suiji).
@@ -1912,12 +1870,9 @@ namespace Game
         // Download gates & pending music
         // -----------------------------------------------------------------------
 
-        /// <summary>
-        /// Shows a brief tip message in the hint window (TipWindows / UICanvasTip).
-        /// </summary>
         void ShowGateTip(string message)
         {
-            ShowHintToast(message, 2500);
+            UiTipToast.ShowMessage(message, 2.5f);
         }
 
         /// <summary>
@@ -2213,6 +2168,29 @@ namespace Game
         {
             RefreshAlbumStrip();
             _list?.RefreshItems();
+        }
+
+        /// <summary>
+        /// Loop/Shuffle auto-advance (and any other PlayIndex) updates playlist
+        /// indices without going through a row click. Rebind visible rows so the
+        /// playing marker moves; do not rebuild, so the user's scroll stays.
+        /// A shuffle jump to another album only clears the stale marker here.
+        /// </summary>
+        void OnPlaylistTrackChanged()
+        {
+            if (_list == null || Root == null || Root.panel == null)
+                return;
+
+            _list.RefreshItems();
+
+            var music = GameEntry.Music;
+            if (music != null
+                && music.CurrentAlbumIndex == _centerAlbum
+                && music.CurrentTrackIndex >= 0
+                && music.CurrentTrackIndex < _trackNames.Count)
+            {
+                ScrollTrackListTo(music.CurrentTrackIndex);
+            }
         }
     }
 }

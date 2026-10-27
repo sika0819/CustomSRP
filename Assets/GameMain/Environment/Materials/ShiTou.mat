@@ -16,7 +16,6 @@ Material:
   m_InvalidKeywords:
   - _CANVAS_ON
   - _INTERNAL_EDGE_ON
-  - _OUTLINE_ON
   - _SHADOWS_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
@@ -126,13 +125,6 @@ Material:
     - _OilFoliage: 0
     - _OilFoliageSkipDay: 0
     - _OilYBillboard: 0
-    - _Outline: 1
-    - _OutlineBreak: 0.12
-    - _OutlineBrushScale: 2.5
-    - _OutlineNoise: 0.55
-    - _OutlineNoiseScale: 3.5
-    - _OutlineWidth: 0.028
-    - _OutlineWobble: 0.85
     - _PaintThickness: 0.18
     - _Parallax: 0.005
     - _QueueOffset: 0
@@ -144,7 +136,7 @@ Material:
     - _ShadowWobble: 0.45
     - _Shadows: 0
     - _Shininess: 0
-    - _Smoothness: 0.5
+    - _Smoothness: 0.6
     - _SmoothnessSource: 0
     - _SmoothnessTextureChannel: 0
     - _SpecSource: 0
@@ -153,14 +145,14 @@ Material:
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
     - _Surface: 0
-    - _TriplanarTiling: 0.06
+    - _TriplanarTiling: 0.1
     - _UseBaseMap: 0
     - _UseEmission: 0
     - _WindNoiseSize: 0.2
     - _WindSpeed: 1
     - _WindStrength: 0
     - _WorkflowMode: 1
-    - _WorldTriplanar: 1
+    - _WorldTriplanar: 2
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 0.3882353, g: 0.4, b: 0.4392157, a: 1}
@@ -169,7 +161,6 @@ Material:
     - _EdgeColor: {r: 0.2, g: 0.22, b: 0.28, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _EmissionLightPosWS: {r: 0, g: 0, b: 0, a: 0}
-    - _OutlineColor: {r: 0.1, g: 0.11, b: 0.14, a: 1}
     - _ShadowTint: {r: 0.3, g: 0.35, b: 0.45, a: 1}
     - _ShadowWarm: {r: 0.5, g: 0.48, b: 0.45, a: 1}
     - _SpecColor: {r: 0.25, g: 0.27, b: 0.3, a: 1}

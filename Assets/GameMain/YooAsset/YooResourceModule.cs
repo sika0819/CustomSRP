@@ -298,6 +298,8 @@ namespace Game
             if (op == null)
                 yield break;
             yield return op;
+            Log.Info(
+                $"[YooAsset] UnloadUnused status={op.Status} destroyedLoaders={op.DestroyedLoaderCount}");
         }
 
         /// <summary>Load an addressed asset; caller owns the handle (Release when done).</summary>
@@ -321,8 +323,11 @@ namespace Game
                 yield break;
             }
 
+            Log.Info($"[YooAsset] handle enter loc={location}");
             AssetHandle handle = DefaultPackage.LoadAssetAsync<T>(location);
+            Log.Info($"[YooAsset] handle created loc={location} done={handle.IsDone}");
             yield return handle;
+            Log.Info($"[YooAsset] handle resume loc={location} status={handle.Status}");
 
             if (handle.Status != EOperationStatus.Succeed)
             {

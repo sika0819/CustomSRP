@@ -209,25 +209,22 @@ float GetDirectionalShadowAttenuation(
         return 1.0;
     }
 
+    // data.y is the world-space PCF radius (meters), used only to offset along the normal.
     float texelSize = _DirectionalShadowCascades[global.cascadeIndex].data.y;
-    // Mild bias only — terrain no longer casts (see IslandMobileTune), so acne is from
-    // atlas texels vs object casters; heavy bias was wiping tree contact shadows.
-#if defined(TERRAIN_SHADOW_RECEIVER)
-    float biasScale = 1.15;
-#else
-    float biasScale = 1.0;
-#endif
     float3 normalBias = surfaceWS.interpolatedNormal * (
-        directional.normalBias * biasScale * texelSize);
+        directional.normalBias * texelSize);
     float3 positionSTS = mul(
         _DirectionalShadowMatrices[directional.tileIndex],
         float4(surfaceWS.position + normalBias, 1.0)
     ).xyz;
 #if defined(TERRAIN_SHADOW_RECEIVER)
+    // STS.z is 0–1 over the cascade depth. Adding the world-space radius here
+    // pushed the contact shadow meters off the trunk. One atlas texel in NDC.
+    float depthBiasNdc = _ShadowAtlasSize.y;
 #if UNITY_REVERSED_Z
-    positionSTS.z += texelSize * 0.2;
+    positionSTS.z += depthBiasNdc;
 #else
-    positionSTS.z -= texelSize * 0.2;
+    positionSTS.z -= depthBiasNdc;
 #endif
     float shadow = SampleDirectionalShadowTerrain(positionSTS);
 #else
@@ -237,16 +234,16 @@ float GetDirectionalShadowAttenuation(
     {
         float texelSize1 = _DirectionalShadowCascades[global.cascadeIndex + 1].data.y;
         normalBias = surfaceWS.interpolatedNormal * (
-            directional.normalBias * biasScale * texelSize1);
+            directional.normalBias * texelSize1);
         positionSTS = mul(
             _DirectionalShadowMatrices[directional.tileIndex + 1],
             float4(surfaceWS.position + normalBias, 1.0)
         ).xyz;
 #if defined(TERRAIN_SHADOW_RECEIVER)
 #if UNITY_REVERSED_Z
-        positionSTS.z += texelSize1 * 0.2;
+        positionSTS.z += depthBiasNdc;
 #else
-        positionSTS.z -= texelSize1 * 0.2;
+        positionSTS.z -= depthBiasNdc;
 #endif
         shadow = lerp(SampleDirectionalShadowTerrain(positionSTS), shadow, global.cascadeBlend);
 #else

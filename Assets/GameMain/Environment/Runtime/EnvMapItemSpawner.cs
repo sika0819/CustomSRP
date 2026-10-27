@@ -24,7 +24,6 @@ namespace Game
         readonly List<AssetHandle> _ownedHandles = new List<AssetHandle>(8);
 
         EnvItemStreamerLite _streamer;
-        EnvMeshColliderLod _colliderLod;
         Transform _focus;
         bool _started;
         bool _released;
@@ -57,10 +56,6 @@ namespace Game
             if (_allMapItems.Count == 0)
                 Log.Error("[MapItem] AllMapItem empty or failed to load");
 
-            _colliderLod = gameObject.GetComponent<EnvMeshColliderLod>()
-                           ?? gameObject.AddComponent<EnvMeshColliderLod>();
-            _colliderLod.Begin(_focus);
-
             const float fillMin = 0.81f;
             const float fillMax = BootLoadingService.TerrainPrepareMax;
             if (_allMapItems.Count > 0)
@@ -69,7 +64,7 @@ namespace Game
                 {
                     _streamer = gameObject.GetComponent<EnvItemStreamerLite>()
                                 ?? gameObject.AddComponent<EnvItemStreamerLite>();
-                    _streamer.Initialize(_allMapItems, _categoryParents, transform, _focus, _colliderLod);
+                    _streamer.Initialize(_allMapItems, _categoryParents, transform, _focus);
                     yield return _streamer.PrefillAroundFocus(fillMin, fillMax, reportProgress);
                 }
                 else
@@ -82,13 +77,6 @@ namespace Game
             _extrasSpawnedCount = 0;
             yield return EnvMapItemExtras.Spawn(
                 transform, _categoryParents, _ownedHandles, n => _extrasSpawnedCount = n);
-
-            // 首铺结束后立刻按焦点打开近处碰撞（不等 RefreshLoop 首拍）。
-            if (_colliderLod != null && _focus != null)
-            {
-                float colRadius = Mathf.Max(48f, EnvStreamingConfig.MeshColliderEnableRadius);
-                _colliderLod.ForceRefreshNear(_focus.position, colRadius);
-            }
 
             IsReady = true;
             Log.Info(
@@ -121,6 +109,7 @@ namespace Game
                 _ownedHandles[i]?.Release();
             _ownedHandles.Clear();
             _allMapItems.Clear();
+            EnvMapItemExtras.ClearLoaded();
             _fullPrefabCache.Clear();
             _fullSpawnedCount = 0;
             _extrasSpawnedCount = 0;
@@ -262,9 +251,6 @@ namespace Game
                     EnvRockColliders.Ensure(instance, d.PrefabName);
                 if (EnvStreamingConfig.IsBridgeCategory(category))
                     EnvBridgePillarFit.Ensure(instance);
-                if (EnvStreamingConfig.IsFarFieldLandmark(d.PrefabName))
-                    EnvLandmarkColliders.Ensure(instance, d.PrefabName);
-                _colliderLod?.Register(instance, pos);
                 _fullSpawnedCount++;
 
                 if (sw.ElapsedMilliseconds >= EnvStreamingConfig.FinalizePerFrameBudgetMs)

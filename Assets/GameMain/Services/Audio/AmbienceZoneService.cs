@@ -144,6 +144,8 @@ namespace Game
 
         /// <summary>标记 inland water 已就绪（收到 OnInlandWaterReady 时设为 true，无需重复设）。</summary>
         static bool _inlandWaterReady;
+        /// <summary>上一轮看见的篝火点燃态。变化时打破 listener-still，否则人站着火才点上永远不开播。</summary>
+        static bool _campfireIgnitedLatched;
         static int _softStopDriveGen;
         static int _attenuationDriveGen;
 
@@ -347,6 +349,7 @@ namespace Game
             _pendingEvaluate = false;
             _restartPending = false;
             _inlandWaterReady = false;
+            _campfireIgnitedLatched = false;
             _hasLastListener = false;
             WaterSurfaceProbe.Clear();
             if (_host != null)
@@ -519,6 +522,8 @@ namespace Game
             BuildMapItemSources();
             Log.Info($"[AmbienceZone] map sources={Sources.Count}");
             EnsureEmitterPool();
+            // 新声源（含 extras 篝火）进来时听者可能没动，不能被 still-skip 吃掉。
+            InvalidateListenerStill();
 
             // InlandWaterInstance 可能比 MapItemSpawner 更晚就绪（异步加载顺序）。
             // 若 water 已就绪（包括事件早于订阅时的兜底），立即 Evaluate；否则等 OnInlandWaterReady。
@@ -624,6 +629,34 @@ namespace Game
 
             if (!hasRiverBed)
                 AmbienceZoneCatalog.AppendNativeRivers(AddSource);
+
+            AppendCampfireExtras();
+        }
+
+        /// <summary>
+        /// Huodui 只在 MapItemExtras，不在 AllMapItem。不扫这份表就没有篝火声源。
+        /// 只收 Campfire：河/瀑的 catalogIndex 会指回 AllMapItem 行。
+        /// </summary>
+        static void AppendCampfireExtras()
+        {
+            IReadOnlyList<MapItemData> extras = EnvMapItemExtras.LoadedItems;
+            if (extras == null || extras.Count == 0)
+                return;
+
+            int added = 0;
+            for (int i = 0; i < extras.Count; i++)
+            {
+                if (!AmbienceZoneCatalog.TryCreateFromMapItem(extras[i], i, out AmbienceEmitterSpec spec))
+                    continue;
+                if (spec.Kind != AmbienceEmitterKind.Campfire)
+                    continue;
+                spec.Id = "campfire_extra_" + i;
+                AddSource(spec);
+                added++;
+            }
+
+            if (added > 0)
+                Log.Info("[AmbienceZone] campfire extras=" + added);
         }
 
         static void AddSource(AmbienceEmitterSpec spec)
@@ -652,6 +685,13 @@ namespace Game
             }
             if (!WanosInteraction.TryGetListenerPosition(out Vector3 listener))
                 return;
+
+            bool campfireIgnited = CampfireWeatherGate.IsVisuallyIgnited;
+            if (campfireIgnited != _campfireIgnitedLatched)
+            {
+                _campfireIgnitedLatched = campfireIgnited;
+                InvalidateListenerStill();
+            }
 
             // Listener-still skip: if the listener moved < 0.09m since the last
             // tick, the previous Enter/Exit decisions are still valid. Cheaper

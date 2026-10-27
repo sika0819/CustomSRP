@@ -12,10 +12,36 @@ namespace CustomSRP.Editor
 {
     /// <summary>
     /// 按 AllMapItem LOD0 mesh XZ 轮廓烤草地禁种遮罩。花草/特效不挡。
+    /// 篝火在 MapItemExtras，按占地圆盘另盖一圈，避免草长进柴堆缝和边上。
     /// </summary>
     public static class OilTerrainGrassKeepOutBakeTool
     {
         const int Res = OilTerrainGrassKeepOutBake.DefaultRes;
+        const string KeepOutFlagRelPath = "Temp/bake_grass_keepout.flag";
+
+        [InitializeOnLoadMethod]
+        static void WatchKeepOutFlag()
+        {
+            EditorApplication.delayCall += TryConsumeKeepOutFlag;
+        }
+
+        static void TryConsumeKeepOutFlag()
+        {
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                EditorApplication.delayCall += TryConsumeKeepOutFlag;
+                return;
+            }
+
+            string flag = Path.GetFullPath(Path.Combine(Application.dataPath, "..", KeepOutFlagRelPath));
+            if (!File.Exists(flag))
+                return;
+            try { File.Delete(flag); } catch { /* ignore */ }
+            if (EditorApplication.isPlaying)
+                return;
+            Log.Info("[OilTerrainGrass] Flag detected — baking keep-out");
+            BakeMenu();
+        }
 
         static readonly HashSet<string> SkipParents = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -121,6 +147,8 @@ namespace CustomSRP.Editor
                 EditorUtility.ClearProgressBar();
             }
 
+            int huodui = StampHuodui(grid, Res, originX, originZ, cell);
+
             data = new OilTerrainGrassKeepOutBake.Data
             {
                 OriginX = originX,
@@ -153,8 +181,111 @@ namespace CustomSRP.Editor
             Log.Info(
                 $"[OilTerrainGrass] KeepOut wrote {OilTerrainGrassKeepOutBake.EditorPath} " +
                 $"items={used} skip={skipped} noMesh={noMesh} missing={missingPrefab} " +
-                $"rivers={rivers} cells={marked}/{grid.Length} cell={cell:F2}");
+                $"huodui={huodui} rivers={rivers} cells={marked}/{grid.Length} cell={cell:F2}");
             return true;
+        }
+
+        /// <summary>篝火模型外再留的空地。柴堆是细网格，只光栅三角形会在缝里和边上留草。</summary>
+        const float HuoduiKeepOutPadMeters = 1.5f;
+
+        static int StampHuodui(byte[] grid, int res, float originX, float originZ, float cell)
+        {
+            var text = AssetDatabase.LoadAssetAtPath<TextAsset>(SceneAssets.MapItemExtrasAssetPath);
+            if (text == null)
+            {
+                Log.Warning("[OilTerrainGrass] MapItemExtras missing — Huodui keep-out skipped");
+                return 0;
+            }
+
+            var items = new List<MapItemData>(64);
+            if (!MapItemData.ReadBinaryTo(text.bytes, items))
+            {
+                Log.Warning("[OilTerrainGrass] MapItemExtras parse failed — Huodui keep-out skipped");
+                return 0;
+            }
+
+            string path = SceneAssets.DaoYu1EditorPath("Other", "Huodui");
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            Lod0Mesh[] meshes = prefab != null ? ExtractLod0(prefab) : Array.Empty<Lod0Mesh>();
+            if (meshes == null || meshes.Length == 0)
+                Log.Warning("[OilTerrainGrass] Huodui mesh missing — stamping fallback disc");
+
+            var worldScratch = Array.Empty<Vector3>();
+            int stamped = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                MapItemData item = items[i];
+                if (item == null || !item.IsActive || item.PrefabName != "Huodui")
+                    continue;
+
+                var trs = Matrix4x4.TRS(item.Pos, Quaternion.Euler(item.Rotation), item.Scale);
+                float radius = HuoduiKeepOutPadMeters;
+                if (meshes != null && meshes.Length > 0)
+                {
+                    for (int m = 0; m < meshes.Length; m++)
+                        RasterizeMesh(grid, res, originX, originZ, cell, meshes[m], trs, ref worldScratch);
+                    radius += FootprintRadius(meshes, trs, item.Pos);
+                }
+                else
+                {
+                    float s = Mathf.Max(Mathf.Abs(item.Scale.x), Mathf.Abs(item.Scale.z));
+                    radius += 1.35f * Mathf.Max(s, 0.01f);
+                }
+
+                StampDisc(grid, res, originX, originZ, cell, item.Pos.x, item.Pos.z, radius);
+                stamped++;
+            }
+
+            Log.Info($"[OilTerrainGrass] Huodui keep-out n={stamped} pad={HuoduiKeepOutPadMeters:F1}m");
+            return stamped;
+        }
+
+        static float FootprintRadius(Lod0Mesh[] meshes, Matrix4x4 trs, Vector3 origin)
+        {
+            float r2 = 0f;
+            for (int m = 0; m < meshes.Length; m++)
+            {
+                Vector3[] verts = meshes[m].Verts;
+                if (verts == null)
+                    continue;
+                for (int i = 0; i < verts.Length; i++)
+                {
+                    Vector3 w = trs.MultiplyPoint3x4(verts[i]);
+                    float dx = w.x - origin.x;
+                    float dz = w.z - origin.z;
+                    float d2 = dx * dx + dz * dz;
+                    if (d2 > r2)
+                        r2 = d2;
+                }
+            }
+
+            return Mathf.Sqrt(r2);
+        }
+
+        static void StampDisc(
+            byte[] grid, int res, float originX, float originZ, float cell,
+            float cx, float cz, float radius)
+        {
+            if (radius <= 0f)
+                return;
+            float r2 = radius * radius;
+            int x0 = Mathf.Clamp(Mathf.FloorToInt((cx - radius - originX) / cell), 0, res - 1);
+            int x1 = Mathf.Clamp(Mathf.FloorToInt((cx + radius - originX) / cell), 0, res - 1);
+            int z0 = Mathf.Clamp(Mathf.FloorToInt((cz - radius - originZ) / cell), 0, res - 1);
+            int z1 = Mathf.Clamp(Mathf.FloorToInt((cz + radius - originZ) / cell), 0, res - 1);
+            for (int z = z0; z <= z1; z++)
+            {
+                float pz = originZ + (z + 0.5f) * cell;
+                float dz = pz - cz;
+                int row = z * res;
+                for (int x = x0; x <= x1; x++)
+                {
+                    float px = originX + (x + 0.5f) * cell;
+                    float dx = px - cx;
+                    if (dx * dx + dz * dz <= r2)
+                        grid[row + x] = 1;
+                }
+            }
         }
 
         /// <summary>河面外再留一圈岸，避免草种进浅水和泥岸。</summary>

@@ -258,6 +258,20 @@ namespace YooAsset
             }
             OperationSystem.MaxTimeSlice = milliseconds;
         }
+
+        /// <summary>当前异步系统时间片（毫秒）。</summary>
+        public static long OperationSystemMaxTimeSlice => OperationSystem.MaxTimeSlice;
+
+        /// <summary>
+        /// 分帧卸载用。允许低于 <see cref="SetOperationSystemMaxTimeSlice"/> 的 10ms 下限。
+        /// 调用方必须在结束后把时间片改回去。
+        /// </summary>
+        public static void SetOperationSystemMaxTimeSliceExact(long milliseconds)
+        {
+            if (milliseconds < 1)
+                milliseconds = 1;
+            OperationSystem.MaxTimeSlice = milliseconds;
+        }
         #endregion
 
         #region 调试信息

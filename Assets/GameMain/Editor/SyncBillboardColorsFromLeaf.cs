@@ -17,7 +17,7 @@ namespace Game
         static readonly string[] SyncProps =
         {
             "_TopColor", "_BottomColor", "_AmbientColor", "_ShadowTint", "_ShadowWarm",
-            "_SpecularColor", "_OutlineColor"
+            "_SpecularColor"
         };
 
         const float AlphaThreshold = 0.35f;

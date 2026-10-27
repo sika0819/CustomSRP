@@ -118,7 +118,11 @@ namespace Game
             GameEntry.Weather?.SetTimeOfDay(preset.TimeHours);
             GameEntry.Weather?.ClearPanelTransitionLock();
             GameEntry.Weather?.SetWeather(preset.WeatherKind, preset.WeatherLevel);
-            GameEntry.Weather?.SetFogDensity(preset.FogDensity);
+            // 关雾 / Clear：强制 0.003，避免旧资产仍写 0.007~0.01。
+            float fog = preset.WeatherLevel <= 0 || preset.WeatherKind == IslandWeatherKind.Clear
+                ? 0.003f
+                : preset.FogDensity;
+            GameEntry.Weather?.SetFogDensity(fog);
             // Per-preset light color override (alpha=0 means "use the time-of-day table").
             Color? lightOverride = preset.LightColorOverride.a > 0.001f
                 ? (Color?)preset.LightColorOverride

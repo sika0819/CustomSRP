@@ -1,4 +1,4 @@
-# 环境（MapItem 流式加载 / 碰撞体 LOD / 篝火 / 原生合批）
+# 环境（MapItem 流式加载 / 石头碰撞 / 篝火 / 原生合批）
 
 模块文档索引见 [00-overview.md](00-overview.md)。
 
@@ -11,7 +11,7 @@
 | [Environment/Runtime/EnvMapItemSpawner.cs](../Environment/Runtime/EnvMapItemSpawner.cs) | 330 | MapItem 装配总入口（读数据 → 分类 → 流式/全量 → extras） |
 | [Environment/Runtime/EnvItemStreamerLite.cs](../Environment/Runtime/EnvItemStreamerLite.cs) | 583 | 距离流式生成 / 回收 |
 | [Environment/Runtime/EnvStreamingConfig.cs](../Environment/Runtime/EnvStreamingConfig.cs) | 469 | **所有半径与分类策略的唯一真源** |
-| [Environment/Runtime/EnvMeshColliderLod.cs](../Environment/Runtime/EnvMeshColliderLod.cs) | ~210 | MeshCollider 距离开关（PhysX 优化） |
+| [Environment/Runtime/EnvRockColliders.cs](../Environment/Runtime/EnvRockColliders.cs) | ~110 | 石头缺碰撞时补 MeshCollider；预制体已有则保留 |
 | [Environment/Runtime/EnvNativeInstancing.cs](../Environment/Runtime/EnvNativeInstancing.cs) | 430 | Android `Graphics.RenderMeshInstanced` 合批 |
 | [Environment/Runtime/EnvBridgePillarFit.cs](../Environment/Runtime/EnvBridgePillarFit.cs) | 235 | 桥墩底部贴合地形 |
 | [Environment/Runtime/EnvMapItemExtras.cs](../Environment/Runtime/EnvMapItemExtras.cs) | 232 | `FX_Day` / `FX_Night` / 篝火 extras |
@@ -40,18 +40,16 @@ void Release();
 `Run` 的顺序：
 ```
 读 AllMapItem.bytes（YooAsset → Editor AssetDatabase → StreamingAssets/AllMapItem.bytes）
-→ 挂 EnvMeshColliderLod 并 Begin(focus)
 → 流式模式：EnvItemStreamerLite.Initialize + PrefillAroundFocus
   全量模式：FullSpawnBudgeted
 → EnvMapItemExtras.Spawn（篝火 / FX）
-→ colliderLod.ForceRefreshNear(focus)
 ```
 
 ### EnvItemStreamerLite
 
 ```csharp
 void Initialize(List<MapItemData> data, Dictionary<string,Transform> categoryParents,
-                Transform mapItemRoot, Transform focus, EnvMeshColliderLod colliderLod);
+                Transform mapItemRoot, Transform focus);
 IEnumerator PrefillAroundFocus(float progressMin, float progressMax, Action<float,string> report);
 int ItemCount { get; } int SpawnedCount { get; }
 void Release();
@@ -59,7 +57,8 @@ void Release();
 
 - 每帧最多评估 256 个 item（游标轮转），生成预算 `SpawnPerFrameBudget`、回收 `DespawnPerFrameBudget`。
 - 生成后处理链：`EnvGroundFit.TrySnapMapItemY` → 关闭远处投影 → `EnvRockColliders.Ensure`（石头）
-  → `EnvBridgePillarFit.Ensure`（桥）→ `EnvLandmarkColliders.Ensure` → 注册碰撞体 → 原生合批。
+  → `EnvBridgePillarFit.Ensure`（桥）→ 原生合批。
+- 大石（Cliff / Cave / Ramp / Spike / Large）碰撞在 prefab 上，引用 `Models/Collision/*_Collision`。不再按距离开关 MeshCollider。
 - 投影迟滞：`ShadowCastMaxDist=26` 关、`ShadowCastRestoreDist=22` 开。
 
 ### EnvStreamingConfig（可调参数总表）
@@ -75,8 +74,6 @@ static float TreeRing0 / TreeRing1;  static float TreeBillboardKeepRadius = 380f
 // 预算
 static int SpawnPerFrameBudget = 24;  static int DespawnPerFrameBudget = 16;
 static float FinalizePerFrameBudgetMs = 3f;
-// 碰撞体
-static float MeshColliderEnableRadius = 90f;  static float MeshColliderDisableRadius = 120f;
 // 原生合批
 static bool NativeInstancingEnabled = false;  static float NativeInstancingMaxDist = 180f;
 // 分类策略
@@ -86,18 +83,10 @@ static bool IsFarFieldLandmark / IsBuildingForFarCull / IsSmallRockForFarCull
 static void ApplyMobileTierDefaults();   // #if !UNITY_EDITOR，移动端收紧半径
 ```
 
-### EnvMeshColliderLod
+### 石头碰撞
 
-```csharp
-void Begin(Transform focus);
-void Register(GameObject go, Vector3 worldPos);
-void Unregister(GameObject go);
-void ForceRefresh();
-void ForceRefreshNear(Vector3 worldPos, float radius);   // 传送 / 切预设后调用
-```
-
-- 距离用 **XZ 平面到 AABB 最近点**（`bounds.ClosestPoint`），不是到 center。
-- `Mountain / Cliff / Cave / Ramp / Spike / Large` 命名的碰撞体常开。
+大石 prefab 自带启用的非 Trigger `MeshCollider`，网格是预烘焙的 `*_Collision`。
+`EnvRockColliders.Ensure` 只在实例上没有 MeshCollider、且 `ShouldHaveRockCollider` 为真时才补。
 
 ### FireController / CampfireWeatherGate
 
@@ -122,8 +111,8 @@ static void ClearVisualIgnited();
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 走远后地面物体「掉下去」/ 撞不到 | 碰撞体 LOD 被误清空（已修复）：旧实现按 `transform.root` 比较，所有 MapItem 共用 root，卸载任一实例会清掉全表 | 现在只摘该实例自身与子节点；`Register` 去重 |
-| 帧率随走动起伏 | `EnvMeshColliderLod.Refresh()` 每 0.25s 扫全表；`EnvNativeInstancing` 每帧全量 `SyncMatrices` | 调 `MeshColliderEnableRadius` / `SpawnPerFrameBudget`；移动端走 `ApplyMobileTierDefaults` |
+| 走远后撞不到大石 | 大石 prefab 缺 MeshCollider，或 `*_Collision` 网格丢失 | 看 ShiTou 里 Cliff/Cave/Ramp/Spike/Large 的 MeshCollider 是否启用并指向 Collision 资源 |
+| 帧率随走动起伏 | `EnvNativeInstancing` 每帧全量 `SyncMatrices`；全岛 MeshCollider 常开 | 调 `SpawnPerFrameBudget`；移动端走 `ApplyMobileTierDefaults` |
 | 植物生成在坡上悬空 / 陷地 | `EnvGroundFit.TrySnapMapItemY` 只对部分类别生效 | 看 prefab 名与分类策略 |
 | 桥墩悬空 | `EnvBridgePillarFit` 按顶点聚类中心采样地形高度，斜坡上会有一端悬空 | 已知限制 |
 | 桥墩被拉变形 | `yCut = bounds.min.y + size.y × 0.73` 的启发式只对特定比例的模型成立 | 换模型需重调 |

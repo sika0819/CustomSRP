@@ -87,7 +87,6 @@ void SampleEnterDolly(float t01);
 void NudgeExitWalk(float dt);
 void EndTransitionDrive();
 bool IsHeightTransitioning { get; }
-void RefreshNearbyColliders();
 ```
 
 Inspector 关键值：`MoveSpeed=9`、`StickYawSpeed=70`、`Pitch=12`、`EyeHeight=3`、`Gravity=28`、

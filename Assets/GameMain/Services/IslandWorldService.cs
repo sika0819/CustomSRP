@@ -194,6 +194,7 @@ namespace Game
 
             if (_terrainInstance != null)
             {
+                DestroyMobileShadowMaterials(_terrainInstance);
                 UnityEngine.Object.Destroy(_terrainInstance);
                 _terrainInstance = null;
             }
@@ -223,6 +224,25 @@ namespace Game
 
             _loaded = false;
             IsNearReady = false;
+        }
+
+        /// <summary>
+        /// (MobileShadow) 是进岛时克隆的地形材质，Destroy(地形) 不会销毁它。
+        /// </summary>
+        static void DestroyMobileShadowMaterials(GameObject terrainRoot)
+        {
+            Terrain[] terrains = terrainRoot.GetComponentsInChildren<Terrain>(true);
+            for (int i = 0; i < terrains.Length; i++)
+            {
+                Terrain terrain = terrains[i];
+                if (terrain == null)
+                    continue;
+                Material mat = terrain.materialTemplate;
+                if (mat == null || mat.name.IndexOf("(MobileShadow)", System.StringComparison.Ordinal) < 0)
+                    continue;
+                terrain.materialTemplate = null;
+                UnityEngine.Object.Destroy(mat);
+            }
         }
 
         /// <summary>

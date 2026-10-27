@@ -874,11 +874,11 @@ namespace CustomSRP
                 RenderSettings.fogMode = FogMode.ExponentialSquared;
             }
 
-            // Lighting window default / manual density (~0.1+) milks ExpSquared into a white slab.
-            // Authored haze stays near 0.001; clamp only pathological values.
-            if (RenderSettings.fogDensity > 0.05f)
+            // Lighting window defaults (~0.1+) milk ExpSquared into a white slab.
+            // Authored Foggy L3 is 0.012 — clamp only values above that band.
+            if (RenderSettings.fogDensity > 0.12f)
             {
-                RenderSettings.fogDensity = 0.001f;
+                RenderSettings.fogDensity = 0.003f;
             }
 
             if (RenderSettings.fogColor != fog)

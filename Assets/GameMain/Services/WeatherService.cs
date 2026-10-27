@@ -22,18 +22,31 @@ namespace Game
         /// <summary>Active Boluo AtmosphereProfile look (sky / light / fog pigments).</summary>
         public IslandLookKind LookKind { get; private set; } = IslandLookKind.Canonical;
         /// <summary>Absolute ExpSquared density pushed to <see cref="IAtmosphereVisualDriver"/>.</summary>
-        public float FogDensity { get; private set; } = 0.001f;
+        public float FogDensity { get; private set; } = 0.003f;
         public bool IsTimeTransitioning => _timeLerpActive;
 
-        /// <summary>Panel gesture lock. Preset apply clears it and is never refused.</summary>
+        /// <summary>
+        /// Panel gesture lock, and the weather visual blend length.
+        /// Preset apply clears the lock and is never refused.
+        /// </summary>
         public const float PanelTransitionSeconds = 2f;
+
+        /// <summary>0–1 wind shown on grass, ocean, and clouds. Eases while <see cref="IsWeatherTransitioning"/>.</summary>
+        public float VisualWind01 { get; private set; }
+
+        /// <summary>Boluo Wind/Rain/Foggy RTPC units (level × 30) while a weather blend is in flight.</summary>
+        public float VisualRainAudio { get; private set; }
+
+        public float VisualFoggyAudio { get; private set; }
+
+        public bool IsWeatherTransitioning => _weatherLerpActive;
 
         public bool IsWeatherBusy => Time.unscaledTime < _panelBusyUntil;
 
         float _panelBusyUntil;
 
-        /// <summary>Cloud/L1 haze (default 0.001); weather UI scales absolute <see cref="FogDensity"/> from this.</summary>
-        float _hazeFogDensity = 0.001f;
+        /// <summary>开雾基系数（默认 0.003）；天气 UI 用 <see cref="WeatherFogScale"/> 乘出绝对密度。</summary>
+        float _hazeFogDensity = 0.003f;
 
         bool _timeLerpActive;
         float _timeLerpElapsed;
@@ -45,6 +58,19 @@ namespace Game
         bool _lookBlendActive;
         IslandLookKind _lookBlendTo;
         bool _suppressPersist;
+
+        bool _weatherLerpActive;
+        float _weatherLerpElapsed;
+        int _weatherBlendId;
+        float _weatherFromFog;
+        float _weatherToFog;
+        float _weatherFromWind;
+        float _weatherToWind;
+        float _weatherFromRainAudio;
+        float _weatherToRainAudio;
+        float _weatherFromFoggyAudio;
+        float _weatherToFoggyAudio;
+        float _displayedFog;
 
         public static WeatherService Ensure()
         {
@@ -65,6 +91,12 @@ namespace Game
         }
 
         void Update()
+        {
+            TickTimeLerp();
+            TickWeatherLerp();
+        }
+
+        void TickTimeLerp()
         {
             if (!_timeLerpActive)
                 return;
@@ -92,6 +124,29 @@ namespace Game
             PersistAtmosphereIfSettled();
         }
 
+        void TickWeatherLerp()
+        {
+            if (!_weatherLerpActive)
+                return;
+
+            // Unscaled so the blend ends with the panel lock (also unscaled).
+            _weatherLerpElapsed += Time.unscaledDeltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_weatherLerpElapsed / PanelTransitionSeconds));
+            ApplyWeatherLerp(t);
+            if (t < 1f)
+                return;
+
+            _weatherLerpActive = false;
+            VisualWind01 = _weatherToWind;
+            VisualRainAudio = _weatherToRainAudio;
+            VisualFoggyAudio = _weatherToFoggyAudio;
+            _displayedFog = _weatherToFog;
+            PushWeather();
+            PushFogDensity();
+            WeatherAudioBridge.Refresh();
+            PersistAtmosphereIfSettled();
+        }
+
         /// <summary>
         /// 进岛：有存档快照则恢复；否则墙钟 → 时段锚点，并写入首份快照。
         /// </summary>
@@ -110,14 +165,15 @@ namespace Game
             try
             {
                 StopTimeLerp();
+                _weatherLerpActive = false;
                 ClearPanelTransitionLock();
                 Kind = IslandWeatherKind.Cloud;
                 Level = 1;
                 Hours = 12f;
                 Period = IslandTimePeriod.Noon;
                 LookKind = IslandLookKind.Canonical;
-                FogDensity = 0.001f;
-                _hazeFogDensity = 0.001f;
+                FogDensity = 0.003f;
+                _hazeFogDensity = 0.003f;
                 PushAll();
             }
             finally
@@ -258,12 +314,57 @@ namespace Game
             _panelBusyUntil = 0f;
         }
 
-        public void SetWeather(IslandWeatherKind kind, int level, bool fireEvent = true)
+        public void SetWeather(IslandWeatherKind kind, int level, bool fireEvent = true, bool animate = false)
         {
             // Level 0 keeps the requested kind (Wind/Rain/Foggy off). Clear is the only kind forced to 0.
+            int nextLevel = kind == IslandWeatherKind.Clear ? 0 : Mathf.Clamp(level, 0, 3);
+            bool changed = Kind != kind || Level != nextLevel;
+            if (!animate || !isActiveAndEnabled || !changed)
+            {
+                CommitWeather(kind, nextLevel, fireEvent);
+                return;
+            }
+
+            float fromFog = _weatherLerpActive ? _displayedFog : FogDensity;
+            float fromWind = VisualWind01;
+            float fromRainAudio = _weatherLerpActive
+                ? VisualRainAudio
+                : AudioUnits(Kind, Level, IslandWeatherKind.Rain);
+            float fromFoggyAudio = _weatherLerpActive
+                ? VisualFoggyAudio
+                : AudioUnits(Kind, Level, IslandWeatherKind.Foggy);
+
             Kind = kind;
-            Level = kind == IslandWeatherKind.Clear ? 0 : Mathf.Clamp(level, 0, 3);
+            Level = nextLevel;
             FogDensity = _hazeFogDensity * WeatherFogScale(Kind, Level);
+            _weatherFromFog = fromFog;
+            _weatherToFog = FogDensity;
+            _weatherFromWind = fromWind;
+            _weatherToWind = WindFactor(Kind, Level);
+            _weatherFromRainAudio = fromRainAudio;
+            _weatherToRainAudio = AudioUnits(Kind, Level, IslandWeatherKind.Rain);
+            _weatherFromFoggyAudio = fromFoggyAudio;
+            _weatherToFoggyAudio = AudioUnits(Kind, Level, IslandWeatherKind.Foggy);
+            _weatherBlendId++;
+            _weatherLerpElapsed = 0f;
+            _weatherLerpActive = true;
+            // t = 0 keeps the current look. Kind is already the selection so the icon can update.
+            ApplyWeatherLerp(0f);
+            if (fireEvent && GameEntry.Event != null)
+                GameEntry.Event.Fire(this, WeatherChangedEventArgs.Create(Kind, Level));
+            GameEntry.AtmosphereProps?.Refresh();
+        }
+
+        void CommitWeather(IslandWeatherKind kind, int level, bool fireEvent)
+        {
+            _weatherLerpActive = false;
+            Kind = kind;
+            Level = level;
+            FogDensity = _hazeFogDensity * WeatherFogScale(Kind, Level);
+            _displayedFog = FogDensity;
+            VisualWind01 = WindFactor(Kind, Level);
+            VisualRainAudio = AudioUnits(Kind, Level, IslandWeatherKind.Rain);
+            VisualFoggyAudio = AudioUnits(Kind, Level, IslandWeatherKind.Foggy);
             PushWeather();
             PushFogDensity();
             if (fireEvent && GameEntry.Event != null)
@@ -272,34 +373,68 @@ namespace Game
             PersistAtmosphereIfSettled();
         }
 
+        void ApplyWeatherLerp(float t)
+        {
+            VisualWind01 = Mathf.Lerp(_weatherFromWind, _weatherToWind, t);
+            VisualRainAudio = Mathf.Lerp(_weatherFromRainAudio, _weatherToRainAudio, t);
+            VisualFoggyAudio = Mathf.Lerp(_weatherFromFoggyAudio, _weatherToFoggyAudio, t);
+            _displayedFog = Mathf.Lerp(_weatherFromFog, _weatherToFog, t);
+            foreach (IAtmosphereVisualDriver driver in FindDrivers())
+                driver.SetWeatherBlend(_weatherBlendId, Kind, Level, t);
+            PushDisplayedFog();
+            WeatherAudioBridge.Refresh();
+        }
+
+        static float WindFactor(IslandWeatherKind kind, int level) =>
+            kind == IslandWeatherKind.Wind && level > 0 ? Mathf.Clamp(level, 0, 3) / 3f : 0f;
+
+        /// <summary>Boluo RTPC: curWeatherState × 30. Other kinds contribute 0.</summary>
+        static float AudioUnits(IslandWeatherKind kind, int level, IslandWeatherKind slot)
+        {
+            if (kind != slot || level <= 0)
+                return 0f;
+            return Mathf.Clamp(level, 0, 3) * 30f;
+        }
+
         /// <summary>
         /// Pin absolute ExpSquared density (preset apply). Backs out haze so later weather UI can rescale.
         /// </summary>
         public void SetFogDensity(float density)
         {
+            if (_weatherLerpActive)
+            {
+                _weatherLerpActive = false;
+                VisualWind01 = WindFactor(Kind, Level);
+                VisualRainAudio = AudioUnits(Kind, Level, IslandWeatherKind.Rain);
+                VisualFoggyAudio = AudioUnits(Kind, Level, IslandWeatherKind.Foggy);
+                PushWeather();
+            }
+
             FogDensity = Mathf.Max(0f, density);
             float scale = WeatherFogScale(Kind, Level);
             _hazeFogDensity = scale > 1e-4f ? FogDensity / scale : FogDensity;
+            _displayedFog = FogDensity;
             PushFogDensity();
             PersistAtmosphereIfSettled();
         }
 
         /// <summary>
-        /// Multiplier on haze base (default 0.001). Foggy L1/L2/L3 → 0.0016 / 0.0019 / 0.0022.
+        /// Multiplier on haze base (default 0.003).
+        /// 关雾 / Clear → 1（0.003）；Foggy 小/中/大 → 2/3/4（0.006 / 0.009 / 0.012）。
         /// </summary>
         public static float WeatherFogScale(IslandWeatherKind kind, int level)
         {
             int lv = Mathf.Clamp(level, 0, 3);
-            // Closed gear (any kind) and Clear share the clear-sky haze.
+            // Closed gear (any kind) and Clear: same as haze base.
             if (lv <= 0 || kind == IslandWeatherKind.Clear)
-                return 0.85f;
+                return 1f;
 
             switch (kind)
             {
                 case IslandWeatherKind.Foggy:
-                    if (lv == 1) return 1.6f; // 小雾
-                    if (lv == 2) return 1.9f; // 中雾
-                    return 2.2f;              // 大雾
+                    if (lv == 1) return 2f; // 小雾 0.006
+                    if (lv == 2) return 3f; // 中雾 0.009
+                    return 4f;              // 大雾 0.012
                 case IslandWeatherKind.Rain:
                     if (lv == 1) return 1.2f;
                     if (lv == 2) return 1.35f;
@@ -361,6 +496,14 @@ namespace Game
 
         void PushAll()
         {
+            if (!_weatherLerpActive)
+            {
+                VisualWind01 = WindFactor(Kind, Level);
+                VisualRainAudio = AudioUnits(Kind, Level, IslandWeatherKind.Rain);
+                VisualFoggyAudio = AudioUnits(Kind, Level, IslandWeatherKind.Foggy);
+                _displayedFog = FogDensity;
+            }
+
             PushLookKind();
             PushTime();
             PushWeather();
@@ -377,7 +520,7 @@ namespace Game
 
         void PersistAtmosphereIfSettled()
         {
-            if (_suppressPersist || _timeLerpActive)
+            if (_suppressPersist || _timeLerpActive || _weatherLerpActive)
                 return;
             BoluoGameSave.CaptureIslandAtmosphere(Kind, Level, Hours, Period, LookKind, FogDensity);
         }
@@ -413,14 +556,29 @@ namespace Game
 
         void PushWeather()
         {
+            if (_weatherLerpActive)
+            {
+                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_weatherLerpElapsed / PanelTransitionSeconds));
+                foreach (IAtmosphereVisualDriver driver in FindDrivers())
+                    driver.SetWeatherBlend(_weatherBlendId, Kind, Level, t);
+                return;
+            }
+
             foreach (IAtmosphereVisualDriver driver in FindDrivers())
                 driver.SetWeather(Kind, Level);
         }
 
         void PushFogDensity()
         {
+            PushDisplayedFog(_weatherLerpActive ? _displayedFog : FogDensity);
+        }
+
+        void PushDisplayedFog() => PushDisplayedFog(_displayedFog);
+
+        void PushDisplayedFog(float density)
+        {
             foreach (IAtmosphereVisualDriver driver in FindDrivers())
-                driver.SetFogDensity(FogDensity);
+                driver.SetFogDensity(density);
         }
 
         Color? _lightColorOverride;

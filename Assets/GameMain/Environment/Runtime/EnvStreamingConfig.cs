@@ -113,14 +113,6 @@ namespace Game
 
         public static bool IsPostUncoverQuiet =>
             Time.realtimeSinceStartup < _postUncoverQuietUntil;
-        /// <summary>
-        /// 近距启用 MeshCollider。须明显大于走路半秒路程，否则高速接近大石时
-        /// 碰撞体尚未打开就会穿进 mesh，再打开也难把 CharacterController 顶出来。
-        /// </summary>
-        public static float MeshColliderEnableRadius = 90f;
-
-        /// <summary>远距关闭 MeshCollider（与 Enable 留滞后）。</summary>
-        public static float MeshColliderDisableRadius = 120f;
 
         /// <summary>
         /// 非 Cliff/Cave/Ramp/Spike/Large 的石头：世界空间最长边 ≥ 此值才补 MeshCollider。
@@ -224,15 +216,6 @@ namespace Game
                    || prefabName.IndexOf("Ramp", System.StringComparison.OrdinalIgnoreCase) >= 0
                    || prefabName.IndexOf("Spike", System.StringComparison.OrdinalIgnoreCase) >= 0
                    || prefabName.IndexOf("Large", System.StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        /// <summary>
-        /// MeshCollider 永不按距离关闭：Mountain 地标 + Cliff/Cave/Ramp/Spike/Large。
-        /// 大石可视距离远大于旧 collider LOD 半径，关碰撞会直接穿模。
-        /// </summary>
-        public static bool ShouldKeepMeshColliderAlwaysOn(string objectName)
-        {
-            return IsFarFieldLandmark(objectName) || IsLargeRockPrefab(objectName);
         }
 
         /// <summary>
@@ -575,9 +558,6 @@ namespace Game
             // 帐篷：真机仍须远于 House；配合 prefab LOD 阈值放宽，避免 40–80m 闪没。
             TentLodHideDistance = 200f;
             TentLodShowDistance = 160f;
-            // 真机略收，但仍须大于 MoveSpeed 数帧路程，避免穿进未开碰撞的大石。
-            MeshColliderEnableRadius = 72f;
-            MeshColliderDisableRadius = 96f;
 
             // 格子驻留须盖住树环（Boluo：Ring1 >= TreeRing1）
             Ring1EnterRadius = Mathf.Max(Ring1EnterRadius, TreeRing1EnterRadius);

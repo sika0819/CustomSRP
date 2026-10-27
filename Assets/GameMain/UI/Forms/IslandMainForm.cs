@@ -84,7 +84,13 @@ namespace Game
         float _presetLabelFadeTo;
         float _presetLabelFadeDuration;
         float _presetLabelFadeElapsed = -1f;
-        bool _presetTransitionBusy;
+        public static bool IsPresetTransitionBusy { get; private set; }
+
+        bool _presetTransitionBusy
+        {
+            get => IsPresetTransitionBusy;
+            set => IsPresetTransitionBusy = value;
+        }
         int _transitionPresetId;
         int _queuedPresetId;
         float _phaseElapsed;
@@ -770,6 +776,8 @@ namespace Game
 
             if (queued > 0)
                 BeginPresetTransition(queued);
+            else
+                IslandAssetReclaimScheduler.Begin();
         }
 
         void ShowInputBlocker(bool on)

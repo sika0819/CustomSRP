@@ -21,6 +21,85 @@ namespace Game
         /// <summary>TipWindows prefab default anchored Y (above stage center).</summary>
         public const float DefaultAnchoredY = 472f;
 
+        public struct Request
+        {
+            public string Message;
+            public float Seconds;
+            public float AnchoredY;
+            public bool Error;
+        }
+
+        static bool _hasPending;
+        static Request _pending;
+
+        /// <summary>
+        /// Show the global tip bubble. It is not parented to a sliding sheet.
+        /// </summary>
+        public static void ShowMessage(
+            string message,
+            float seconds = 1.6f,
+            float anchoredY = DefaultAnchoredY,
+            bool error = false)
+        {
+            _pending = new Request
+            {
+                Message = message ?? string.Empty,
+                Seconds = seconds,
+                AnchoredY = anchoredY,
+                Error = error,
+            };
+            _hasPending = true;
+
+            if (TipToastForm.Current != null)
+            {
+                TipToastForm.Current.FlushPending();
+                return;
+            }
+
+            EnsureHost();
+        }
+
+        /// <summary>Open the tip layer once and keep it for the island session.</summary>
+        public static void EnsureHost()
+        {
+            if (TipToastForm.Current != null)
+                return;
+
+            if (GameEntry.UI == null)
+            {
+                UnityEngine.Debug.LogWarning("[UiTipToast] UI is not ready.");
+                return;
+            }
+
+            GameEntry.EnsureUiGroups();
+            if (GameEntry.UI.HasUIForm(UiAssets.TipToastForm))
+                return;
+
+            // pauseCoveredUIForm: false — the bubble must not pause the sheet under it.
+            GameEntry.UI.OpenUIForm(UiAssets.TipToastForm, UiAssets.TipGroup, false);
+        }
+
+        public static void ResetSession()
+        {
+            _hasPending = false;
+            _pending = default;
+            TipToastForm.ClearCurrent();
+        }
+
+        internal static void NotifyHostClosed()
+        {
+            _hasPending = false;
+        }
+
+        internal static bool TryConsume(out Request request)
+        {
+            request = _pending;
+            if (!_hasPending)
+                return false;
+            _hasPending = false;
+            return true;
+        }
+
         public static VisualElement Ensure(VisualElement host, string name)
         {
             if (host == null)

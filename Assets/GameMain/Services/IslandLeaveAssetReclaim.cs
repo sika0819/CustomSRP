@@ -24,6 +24,7 @@ namespace Game
         /// <summary>World.Release 后调度；可重入（只保留最新一代）。</summary>
         public static void ScheduleAfterWorldRelease()
         {
+            IslandAssetReclaimScheduler.Cancel();
             _generation++;
             int gen = _generation;
             CancelRoutineOnly();
@@ -104,6 +105,17 @@ namespace Game
             }
 
             float t0 = Time.realtimeSinceStartup;
+            // 运行时材质要等上面的 Destroy 落帧后才失去贴图引用。
+            Log.Info("[IslandLeaveAssetReclaim] begin Resources.UnloadUnusedAssets");
+            yield return Resources.UnloadUnusedAssets();
+            if (gen != _generation)
+            {
+                _busy = false;
+                _routine = null;
+                _host = null;
+                yield break;
+            }
+
             Log.Info("[IslandLeaveAssetReclaim] begin Yoo UnloadUnused after leave");
             yield return YooResourceModule.UnloadUnusedAssetsCoroutine(YooUnloadLoops);
             if (gen != _generation)

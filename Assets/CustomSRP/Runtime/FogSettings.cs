@@ -30,7 +30,7 @@ namespace CustomSRP
 
         [Tooltip("Exponential and Exponential Squared density. Used when Source is Custom.")]
         [Min(0f)]
-        public float density = 0.001f;
+        public float density = 0.003f;
 
         [Tooltip("Linear fog start. Used when Source is Custom.")]
         public float startDistance;

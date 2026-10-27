@@ -14,6 +14,13 @@ namespace Game
     {
         public static readonly string[] ExtraCategories = { "FX_Day", "FX_Night" };
 
+        static readonly List<MapItemData> Loaded = new List<MapItemData>(64);
+
+        /// <summary>最近一次 <see cref="Spawn"/> 读到的 extras。篝火不在 AllMapItem 里，音效锚点用这份。</summary>
+        public static IReadOnlyList<MapItemData> LoadedItems => Loaded;
+
+        public static void ClearLoaded() => Loaded.Clear();
+
         public static IEnumerator LoadDataCoroutine(List<MapItemData> output)
         {
             output?.Clear();
@@ -93,6 +100,9 @@ namespace Game
 
             var items = new List<MapItemData>(64);
             yield return LoadDataCoroutine(items);
+            Loaded.Clear();
+            if (items.Count > 0)
+                Loaded.AddRange(items);
             if (items.Count == 0)
             {
                 onCount?.Invoke(0);

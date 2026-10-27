@@ -172,25 +172,37 @@ namespace Game
 
             if (weather != null && !PresetWeatherHold.IsHeld)
             {
-                // Boluo: RTPC = curWeatherState * 30 (关闭=0, 小=30, 中=60, 大=90).
-                float intensity = weather.Level <= 0 ? 0f : Mathf.Clamp(weather.Level, 0, 3) * 30f;
-                switch (weather.Kind)
+                if (weather.IsWeatherTransitioning)
                 {
-                    case IslandWeatherKind.Wind:
-                        wantWind = intensity > 0f;
-                        wind = intensity;
-                        break;
-                    case IslandWeatherKind.Rain:
-                        wantRain = intensity > 0f;
-                        rain = intensity;
-                        break;
-                    case IslandWeatherKind.Foggy:
-                        foggy = intensity;
-                        break;
-                    case IslandWeatherKind.Cloud:
-                    case IslandWeatherKind.Clear:
-                    default:
-                        break;
+                    // Same 2s blend as fog / rain / wind, so the loop does not pop in at full level.
+                    wind = weather.VisualWind01 * 90f;
+                    rain = weather.VisualRainAudio;
+                    foggy = weather.VisualFoggyAudio;
+                    wantWind = wind > 0.01f;
+                    wantRain = rain > 0.01f;
+                }
+                else
+                {
+                    // Boluo: RTPC = curWeatherState * 30 (关闭=0, 小=30, 中=60, 大=90).
+                    float intensity = weather.Level <= 0 ? 0f : Mathf.Clamp(weather.Level, 0, 3) * 30f;
+                    switch (weather.Kind)
+                    {
+                        case IslandWeatherKind.Wind:
+                            wantWind = intensity > 0f;
+                            wind = intensity;
+                            break;
+                        case IslandWeatherKind.Rain:
+                            wantRain = intensity > 0f;
+                            rain = intensity;
+                            break;
+                        case IslandWeatherKind.Foggy:
+                            foggy = intensity;
+                            break;
+                        case IslandWeatherKind.Cloud:
+                        case IslandWeatherKind.Clear:
+                        default:
+                            break;
+                    }
                 }
             }
 

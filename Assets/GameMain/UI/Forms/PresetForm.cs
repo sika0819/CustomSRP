@@ -30,7 +30,6 @@ namespace Game
         const float SidePad = 60f;
         const float ScrollbarIdleHideSeconds = 3f;
         const float ToastSeconds = 1.6f;
-        const string ToastName = "presetBusyToast";
         const string BusyToastText = "天气正在改变,稍后再操作";
         const string HeardMarkerFile = "preset_heard_markers.txt";
         static readonly HashSet<string> HeardPresets = new HashSet<string>(StringComparer.Ordinal);
@@ -74,8 +73,6 @@ namespace Game
         VisualElement _scrollThumb;
         VisualElement _scrollTrack;
         VisualElement _panel;
-        VisualElement _toast;
-        IVisualElementScheduledItem _toastHide;
         IVisualElementScheduledItem _scrollbarHide;
         IVisualElementScheduledItem _progressTick;
         IVisualElementScheduledItem _playingAnimTick;
@@ -121,9 +118,6 @@ namespace Game
             _list.RegisterCallback<PointerCancelEvent>(OnListPointerCancel, TrickleDown.TrickleDown);
             _list.horizontalScroller.valueChanged += OnScrollValueChanged;
 
-            EnsureToast();
-            HideToast();
-
             if (GameEntry.Presets != null && GameEntry.Presets.CurrentId > 0)
             {
                 IslandPresetAsset[] presets = GameEntry.Presets.Presets;
@@ -145,8 +139,6 @@ namespace Game
             // F2: closing must NOT cancel downloads or CancelOtherState.
             StopProgressTick();
             StopPlayingAnimTick();
-            _toastHide?.Pause();
-            _toastHide = null;
             _scrollbarHide?.Pause();
             _scrollbarHide = null;
 
@@ -165,7 +157,6 @@ namespace Game
             _scrollThumb = null;
             _scrollTrack = null;
             _panel = null;
-            _toast = null;
             base.OnClose(isShutdown, userData);
         }
 
@@ -1158,27 +1149,9 @@ namespace Game
             }
         }
 
-        void EnsureToast()
-        {
-            // Host on stage (not the sheet) so TipWindows sits above the panel chrome.
-            VisualElement host = Root.Q("stage") ?? Root;
-            _toast = UiTipToast.Ensure(host, ToastName);
-        }
-
         void ShowToast(string message)
         {
-            if (_toast == null)
-                return;
-            UiTipToast.Show(_toast, message ?? BusyToastText, anchoredY: 0f);
-            _toastHide?.Pause();
-            _toastHide = _toast.schedule.Execute(HideToast).StartingIn((long)(ToastSeconds * 1000f));
-        }
-
-        void HideToast()
-        {
-            _toastHide?.Pause();
-            _toastHide = null;
-            UiTipToast.Hide(_toast);
+            UiTipToast.ShowMessage(message ?? BusyToastText, ToastSeconds, anchoredY: 0f);
         }
 
         static void MarkHeard(string displayName)

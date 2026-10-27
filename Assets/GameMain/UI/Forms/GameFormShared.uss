@@ -54,6 +54,16 @@
     picking-mode: Ignore;
 }
 
+/* Full-screen host for the global tip. Stays put while panel sheets slide. */
+.game-tip-toast-host {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    picking-mode: Ignore;
+}
+
 .game-tip-toast__label {
     flex-grow: 0;
     flex-shrink: 1;

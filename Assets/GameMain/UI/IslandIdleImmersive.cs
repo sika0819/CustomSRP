@@ -95,6 +95,7 @@ namespace Game
             _armed = false;
             SetHudAlpha(1f);
             IslandCameraSrpSetup.ApplyTargetFrameRate();
+            IslandAssetReclaimScheduler.Cancel();
         }
 
         public void ExitOnReturnFromForeground()
@@ -148,6 +149,7 @@ namespace Game
             if (wasImmersive)
             {
                 IslandCameraSrpSetup.ApplyTargetFrameRate();
+                IslandAssetReclaimScheduler.Cancel();
                 Log.Info("[IslandIdleImmersive] exit fps=" + IslandCameraSrpSetup.DefaultFrameRate);
             }
         }
@@ -184,6 +186,7 @@ namespace Game
             IsActive = true;
             _breath.Show();
             IslandCameraSrpSetup.ApplyTargetFrameRate();
+            IslandAssetReclaimScheduler.Begin();
             Log.Info("[IslandIdleImmersive] enter fps=" + IslandCameraSrpSetup.ImmersiveFrameRate);
         }
 

@@ -3,9 +3,6 @@
     <Style src="MusicForm.uss" />
     <ui:VisualElement name="root" class="game-music-form__root">
         <ui:VisualElement name="stage" class="game-form-stage">
-            <ui:VisualElement name="hintwindows" class="game-music-form__hintwindows">
-                <ui:Label name="labeltmp" class="game-music-form__labeltmp" text="播放模式" />
-            </ui:VisualElement>
             <ui:VisualElement name="musicDialogkapian" class="game-music-form__music-dialogkapian">
                 <ui:VisualElement name="hlist" class="game-music-form__hlist">
                     <ui:VisualElement name="biao" class="game-music-form__biao" />

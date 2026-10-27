@@ -18,7 +18,6 @@ Material:
   - _BASEMAP
   - _CANVAS_ON
   - _INTERNAL_EDGE_ON
-  - _OUTLINE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 1
@@ -123,13 +122,6 @@ Material:
     - _NormalStrength: 0.85
     - _OcclusionStrength: 1
     - _OilFoliage: 0
-    - _Outline: 1
-    - _OutlineBreak: 0.12
-    - _OutlineBrushScale: 2.5
-    - _OutlineNoise: 0.55
-    - _OutlineNoiseScale: 3.5
-    - _OutlineWidth: 0.028
-    - _OutlineWobble: 0.85
     - _PaintThickness: 0.18
     - _Parallax: 0.005
     - _QueueOffset: 0
@@ -161,7 +153,6 @@ Material:
     - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _EmissionLightPosWS: {r: 0, g: 0, b: 0, a: 0}
-    - _OutlineColor: {r: 0.13999996, g: 0.09999997, b: 0.07999996, a: 1}
     - _ShadowTint: {r: 0.41999996, g: 0.47999996, b: 0.72, a: 1}
     - _ShadowWarm: {r: 0.62, g: 0.45, b: 0.31999996, a: 1}
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}

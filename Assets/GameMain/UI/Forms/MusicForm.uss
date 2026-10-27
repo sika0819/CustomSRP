@@ -10,44 +10,6 @@
    bottom (Boluo InGameYinYueView yinyuetanchuangkapian anchoredY=120). Per-form gap:
    MusicForm.SheetBottomOffset (GameFormLogic translates stage). */
 
-/* Boluo TipWindows (UICanvasTip tip.png); size/position refined in MusicForm.cs. */
-.game-music-form__hintwindows {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    margin-left: -144px;
-    margin-top: -541px; /* -(472 + 138/2) — TipWindows anchoredY 472 */
-    margin-right: 0;
-    margin-bottom: 0;
-    min-width: 288px;
-    min-height: 138px;
-    max-width: 666px;
-    width: 288px;
-    padding-left: 60px;
-    padding-right: 60px;
-    padding-top: 36px;
-    padding-bottom: 36px;
-    align-items: center;
-    justify-content: center;
-    background-image: url("../Textures/Shared/tip.png");
-    -unity-background-scale-mode: stretch-to-fill;
-    -unity-background-image-tint-color: rgba(255, 255, 255, 0.902);
-    -unity-slice-left: 45px;
-    -unity-slice-right: 45px;
-    -unity-slice-top: 40px;
-    -unity-slice-bottom: 40px;
-    picking-mode: Ignore;
-    opacity: 0.000;
-}
-.game-music-form__labeltmp {
-    flex-grow: 0;
-    flex-shrink: 1;
-    -unity-text-align: middle-center;
-    font-size: 36px;
-    color: rgba(255, 255, 255, 1.000);
-    white-space: normal;
-    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
-}
 .game-music-form__music-dialogkapian {
     position: absolute;
     left: 50%;

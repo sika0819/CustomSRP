@@ -23,6 +23,7 @@ namespace Game
             Game.BoluoApi.BoluoApiEnvironment.ClearCached();
             WanosSoundSetup.ResetSession();
             MusicPlaylist.ResetSession();
+            UiTipToast.ResetSession();
             AudioInteractionBootstrap.ResetSession();
             AudioAppLifecycle.ResetSession();
             AudioAppLifecycle.EnsureExists();
@@ -130,6 +131,9 @@ namespace Game
             EnsureGroup("Main", 1);
             EnsureGroup("Panel", 2);
             EnsureGroup("Dialog", 3);
+            // Tip is a fixed overlay. Depth 4 sits above sheets (Panel 2 / Dialog 3)
+            // and under the loading cover (10). HudOverlayGate does not count it.
+            EnsureGroup(UiAssets.TipGroup, 4);
             EnsureGroup("Loading", 10);
         }
 

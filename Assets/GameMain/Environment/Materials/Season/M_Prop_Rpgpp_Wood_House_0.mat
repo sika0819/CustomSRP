@@ -15,7 +15,6 @@ Material:
   - _SHADOWS_CLIP
   m_InvalidKeywords:
   - _CANVAS_ON
-  - _OUTLINE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -87,13 +86,6 @@ Material:
     - _NightContour: 1
     - _NormalStrength: 0.85
     - _OilFoliage: 0
-    - _Outline: 1
-    - _OutlineBreak: 0.12
-    - _OutlineBrushScale: 2.5
-    - _OutlineNoise: 0.55
-    - _OutlineNoiseScale: 3.5
-    - _OutlineWidth: 0.028
-    - _OutlineWobble: 0.85
     - _PaintThickness: 0.18
     - _RampStrength: 1
     - _ReceiveShadows: 0
@@ -119,7 +111,6 @@ Material:
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EdgeColor: {r: 0.35, g: 0.3, b: 0.25, a: 1}
     - _LightTint: {r: 1.06, g: 0.98, b: 0.86, a: 1}
-    - _OutlineColor: {r: 0.14, g: 0.1, b: 0.08, a: 1}
     - _ShadowTint: {r: 0.34, g: 0.3, b: 0.36, a: 1}
     - _ShadowWarm: {r: 0.62, g: 0.45, b: 0.31999996, a: 1}
     - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}

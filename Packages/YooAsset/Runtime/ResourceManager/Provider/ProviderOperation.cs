@@ -128,6 +128,8 @@ namespace YooAsset
 
             if (_steps == ESteps.StartBundleLoader)
             {
+                UnityEngine.Debug.Log(
+                    $"[YooLoad] provider begin path={MainAssetInfo.AssetPath} loaders={_bundleLoaders.Count} sync={IsWaitForAsyncComplete}");
                 foreach (var bundleLoader in _bundleLoaders)
                 {
                     bundleLoader.StartOperation();
@@ -184,6 +186,7 @@ namespace YooAsset
         }
         internal override void InternalWaitForAsyncComplete()
         {
+            UnityEngine.Debug.Log($"[YooLoad] wait-spin enter path={MainAssetInfo.AssetPath} step={_steps}");
             while (true)
             {
                 if (ExecuteWhileDone())
@@ -192,6 +195,8 @@ namespace YooAsset
                     break;
                 }
             }
+
+            UnityEngine.Debug.Log($"[YooLoad] wait-spin exit path={MainAssetInfo.AssetPath} status={Status}");
         }
         internal override string InternalGetDesc()
         {

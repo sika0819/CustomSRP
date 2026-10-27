@@ -10,6 +10,10 @@ namespace Game
         // Main
         public const string IslandMainForm = "Assets/GameMain/UI/Forms/IslandMainForm.prefab";
 
+        /// <summary>Above Dialog, below Loading. Not a popup — does not block locomotion.</summary>
+        public const string TipGroup = "Tip";
+        public const string TipToastForm = "Assets/GameMain/UI/Forms/TipToastForm.prefab";
+
         // Panel
         public const string WeatherForm = "Assets/GameMain/UI/Forms/WeatherForm.prefab";
         public const string MusicForm = "Assets/GameMain/UI/Forms/MusicForm.prefab";

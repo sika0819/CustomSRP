@@ -130,6 +130,32 @@ namespace WanosAudio
                 return Loaded.Contains(Strip(bankName));
         }
 
+        /// <summary>
+        /// 收集可以卸的 bank：已加载、引用计数为 0、不在延迟卸载、也不在加载中。
+        /// 正在宽限里的不收集，避免过桥那 2 秒被提前掐掉。
+        /// </summary>
+        public static void CollectUnreferenced(List<string> dst)
+        {
+            if (dst == null)
+                return;
+            dst.Clear();
+            lock (Gate)
+            {
+                foreach (string stem in Loaded)
+                {
+                    if (string.IsNullOrEmpty(stem))
+                        continue;
+                    if (InFlight.Contains(stem))
+                        continue;
+                    if (PendingUnloads.ContainsKey(stem))
+                        continue;
+                    if (Refs.TryGetValue(stem, out int count) && count > 0)
+                        continue;
+                    dst.Add(stem);
+                }
+            }
+        }
+
         /// <summary>路径表里有这个 bank，或已经灌进引擎。没有文件时不要拿它去 Load。</summary>
         public static bool CanResolve(string bankName)
         {

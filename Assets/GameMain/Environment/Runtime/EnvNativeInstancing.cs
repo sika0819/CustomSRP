@@ -150,6 +150,33 @@ namespace Game
             return _instance;
         }
 
+        /// <summary>
+        /// 离岛松开 Mesh/Material。物体保留，下次 <see cref="Ensure"/> 复用。
+        /// 不摘的话 Yoo UnloadUnused 看不到 ref=0，二次 Prefill 会在高水位上同步 Instantiate。
+        /// </summary>
+        public void Clear()
+        {
+            _prototypes.Clear();
+            _buckets.Clear();
+            _assetIdToIndex.Clear();
+            _bbAssetIdToIndex.Clear();
+            _bbNameToIndex.Clear();
+            _nameToIndex.Clear();
+            _syncFrame = 0;
+        }
+
+        /// <summary>
+        /// 丢掉一个已经没有实例的原型，放开 Mesh/Material。不压缩列表，避免活着的 ProtoIndex 错位。
+        /// </summary>
+        public static bool TryDropOneEmptyPrototype()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return _instance != null && _instance.DropOneEmptyPrototype();
+#else
+            return false;
+#endif
+        }
+
         public void SetMaxDist(float maxDist)
         {
             if (maxDist > 0f)
@@ -309,6 +336,60 @@ namespace Game
                 SetRenderersEnabled(go, true);
 #endif
         }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        bool DropOneEmptyPrototype()
+        {
+            for (int i = 0; i < _prototypes.Count; i++)
+            {
+                if (i >= _buckets.Count || _buckets[i].Count > 0)
+                    continue;
+                Prototype proto = _prototypes[i];
+                if (proto.Mesh == null && proto.Material == null)
+                    continue;
+
+                Material material = proto.Material;
+                proto.Mesh = null;
+                proto.Material = null;
+                if (material != null && material.name.EndsWith("(YBillboard)"))
+                    Destroy(material);
+                UnbindPrototypeIndex(i);
+                return true;
+            }
+
+            return false;
+        }
+
+        void UnbindPrototypeIndex(int index)
+        {
+            Unbind(_assetIdToIndex, index);
+            Unbind(_bbAssetIdToIndex, index);
+            Unbind(_nameToIndex, index);
+            Unbind(_bbNameToIndex, index);
+        }
+
+        static void Unbind<TKey>(Dictionary<TKey, int> map, int index)
+        {
+            bool removed;
+            do
+            {
+                removed = false;
+                TKey key = default;
+                foreach (var kv in map)
+                {
+                    if (kv.Value != index)
+                        continue;
+                    key = kv.Key;
+                    removed = true;
+                    break;
+                }
+
+                if (removed)
+                    map.Remove(key);
+            }
+            while (removed);
+        }
+#endif
 
         void LateUpdate()
         {

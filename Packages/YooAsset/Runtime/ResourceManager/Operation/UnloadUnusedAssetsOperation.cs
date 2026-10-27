@@ -18,6 +18,9 @@ namespace YooAsset
         private int _loopCounter = 0;
         private ESteps _steps = ESteps.None;
 
+        /// <summary>本次卸载真正拆掉的 bundle loader 数。0 表示引用还在，卸载是空转。</summary>
+        public int DestroyedLoaderCount { get; private set; }
+
         internal UnloadUnusedAssetsOperation(ResourceManager resourceManager, int loopCount)
         {
             _resManager = resourceManager;
@@ -99,6 +102,8 @@ namespace YooAsset
                 loader.DestroyLoader();
                 _resManager.LoaderDic.Remove(bundleName);
             }
+
+            DestroyedLoaderCount += removeList.Count;
         }
     }
 }

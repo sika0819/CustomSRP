@@ -31,7 +31,7 @@
 | `Services/` | [04](04-services.md) | 天气 / 预设 / 氛围 / 世界 / 草地 / 移动端调优 |
 | `Services/Audio/` + `Sound/` | [05](05-audio.md) | BGM、环境音、天气音、雨水面采样 |
 | `UI/` | [06](06-ui.md) | UI Toolkit 表单框架与 7 个运行时表单 |
-| `Environment/Runtime/` | [07](07-environment.md) | MapItem 流式加载、碰撞体 LOD、篝火、原生合批 |
+| `Environment/Runtime/` | [07](07-environment.md) | MapItem 流式加载、石头碰撞、篝火、原生合批 |
 | `Input/` + `Entity/` | [08](08-input-camera.md) | 虚拟摇杆、移动输入、第一人称相机 |
 | `BoluoApi/` + `Native/` | [09](09-boluoapi-native.md) | 登录换票、签名、Bank 下载、原生桥 |
 | （跨模块坑） | [10](10-bug-index.md) | 已知坑总表与排障流程 |

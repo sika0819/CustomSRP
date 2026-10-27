@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
 using UnityEngine.Rendering;
 using YooAsset;
@@ -49,30 +50,39 @@ namespace Game
         readonly List<Item> _items = new List<Item>(2560);
         readonly Dictionary<string, GameObject> _prefabCache = new Dictionary<string, GameObject>(192);
         readonly Dictionary<string, AssetHandle> _prefabHandles = new Dictionary<string, AssetHandle>(192);
+        readonly Dictionary<string, int> _locationUsers = new Dictionary<string, int>(192);
+        readonly HashSet<string> _loadingLocations = new HashSet<string>();
         readonly List<int> _spawnQueue = new List<int>(256);
         readonly List<int> _despawnQueue = new List<int>(256);
         readonly HashSet<int> _spawnQueued = new HashSet<int>();
         readonly HashSet<int> _despawnQueued = new HashSet<int>();
 
         Transform _focus;
-        EnvMeshColliderLod _colliderLod;
         EnvNativeInstancing _native;
+        readonly Stopwatch _sliceSw = new Stopwatch();
+        int _sliceFrame = -1;
         bool _running;
+        bool _spawnBacklog;
         int _evalCursor;
         int _spawnedCount;
 
+        public static EnvItemStreamerLite Current { get; private set; }
+
         public int ItemCount => _items.Count;
         public int SpawnedCount => _spawnedCount;
+
+        /// <summary>
+        /// 本帧生成预算没排完，或有预制体还在加载。卸载要让开 Instantiate。
+        /// </summary>
+        public bool HasPendingSpawn => _spawnBacklog || _loadingLocations.Count > 0;
 
         public void Initialize(
             List<MapItemData> data,
             Dictionary<string, Transform> categoryParents,
             Transform mapItemRoot,
-            Transform focus,
-            EnvMeshColliderLod colliderLod)
+            Transform focus)
         {
             _focus = focus;
-            _colliderLod = colliderLod;
             EnvStreamingConfig.ApplyMobileTierDefaults();
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (EnvStreamingConfig.NativeInstancingEnabled)
@@ -84,6 +94,15 @@ namespace Game
 #endif
 
             _items.Clear();
+            _spawnQueue.Clear();
+            _despawnQueue.Clear();
+            _spawnQueued.Clear();
+            _despawnQueued.Clear();
+            _locationUsers.Clear();
+            _loadingLocations.Clear();
+            _spawnBacklog = false;
+            _evalCursor = 0;
+            Current = this;
             for (int i = 0; i < data.Count; i++)
             {
                 MapItemData d = data[i];
@@ -166,6 +185,8 @@ namespace Game
 
             int total = near.Count;
             int done = 0;
+            int skippedVisible = 0;
+            Log.Info($"[EnvItemStreamerLite] prefill begin near={total} items={_items.Count}");
             var sw = System.Diagnostics.Stopwatch.StartNew();
             for (int k = 0; k < near.Count; k++)
             {
@@ -173,12 +194,13 @@ namespace Game
                 Item item = _items[idx];
                 if (item.State == StateVisible && item.Go != null)
                 {
+                    skippedVisible++;
                     done++;
                     continue;
                 }
 
                 GameObject prefab = null;
-                yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go);
+                yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go, "prefill");
                 if (prefab == null)
                 {
                     Log.Warning(
@@ -189,7 +211,9 @@ namespace Game
                 }
 
                 byte tier = ResolveSpawnTier(item, DistSqXZ(item.Pos, p));
+                var instSw = System.Diagnostics.Stopwatch.StartNew();
                 var spawned = CreateInstanceForTier(item, prefab, tier);
+                long instMs = instSw.ElapsedMilliseconds;
                 if (spawned.Go == null)
                 {
                     done++;
@@ -198,18 +222,30 @@ namespace Game
 
                 FinalizeSpawned(idx, spawned.Go, prefab, spawned.Tier);
                 done++;
+                if (instMs >= 8)
+                {
+                    Log.Info(
+                        $"[EnvItemStreamerLite] instantiate slow ms={instMs} " +
+                        $"done={done}/{total} name={item.PrefabName} loc={item.Location}");
+                }
 
                 if (sw.ElapsedMilliseconds >= EnvStreamingConfig.FinalizePerFrameBudgetMs)
                 {
                     float t = total > 0 ? (float)done / total : 1f;
                     report?.Invoke(Mathf.Lerp(progressMin, progressMax, t), "正在铺装环境...");
+                    Log.Info(
+                        $"[EnvItemStreamerLite] prefill tick {done}/{total} " +
+                        $"skipVisible={skippedVisible} name={item.PrefabName}");
                     yield return null;
+                    Log.Info($"[EnvItemStreamerLite] prefill resumed done={done}/{total}");
                     sw.Restart();
                 }
             }
 
             report?.Invoke(progressMax, "正在铺装环境...");
-            Log.Info($"[EnvItemStreamerLite] prefill spawned={_spawnedCount}/{_items.Count} near={total}");
+            Log.Info(
+                $"[EnvItemStreamerLite] prefill spawned={_spawnedCount}/{_items.Count} " +
+                $"near={total} skipVisible={skippedVisible}");
         }
 
         IEnumerator StreamLoop()
@@ -234,27 +270,141 @@ namespace Game
                 EvaluateQueues();
                 int spawnBudget = EnvStreamingConfig.SpawnPerFrameBudget;
                 int despawnBudget = EnvStreamingConfig.DespawnPerFrameBudget;
+                float budgetMs = EnvStreamingConfig.FinalizePerFrameBudgetMs;
+                _sliceSw.Restart();
+                _sliceFrame = Time.frameCount;
 
-                for (int i = 0; i < _despawnQueue.Count && despawnBudget > 0; i++)
+                int despawned = DrainDespawns(despawnBudget, budgetMs);
+                if (despawned > 0)
+                    _despawnQueue.RemoveRange(0, despawned);
+
+                int spawnCount = _spawnQueue.Count;
+                int consumed = 0;
+                for (int i = 0; i < spawnCount && spawnBudget > 0; i++)
                 {
-                    DespawnItem(_despawnQueue[i]);
-                    despawnBudget--;
-                }
+                    if (SliceBudgetSpent(budgetMs))
+                        break;
 
-                _despawnQueue.Clear();
-                _despawnQueued.Clear();
+                    int index = _spawnQueue[i];
+                    _spawnQueued.Remove(index);
+                    consumed++;
+                    if (!ShouldStillSpawn(index))
+                        continue;
 
-                for (int i = 0; i < _spawnQueue.Count && spawnBudget > 0; i++)
-                {
-                    yield return SpawnItem(_spawnQueue[i]);
+                    yield return SpawnItem(index);
                     spawnBudget--;
                 }
 
-                // 未处理完的由下一帧 EvaluateQueues 重新入队。
-                _spawnQueue.Clear();
-                _spawnQueued.Clear();
+                if (consumed > 0)
+                    _spawnQueue.RemoveRange(0, consumed);
+                // 预算没用完的下标留在队列里，下一帧接着排，不再整表丢掉。
+                _spawnBacklog = _spawnQueue.Count > 0;
                 yield return null;
             }
+        }
+
+        int DrainDespawns(int despawnBudget, float budgetMs)
+        {
+            int despawnCount = _despawnQueue.Count;
+            int despawned = 0;
+            for (int i = 0; i < despawnCount && despawnBudget > 0; i++)
+            {
+                if (SliceBudgetSpent(budgetMs))
+                    break;
+
+                int index = _despawnQueue[i];
+                _despawnQueued.Remove(index);
+                despawned++;
+                if (ShouldStillDespawn(index))
+                {
+                    DespawnItem(index);
+                    despawnBudget--;
+                }
+            }
+
+            return despawned;
+        }
+
+        /// <summary>
+        /// 加载协程让出多帧后，在 Instantiate 之前把计时拨回当前帧，避免把等待算进预算。
+        /// </summary>
+        void RestartSliceIfNewFrame()
+        {
+            if (Time.frameCount == _sliceFrame)
+                return;
+            _sliceFrame = Time.frameCount;
+            _sliceSw.Restart();
+        }
+
+        bool SliceBudgetSpent(float budgetMs)
+        {
+            RestartSliceIfNewFrame();
+            return _sliceSw.ElapsedMilliseconds >= budgetMs;
+        }
+
+        bool ShouldStillSpawn(int index)
+        {
+            if (index < 0 || index >= _items.Count)
+                return false;
+
+            Item item = _items[index];
+            if (item.State == StateVisible && item.Go != null)
+                return false;
+
+            float distSq = DistSqToFocus(item.Pos);
+            bool neverUnload = item.HideDist >= 1e20f;
+            bool thinFar = EnvStreamingConfig.ShouldThinFarTree(item.Category, distSq, index);
+            if (thinFar || (!neverUnload && distSq > item.ShowDist * item.ShowDist))
+                return false;
+
+            // 换档卸完后 LodTier != PendingTier，保留目标档；否则按当前距离重判。
+            if (item.LodTier == item.PendingTier)
+            {
+                item.PendingTier = ResolveSpawnTier(item, distSq);
+                _items[index] = item;
+            }
+
+            return true;
+        }
+
+        bool ShouldStillDespawn(int index)
+        {
+            if (index < 0 || index >= _items.Count)
+                return false;
+
+            Item item = _items[index];
+            if (item.Go == null)
+                return item.State == StateVisible;
+
+            float distSq = DistSqToFocus(item.Pos);
+            bool neverUnload = item.HideDist >= 1e20f;
+            bool thinFar = EnvStreamingConfig.ShouldThinFarTree(item.Category, distSq, index);
+            if (!neverUnload && (thinFar || distSq > item.HideDist * item.HideDist))
+                return true;
+
+            if (item.LodTier == TierFull
+                && EnvStreamingConfig.ShouldDowngradeTreeToBillboard(item.Category, distSq))
+            {
+                item.PendingTier = TierBillboard;
+                _items[index] = item;
+                return true;
+            }
+
+            if (item.LodTier == TierBillboard
+                && EnvStreamingConfig.ShouldUpgradeTreeToFull(item.Category, distSq))
+            {
+                item.PendingTier = TierFull;
+                _items[index] = item;
+                return true;
+            }
+
+            if (item.PendingTier != item.LodTier)
+            {
+                item.PendingTier = item.LodTier;
+                _items[index] = item;
+            }
+
+            return false;
         }
 
         void EvaluateQueues()
@@ -348,10 +498,11 @@ namespace Game
                 yield break;
 
             GameObject prefab = null;
-            yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go);
+            yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go, "stream");
             if (prefab == null)
                 yield break;
 
+            RestartSliceIfNewFrame();
             byte tier = item.PendingTier;
             if (tier != TierFull && tier != TierBillboard)
                 tier = ResolveSpawnTier(item, DistSqToFocus(item.Pos));
@@ -419,6 +570,7 @@ namespace Game
             {
                 Vector3 pos = item.Pos;
                 EnvGroundFit.TrySnapMapItemY(ref pos, item.Category, item.PrefabName);
+                LogStepBegin("billboard-proxy", item.PrefabName);
                 GameObject proxy = EnvTreeBillboardUtil.BuildBillboardProxy(
                     prefab,
                     item.Parent,
@@ -432,9 +584,12 @@ namespace Game
                 actualTier = TierFull;
             }
 
+            LogStepBegin("instantiate", item.PrefabName);
+            GameObject go = Object.Instantiate(prefab, item.Parent, false);
+            LogStepEnd("instantiate", item.PrefabName);
             return new SpawnedInstance
             {
-                Go = Object.Instantiate(prefab, item.Parent, false),
+                Go = go,
                 Tier = actualTier,
             };
         }
@@ -460,8 +615,10 @@ namespace Game
             instance.transform.SetParent(item.Parent, false);
 
             Vector3 pos = item.Pos;
+            LogStepBegin("ground", item.PrefabName);
             if (EnvGroundFit.TrySnapMapItemY(ref pos, item.Category, item.PrefabName))
                 item.Pos = pos;
+            LogStepEnd("ground", item.PrefabName);
 
             if (EnvGroundFit.IsFlatGroundCard(item.PrefabName) || item.FarField)
                 EnvGroundFit.DisableCastShadows(instance);
@@ -477,26 +634,36 @@ namespace Game
                 || isBillboard)
                 EnvGroundFit.DisableCastShadows(instance);
 
+            LogStepBegin("set-active", item.PrefabName);
             instance.SetActive(item.IsActive);
+            LogStepEnd("set-active", item.PrefabName);
 
             if (!isBillboard)
             {
                 if (EnvStreamingConfig.IsRockCategory(item.Category))
+                {
+                    LogStepBegin("rock-collider", item.PrefabName);
                     EnvRockColliders.Ensure(instance, item.PrefabName);
+                    LogStepEnd("rock-collider", item.PrefabName);
+                }
                 if (EnvStreamingConfig.IsBridgeCategory(item.Category))
+                {
+                    LogStepBegin("bridge", item.PrefabName);
                     EnvBridgePillarFit.Ensure(instance);
+                    LogStepEnd("bridge", item.PrefabName);
+                }
                 if (EnvStreamingConfig.IsRockCategory(item.Category) &&
                     EnvStreamingConfig.IsSmallRockForFarCull(item.PrefabName))
                 {
                     EnvStreamerReflectionSkip.Apply(instance);
                 }
-                if (item.FarField)
-                    EnvLandmarkColliders.Ensure(instance, item.PrefabName);
                 // Near full trees: LOD_Billboard must also Y-face when LOD switches.
                 if (EnvStreamingConfig.IsBigTreeCategory(item.Category))
+                {
+                    LogStepBegin("y-billboard", item.PrefabName);
                     EnvTreeBillboardUtil.ApplyYBillboardToLodBillboardChildren(instance);
-
-                _colliderLod?.Register(instance, pos);
+                    LogStepEnd("y-billboard", item.PrefabName);
+                }
             }
 
             int proto = -1;
@@ -508,7 +675,9 @@ namespace Game
                 {
                     bool mainCameraOnly = EnvStreamingConfig.ShouldBeMainCameraOnly(
                         item.Category, item.PrefabName);
+                    LogStepBegin("native-bb", item.PrefabName);
                     proto = _native.AddBillboardPrototype(prefab, mainCameraOnly);
+                    LogStepEnd("native-bb", item.PrefabName);
                     if (proto >= 0 && _native.TryAddInstance(instance, proto))
                         inNative = true;
                 }
@@ -518,7 +687,9 @@ namespace Game
                         item.Category, item.PrefabName);
                     bool canCastShadows = EnvStreamingConfig.CanItemCastShadows(
                         item.Category, item.PrefabName);
+                    LogStepBegin("native-proto", item.PrefabName);
                     proto = _native.AddPrototype(prefab, mainCameraOnly, canCastShadows);
+                    LogStepEnd("native-proto", item.PrefabName);
                     if (proto >= 0 && _native.TryAddInstance(instance, proto))
                         inNative = true;
                 }
@@ -546,6 +717,7 @@ namespace Game
 
             _items[index] = item;
             _spawnedCount++;
+            AddLocationUser(item.Location);
         }
 
         void DespawnItem(int index)
@@ -564,7 +736,8 @@ namespace Game
             if (item.InNative && _native != null)
                 _native.RemoveInstance(item.Go, item.ProtoIndex);
 #endif
-            _colliderLod?.Unregister(item.Go);
+            DestroyYBillboardMaterials(item.Go);
+            RemoveLocationUser(item.Location);
             Destroy(item.Go);
             item.Go = null;
             item.State = StateHidden;
@@ -654,9 +827,22 @@ namespace Game
             return false;
         }
 
-        IEnumerator LoadPrefab(string location, string editorPath, System.Action<GameObject> onDone)
+        static void LogStepBegin(string step, string name)
         {
-            if (!string.IsNullOrEmpty(location) && _prefabCache.TryGetValue(location, out GameObject cached)
+            _ = step;
+            _ = name;
+        }
+
+        static void LogStepEnd(string step, string name)
+        {
+            _ = step;
+            _ = name;
+        }
+
+        IEnumerator LoadPrefab(string location, string editorPath, System.Action<GameObject> onDone, string phase)
+        {
+            if (!string.IsNullOrEmpty(location)
+                && _prefabCache.TryGetValue(location, out GameObject cached)
                 && cached != null)
             {
                 onDone?.Invoke(cached);
@@ -664,17 +850,36 @@ namespace Game
             }
 
             GameObject prefab = null;
-            if (YooResourceModule.IsInitialized && YooResourceModule.DefaultPackage != null
+            bool trackLoad = !string.IsNullOrEmpty(location);
+            if (trackLoad)
+                _loadingLocations.Add(location);
+            var loadSw = System.Diagnostics.Stopwatch.StartNew();
+            Log.Info($"[EnvItemStreamerLite] load begin phase={phase} loc={location}");
+            bool locationValid = YooResourceModule.IsInitialized && YooResourceModule.DefaultPackage != null
                 && !string.IsNullOrEmpty(location)
-                && YooResourceModule.DefaultPackage.CheckLocationValid(location))
+                && YooResourceModule.DefaultPackage.CheckLocationValid(location);
+            Log.Info($"[EnvItemStreamerLite] load valid phase={phase} loc={location} valid={locationValid}");
+            try
             {
-                yield return YooResourceModule.LoadAssetCoroutine<GameObject>(location, (asset, handle) =>
+                if (locationValid)
                 {
-                    prefab = asset;
-                    if (handle != null && !string.IsNullOrEmpty(location))
-                        _prefabHandles[location] = handle;
-                });
+                    yield return YooResourceModule.LoadAssetCoroutine<GameObject>(location, (asset, handle) =>
+                    {
+                        prefab = asset;
+                        if (handle != null && !string.IsNullOrEmpty(location))
+                            _prefabHandles[location] = handle;
+                    });
+                }
             }
+            finally
+            {
+                if (trackLoad)
+                    _loadingLocations.Remove(location);
+            }
+
+            Log.Info(
+                $"[EnvItemStreamerLite] load end phase={phase} loc={location} " +
+                $"ms={loadSw.ElapsedMilliseconds} ok={prefab != null}");
 
 #if UNITY_EDITOR
             if (prefab == null && !string.IsNullOrEmpty(editorPath))
@@ -697,12 +902,29 @@ namespace Game
             StopAllCoroutines();
             for (int i = 0; i < _items.Count; i++)
             {
-                if (_items[i].Go != null)
-                    Destroy(_items[i].Go);
+                Item item = _items[i];
+#if UNITY_ANDROID && !UNITY_EDITOR
+                if (item.InNative && _native != null && item.Go != null)
+                    _native.RemoveInstance(item.Go, item.ProtoIndex);
+#endif
+                if (item.Go != null)
+                {
+                    DestroyYBillboardMaterials(item.Go);
+                    Destroy(item.Go);
+                }
             }
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // 句柄稍后才 Release；先丢掉合批对 Mesh/Material 的握持，UnloadUnused 才能回收。
+            _native?.Clear();
+#endif
             _items.Clear();
             _spawnedCount = 0;
+            _spawnBacklog = false;
+            _locationUsers.Clear();
+            _loadingLocations.Clear();
+            if (Current == this)
+                Current = null;
 
             foreach (var kv in _prefabHandles)
                 kv.Value?.Release();
@@ -710,9 +932,84 @@ namespace Game
             _prefabCache.Clear();
         }
 
+        /// <summary>
+        /// 释放一个已经没有可见实例、也没在加载的预制体句柄。没有可释放的返回 false。
+        /// </summary>
+        public bool ReleaseOneUnusedPrefab()
+        {
+            if (_released)
+                return false;
+
+            string location = null;
+            foreach (var kv in _prefabHandles)
+            {
+                if (string.IsNullOrEmpty(kv.Key))
+                    continue;
+                if (_loadingLocations.Contains(kv.Key))
+                    continue;
+                if (_locationUsers.TryGetValue(kv.Key, out int users) && users > 0)
+                    continue;
+                location = kv.Key;
+                break;
+            }
+
+            if (location == null)
+                return false;
+
+            AssetHandle handle = _prefabHandles[location];
+            _prefabHandles.Remove(location);
+            _prefabCache.Remove(location);
+            handle?.Release();
+            return true;
+        }
+
+        void AddLocationUser(string location)
+        {
+            if (string.IsNullOrEmpty(location))
+                return;
+            _locationUsers.TryGetValue(location, out int count);
+            _locationUsers[location] = count + 1;
+        }
+
+        void RemoveLocationUser(string location)
+        {
+            if (string.IsNullOrEmpty(location))
+                return;
+            if (!_locationUsers.TryGetValue(location, out int count))
+                return;
+            count--;
+            if (count <= 0)
+                _locationUsers.Remove(location);
+            else
+                _locationUsers[location] = count;
+        }
+
         void OnDestroy()
         {
             Release();
+        }
+
+        /// <summary>
+        /// (YBillboard) 是运行时克隆，Destroy(GO) 不会带走它，贴图引用会挡住卸包。
+        /// </summary>
+        static void DestroyYBillboardMaterials(GameObject go)
+        {
+            Renderer[] renderers = go.GetComponentsInChildren<Renderer>(true);
+            for (int r = 0; r < renderers.Length; r++)
+            {
+                Renderer renderer = renderers[r];
+                if (renderer == null)
+                    continue;
+                Material[] mats = renderer.sharedMaterials;
+                if (mats == null)
+                    continue;
+                for (int m = 0; m < mats.Length; m++)
+                {
+                    Material mat = mats[m];
+                    if (mat != null && mat.name.EndsWith("(YBillboard)"))
+                        Destroy(mat);
+                }
+            }
         }
     }
 }

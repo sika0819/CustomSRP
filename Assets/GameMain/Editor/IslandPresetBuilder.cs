@@ -55,24 +55,24 @@ namespace Game.Editor
             (new Vector3(425.29f, 38.89f, 396.35f), 0f, Vector3.zero, 3f, 6f, 9f, 3, 0),
         };
 
-        // ExpSquared densities relative to default haze 0.001 (WeatherService / OilAtmosphereDriver).
-        // Foggy L1/L2/L3 ≈ 1.6× / 1.9× / 2.2× of that base via WeatherFogScale.
+        // ExpSquared：关雾 / Cloud L0 = 0.003；Foggy 小/中/大 = 0.006 / 0.009 / 0.012；Rain 按档位。
+        // 开雾基系数 0.003（WeatherService._hazeFogDensity）。
         static readonly float[] FogDensities =
         {
-            0.0010f,  // 1 清晨起床 Cloud — reference
-            0.0008f,  // 2 独自旅行 Cloud morning
-            0.0016f,  // 3 午后放松 Foggy L1
-            0.0012f,  // 4 委屈泛滥 Rain L1 night
-            0.0008f,  // 5 专注工作 Cloud
-            0.0015f,  // 6 放空发呆 Rain L3 night
-            0.0009f,  // 7 灵感唤醒 Cloud
-            0.00075f, // 8 假日躺平 Cloud noon (lighter)
-            0.0007f,  // 9 学习冲刺 Cloud near-noon
-            0.00085f, // 10 准备入睡 Cloud night
-            0.0007f,  // 11 海边漫步 Cloud L0
-            0.00135f, // 12 山间黄昏 Rain L2
-            0.0007f,  // 13 林间正午 Cloud L0
-            0.00075f, // 14 清晨林间 Cloud L0
+            0.003f,  // 1 清晨起床 Cloud 关雾
+            0.003f,  // 2 独自旅行 Cloud 关雾
+            0.006f,  // 3 午后放松 Foggy L1 小雾
+            0.012f,  // 4 委屈泛滥 Rain L1 night
+            0.003f,  // 5 专注工作 Cloud 关雾
+            0.015f,  // 6 放空发呆 Rain L3 night
+            0.003f,  // 7 灵感唤醒 Cloud 关雾
+            0.003f,  // 8 假日躺平 Cloud 关雾
+            0.003f,  // 9 学习冲刺 Cloud 关雾
+            0.003f,  // 10 准备入睡 Cloud 关雾
+            0.003f,  // 11 海边漫步 Cloud 关雾
+            0.0135f, // 12 山间黄昏 Rain L2
+            0.003f,  // 13 林间正午 Cloud 关雾
+            0.003f,  // 14 清晨林间 Cloud 关雾
         };
 
         // Boluo AtmosphereProfile: Camera_1 / Camera_5 / 3 / 7(1) / 8 / 10.

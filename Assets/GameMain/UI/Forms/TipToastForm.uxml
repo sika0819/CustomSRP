@@ -1,0 +1,6 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="GameFormShared.uss" />
+    <ui:VisualElement name="root" class="game-tip-toast-host" picking-mode="Ignore">
+        <ui:VisualElement name="stage" class="game-form-stage" picking-mode="Ignore" />
+    </ui:VisualElement>
+</ui:UXML>

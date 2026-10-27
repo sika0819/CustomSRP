@@ -135,7 +135,7 @@ Editor 联调:`GameMain/Boluo/环境·渠道·版本`;换票需开启 `Editor Gu
 | 进岛没 HUD | 06 / 01 | `[ProcedureIsland] IslandMainForm timeout` |
 | 天气改了画面不变 | 04 | `IAtmosphereVisualDriver` |
 | 穿模 / 掉出地面 / 撞不到石头 | 07 / 08 | `[EnvItemStreamerLite]` `[MapItem]` |
-| 走动帧率抖 | 07 | `EnvNativeInstancing` `EnvMeshColliderLod` |
+| 走动帧率抖 | 07 | `EnvNativeInstancing` |
 | 存档丢失 / 红点不出现 | 03 | `[BoluoGameSave]` `[DownloadedUnplayed]` |
 | 坐标不再保存 | 06 / 03 | `PushSaveSuppress` 计数未归零 |
 | 预设切换卡住 | 04 | `SchemeState` 卡在 1 → 需 `MarkPlaying()` / `AbortTransition()` |

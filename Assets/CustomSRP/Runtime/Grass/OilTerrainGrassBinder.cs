@@ -427,11 +427,8 @@ namespace CustomSRP
         float GetWeatherWindStrength()
         {
             var weather = WeatherService.Ensure();
-            if (weather.Kind != IslandWeatherKind.Wind)
-                return 0f;
-            // Map weather level (0-3) to wind strength (0-0.55)
-            float levelFactor = weather.Level / 3f;
-            return Mathf.Lerp(0f, windStrength, levelFactor);
+            // VisualWind01 already eases across a weather change (0 when not wind).
+            return weather.VisualWind01 * windStrength;
         }
 
         static float HorizontalDistXZ(Vector3 a, Vector3 b)

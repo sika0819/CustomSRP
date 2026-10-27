@@ -65,7 +65,10 @@ namespace YooAsset
                     else
                     {
                         string filePath = _fileSystem.GetBuildinFileLoadPath(_bundle);
+                        UnityEngine.Debug.Log(
+                            $"[YooLoad] bundle begin sync name={_bundle.BundleName} bytes={_bundle.FileSize}");
                         _assetBundle = AssetBundle.LoadFromFile(filePath);
+                        UnityEngine.Debug.Log($"[YooLoad] bundle end sync name={_bundle.BundleName}");
                     }
                 }
                 else
@@ -79,7 +82,10 @@ namespace YooAsset
                     else
                     {
                         string filePath = _fileSystem.GetBuildinFileLoadPath(_bundle);
+                        UnityEngine.Debug.Log(
+                            $"[YooLoad] bundle begin async name={_bundle.BundleName} bytes={_bundle.FileSize}");
                         _createRequest = AssetBundle.LoadFromFileAsync(filePath);
+                        UnityEngine.Debug.Log($"[YooLoad] bundle end async name={_bundle.BundleName}");
                     }
                 }
 

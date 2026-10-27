@@ -75,14 +75,20 @@ namespace YooAsset
                     {
                         // 强制挂起主线程（注意：该操作会很耗时）
                         YooLogger.Warning("Suspend the main thread to load unity asset.");
+                        Debug.Log(
+                            $"[YooLoad] asset begin sync path={_assetInfo.AssetPath} bundle={_packageBundle.BundleName}");
                         Result = _request.asset;
+                        Debug.Log($"[YooLoad] asset end sync path={_assetInfo.AssetPath}");
                     }
                     else
                     {
                         Progress = _request.progress;
                         if (_request.isDone == false)
                             return;
+                        Debug.Log(
+                            $"[YooLoad] asset begin path={_assetInfo.AssetPath} bundle={_packageBundle.BundleName}");
                         Result = _request.asset;
+                        Debug.Log($"[YooLoad] asset end path={_assetInfo.AssetPath}");
                     }
                 }
 
@@ -108,6 +114,8 @@ namespace YooAsset
         }
         internal override void InternalWaitForAsyncComplete()
         {
+            UnityEngine.Debug.Log(
+                $"[YooLoad] asset-spin enter path={_assetInfo.AssetPath} step={_steps}");
             while (true)
             {
                 if (ExecuteWhileDone())
@@ -116,6 +124,9 @@ namespace YooAsset
                     break;
                 }
             }
+
+            UnityEngine.Debug.Log(
+                $"[YooLoad] asset-spin exit path={_assetInfo.AssetPath} status={Status}");
         }
     }
 }

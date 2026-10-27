@@ -317,10 +317,8 @@ namespace CustomSRP
         float GetWeatherWindIntensity()
         {
             var weather = WeatherService.Ensure();
-            if (weather.Kind != IslandWeatherKind.Wind)
-                return 0f;
-            // Map weather level (0-3) to wind intensity (0-1)
-            return weather.Level / 3f;
+            // VisualWind01 already eases across a weather change (0 when not wind).
+            return weather.VisualWind01;
         }
 
         float ResolveSeaLevel()

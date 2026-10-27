@@ -52,7 +52,6 @@ namespace Game
         const float LookSensitivity = 0.11f;
         /// <summary>Portrait design width; wider screens scale look down so full-width swipes feel similar.</summary>
         const float RefLookWidth = 1125f;
-        const float ColliderRefreshMinRadius = 48f;
         const float GroundNormalMinY = 0.45f;
         /// <summary>脚底低于海平面超过此值视为走进海里（允许湿沙滩浅滩）。</summary>
         const float OceanBelowSurfaceBan = 0.25f;
@@ -71,7 +70,6 @@ namespace Game
         public float YawDegrees => _yaw;
 
         CharacterController _cc;
-        EnvMeshColliderLod _colliderLod;
 
         Vector2 _smoothedMove;
         float _speedRatio;
@@ -142,8 +140,6 @@ namespace Game
             if (_defaultEyeHeight < 0f)
                 _defaultEyeHeight = EyeHeight;
             AdoptSceneLook();
-            if (_colliderLod == null)
-                _colliderLod = FindAnyObjectByType<EnvMeshColliderLod>();
             EnsureBody();
             ApplyRenderScale(false);
         }
@@ -222,8 +218,6 @@ namespace Game
             EnsureBody();
             Vector3 ground = SampleGround(worldPos);
             SetPose(ground + Vector3.up * EyeHeight, Quaternion.Euler(Pitch, _yaw, 0f));
-            // 对齐 Boluo 切落点：立刻打开落点附近 MeshCollider，避免走路穿大石。
-            RefreshNearbyColliders();
         }
 
         public void ApplyPreset(IslandPresetAsset preset)
@@ -242,7 +236,6 @@ namespace Game
             _enterDollyActive = false;
 
             SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
-            RefreshNearbyColliders();
         }
 
         /// <summary>Iris exit: plant dolly from current eye toward a closer point along look.</summary>
@@ -309,7 +302,6 @@ namespace Game
                 _yaw = yaw;
                 _enterDollyActive = false;
                 SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
-                RefreshNearbyColliders();
                 return;
             }
 
@@ -324,7 +316,6 @@ namespace Game
             _enterDollyActive = true;
 
             SetPose(farPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
-            RefreshNearbyColliders();
         }
 
         public void SampleEnterDolly(float t01)
@@ -434,8 +425,6 @@ namespace Game
                     new Vector3(transform.position.x, targetY, transform.position.z),
                     Quaternion.Euler(Pitch, _yaw, 0f));
             }
-
-            RefreshNearbyColliders();
         }
 
         // ─── Per-frame ─────────────────────────────────────────────────────────────
@@ -893,12 +882,6 @@ namespace Game
                 return false;
             oceanY = ocean.transform.position.y;
             return true;
-        }
-
-        void RefreshNearbyColliders()
-        {
-            float radius = Mathf.Max(ColliderRefreshMinRadius, EnvStreamingConfig.MeshColliderEnableRadius);
-            _colliderLod?.ForceRefreshNear(transform.position, radius);
         }
 
         Vector3 SampleGround(Vector3 worldPos)

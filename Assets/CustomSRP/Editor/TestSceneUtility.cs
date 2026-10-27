@@ -838,7 +838,7 @@ namespace CustomSRP.Editor
         }
 
         /// <summary>
-        /// Floor preset: bigger paint dabs, warmer umbra, weak weave, no outline.
+        /// Floor preset: bigger paint dabs, warmer umbra, weak weave.
         /// </summary>
         public static void ApplyOilGroundPreset(Material material, Texture2D groundMap)
         {

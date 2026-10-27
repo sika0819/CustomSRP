@@ -59,8 +59,18 @@ namespace CustomSRP
 
         partial void DisposeForEditor();
 
+        static bool _stallQuiet;
+
         protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
         {
+            if (!_stallQuiet)
+            {
+                _stallQuiet = true;
+                Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
+            }
+#if !UNITY_EDITOR
+            UnityEngine.Debug.Log($"[Stall] render-begin cameras={cameras.Count}");
+#endif
             EnsureUIOverlay();
             BeginContextRendering(context, cameras);
             try
@@ -94,6 +104,9 @@ namespace CustomSRP
             }
 
             _renderGraph.EndFrame();
+#if !UNITY_EDITOR
+            UnityEngine.Debug.Log("[Stall] render-end");
+#endif
         }
     }
 }

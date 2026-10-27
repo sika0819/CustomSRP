@@ -376,7 +376,7 @@ namespace CustomSRP.Editor
             RenderSettings.skybox = skyMat;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogDensity = 0.001f;
+            RenderSettings.fogDensity = 0.003f;
             RenderSettings.fogColor = new Color(0.67f, 0.76f, 0.82f, 1f);
             RenderSettings.sun = sun;
             var driver = sun.gameObject.AddComponent<OilSkyboxTime>();

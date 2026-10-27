@@ -145,6 +145,7 @@ namespace Game
                     UiAssets.CloseGroup("Main");
                     UiAssets.CloseGroup("Panel");
                     UiAssets.CloseGroup("Dialog");
+                    UiAssets.CloseGroup(UiAssets.TipGroup);
                 }
                 BootLoadingService.Show("正在进入世界...", BootLoadingService.VisualPrepareMin);
                 ChangeState<ProcedureGuestLogin>(procedureOwner);
@@ -270,6 +271,7 @@ namespace Game
                         GameEntry.Weather?.PushVisuals();
                         Log.Info("[ProcedureIsland] OpenUIForm IslandMainForm");
                         GameEntry.UI.OpenUIForm(UiAssets.IslandMainForm, "Main");
+                        UiTipToast.EnsureHost();
                     }
 
                     if (!GameEntry.UI.HasUIForm(UiAssets.IslandMainForm))

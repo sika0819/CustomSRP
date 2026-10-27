@@ -15,7 +15,6 @@ Material:
   - _CLIPPING
   m_InvalidKeywords:
   - _CANVAS_ON
-  - _OILFOLIAGE_ON
   - _SHADOWS_OFF
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
@@ -62,16 +61,9 @@ Material:
     - _InternalEdge: 1
     - _NormalStrength: 0.85
     - _OilCrossBillboard: 0
-    - _OilFoliage: 1
+    - _OilFoliage: 0
     - _OilFoliageSkipDay: 0
     - _OilYBillboard: 0
-    - _Outline: 0
-    - _OutlineBreak: 0.12
-    - _OutlineBrushScale: 2.5
-    - _OutlineNoise: 0.55
-    - _OutlineNoiseScale: 3.5
-    - _OutlineWidth: 0.028
-    - _OutlineWobble: 0.85
     - _PaintThickness: 0.18
     - _ReceiveShadows: 0
     - _ShadeLift: 0.58
@@ -92,7 +84,6 @@ Material:
     - _BottomColor: {r: 0.380392, g: 0.478431, b: 0.34902, a: 1}
     - _Color: {r: 1.101871, g: 1.105902, b: 1.034339, a: 1}
     - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}
-    - _OutlineColor: {r: 0.380392, g: 0.478431, b: 0.34902, a: 1}
     - _ShadowTint: {r: 0.380392, g: 0.478431, b: 0.34902, a: 1}
     - _ShadowWarm: {r: 0.658824, g: 0.74902, b: 0.470588, a: 1}
     - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}

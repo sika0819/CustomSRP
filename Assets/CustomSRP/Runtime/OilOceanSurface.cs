@@ -146,9 +146,8 @@ namespace CustomSRP
                 return 0f;
 
             var weather = WeatherService.Ensure();
-            if (weather.Kind != IslandWeatherKind.Wind)
-                return 0f;
-            return weather.Level / 3f;
+            // VisualWind01 already eases across a weather change (0 when not wind).
+            return weather.VisualWind01;
         }
 
         void ApplyWaveHeight()

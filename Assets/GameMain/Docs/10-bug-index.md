@@ -23,8 +23,8 @@
 | 雨预设（如委屈泛滥）雨丝粉/洋红 | SubShader `RenderPipeline=CustomSRP` 与管线 tag 不匹配被整包 strip | [11](11-rain-device-visual.md) §3.1b |
 | 真机完全没云 | **有意为之**：`IslandMobileTune.TuneCloudsForMobile` | [11](11-rain-device-visual.md) [04](04-services.md) |
 | 天气图标档位错 | 图标数组顺序 | [06](06-ui.md) |
-| 走远后物体穿模 / 掉出地面 | 碰撞体 LOD 误清空 | [07](07-environment.md) |
-| 走动时帧率抖 | 流式生成预算 / 碰撞体全表刷新 | [07](07-environment.md) |
+| 走远后撞不到大石 | 大石 prefab 缺 MeshCollider | [07](07-environment.md) |
+| 走动时帧率抖 | 流式生成预算 / 全岛 MeshCollider 常开 | [07](07-environment.md) |
 | 相机 render scale 不变 | 反射找不到 `CustomRenderPipelineCamera` | [08](08-input-camera.md) |
 | 存档不落盘 / 红点不出现 | 游客隔离拦截 | [03](03-persistence.md) |
 | 坐标不再保存 | `PushSaveSuppress` 未出栈 | [06](06-ui.md) [03](03-persistence.md) |
@@ -38,7 +38,7 @@
 
 | # | 位置 | 问题 | 修复 |
 |---|---|---|---|
-| 1 | `Environment/Runtime/EnvMeshColliderLod.cs` | `Unregister` 用 `transform.root` 比较，所有 MapItem 共用 root → 卸载任一实例会清空**全岛**碰撞体表，距离 LOD 失效 | 改为只摘该实例自身与子节点；新增 `_colliderSet` 做登记去重与 O(1) 移除 |
+| 1 | `Environment/Runtime/` | 距离开关 MeshCollider 会在走远后把碰撞关掉，大石可视距离远于开关半径时直接穿模 | 已删除 `EnvMeshColliderLod`。大石碰撞留在 prefab 上，常开 |
 | 2 | `UI/Forms/IslandMainForm.cs` | 天气云层数组为 `{晴天, 中云, 小云}` → 「多云 1 级」显示晴天图标，「多云 3 级」显示小云 | 改为 `{小云, 中云, 中云}`（无「大云」贴图）并加注释 |
 | 3 | `Services/IslandWorldService.cs` | `Release()` 未复位静态 `InlandWaterReady` → 再次进岛时音频侧误判「水体已就绪」并沿用过期探针 | `Release()` 中置回 `false` 并触发 `OnInlandWaterReady(false)` |
 | 4 | `Services/MusicCatalog.cs` | `SetServerData` 遇 `_albums != null` 直接 return；启动时本地 JSON 先加载 → 服务器歌单永远不生效 | 新增 `_fromServer` 标记：服务器数据覆盖本地并重新广播；本地解析时若服务器已到则丢弃本地结果 |
@@ -92,7 +92,7 @@
 ### 4.3 卡顿 / 性能类
 
 1. Profiler 看 `LateUpdate`：`EnvNativeInstancing.DrawAll` 与 `IslandJoystickCamera` 是常驻热点。
-2. 看 `EnvMeshColliderLod.Refresh`（0.25s 全表扫描）与 `EnvItemStreamerLite.EvaluateQueues`（每帧 256 个）。
+2. 看 `EnvItemStreamerLite.EvaluateQueues`（每帧 256 个）与全岛常开的 MeshCollider。
 3. 看 `HudOverlayGate.HasPopup`（已改 `UIFormCount`；旧版 `GetAllUIForms` 每帧分配）。
 4. 开预设面板掉帧：查 `PresetForm` 进度 tick + `BankDownloader.LocalSatisfiesCatalog` 磁盘探测。
 5. 编辑器与真机差异：真机走 `ApplyMobileTierDefaults()`，半径更小、预算更低。

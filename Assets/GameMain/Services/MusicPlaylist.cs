@@ -47,6 +47,12 @@ namespace Game
         /// <summary>True when a track is currently playing.</summary>
         public bool IsPlaying { get; private set; }
 
+        /// <summary>
+        /// 当前曲目已提交并尝试起播之后（含循环/随机自动切歌）。
+        /// 打开中的播放列表据此重绑行上的播放标记。
+        /// </summary>
+        public event Action TrackChanged;
+
         public float MusicVolume { get; private set; } = 1f;
         public float EffectVolume { get; private set; } = 1f;
         public int PlayMode { get; private set; } = MusicPlayMode.Single;
@@ -88,6 +94,16 @@ namespace Game
             {
                 var track = MusicCatalog.GetTrack(CurrentAlbumIndex, CurrentTrackIndex);
                 return track?.EventName ?? "";
+            }
+        }
+
+        /// <summary>当前曲目的 bank。沉浸/切预设回收时保留，避免把正在听的曲子卸掉。</summary>
+        public string CurrentBankName
+        {
+            get
+            {
+                var track = MusicCatalog.GetTrack(CurrentAlbumIndex, CurrentTrackIndex);
+                return track?.BankName;
             }
         }
 
@@ -265,6 +281,7 @@ namespace Game
             // Hard-stop previous voice before starting the next (Wanos can stack PostEvents).
             Stop(publish: false);
             TryStartTrack(track.Value);
+            TrackChanged?.Invoke();
         }
 
         /// <summary>

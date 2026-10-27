@@ -14,7 +14,6 @@ namespace Game
 
         const float KnobAnimSeconds = 0.5f;
         const float ToastSeconds = 1.6f;
-        const string ToastName = "weatherBusyToast";
 
         static readonly float[] LevelMarginLeft = { -403.5f, -184.5f, 37.5f, 259.5f };
         static readonly string[] LevelNames = { "关闭", "小", "中", "大" };
@@ -41,14 +40,12 @@ namespace Game
         VisualElement _knob;
         VisualElement _knobHighlight;
         Label _knobLabel;
-        VisualElement _toast;
         VisualElement _track;
         EventCallback<PointerDownEvent> _knobDown;
         EventCallback<PointerMoveEvent> _knobMove;
         EventCallback<PointerUpEvent> _knobUp;
         EventCallback<ClickEvent> _trackClick;
         IVisualElementScheduledItem _knobAnim;
-        IVisualElementScheduledItem _toastHide;
 
         public override void OnOpen(object userData)
         {
@@ -84,8 +81,6 @@ namespace Game
 
             BindKnobPointer();
             BindTrack();
-            EnsureToast();
-            HideToast();
 
             if (GameEntry.Event != null)
                 GameEntry.Event.Subscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
@@ -101,8 +96,6 @@ namespace Game
             UnbindKnobPointer();
             UnbindTrack();
             StopKnobAnim();
-            _toastHide?.Pause();
-            _toastHide = null;
             _dragging = false;
             _applying = false;
             base.OnClose(isShutdown, userData);
@@ -187,7 +180,7 @@ namespace Game
             _applying = true;
             try
             {
-                weather.SetWeather(WeatherKinds[_editingIndex], _knobLevel);
+                weather.SetWeather(WeatherKinds[_editingIndex], _knobLevel, animate: true);
                 weather.BeginPanelTransitionLock();
             }
             finally
@@ -287,7 +280,7 @@ namespace Game
             if (_knob == null)
                 return;
             _knob.style.marginLeft = margin;
-            // Stay above the stationary hit at 关闭, under the hint and toast.
+            // Stay above the stationary hit at 关闭, under the description.
             VisualElement description = Root != null ? Root.Q("description") : null;
             if (description != null && description.parent == _knob.parent)
                 _knob.PlaceBehind(description);
@@ -473,27 +466,9 @@ namespace Game
             return 0;
         }
 
-        void EnsureToast()
-        {
-            VisualElement stage = Root.Q("stage") ?? Root;
-            _toast = UiTipToast.Ensure(stage, ToastName);
-        }
-
         void ShowToast()
         {
-            if (_toast == null)
-                return;
-            // TipWindow.ShowTip default y=0 (stage center); busy tips stay centered.
-            UiTipToast.Show(_toast, "天气正在改变,稍后再操作", anchoredY: 0f);
-            _toastHide?.Pause();
-            _toastHide = _toast.schedule.Execute(HideToast).StartingIn((long)(ToastSeconds * 1000f));
-        }
-
-        void HideToast()
-        {
-            _toastHide?.Pause();
-            _toastHide = null;
-            UiTipToast.Hide(_toast);
+            UiTipToast.ShowMessage("天气正在改变,稍后再操作", ToastSeconds, anchoredY: 0f);
         }
     }
 }

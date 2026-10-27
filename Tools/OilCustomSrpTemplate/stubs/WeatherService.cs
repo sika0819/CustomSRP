@@ -11,6 +11,10 @@ namespace Game
         public IslandWeatherKind Kind { get; private set; } = IslandWeatherKind.Cloud;
         public int Level { get; private set; } = 1;
 
+        /// <summary>0–1 wind weight. Full game lerps this; the stub follows Kind/Level.</summary>
+        public float VisualWind01 =>
+            Kind == IslandWeatherKind.Wind && Level > 0 ? Mathf.Clamp(Level, 0, 3) / 3f : 0f;
+
         public static WeatherService Ensure()
         {
             var existing = Object.FindAnyObjectByType<WeatherService>();

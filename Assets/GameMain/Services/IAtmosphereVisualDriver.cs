@@ -7,6 +7,13 @@ namespace Game
     {
         void SetTimeOfDayHours(float hours);
         void SetWeather(IslandWeatherKind kind, int level01To03);
+
+        /// <summary>
+        /// Blend cloud coverage, rain intensity, and foggy weight toward <paramref name="kind"/>.
+        /// A new <paramref name="blendId"/> captures the driver's current look as the start.
+        /// <paramref name="t"/> is already smoothed, 0 at the start and 1 when committed.
+        /// </summary>
+        void SetWeatherBlend(int blendId, IslandWeatherKind kind, int level01To03, float t);
         /// <summary>Absolute ExpSquared density for the active preset look.</summary>
         void SetFogDensity(float exponentialSquaredDensity);
         /// <summary>Optional directional-light color override. Pass null to clear and fall back to the time-of-day table.</summary>
