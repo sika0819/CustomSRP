@@ -116,24 +116,37 @@ namespace Game
                 ForceEnd();
         }
 
+        /// <summary>
+        /// UITK touch pointerId = <see cref="PointerId.touchPointerIdBase"/> + fingerId（base 通常为 1），
+        /// 不能拿 pointerId 直接去对 <see cref="Touch.fingerId"/>——否则 Down 后下一帧会被 ForceEnd，表现为「能点 HUD 但不能走」。
+        /// </summary>
+        static int TouchFingerIdFromPointerId(int pointerId)
+        {
+            if (pointerId >= PointerId.touchPointerIdBase)
+                return pointerId - PointerId.touchPointerIdBase;
+            return pointerId;
+        }
+
         static bool IsPointerContactAlive(int pointerId)
         {
             if (pointerId < 0)
                 return false;
-
-            for (int i = 0; i < Input.touchCount; i++)
-            {
-                Touch touch = Input.GetTouch(i);
-                if (touch.fingerId != pointerId)
-                    continue;
-                return touch.phase != TouchPhase.Ended && touch.phase != TouchPhase.Canceled;
-            }
 
 #if UNITY_EDITOR || UNITY_STANDALONE
             // UITK mouse id is PointerId.mousePointerId (0).
             if (pointerId == PointerId.mousePointerId)
                 return Input.GetMouseButton(0);
 #endif
+
+            int fingerId = TouchFingerIdFromPointerId(pointerId);
+            for (int i = 0; i < Input.touchCount; i++)
+            {
+                Touch touch = Input.GetTouch(i);
+                if (touch.fingerId != fingerId)
+                    continue;
+                return touch.phase != TouchPhase.Ended && touch.phase != TouchPhase.Canceled;
+            }
+
             return false;
         }
 
@@ -171,7 +184,7 @@ namespace Game
         }
 
         public bool OwnsPointer(int fingerId) =>
-            _active && _pointerId == fingerId;
+            _active && TouchFingerIdFromPointerId(_pointerId) == fingerId;
 
         void Build(VisualElement formRoot)
         {
@@ -309,6 +322,12 @@ namespace Game
             _hit.CapturePointer(_pointerId);
             _paint.BringToFront();
             ShowAt(_origin, Vector2.zero);
+            // 真机验收：确认 UITK Down 已接手（旧 bug 会在 TickFrame 立刻 ForceEnd）。
+            Debug.Log(
+                "[IslandJoystick] begin pointerId="
+                + _pointerId
+                + " fingerId="
+                + TouchFingerIdFromPointerId(_pointerId));
             evt.StopPropagation();
         }
 

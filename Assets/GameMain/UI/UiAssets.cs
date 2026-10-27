@@ -33,7 +33,11 @@ namespace Game
 
         // Login / Account
         public const string AgreementForm = "Assets/GameMain/UI/Forms/AgreementForm.prefab";
-        public const string CancelAccountReminderForm = "Assets/GameMain/UI/Forms/CancelAccountReminderForm.prefab";
+#if UNITY_EDITOR
+        /// <summary>编辑器联调注销弹窗；资源在 Editor/UI，不进发包采集。</summary>
+        public const string CancelAccountReminderForm =
+            "Assets/GameMain/Editor/UI/CancelAccountReminder/CancelAccountReminderForm.prefab";
+#endif
 
         // Settings
         public const string LogoutConfirmForm = "Assets/GameMain/UI/Forms/LogoutConfirmForm.prefab";

@@ -77,6 +77,11 @@ namespace Game.Native
         public static void HudHealth() => NativeMessages.HudHealth();
         public static void NotifyIslandReady() => NativeMessages.IslandReady();
 
+        /// <summary>
+        /// 揭幕后手动 Apply overlay 后同步 Facade 镜像字段并通知 HUD（防 BlocksLocomotion 脏读）。
+        /// </summary>
+        public static void SyncOverlayFromGate() => PublishOverlay();
+
         public static void PublishNowPlaying(
             bool playing, int album, int track, string title, string albumName,
             int positionMs = 0, int durationMs = 0)
@@ -94,6 +99,10 @@ namespace Game.Native
 #endif
         }
 
+        /// <summary>
+        /// Prefill 收尾补发：主路径已在 <c>ProcedureIsland</c> FadeHide 后 Notify；
+        /// 若揭罩被打断未发，此处仍保证宿主能抬 hudReady。
+        /// </summary>
         static void OnWorldReady(object sender, GameFramework.Event.GameEventArgs e)
         {
             NotifyIslandReady();
@@ -102,6 +111,7 @@ namespace Game.Native
         static void PublishOverlay()
         {
             CaptureOverlay();
+            Game.HudBottomIcons.SyncNativeHidden(BottomIconsHidden);
             if (Game.GameEntry.Event == null)
                 return;
             Game.GameEntry.Event.Fire(null, NativeOverlayEventArgs.Create(

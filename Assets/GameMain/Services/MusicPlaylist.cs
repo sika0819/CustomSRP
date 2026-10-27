@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 using Game.BoluoApi.Music;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -17,9 +19,20 @@ namespace Game
         public const string AmbientGroup = "Ambient";
         public const string PlayModeKey = "Music.PlayMode";
 
+        /// <summary>Playing 丢失时补发 Break 的等待（仍等本曲播完，不中途 Stop）。</summary>
+        const int BreakFallbackDelayMs = 1500;
+
+        /// <summary>Ended 丢失时（macOS Editor 常见）按曲长兜底切歌的余量。</summary>
+        const int EndedFallbackSlackMs = 2000;
+
+        /// <summary>无法从 bank 估时长时的 Ended 兜底（仍避免永远不切）。</summary>
+        const int EndedFallbackDefaultMs = 180_000;
+
         static MusicPlaylist _instance;
 
         public static MusicPlaylist Instance => _instance ??= new MusicPlaylist();
+
+        static readonly List<(int album, int track)> ShuffleScratch = new List<(int, int)>(64);
 
         // -----------------------------------------------------------------------
         // State
@@ -49,6 +62,11 @@ namespace Game
         /// <summary>Break_Music already posted for this voice (ListLoop / Shuffle).</summary>
         bool _breakPostedForVoice;
 
+        /// <summary>
+        /// SetPlayMode 切到 Loop/Shuffle 时 voice 尚未挂上：Attach 后补 Break（等播完，不掐断）。
+        /// </summary>
+        bool _breakWhenVoiceAttached;
+
         bool _voiceHooked;
 
         /// <summary>
@@ -75,7 +93,8 @@ namespace Game
 
         /// <summary>
         /// 采用原生已经在播的曲目（后台负一屏切歌后回前台对账）。
-        /// 只更新索引与播放态：引擎里已经是原生起播的那一轨，不能再发一次 Play 事件。
+        /// 只更新索引与播放态：引擎里已经是原生起播的那一轨，不能再发一次 Play 事件（避免中途掐断）。
+        /// Loop/Shuffle 时尽量重挂 voice + Break，等本曲 Ended 再自动下一首。
         /// </summary>
         public void AdoptTrack(int albumIndex, int trackIndex)
         {
@@ -84,6 +103,20 @@ namespace Game
             CurrentAlbumIndex = albumIndex;
             CurrentTrackIndex = trackIndex;
             IsPlaying = true;
+            _stoppedByUser = false;
+
+            EnsureVoiceHook();
+            if (WanosSoundAgentHelper.TryGetActiveMusicVoice(out ulong agentVoice) && agentVoice != 0)
+            {
+                AttachMusicVoice(agentVoice);
+                Log.Info($"[MusicPlaylist] AdoptTrack album={albumIndex} track={trackIndex} rebind voice={agentVoice} mode={PlayMode}");
+                return;
+            }
+
+            if (_musicVoiceId != 0 && IsListAdvanceMode(PlayMode) && !_breakPostedForVoice)
+                TryPostBreak("adopt-keep-voice");
+            else
+                Log.Info($"[MusicPlaylist] AdoptTrack album={albumIndex} track={trackIndex} voice={_musicVoiceId} mode={PlayMode}");
         }
 
         // -----------------------------------------------------------------------
@@ -98,6 +131,7 @@ namespace Game
                 _instance._musicSerialId = -1;
                 _instance._musicVoiceId = 0;
                 _instance._breakPostedForVoice = false;
+                _instance._breakWhenVoiceAttached = false;
                 _instance._voiceGeneration++;
                 _instance.IsPlaying = false;
                 _instance._stoppedByUser = false;
@@ -113,7 +147,14 @@ namespace Game
             EnsureVoiceHook();
             _musicVoiceId = voiceId;
             _breakPostedForVoice = false;
-            _voiceGeneration++;
+            _breakWhenVoiceAttached = false;
+            int gen = ++_voiceGeneration;
+
+            // 不在 Attach 立刻 Break：引擎可能尚未 Playing，过早 Break 会被吞，
+            // 且 _breakPostedForVoice 会挡住真正的 Playing→Break。
+            // Playing 正常路径发 Break；丢包时由 fallback 补发（仍等本曲播完）。
+            if (IsListAdvanceMode(PlayMode))
+                ScheduleBreakFallback(gen).Forget();
         }
 
         /// <summary>
@@ -124,6 +165,7 @@ namespace Game
             if (voiceId != 0 && voiceId == _musicVoiceId)
                 _musicVoiceId = 0;
             _breakPostedForVoice = false;
+            _breakWhenVoiceAttached = false;
             _voiceGeneration++;
         }
 
@@ -162,22 +204,26 @@ namespace Game
             if (PlayMode == mode)
                 return;
 
-            // Boluo WanosMusicPlayer.SetPlayMode: Break while playing so native/C# mode
-            // and Break-vs-loop stay in sync (Single keeps engine loop; List/Shuffle Break).
-            if (IsPlaying && _musicVoiceId != 0)
+            PlayMode = mode;
+
+            // Loop/Shuffle：只发 Break，等本曲播完再 Ended→Next（不中途 Stop）。
+            // Single：不 Break，引擎继续自循环。
+            _breakWhenVoiceAttached = false;
+            if (IsPlaying && IsListAdvanceMode(mode))
             {
-                _breakPostedForVoice = true;
-                try
+                if (_musicVoiceId == 0
+                    && WanosSoundAgentHelper.TryGetActiveMusicVoice(out ulong agentVoice)
+                    && agentVoice != 0)
                 {
-                    WanosNative.Instance.PostEvent(0, "Break_Music");
+                    AttachMusicVoice(agentVoice);
                 }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"[MusicPlaylist] Break_Music on SetPlayMode failed: {ex.Message}");
-                }
+
+                if (_musicVoiceId != 0)
+                    TryPostBreak("SetPlayMode");
+                else
+                    _breakWhenVoiceAttached = true;
             }
 
-            PlayMode = mode;
             if (GameEntry.Setting != null)
             {
                 GameEntry.Setting.SetInt(PlayModeKey, PlayMode);
@@ -232,8 +278,7 @@ namespace Game
             // Always post even if serialId was lost — prevents overlapping Play_Music* voices.
             try
             {
-                if (WanosNative.Instance != null)
-                    WanosNative.Instance.PostEvent(0, "Stop_Music");
+                WanosInteraction.PostMusicEvent("Stop_Music");
             }
             catch (Exception ex)
             {
@@ -357,56 +402,123 @@ namespace Game
             if (MusicCatalog.AlbumCount <= 0)
                 return;
 
-            // Prefer another album when possible; always pick track inside the chosen album.
-            if (MusicCatalog.AlbumCount > 1)
+            // 全专辑扁平随机，排除当前同一首（全库仅 1 首时才允许同曲）。
+            ShuffleScratch.Clear();
+            for (int a = 0; a < MusicCatalog.AlbumCount; a++)
             {
-                int nextAlbum;
-                do { nextAlbum = UnityEngine.Random.Range(0, MusicCatalog.AlbumCount); }
-                while (nextAlbum == CurrentAlbumIndex);
-                albumIndex = nextAlbum;
-            }
-            else
-            {
-                albumIndex = 0;
+                var tracks = MusicCatalog.GetTracks(a);
+                for (int t = 0; t < tracks.Count; t++)
+                {
+                    if (a == CurrentAlbumIndex && t == CurrentTrackIndex)
+                        continue;
+                    ShuffleScratch.Add((a, t));
+                }
             }
 
-            var tracks = MusicCatalog.GetTracks(albumIndex);
-            if (tracks.Count <= 0)
-            {
-                trackIndex = 0;
+            if (ShuffleScratch.Count == 0)
                 return;
-            }
 
-            if (tracks.Count == 1)
-            {
-                trackIndex = 0;
-                return;
-            }
-
-            int nextTrack;
-            do { nextTrack = UnityEngine.Random.Range(0, tracks.Count); }
-            while (albumIndex == CurrentAlbumIndex && nextTrack == CurrentTrackIndex);
-            trackIndex = nextTrack;
+            var pick = ShuffleScratch[UnityEngine.Random.Range(0, ShuffleScratch.Count)];
+            albumIndex = pick.album;
+            trackIndex = pick.track;
         }
 
         // -----------------------------------------------------------------------
         // Voice Playing / Ended → Break + auto-next (Boluo WanosMusicPlayer.PlayState)
         // -----------------------------------------------------------------------
 
+        static bool IsListAdvanceMode(int mode) =>
+            mode == MusicPlayMode.Loop || mode == MusicPlayMode.Shuffle;
+
         void EnsureVoiceHook()
         {
-            if (_voiceHooked)
-                return;
-            _voiceHooked = true;
+            // 先卸再挂：WanosEventCallbackQueue.ResetSession 可能把 StateChanged 置空，
+            // 若只靠 _voiceHooked 短路会永久收不到 Playing/Ended。
+            WanosEventCallbackQueue.StateChanged -= OnMusicVoiceState;
             WanosEventCallbackQueue.StateChanged += OnMusicVoiceState;
+            _voiceHooked = true;
         }
 
         void UnhookVoiceStates()
         {
-            if (!_voiceHooked)
-                return;
             WanosEventCallbackQueue.StateChanged -= OnMusicVoiceState;
             _voiceHooked = false;
+        }
+
+        void TryPostBreak(string reason)
+        {
+            if (_breakPostedForVoice)
+                return;
+            _breakPostedForVoice = true;
+            try
+            {
+                WanosInteraction.PostMusicEvent("Break_Music");
+                Log.Info($"[MusicPlaylist] Break_Music ({reason}) voice={_musicVoiceId} mode={PlayMode}");
+                // macOS Editor：Playing 能到、Ended 经常丢 → 按曲长兜底 Advance（Ended 先到则 gen 变、兜底作废）。
+                ScheduleEndedFallback(_voiceGeneration).Forget();
+            }
+            catch (Exception ex)
+            {
+                _breakPostedForVoice = false;
+                Debug.LogWarning($"[MusicPlaylist] Break_Music ({reason}) failed: {ex.Message}");
+            }
+        }
+
+        async UniTaskVoid ScheduleBreakFallback(int generation)
+        {
+            try
+            {
+                await UniTask.Delay(BreakFallbackDelayMs, DelayType.UnscaledDeltaTime);
+            }
+            catch
+            {
+                return;
+            }
+
+            if (generation != _voiceGeneration)
+                return;
+            if (_breakPostedForVoice || _musicVoiceId == 0)
+                return;
+            if (!IsListAdvanceMode(PlayMode))
+                return;
+            TryPostBreak("Playing-fallback");
+        }
+
+        async UniTaskVoid ScheduleEndedFallback(int generation)
+        {
+            int delayMs = EndedFallbackDefaultMs;
+            var track = MusicCatalog.GetTrack(CurrentAlbumIndex, CurrentTrackIndex);
+            if (track != null
+                && !string.IsNullOrEmpty(track.Value.BankName)
+                && WanosBankStore.TryEstimateDurationMs(track.Value.BankName, out int estimatedMs))
+            {
+                delayMs = estimatedMs + EndedFallbackSlackMs;
+            }
+
+            try
+            {
+                await UniTask.Delay(delayMs, DelayType.UnscaledDeltaTime);
+            }
+            catch
+            {
+                return;
+            }
+
+            if (generation != _voiceGeneration)
+                return;
+            if (_musicVoiceId == 0)
+                return;
+            if (!IsListAdvanceMode(PlayMode))
+                return;
+            if (_stoppedByUser || NowPlayingService.UserManuallyPaused)
+                return;
+
+            Log.Warning(
+                $"[MusicPlaylist] Ended missing after {delayMs}ms — fallback advance {CurrentAlbumIndex}/{CurrentTrackIndex} mode={PlayMode}");
+            _musicVoiceId = 0;
+            _breakPostedForVoice = false;
+            _voiceGeneration++;
+            AdvanceAfterTrackEnded();
         }
 
         void OnMusicVoiceState(ulong instanceId, int state)
@@ -416,22 +528,10 @@ namespace Game
 
             if (state == WanosInstanceState.Playing)
             {
-                // ListLoop / ListShuffle: Break so the authored loop ends once → Ended → Next.
-                // SingleLoop: no Break → engine keeps looping the same event.
-                if (PlayMode == MusicPlayMode.Loop || PlayMode == MusicPlayMode.Shuffle)
-                {
-                    if (_breakPostedForVoice)
-                        return;
-                    _breakPostedForVoice = true;
-                    try
-                    {
-                        WanosNative.Instance.PostEvent(0, "Break_Music");
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogWarning($"[MusicPlaylist] Break_Music failed: {ex.Message}");
-                    }
-                }
+                // ListLoop / Shuffle: Break → 本曲播完进 Ended → Next（不中途掐断）。
+                // Single: 不 Break → 引擎自循环。
+                if (IsListAdvanceMode(PlayMode))
+                    TryPostBreak("Playing");
                 return;
             }
 
@@ -439,8 +539,12 @@ namespace Game
                 return;
 
             if (_stoppedByUser || NowPlayingService.UserManuallyPaused)
+            {
+                Log.Info($"[MusicPlaylist] Ended ignored stopped={_stoppedByUser} paused={NowPlayingService.UserManuallyPaused}");
                 return;
+            }
 
+            Log.Info($"[MusicPlaylist] Ended voice={instanceId} mode={PlayMode} → advance {CurrentAlbumIndex}/{CurrentTrackIndex}");
             // Drop ownership before Advance (PlayIndex → Stop detaches again safely).
             _musicVoiceId = 0;
             _breakPostedForVoice = false;
@@ -479,8 +583,7 @@ namespace Game
                 // serial 已丢时 PauseSound 走不到；仍发 Pause_Music，覆盖原生直控/后台传输仍在出声。
                 try
                 {
-                    if (WanosNative.Instance != null)
-                        WanosNative.Instance.PostEvent(0, "Pause_Music");
+                    WanosInteraction.PostMusicEvent("Pause_Music");
                 }
                 catch (Exception ex)
                 {
@@ -510,10 +613,7 @@ namespace Game
                 GameEntry.Sound.ResumeSound(_musicSerialId);
             try
             {
-                if (WanosNative.Instance != null)
-                    WanosNative.Instance.PostEvent(0, "Resume_Music");
-                else
-                    WanosEngine.ResumeAll();
+                WanosInteraction.PostMusicEvent("Resume_Music");
             }
             catch (Exception ex)
             {
@@ -595,8 +695,7 @@ namespace Game
                 GameEntry.Sound.ResumeSound(_musicSerialId);
             try
             {
-                if (WanosNative.Instance != null)
-                    WanosNative.Instance.PostEvent(0, "Resume_Music");
+                WanosInteraction.PostMusicEvent("Resume_Music");
             }
             catch (Exception ex)
             {

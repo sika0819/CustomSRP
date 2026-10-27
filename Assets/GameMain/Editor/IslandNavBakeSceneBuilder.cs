@@ -671,6 +671,7 @@ namespace Game.Editor
                 Directory.CreateDirectory(dir);
 
             // BuildNavMesh 常把 asset 建在场景旁；统一挪/拷到 AssetRaw/Island。
+            // 禁止先 Delete 再 Move：Move 失败时会丢掉唯一的 IslandNavMesh（今天已踩过）。
             string existing = AssetDatabase.GetAssetPath(baked);
             if (!string.IsNullOrEmpty(existing) && existing.Replace('\\', '/') == NavMeshAssetPath)
             {
@@ -679,15 +680,14 @@ namespace Game.Editor
                 return true;
             }
 
-            if (File.Exists(NavMeshAssetPath))
-                AssetDatabase.DeleteAsset(NavMeshAssetPath);
-
             if (!string.IsNullOrEmpty(existing))
             {
                 string err = AssetDatabase.MoveAsset(existing, NavMeshAssetPath);
                 if (!string.IsNullOrEmpty(err))
                 {
-                    Debug.LogWarning($"[IslandNavBake] MoveAsset failed ({err}); duplicating.");
+                    Debug.LogWarning($"[IslandNavBake] MoveAsset failed ({err}); duplicating over target.");
+                    if (File.Exists(NavMeshAssetPath))
+                        AssetDatabase.DeleteAsset(NavMeshAssetPath);
                     NavMeshData copy = Object.Instantiate(baked);
                     copy.name = "IslandNavMesh";
                     AssetDatabase.CreateAsset(copy, NavMeshAssetPath);
@@ -700,6 +700,8 @@ namespace Game.Editor
             }
             else
             {
+                if (File.Exists(NavMeshAssetPath))
+                    AssetDatabase.DeleteAsset(NavMeshAssetPath);
                 baked.name = "IslandNavMesh";
                 AssetDatabase.CreateAsset(baked, NavMeshAssetPath);
                 surface.navMeshData = baked;

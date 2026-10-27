@@ -173,4 +173,4 @@ ProcedureLaunch ──> ProcedureInitYooAsset ──> ProcedureGuestLogin ──
 | HUD 10 s 没出来 | `[ProcedureIsland] IslandMainForm timeout — uncover without HUD` | 查 `UiAssets.IslandMainForm` 资源地址与 `YooGF` 加载日志 |
 | 遮罩进度条倒退 | `ReportProgress` 单调保护生效，会被**抬到**旧值而不是回退 | 检查是否有多处同时 `ReportProgress` |
 
-> Editor 联调入口：`GameMain/Boluo/环境·渠道·版本`；换票需开 `Editor Guest Login/Try Remote TouristLogin`。
+> Editor 联调入口：菜单 **`GameMain/Boluo/编辑器登录`**（UITK EditorWindow，仅 Editor；**游客 / 手机** 二选一）。无已落盘会话时进 Play 自动弹出；游客与正式账号均复用 token，主动退出前无需重登。真机包不含此窗。环境/渠道见 `环境·渠道·版本`。

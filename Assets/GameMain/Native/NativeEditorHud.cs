@@ -19,6 +19,12 @@ namespace Game.Native
         static Vector2 _scroll;
         static int _lastPushedRemaining = -1;
 
+        /// <summary>
+        /// 个人中心打开时由 Game.Editor 订阅，弹出 UITK「退登 / 注销」联调窗。
+        /// 运行时程序集不能引用 Editor，故用回调解耦。
+        /// </summary>
+        public static Action OpenAccountLeaveWindow;
+
         public static bool IsShowing => _page != Page.None;
 
         public static void HandleHudIcon(int iconId)
@@ -75,7 +81,10 @@ namespace Game.Native
             GUI.color = prev;
 
             float w = Mathf.Min(520f, Screen.width - 40f);
-            float h = _page == Page.Timer ? 340f : _page == Page.TimerEnd ? 300f : 280f;
+            float h = _page == Page.Profile ? 320f
+                : _page == Page.Timer ? 340f
+                : _page == Page.TimerEnd ? 300f
+                : 280f;
             var box = new Rect((Screen.width - w) * 0.5f, Screen.height - h - 24f, w, h);
             if (Event.current.type == EventType.MouseDown && !box.Contains(Event.current.mousePosition))
             {
@@ -114,8 +123,14 @@ namespace Game.Native
         static void Open(Page page)
         {
             _page = page;
-            // 与真机一致：个人中心 / 定时 / 健康均不藏右侧 HUD。
-            NativePushReceiver.SimulatePush(MsgType.UiOverlay, 1, 0, 0);
+            // 定时：对齐 iOS，只抬 bottomIconsHidden 挡沉浸并藏底栏预设/健康，不抬 overlayPresent。
+            // 个人中心 / 健康 / 定时结束：半层 present + 关触摸（不藏右侧天气等 HUD）。
+            if (page == Page.Timer)
+                NativePushReceiver.SimulatePush(MsgType.UiOverlay, 0, 1, 1);
+            else
+                NativePushReceiver.SimulatePush(MsgType.UiOverlay, 1, 0, 0);
+            if (page == Page.Profile)
+                OpenAccountLeaveWindow?.Invoke();
         }
 
         static void DrawProfile()
@@ -124,8 +139,12 @@ namespace Game.Native
             GUILayout.Space(8);
             GUILayout.Label("真机走 Android / iOS NativeHudOverlay + GET /api/commonUser/getUserinfo。");
             GUILayout.Label("Editor 无宿主 token，Query(20) 返回 -2 属预期。");
-            GUILayout.Space(12);
-            if (GUILayout.Button("关闭", GUILayout.Height(36)))
+            GUILayout.Space(8);
+            GUILayout.Label("退登 / 注销请用已打开的 UITK「个人中心·退登注销」窗口（对齐 HostLeaveIsland）。");
+            GUILayout.Space(8);
+            if (GUILayout.Button("打开退登 / 注销窗口", GUILayout.Height(36)))
+                OpenAccountLeaveWindow?.Invoke();
+            if (GUILayout.Button("关闭", GUILayout.Height(32)))
                 Close();
         }
 

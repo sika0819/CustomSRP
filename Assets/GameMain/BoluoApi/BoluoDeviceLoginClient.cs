@@ -104,18 +104,39 @@ namespace Game.BoluoApi
         /// </summary>
         public static async UniTask<bool> EnsureUserTokenAsync(bool failFast)
         {
-            // Hybrid：宿主 SSOT 优先。退登后 Prefs 可能仍有旧票，或 Leave 已清票；
-            // 若先 short-circuit Prefs，二次登录会沿用脏 token / 跳过 JNI 新票。
-            if (Game.Native.NativeSession.IsHybridAvailable()
-                && Game.Native.NativeSession.TryGetUserSession(
-                    out string hybridToken, out bool hybridGuest, out string hybridUserId)
-                && !string.IsNullOrEmpty(hybridToken))
+            // Hybrid：宿主 SSOT 优先。退登后 Prefs 可能仍有旧游客票；
+            // 若先 short-circuit Prefs，游客→正式会沿用脏 token / 跳过 JNI 新票。
+            if (Game.Native.NativeSession.IsHybridAvailable())
             {
-                Game.GuestSession.ApplyUserSession(hybridToken, hybridUserId, hybridGuest);
-                Log.Info(
-                    $"[DeviceLogin] hybrid userToken len={hybridToken.Length} " +
-                    $"guest={hybridGuest} userId={hybridUserId}");
-                return true;
+                if (Game.Native.NativeSession.TryGetUserSession(
+                        out string hybridToken, out bool hybridGuest, out string hybridUserId)
+                    && !string.IsNullOrEmpty(hybridToken))
+                {
+                    // 宿主已是正式票时清掉 Unity 侧游客缓存，再写入正式会话。
+                    BoluoSession.LoadFromPrefs();
+                    if (!hybridGuest
+                        && (BoluoSession.IsGuest || string.IsNullOrEmpty(BoluoSession.UserToken)
+                            || !string.Equals(BoluoSession.UserToken, hybridToken, StringComparison.Ordinal)))
+                    {
+                        Game.GuestSession.Clear();
+                    }
+
+                    Game.GuestSession.ApplyUserSession(hybridToken, hybridUserId, hybridGuest);
+                    Log.Info(
+                        $"[DeviceLogin] hybrid userToken len={hybridToken.Length} " +
+                        $"guest={hybridGuest} userId={hybridUserId}");
+                    return true;
+                }
+
+                // Hybrid 宿主暂无票：禁止回落 Prefs 旧游客票（游客升正式窗口）。
+                BoluoSession.LoadFromPrefs();
+                if (!string.IsNullOrEmpty(BoluoSession.UserToken) && BoluoSession.IsGuest)
+                {
+                    Log.Warning(
+                        "[DeviceLogin] hybrid empty userToken — clear stale Unity guest Prefs, wait host");
+                    Game.GuestSession.Clear();
+                    return false;
+                }
             }
 
             BoluoSession.LoadFromPrefs();

@@ -85,7 +85,7 @@ namespace Game
             if (string.IsNullOrEmpty(key))
                 return;
             EnsureLoaded();
-            if (GuestSession.IsGuest)
+            if (!BoluoGamePersistence.AllowsAccountProgressDisk)
                 return;
             Played.Add(key);
             FirstShownAt.Remove(key);
@@ -97,7 +97,7 @@ namespace Game
             if (string.IsNullOrEmpty(key))
                 return false;
             EnsureLoaded();
-            if (GuestSession.IsGuest)
+            if (!BoluoGamePersistence.AllowsAccountProgressDisk)
                 return false;
             if (Played.Contains(key))
                 return false;

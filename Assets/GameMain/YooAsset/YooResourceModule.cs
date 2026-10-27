@@ -287,6 +287,19 @@ namespace Game
             DefaultPackage.UnloadUnusedAssetsAsync(loopCount);
         }
 
+        /// <summary>
+        /// 等 Yoo 卸完 ref=0 的 provider。退登后 / Prefill 前调用；勿与二次 Prefill 叠帧。
+        /// </summary>
+        public static IEnumerator UnloadUnusedAssetsCoroutine(int loopCount = 10)
+        {
+            if (!IsInitialized || DefaultPackage == null)
+                yield break;
+            UnloadUnusedAssetsOperation op = DefaultPackage.UnloadUnusedAssetsAsync(loopCount);
+            if (op == null)
+                yield break;
+            yield return op;
+        }
+
         /// <summary>Load an addressed asset; caller owns the handle (Release when done).</summary>
         public static IEnumerator LoadAssetCoroutine<T>(
             string location,

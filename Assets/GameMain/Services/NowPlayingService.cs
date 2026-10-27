@@ -118,20 +118,28 @@ namespace Game
         /// <summary>进岛后允许 NowPlaying / RemoteCommand。</summary>
         public static void ArmSession()
         {
-            if (_armed)
-                return;
+            bool firstArm = !_armed;
             _armed = true;
             _userManuallyPaused = false;
 
+            // 每次 Arm 都确保平台门面 + 开闸：冷启动 Cleanup 会关 sPlaybackActive；
+            // 若只在 !_armed 时 Init，已 Arm 但未 Init 会永久吞掉负一屏推送。
+            EnsurePlatformSession();
+
+            if (firstArm)
+                PublishFromPlaylist();
+            Log.Info("[NowPlaying] ArmSession");
+        }
+
+        static void EnsurePlatformSession()
+        {
 #if UNITY_IOS && !UNITY_EDITOR
             if (BoluoMusicPlayerIOS.Instance != null)
                 BoluoMusicPlayerIOS.Instance.InitializeAfterLogin();
 #elif UNITY_ANDROID && !UNITY_EDITOR
-            if (BoluoMusicPlayerAndroid.Instance != null)
-                BoluoMusicPlayerAndroid.Instance.InitializeAfterLogin();
+            var android = BoluoMusicPlayerAndroid.EnsureExists();
+            android?.InitializeAfterLogin();
 #endif
-            PublishFromPlaylist();
-            Log.Info("[NowPlaying] ArmSession");
         }
 
         public static void CleanupAfterLeaveIsland()
@@ -139,27 +147,37 @@ namespace Game
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
             music?.Stop(publish: false);
             _userManuallyPaused = false;
-            ClearCard();
-            // 原生侧的后台传输计划也作废：曲子已经停了，别让原生再切。
-            BackgroundTransportSync.ClearPlan();
+            // 先 Disarm，堵住拆除窗口里 PublishFromPlaylist 再推非空 title。
+            _armed = false;
 
 #if UNITY_IOS && !UNITY_EDITOR
             BoluoMusicPlayerIOS.CleanupAfterLogout();
 #elif UNITY_ANDROID && !UNITY_EDITOR
+            // 须在 LoadScene(Login) 前：关闸 + 撤 native 排队 NowPlaying，避免误拉 FGS 超时杀进程。
             BoluoMusicPlayerAndroid.CleanupAfterLogout();
 #endif
-            _armed = false;
+            ClearCard();
+            // 原生侧的后台传输计划也作废：曲子已经停了，别让原生再切。
+            BackgroundTransportSync.ClearPlan();
             Log.Info("[NowPlaying] CleanupAfterLeaveIsland");
         }
 
         /// <summary>
         /// 首播 / 切歌成功同一帧强制刷「播放中」卡片。
-        /// 未 Arm 时先 Arm，避免 <c>!_armed → ClearCard</c> 把刚推的卡拆掉。
+        /// 必须已 <see cref="ArmSession"/>：禁止在 <c>CleanupAfterLeaveIsland</c> 后自动重 Arm，
+        /// 否则 LoadScene(Login) 主线程拥堵窗口会 <c>setPlaybackActive(true)</c> + 拉 FGS →
+        /// ForegroundServiceDidNotStartInTimeException（退登杀进程）。
         /// </summary>
         public static void PublishPlayingForced()
         {
             if (!_armed)
-                ArmSession();
+            {
+                Log.Info("[NowPlaying] PublishPlayingForced skipped — not armed (teardown guard)");
+                return;
+            }
+
+            // 已 Arm：补 Init / 开闸（冷启动 Cleanup 可能关过 sPlaybackActive）。
+            EnsurePlatformSession();
             _userManuallyPaused = false;
             PublishFromPlaylist(forcePlaying: true);
             Log.Info("[NowPlaying] PublishPlayingForced");

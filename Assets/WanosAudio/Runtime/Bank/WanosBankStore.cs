@@ -437,6 +437,60 @@ namespace WanosAudio
             }
         }
 
+        /// <summary>
+        /// Estimate one-shot PCM duration from bank <c>sample_count</c> (Editor/macOS Ended fallback).
+        /// Assumes <paramref name="sampleRateHz"/> (engine default 48000).
+        /// </summary>
+        public static bool TryEstimateDurationMs(string bankName, out int durationMs, int sampleRateHz = 48000)
+        {
+            durationMs = 0;
+            string stem = Strip(bankName);
+            if (string.IsNullOrEmpty(stem) || sampleRateHz <= 0)
+                return false;
+            if (_paths == null || !_paths.TryResolve(stem, out string path) || !File.Exists(path))
+                return false;
+
+            try
+            {
+                byte[] data = File.ReadAllBytes(path);
+                // Field layout: type(1) + nameLen(u16 LE) + name + value(i64 LE)
+                byte[] key = Encoding.ASCII.GetBytes("sample_count");
+                for (int i = 0; i + 1 + 2 + key.Length + 8 <= data.Length; i++)
+                {
+                    if (data[i] != 0x08)
+                        continue;
+                    int nameLen = data[i + 1] | (data[i + 2] << 8);
+                    if (nameLen != key.Length)
+                        continue;
+                    bool match = true;
+                    for (int j = 0; j < key.Length; j++)
+                    {
+                        if (data[i + 3 + j] != key[j])
+                        {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (!match)
+                        continue;
+
+                    long samples = BitConverter.ToInt64(data, i + 3 + key.Length);
+                    if (samples <= 0 || samples > int.MaxValue)
+                        continue;
+                    durationMs = (int)(samples * 1000L / sampleRateHz);
+                    if (durationMs < 1000)
+                        continue;
+                    return true;
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[{LogTag}] TryEstimateDurationMs({stem}): {e.Message}");
+            }
+
+            return false;
+        }
+
         static string Strip(string name)
         {
             if (string.IsNullOrEmpty(name))

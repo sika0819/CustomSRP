@@ -349,6 +349,9 @@ namespace Game
             _inlandWaterReady = false;
             _hasLastListener = false;
             WaterSurfaceProbe.Clear();
+            // host Destroy 会带走子节点；必须清池，否则下次 Acquire 对已销毁 GO SetActive 会炸。
+            _emitterPool = null;
+            _emitterInUse = null;
             if (_host != null)
             {
                 UnityEngine.Object.Destroy(_host);
@@ -477,6 +480,7 @@ namespace Game
 
                 EnsureHost();
                 BuildStaticSources();
+                EnsureEmitterPool();
                 _catalogBuilt = true;
                 Log.Info($"[AmbienceZone] static sources={Sources.Count}");
                 if (_pendingEvaluate)
@@ -539,7 +543,7 @@ namespace Game
 
         /// <summary>
         /// Pre-allocate one inactive GameObject per source under the host root.
-        /// Called once after <see cref="BuildStaticSources"/> + <see cref="BuildMapItemSources"/>.
+        /// Called after <see cref="BuildStaticSources"/> / <see cref="BuildMapItemSources"/>.
         /// Subsequent enter/exit cycles reuse these instead of allocating/destroying.
         /// </summary>
         static void EnsureEmitterPool()
@@ -548,23 +552,35 @@ namespace Game
             EnsureHost();
             if (_emitterPool == null || _emitterPool.Length != Sources.Count)
             {
+                // 旧池 GO 若仍活着且挂在 host 下，随尺寸变化重建槽位时先摘掉引用（host 仍在则留给新槽重造）。
                 _emitterPool = new GameObject[Sources.Count];
                 _emitterInUse = new bool[Sources.Count];
             }
+
             for (int i = 0; i < Sources.Count; i++)
             {
-                if (_emitterPool[i] != null) continue;
-                var go = new GameObject($"Amb_{i}");
-                go.transform.SetParent(_root, false);
-                go.SetActive(false);
-                _emitterPool[i] = go;
+                if (EmitterAlive(_emitterPool[i]))
+                    continue;
+                _emitterPool[i] = CreatePooledEmitter(i);
+                _emitterInUse[i] = false;
             }
         }
+
+        static GameObject CreatePooledEmitter(int index)
+        {
+            var go = new GameObject($"Amb_{index}");
+            go.transform.SetParent(_root, false);
+            go.SetActive(false);
+            return go;
+        }
+
+        /// <summary>Unity 已 Destroy 的 Object 用 == null 为 true，但裸调用仍会 MissingReferenceException。</summary>
+        static bool EmitterAlive(GameObject go) => go != null;
 
         /// <summary>Mark the slot holding `go` as free and deactivate the GameObject.</summary>
         static void ReturnEmitter(GameObject go)
         {
-            if (go == null || _emitterPool == null) return;
+            if (!EmitterAlive(go) || _emitterPool == null) return;
             for (int i = 0; i < _emitterPool.Length; i++)
             {
                 if (_emitterPool[i] == go)
@@ -579,17 +595,22 @@ namespace Game
         /// <summary>Find an unused pool slot for `src`. Returns the GameObject or null if full.</summary>
         static GameObject AcquireEmitterForSource(RuntimeSource src)
         {
+            EnsureEmitterPool();
             if (_emitterPool == null) return null;
             int srcIdx = Sources.IndexOf(src);
-            if (srcIdx < 0) return null;
-            if (_emitterInUse[srcIdx])
-            {
-                // Already acquired — reuse.
-                return _emitterPool[srcIdx];
-            }
-            _emitterInUse[srcIdx] = true;
+            if (srcIdx < 0 || srcIdx >= _emitterPool.Length) return null;
+
             var go = _emitterPool[srcIdx];
-            go.SetActive(true);
+            if (!EmitterAlive(go))
+            {
+                go = CreatePooledEmitter(srcIdx);
+                _emitterPool[srcIdx] = go;
+                _emitterInUse[srcIdx] = false;
+            }
+
+            _emitterInUse[srcIdx] = true;
+            if (!go.activeSelf)
+                go.SetActive(true);
             return go;
         }
 
@@ -1397,7 +1418,15 @@ namespace Game
             try
             {
                 EnsureHost();
+                if (!EmitterAlive(src.Emitter))
+                    src.Emitter = null;
                 src.Emitter = AcquireEmitterForSource(src) ?? CreateEmitter(pos);
+                if (!EmitterAlive(src.Emitter))
+                {
+                    Log.Warning($"[AmbienceZone] StartSource no emitter id={spec.Id}");
+                    return;
+                }
+
                 src.Emitter.transform.position = pos;
                 WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
                 src.NeedsRepost = true;
@@ -1426,11 +1455,15 @@ namespace Game
         static void RepostSource(RuntimeSource src, Vector3 pos, float dist)
         {
             var spec = src.Spec;
-            if (src.Emitter == null)
+            if (!EmitterAlive(src.Emitter))
             {
                 EnsureHost();
                 src.Emitter = AcquireEmitterForSource(src) ?? CreateEmitter(pos);
             }
+
+            if (!EmitterAlive(src.Emitter))
+                return;
+
             src.Emitter.transform.position = pos;
             WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
 

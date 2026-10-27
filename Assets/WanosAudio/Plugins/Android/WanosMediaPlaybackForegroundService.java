@@ -65,10 +65,19 @@ public class WanosMediaPlaybackForegroundService extends Service {
         }
     }
 
-    /** NowPlaying 更新后刷新 MediaStyle 标题/按钮。已在跑用 startService，避免后台再 startForegroundService。 */
+    /**
+     * NowPlaying 更新后刷新 MediaStyle 标题/按钮。
+     * 未在跑时仅在「正在播放」才 startForegroundService；暂停/登出残留推送禁止拉起 FGS，
+     * 否则切 Login 主线程拥堵会触发 ForegroundServiceDidNotStartInTimeException。
+     * 已在跑用 startService，避免后台再 startForegroundService。
+     */
     public static void notifyNowPlayingChanged(Context context) {
         if (context == null) return;
         if (!sRunning) {
+            if (!WIAEngineJNI.getLastIsPlaying() || !WIAEngineJNI.isPlaybackActive()) {
+                Log.d(TAG, "notifyNowPlayingChanged skip start: not playing or inactive");
+                return;
+            }
             start(context);
             return;
         }
@@ -90,7 +99,6 @@ public class WanosMediaPlaybackForegroundService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-        sRunning = true;
         dispatchTransportAction(intent, action);
         ensureChannel();
         Notification notification = buildNotification();
@@ -101,8 +109,17 @@ public class WanosMediaPlaybackForegroundService extends Service {
             } else {
                 startForeground(NOTIFICATION_ID, notification);
             }
+            sRunning = true;
         } catch (Exception e) {
+            // 吞异常后若不 stopSelf，系统仍会因未 startForeground 超时杀进程。
             Log.w(TAG, "startForeground failed: " + e.getMessage());
+            sRunning = false;
+            try {
+                stopSelf();
+            } catch (Exception stopEx) {
+                Log.w(TAG, "stopSelf after startForeground fail: " + stopEx.getMessage());
+            }
+            return START_NOT_STICKY;
         }
         return START_STICKY;
     }

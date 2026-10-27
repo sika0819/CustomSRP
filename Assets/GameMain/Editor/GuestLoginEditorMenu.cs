@@ -5,7 +5,8 @@ using UnityGameFramework.Runtime;
 namespace Game.Editor
 {
     /// <summary>
-    /// Editor 游客进岛开关 + API 环境快捷菜单（与 BoluoEnvTestWindow 共用环境 key）。
+    /// Editor 游客远端换票 + API 环境快捷菜单。
+    /// 登录入口：<c>GameMain/Boluo/编辑器登录</c>（游客 / 手机 二选一）。
     /// </summary>
     public static class GuestLoginEditorMenu
     {
@@ -20,7 +21,7 @@ namespace Game.Editor
         {
             bool next = !EditorPrefs.GetBool(GuestLoginClient.EditorTryRemoteKey, false);
             EditorPrefs.SetBool(GuestLoginClient.EditorTryRemoteKey, next);
-            Log.Info("[GuestLogin] Try remote touristLogin / device login = " + next);
+            Log.Info("[GuestLogin] Try remote touristLogin on guest proceed = " + next);
         }
 
         [MenuItem(TryRemoteMenu, true)]

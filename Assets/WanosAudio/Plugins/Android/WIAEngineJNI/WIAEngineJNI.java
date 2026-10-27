@@ -128,6 +128,15 @@ public class WIAEngineJNI {
     /** MediaSession 用于更新锁屏/通知栏 NowPlaying 元数据，并接收播放/暂停/停止传输控制 */
     private static MediaSession sMediaSession;
 
+    /** 保护 sMediaSession 判空→使用的跨线程竞态（Unity render / main / 清卡）。 */
+    private static final Object sSessionLock = new Object();
+
+    /**
+     * 播放会话闸：登出 / 切 Login 拆除期置 false，拒绝一切 NowPlaying 推送，
+     * 避免残留曲名在主线程拥堵时误拉起 Media FGS → ForegroundServiceDidNotStartInTimeException。
+     */
+    private static volatile boolean sPlaybackActive = true;
+
     /** 最近一次推到 MediaSession 的曲名 / 播放态，供 FGS MediaStyle 通知读取。 */
     private static volatile String sLastTrackTitle = "";
     private static volatile boolean sLastIsPlaying;
@@ -190,6 +199,48 @@ public class WIAEngineJNI {
 
     public static boolean getLastIsPlaying() {
         return sLastIsPlaying;
+    }
+
+    /** 播放会话闸是否打开（登出拆除期为 false）。 */
+    public static boolean isPlaybackActive() {
+        return sPlaybackActive;
+    }
+
+    /**
+     * 开关播放会话闸。false：释放 MediaSession、停 FGS，后续 updateNowPlayingInfo 直接 return。
+     * 进岛 Arm / InitializeAfterLogin 再置 true。
+     */
+    public static void setPlaybackActive(boolean active) {
+        if (active) {
+            sPlaybackActive = true;
+            Log.i(TAG, "setPlaybackActive: true");
+            return;
+        }
+        sPlaybackActive = false;
+        synchronized (sSessionLock) {
+            sLastTrackTitle = "";
+            sLastIsPlaying = false;
+            sLastArtBitmap = null;
+            if (sMediaSession != null) {
+                try {
+                    sMediaSession.setActive(false);
+                    sMediaSession.release();
+                } catch (Exception e) {
+                    Log.w(TAG, "setPlaybackActive release session: " + e.getMessage());
+                }
+                sMediaSession = null;
+            }
+        }
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                WanosMediaPlaybackForegroundService.stop(ctx);
+            } catch (Throwable t) {
+                Log.w(TAG, "setPlaybackActive stop FGS: " + t.getMessage());
+            }
+            sendNowPlayingBroadcast(ctx, "", "", false);
+        }
+        Log.i(TAG, "setPlaybackActive: false — session cleared, FGS stopped");
     }
 
     /** FGS / 负一屏大图；可能为 null（解码失败时系统会回退 App 图标）。 */
@@ -315,6 +366,10 @@ public class WIAEngineJNI {
      */
     public static void updateNowPlayingInfo(String trackName, String coverUrl, boolean isPlaying) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
+        if (!sPlaybackActive) {
+            Log.d(TAG, "updateNowPlayingInfo skipped: playback inactive");
+            return;
+        }
         Context ctx = getContext();
         if (ctx == null) {
             Log.w(TAG, "updateNowPlayingInfo: no Context, call setContext() first or ensure in app process");
@@ -374,113 +429,125 @@ public class WIAEngineJNI {
     }
 
     private static void updateNowPlayingInfoImpl(Context ctx, String trackName, String coverUrl, boolean isPlaying) {
-        try {
-            boolean allEmpty = (trackName == null || trackName.isEmpty())
-                    && (coverUrl == null || coverUrl.isEmpty());
-            if (allEmpty) {
-                sLastTrackTitle = "";
-                sLastIsPlaying = false;
-                sLastArtBitmap = null;
-                if (sMediaSession != null) {
-                    sMediaSession.setActive(false);
-                    sMediaSession.release();
-                    sMediaSession = null;
-                }
-                sendNowPlayingBroadcast(ctx, "", "", false);
-                Log.i(TAG, "updateNowPlayingInfo: all empty, cleared");
+        synchronized (sSessionLock) {
+            if (!sPlaybackActive) {
+                Log.d(TAG, "updateNowPlayingInfoImpl skipped: playback inactive");
                 return;
             }
-
-            if (sMediaSession == null) {
-                sMediaSession = new MediaSession(ctx, TAG);
-                sMediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
-                // 注册传输控制回调。没有 Callback 时通知栏/锁屏/负一屏按钮会被系统丢弃。
-                // 必须用独立 Handler：后台主线程被 OEM throttle 时 media key 会「送到 session 名但业务不跑」。
-                sMediaSession.setCallback(new MediaSession.Callback() {
-                    @Override
-                    public void onPlay() {
-                        Log.i(TAG, "MediaSession onPlay");
-                        dispatchTransportPlay();
-                    }
-
-                    @Override
-                    public void onPause() {
-                        Log.i(TAG, "MediaSession onPause");
-                        dispatchTransportPause();
-                    }
-
-                    @Override
-                    public void onStop() {
-                        Log.i(TAG, "MediaSession onStop");
-                        dispatchTransportStop();
-                    }
-
-                    @Override
-                    public void onSkipToNext() {
-                        Log.i(TAG, "MediaSession onSkipToNext");
-                        dispatchTransportSkipToNext();
-                    }
-
-                    @Override
-                    public void onSkipToPrevious() {
-                        Log.i(TAG, "MediaSession onSkipToPrevious");
-                        dispatchTransportSkipToPrevious();
-                    }
-
-                    @Override
-                    public boolean onMediaButtonEvent(Intent mediaButtonIntent) {
-                        // OEM 负一屏常只走 KEYCODE_MEDIA_*，不保证拆成 onPlay/onSkipToNext。
-                        if (dispatchFromMediaButtonIntent(mediaButtonIntent)) {
-                            return true;
-                        }
-                        return super.onMediaButtonEvent(mediaButtonIntent);
-                    }
-                }, sSessionCallbackHandler);
-                installMediaButtonReceiver(ctx);
-            }
-
-            String title = (trackName == null || trackName.isEmpty()) ? "波萝" : trackName;
-            sLastTrackTitle = title;
-            sLastIsPlaying = isPlaying;
-            Log.d(TAG, "updateNowPlayingInfoImpl: title=" + title + " isPlaying=" + isPlaying);
-            MediaMetadata.Builder metaBuilder = new MediaMetadata.Builder()
-                    .putString(MediaMetadata.METADATA_KEY_TITLE, title)
-                    .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE, title)
-                    .putLong(MediaMetadata.METADATA_KEY_DURATION, -1);
-
-            Bitmap art = scaleArtwork(decodeCoverBitmap(ctx, coverUrl));
-            sLastArtBitmap = art;
-            if (art != null) {
-                // 部分 OEM 负一屏读 ART，部分读 ALBUM_ART；两份都写避免默认系统图标。
-                // 必须降采样：2000² ARGB 约 16MB，跨进程 Binder 会被丢弃，负一屏就回退 App 图标。
-                metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_ART, art);
-                metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art);
-                metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON, art);
-            } else {
-                Log.w(TAG, "updateNowPlayingInfo: artwork decode failed coverUrl=" + coverUrl);
-            }
-            sMediaSession.setMetadata(metaBuilder.build());
-
-            // 播放/暂停 + 上一曲/下一曲；paused 时 rate=0，避免 OEM 把播放态图标画反。
-            int state = isPlaying ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
-            float rate = isPlaying ? 1.0f : 0.0f;
-            long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE
-                    | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP
-                    | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS;
-            PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
-                    .setActions(actions)
-                    .setState(state, PlaybackState.PLAYBACK_POSITION_UNKNOWN, rate);
-            sMediaSession.setPlaybackState(stateBuilder.build());
-            sMediaSession.setActive(true);
-
-            sendNowPlayingBroadcast(ctx, trackName, coverUrl, isPlaying);
             try {
-                WanosMediaPlaybackForegroundService.notifyNowPlayingChanged(ctx);
-            } catch (Throwable t) {
-                Log.d(TAG, "notifyNowPlayingChanged skipped: " + t.getMessage());
+                boolean allEmpty = (trackName == null || trackName.isEmpty())
+                        && (coverUrl == null || coverUrl.isEmpty());
+                if (allEmpty) {
+                    sLastTrackTitle = "";
+                    sLastIsPlaying = false;
+                    sLastArtBitmap = null;
+                    if (sMediaSession != null) {
+                        sMediaSession.setActive(false);
+                        sMediaSession.release();
+                        sMediaSession = null;
+                    }
+                    sendNowPlayingBroadcast(ctx, "", "", false);
+                    Log.i(TAG, "updateNowPlayingInfo: all empty, cleared");
+                    return;
+                }
+
+                MediaSession session = sMediaSession;
+                if (session == null) {
+                    session = new MediaSession(ctx, TAG);
+                    session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
+                    // 注册传输控制回调。没有 Callback 时通知栏/锁屏/负一屏按钮会被系统丢弃。
+                    // 必须用独立 Handler：后台主线程被 OEM throttle 时 media key 会「送到 session 名但业务不跑」。
+                    session.setCallback(new MediaSession.Callback() {
+                        @Override
+                        public void onPlay() {
+                            Log.i(TAG, "MediaSession onPlay");
+                            dispatchTransportPlay();
+                        }
+
+                        @Override
+                        public void onPause() {
+                            Log.i(TAG, "MediaSession onPause");
+                            dispatchTransportPause();
+                        }
+
+                        @Override
+                        public void onStop() {
+                            Log.i(TAG, "MediaSession onStop");
+                            dispatchTransportStop();
+                        }
+
+                        @Override
+                        public void onSkipToNext() {
+                            Log.i(TAG, "MediaSession onSkipToNext");
+                            dispatchTransportSkipToNext();
+                        }
+
+                        @Override
+                        public void onSkipToPrevious() {
+                            Log.i(TAG, "MediaSession onSkipToPrevious");
+                            dispatchTransportSkipToPrevious();
+                        }
+
+                        @Override
+                        public boolean onMediaButtonEvent(Intent mediaButtonIntent) {
+                            // OEM 负一屏常只走 KEYCODE_MEDIA_*，不保证拆成 onPlay/onSkipToNext。
+                            if (dispatchFromMediaButtonIntent(mediaButtonIntent)) {
+                                return true;
+                            }
+                            return super.onMediaButtonEvent(mediaButtonIntent);
+                        }
+                    }, sSessionCallbackHandler);
+                    installMediaButtonReceiver(ctx);
+                    sMediaSession = session;
+                }
+
+                String title = (trackName == null || trackName.isEmpty()) ? "波萝" : trackName;
+                sLastTrackTitle = title;
+                sLastIsPlaying = isPlaying;
+                Log.d(TAG, "updateNowPlayingInfoImpl: title=" + title + " isPlaying=" + isPlaying);
+                MediaMetadata.Builder metaBuilder = new MediaMetadata.Builder()
+                        .putString(MediaMetadata.METADATA_KEY_TITLE, title)
+                        .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE, title)
+                        .putLong(MediaMetadata.METADATA_KEY_DURATION, -1);
+
+                Bitmap art = scaleArtwork(decodeCoverBitmap(ctx, coverUrl));
+                sLastArtBitmap = art;
+                if (art != null) {
+                    // 部分 OEM 负一屏读 ART，部分读 ALBUM_ART；两份都写避免默认系统图标。
+                    // 必须降采样：2000² ARGB 约 16MB，跨进程 Binder 会被丢弃，负一屏就回退 App 图标。
+                    metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_ART, art);
+                    metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art);
+                    metaBuilder.putBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON, art);
+                } else {
+                    Log.w(TAG, "updateNowPlayingInfo: artwork decode failed coverUrl=" + coverUrl);
+                }
+                session.setMetadata(metaBuilder.build());
+
+                // 播放/暂停 + 上一曲/下一曲；paused 时 rate=0，避免 OEM 把播放态图标画反。
+                int state = isPlaying ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
+                float rate = isPlaying ? 1.0f : 0.0f;
+                long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE
+                        | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP
+                        | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS;
+                PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
+                        .setActions(actions)
+                        .setState(state, PlaybackState.PLAYBACK_POSITION_UNKNOWN, rate);
+                session.setPlaybackState(stateBuilder.build());
+                session.setActive(true);
+
+                sendNowPlayingBroadcast(ctx, trackName, coverUrl, isPlaying);
+                // 仅正在播放时拉/刷 FGS。暂停态 startForegroundService 会在登出切 Login
+                // 主线程拥堵时触发 ForegroundServiceDidNotStartInTimeException。
+                if (isPlaying) {
+                    try {
+                        WanosMediaPlaybackForegroundService.notifyNowPlayingChanged(ctx);
+                    } catch (Throwable t) {
+                        Log.d(TAG, "notifyNowPlayingChanged skipped: " + t.getMessage());
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "updateNowPlayingInfo failed", e);
             }
-        } catch (Exception e) {
-            Log.e(TAG, "updateNowPlayingInfo failed", e);
         }
     }
 

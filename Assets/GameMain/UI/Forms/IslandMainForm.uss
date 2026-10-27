@@ -72,8 +72,10 @@
     -unity-background-scale-mode: stretch-to-fill;
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
 }
+/* 默认隐藏；显隐由原生 Push 102（NativeProfileBadgeEventArgs）驱动。
+ * iOS：未绑 Apple ID 亮；Android：恒灭。勿在此写死 display: flex。 */
 #profile #badge {
-    display: flex;
+    display: none;
 }
 .game-island-main-form__activity-entry {
     position: absolute;
@@ -342,6 +344,7 @@
     -unity-background-scale-mode: stretch-to-fill;
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
 }
+/* 健康入口仅 iOS；默认隐藏，IslandMainForm 在非 Android 再打开。 */
 .game-island-main-form__default-state2 {
     position: absolute;
     left: 100%;
@@ -352,6 +355,7 @@
     width: 120px;
     margin-bottom: 0;
     height: 120px;
+    display: none;
 }
 .game-island-main-form__default-state22 {
     position: absolute;

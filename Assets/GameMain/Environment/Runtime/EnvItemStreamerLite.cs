@@ -58,11 +58,15 @@ namespace Game
         EnvMeshColliderLod _colliderLod;
         EnvNativeInstancing _native;
         bool _running;
+        /// <summary>True while <see cref="CatchUpAroundFocus"/> runs — StreamLoop skips spawn/despawn to avoid races.</summary>
+        bool _catchUpBusy;
         int _evalCursor;
         int _spawnedCount;
 
         public int ItemCount => _items.Count;
         public int SpawnedCount => _spawnedCount;
+        public int PendingSpawnCount => _spawnQueue.Count;
+        public bool IsCatchUpBusy => _catchUpBusy;
 
         public void Initialize(
             List<MapItemData> data,
@@ -124,19 +128,40 @@ namespace Game
             }
 
             _running = true;
-            StartCoroutine(StreamLoop());
+            // 勿在此 Start StreamLoop：与 PrefillAroundFocus 并行会抢同一 _items /
+            // LoadPrefab / Native 合批，真机二次进岛可卡死在「正在铺装环境」。
+            // Prefill 结束后由 BeginStreamingAfterPrefill 再开环。
             Log.Info(
                 $"[EnvItemStreamerLite] init items={_items.Count} streaming=on " +
-                $"native={(_native != null)}");
+                $"native={(_native != null)} (StreamLoop deferred)");
         }
 
-        public IEnumerator PrefillAroundFocus(float progressMin, float progressMax, System.Action<float, string> report)
+        /// <summary>Prefill 完成后再开常驻流式环。</summary>
+        public void BeginStreamingAfterPrefill()
+        {
+            if (_released || !_running)
+                return;
+            StopCoroutine(nameof(StreamLoop));
+            StartCoroutine(StreamLoop());
+        }
+
+        /// <param name="onNearReady">
+        /// 近场段结束后回调（世界首装揭罩门闩）；null 时不做 Quiet Hold（CatchUp）。
+        /// </param>
+        public IEnumerator PrefillAroundFocus(
+            float progressMin,
+            float progressMax,
+            System.Action<float, string> report,
+            System.Action onNearReady = null)
         {
             if (_focus == null)
+            {
+                onNearReady?.Invoke();
                 yield break;
+            }
 
             Vector3 p = _focus.position;
-            var near = new List<int>(512);
+            var candidates = new List<int>(512);
             for (int i = 0; i < _items.Count; i++)
             {
                 Item item = _items[i];
@@ -149,74 +174,150 @@ namespace Game
                     continue;
                 if (EnvStreamingConfig.ShouldThinFarTree(item.Category, distSq, i))
                     continue;
-                near.Add(i);
+                candidates.Add(i);
             }
 
-            // 按有效距离升序：先近后远；出生朝向的前/右扇区略提前（半径不变）。
-            // 闺蜜机启动后右转常扫到尚未首编的视锥内容；Prefill 时相机 yaw 尚未钉死，
-            // 用 IslandSpawnPose.DefaultYaw 近似「刚进岛会先看到」的一侧。
+            // 按有效距离升序：先近后远；当前焦点朝向的前/右扇区略提前（半径不变）。
+            // ProcedureIsland 已在 Prefill 前 InitAndArm，用 focus 真实 yaw；无有效朝向再回退默认出生 yaw。
             // _prefabCache 会让重复 LoadPrefab 退化为 Dictionary 查找，无需再按 Location 分组。
-            Vector3 lookFwd = Quaternion.Euler(0f, IslandSpawnPose.DefaultYawDegrees, 0f) * Vector3.forward;
-            Vector3 lookRight = Quaternion.Euler(0f, IslandSpawnPose.DefaultYawDegrees, 0f) * Vector3.right;
-            near.Sort((a, b) =>
+            Vector3 lookFwd = _focus.forward;
+            lookFwd.y = 0f;
+            if (lookFwd.sqrMagnitude < 1e-4f)
+                lookFwd = Quaternion.Euler(0f, IslandSpawnPose.DefaultYawDegrees, 0f) * Vector3.forward;
+            else
+                lookFwd.Normalize();
+            Vector3 lookRight = new Vector3(lookFwd.z, 0f, -lookFwd.x);
+            candidates.Sort((a, b) =>
             {
                 float sa = PrefillPriorityDistSq(_items[a].Pos, p, lookFwd, lookRight);
                 float sb = PrefillPriorityDistSq(_items[b].Pos, p, lookFwd, lookRight);
                 return sa.CompareTo(sb);
             });
 
-            int total = near.Count;
+            int total = candidates.Count;
             int done = 0;
+            float progressMid = Mathf.Lerp(progressMin, progressMax, 0.55f);
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            for (int k = 0; k < near.Count; k++)
+
+            // --- Near：Ring0 / TreeRing0（≥ MeshCollider）→ IsNearReady ---
+            for (int k = 0; k < candidates.Count; k++)
             {
-                int idx = near[k];
+                int idx = candidates[k];
+                Item item = _items[idx];
+                float distSq = DistSqXZ(item.Pos, p);
+                float nearShow = EnvStreamingConfig.GetPrefillNearShowDistance(item.Category, item.ShowDist);
+                if (distSq > nearShow * nearShow)
+                    continue;
+
+                yield return PrefillSpawnOne(idx, p, sw);
+                done++;
+                float tNear = total > 0 ? (float)done / total : 1f;
+                report?.Invoke(Mathf.Lerp(progressMin, progressMid, tNear), "正在铺装环境...");
+            }
+
+            onNearReady?.Invoke();
+            if (onNearReady != null)
+                EnvStreamingConfig.BeginPostUncoverQuiet();
+            // 进岛揭罩路径：近场后不再刷 Loading 进度（远场后台铺，避免罩回来盖住岛）。
+            // CatchUp（onNearReady==null）仍走完整进度条。
+            bool reportFar = onNearReady == null;
+            if (reportFar)
+                report?.Invoke(progressMid, "近场就绪，继续铺装...");
+            Log.Info(
+                $"[EnvItemStreamerLite] prefill near-ready spawned={_spawnedCount}/{_items.Count} candidates={total}");
+
+            // --- Far：其余 PrefillShow 半径，Quiet 预算 ---
+            for (int k = 0; k < candidates.Count; k++)
+            {
+                int idx = candidates[k];
                 Item item = _items[idx];
                 if (item.State == StateVisible && item.Go != null)
-                {
-                    done++;
                     continue;
-                }
 
-                GameObject prefab = null;
-                yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go);
-                if (prefab == null)
-                {
-                    Log.Warning(
-                        "[EnvItemStreamerLite] prefab missing loc=" + item.Location +
-                        " cat=" + item.Category + " name=" + item.PrefabName);
-                    done++;
-                    continue;
-                }
-
-                byte tier = ResolveSpawnTier(item, DistSqXZ(item.Pos, p));
-                var spawned = CreateInstanceForTier(item, prefab, tier);
-                if (spawned.Go == null)
-                {
-                    done++;
-                    continue;
-                }
-
-                FinalizeSpawned(idx, spawned.Go, prefab, spawned.Tier);
+                yield return PrefillSpawnOne(idx, p, sw);
                 done++;
-
-                if (sw.ElapsedMilliseconds >= EnvStreamingConfig.FinalizePerFrameBudgetMs)
+                if (reportFar)
                 {
-                    float t = total > 0 ? (float)done / total : 1f;
-                    report?.Invoke(Mathf.Lerp(progressMin, progressMax, t), "正在铺装环境...");
-                    yield return null;
-                    sw.Restart();
+                    float tFar = total > 0 ? (float)done / total : 1f;
+                    report?.Invoke(Mathf.Lerp(progressMid, progressMax, tFar), "正在铺装环境...");
                 }
             }
 
-            report?.Invoke(progressMax, "正在铺装环境...");
-            Log.Info($"[EnvItemStreamerLite] prefill spawned={_spawnedCount}/{_items.Count} near={total}");
+            if (reportFar)
+                report?.Invoke(progressMax, "正在铺装环境...");
+            Log.Info($"[EnvItemStreamerLite] prefill done spawned={_spawnedCount}/{_items.Count} candidates={total}");
+        }
+
+        IEnumerator PrefillSpawnOne(int idx, Vector3 focusPos, System.Diagnostics.Stopwatch sw)
+        {
+            Item item = _items[idx];
+            if (item.State == StateVisible && item.Go != null)
+                yield break;
+
+            GameObject prefab = null;
+            yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go);
+            if (prefab == null)
+            {
+                Log.Warning(
+                    "[EnvItemStreamerLite] prefab missing loc=" + item.Location +
+                    " cat=" + item.Category + " name=" + item.PrefabName);
+                yield break;
+            }
+
+            // Item 是 struct：Create 前再读一次，避免 LoadPrefab yield 后陈旧副本。
+            item = _items[idx];
+            byte tier = ResolveSpawnTier(item, DistSqXZ(item.Pos, focusPos));
+            var spawned = CreateInstanceForTier(item, prefab, tier);
+            if (spawned.Go == null)
+                yield break;
+
+            FinalizeSpawned(idx, spawned.Go, prefab, spawned.Tier);
+
+            // Quiet（远场 Prefill / 揭罩后）：缓存命中时 LoadPrefab 不 yield，
+            // 必须每实例让帧，否则二次进岛会把主线程打到个位数 FPS。
+            if (EnvStreamingConfig.IsPostUncoverQuiet
+                || sw.ElapsedMilliseconds >= EnvStreamingConfig.EffectiveFinalizePerFrameBudgetMs)
+            {
+                yield return null;
+                sw.Restart();
+            }
+        }
+
+        /// <summary>
+        /// 切预设 / 传送后：按当前焦点把附近未生成的 MapItem 立刻铺齐（复用 Prefill 路径），
+        /// 期间暂停 StreamLoop，避免与分帧队列双开同一条目。
+        /// </summary>
+        public IEnumerator CatchUpAroundFocus(System.Action<float, string> report = null)
+        {
+            if (!_running || _focus == null)
+                yield break;
+
+            _catchUpBusy = true;
+            // 清空未处理队列：CatchUp 会全量重扫，避免 StreamLoop 恢复后立刻再排一遍旧焦点。
+            _spawnQueue.Clear();
+            _spawnQueued.Clear();
+            _despawnQueue.Clear();
+            _despawnQueued.Clear();
+            try
+            {
+                yield return PrefillAroundFocus(0f, 1f, report);
+            }
+            finally
+            {
+                _catchUpBusy = false;
+            }
         }
 
         IEnumerator StreamLoop()
         {
             while (_running)
             {
+                if (_catchUpBusy)
+                {
+                    yield return null;
+                    continue;
+                }
+
                 if (_focus == null)
                 {
                     Camera cam = Camera.main;
@@ -490,9 +591,9 @@ namespace Game
                 }
                 if (item.FarField)
                     EnvLandmarkColliders.Ensure(instance, item.PrefabName);
-                // Near full trees: LOD_Billboard must also Y-face when LOD switches.
+                // Near full trees: LOD_Billboard must Cross-face when LOD switches.
                 if (EnvStreamingConfig.IsBigTreeCategory(item.Category))
-                    EnvTreeBillboardUtil.ApplyYBillboardToLodBillboardChildren(instance);
+                    EnvTreeBillboardUtil.ApplyCrossBillboardToLodBillboardChildren(instance);
 
                 _colliderLod?.Register(instance, pos);
             }
@@ -775,6 +876,11 @@ namespace Game
             _released = true;
             _running = false;
             StopAllCoroutines();
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // 先清原生合批再 Destroy：否则 LateUpdate 仍扫幽灵实例，二次进岛 Prefill 卡死。
+            EnvNativeInstancing.ClearAll();
+            _native = null;
+#endif
             for (int i = 0; i < _items.Count; i++)
             {
                 if (_items[i].Go != null)

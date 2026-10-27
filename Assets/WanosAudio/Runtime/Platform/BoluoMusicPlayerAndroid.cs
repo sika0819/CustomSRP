@@ -14,13 +14,26 @@ namespace WanosAudio
 
         static bool sIsInitialized;
 
+        /// <summary>NowPlaying 会话是否已开闸（可写 MediaSession）。</summary>
+        public static bool IsSessionReady => Instance != null && sIsInitialized;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void OnGameStart()
         {
+            EnsureExists();
+        }
+
+        /// <summary>
+        /// Disable Domain Reload / UaaL 软重启后 AfterSceneLoad 不再触发，
+        /// Arm / Publish 前必须能重建门面，否则 <c>!sIsInitialized</c> 永久吞掉负一屏推送。
+        /// </summary>
+        public static BoluoMusicPlayerAndroid EnsureExists()
+        {
             if (Instance != null)
-                return;
+                return Instance;
             var go = new GameObject(nameof(BoluoMusicPlayerAndroid));
             Instance = go.AddComponent<BoluoMusicPlayerAndroid>();
+            return Instance;
         }
 
         void Awake()
@@ -38,17 +51,22 @@ namespace WanosAudio
 
         public void InitializeAfterLogin()
         {
-            if (sIsInitialized)
-                return;
-            sIsInitialized = true;
             ArtworkDefault = "WanosAudio/Artwork/boluo.png";
+
+            // 对称 teardownForLogout：二次进岛 / 冷启动 Awake 拆闸后重新打开 NowPlaying / FGS 闸。
+            // 已 initialized 也要重开闸——GameEntry.Awake 的 Cleanup 会关闸但未必清 sIsInitialized 竞态。
+            BoluoAndroidEngineNative.SetPlaybackActive(true);
 
             bool bgDisable = BackgroundPlayPolicyCallback.GetBackgroundPlayDisable();
             BoluoAndroidEngineNative.NotifyAppLifecycle(false, bgDisable);
 
-            if (!bgDisable)
-                UpdateNowPlayingInfo("波萝", ArtworkDefault, false);
-            else
+            if (sIsInitialized)
+                return;
+            sIsInitialized = true;
+
+            // 不在这里推 paused「波萝」：paused 不拉 FGS，创维等 OEM 负一屏不绑 MediaStyle。
+            // 真正出卡走 PublishPlayingForced（isPlaying=true）。关后台播放才清卡。
+            if (bgDisable)
                 ClearNowPlaying();
 
             Debug.Log("[BoluoMusicPlayerAndroid] InitializeAfterLogin");
@@ -57,14 +75,17 @@ namespace WanosAudio
         public static void CleanupAfterLogout()
         {
             if (Instance == null)
+            {
+                BoluoAndroidEngineNative.TeardownForLogout();
                 return;
+            }
             Instance.CleanupInternal();
         }
 
         void CleanupInternal()
         {
-            ClearNowPlaying();
-            BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
+            // 先关闸并撤 native 排队推送，再清卡；禁止 MarkUserPaused(false) 把拆除态当成可续播。
+            BoluoAndroidEngineNative.TeardownForLogout();
             sIsInitialized = false;
             Debug.Log("[BoluoMusicPlayerAndroid] CleanupAfterLogout");
         }

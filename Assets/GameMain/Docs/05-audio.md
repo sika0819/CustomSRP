@@ -16,16 +16,19 @@
 前台起播：
 MusicPlaylist ──> GameEntry.Sound.PlaySound ──> WanosSoundAgentHelper
   └─ PostEvent(+ Playing/Ended callback) → AttachMusicVoice
-       ├─ Playing + 列表/随机 → Break_Music（本曲播完进 Ended）
+       ├─ Playing + 列表/随机 → Break_Music on MusicObjectId（等本曲播完进 Ended；Playing 丢失约 1.5s 补 Break）
        ├─ Playing + 单曲循环 → 不 Break（引擎自循环）
-       └─ Ended → Single 重播本曲 / Loop·Shuffle → Next()
+       ├─ Ended → Single 重播本曲 / Loop 专辑内下一首 / Shuffle 全专辑随机（排除当前曲）
+       └─ Ended 丢失（macOS Editor 常见）→ 按 bank sample_count 估时长 +2s 兜底 Advance
   └─ Unmute + PushVolumes + EnsureAudibleForUnityPlayback（Android）
 
 后台（Unity 已被 pause）：
 NowPlayingService.PublishPlan ──> BackgroundTransportSync ──> AndroidBackgroundTransport.SetPlan
+  └─ Single/Loop：当前专辑；Shuffle：全部专辑可播曲（mode=C# 1/2/3）
 负一屏 播放/暂停/切歌 ──> WanosMusicPlayerNative.handleTransport*InBackground ──> 原生直接 PostEvent
 回前台：AudioAppLifecycle.RestoreForegroundAudio
-  └─ ResyncFromNative（AdoptTrack）+ WanosEngine.RestoreForeground + 业务续播
+  └─ ResyncFromNative（AdoptTrack 重挂 voice+Break，不中途 Stop+Play）
+       + WanosEngine.RestoreForeground + 业务续播
   触发条件：仅 `_needsRestore`（进过后台）或 `WanosEngine.IsInterrupted`
   （禁止用 PlaybackState!=Started 当常驻条件，否则 Editor 焦点/点击会反复 Stop+Play）
 ```
@@ -208,15 +211,15 @@ Unity 进后台会被宿主 pause，`UnitySendMessage` / C# 回调都停转。�
 ### 数据流
 
 1. **前台推计划**：`NowPlayingService.PublishFromPlaylist` → `BackgroundTransportSync.PublishPlan`
-   - 把当前专辑里「bank 文件已就绪」的曲目打成 JSON，经 `AndroidBackgroundTransport.SetPlan` 推给 Java。
+   - Single/Loop：当前专辑「bank 已就绪」曲目；Shuffle：全部专辑可播曲。经 `AndroidBackgroundTransport.SetPlan` 推给 Java。
    - JSON：`{"mode":2,"current":0,"tracks":[{"name":"...","event":"Play_Music1_2","bank":"Music1_2","guid":"...","path":"/abs/...wsbk","loaded":true}]}`
    - `mode` 对齐 `MusicPlaylist.PlayMode`（1 单曲 / 2 列表循环 / 3 随机）。
 2. **后台执行**：`WanosMusicPlayerNative` 的 transport 回调里，若 `appInBackground`：
    - 播放/暂停 → `handleTransportInBackground`（`Pause_Music` / `Resume_Music`）
-   - 切歌 → `handleTransportSkipInBackground`（`Stop_Music` + `Play_*`；必要时 `loadBankFromPath`）
+   - 切歌 → `handleTransportSkipInBackground`（`Stop_Music` + `Play_*`；必要时 `loadBankFromPath`；mode 3 随机且不抽当前 index）
 3. **回前台对账**：`AudioAppLifecycle.RestoreForegroundAudio` → `BackgroundTransportSync.ResyncFromNative`
    - 读 `getBackgroundTransportState()` 的 `event` → `MusicCatalog.TryFindByEventName` → `MusicPlaylist.AdoptTrack`
-   - **只改索引，不再发 Play**：引擎里已经是原生起播的那一轨。
+   - **不发 Play**（避免掐断）；尽量重挂 agent voice + Loop/Shuffle `Break_Music`，等本曲 Ended 再自动下一首。
 4. **退岛清计划**：`NowPlayingService.CleanupAfterLeaveIsland` → `ClearPlan`，避免原生继续切失效曲目。
 
 iOS 无对等 API → `BackgroundTransportSync` 三个方法全部 no-op。
@@ -225,12 +228,12 @@ iOS 无对等 API → `BackgroundTransportSync` 三个方法全部 no-op。
 
 ```csharp
 // Game
-BackgroundTransportSync.PublishPlan();       // 前台：推当前专辑可播曲目
+BackgroundTransportSync.PublishPlan();       // 前台：Single/Loop 当前专辑；Shuffle 全专辑
 BackgroundTransportSync.ClearPlan();         // 退岛 / 无曲
 BackgroundTransportSync.ResyncFromNative();  // 回前台：AdoptTrack + 同步暂停态
 
 MusicPlaylist.CurrentEventName;              // 与计划里的 event 对齐
-MusicPlaylist.AdoptTrack(album, track);      // 只更新索引，不发 Play
+MusicPlaylist.AdoptTrack(album, track);      // 对账索引 + 重挂 voice/Break，不发 Play
 
 // WanosAudio（Android only）
 AndroidBackgroundTransport.SetPlan(json);
@@ -242,7 +245,9 @@ AndroidBackgroundTransport.GetStateJson();   // {"event","name","paused","index"
 
 - **前台每次发媒体卡片都必须顺带 `PublishPlan`**（`PublishFromPlaylist` 已做）。漏推 → 后台负一屏切歌无响应 / 仍转发到已被 pause 的 Unity。
 - **回前台必须 `ResyncFromNative` 再 `PublishFromPlaylist`**，否则岛内 UI 与「下一曲」会错位。
-- **`AdoptTrack` 禁止再发 Play 事件**——原生已经起播，C# 只认账。
+- **`AdoptTrack` 禁止再发 Play 事件**——原生已经起播，C# 只认账；Loop/Shuffle 只补 Break 等播完。
+- **列表循环 / 随机必须播完再切**：靠 `Break_Music`→`Ended`→`Next`/`PickShuffle`，切模式也不中途 `Stop`。
+- **随机禁止抽到当前同一首**（全库仅 1 首除外）。
 - 计划里只放 bank 文件已就绪的曲；未下载的曲进不了列表（避免后台切到空 bank 崩引擎）。
 - Java 侧加载 bank 必须过 `looksLikeWanosBank` 头校验（拒绝 BKHD / 文本 / 半截文件，否则 native 抛 → SIGABRT）。
 

@@ -85,7 +85,7 @@ ProcedureLaunch            (Launch.unity 已加载,准备 YooAsset 会话)
               └─→ ProcedureIsland   (进岛; IslandWorldReady → Notify IslandReady)
 ```
 
-Editor 联调:`GameMain/Boluo/环境·渠道·版本`;换票需开启 `Editor Guest Login/Try Remote TouristLogin`。
+Editor 联调:菜单 `GameMain/Boluo/编辑器登录`（UITK，仅 Editor；游客 / 手机）+ `环境·渠道·版本`。真机不含。
 
 新增 Procedure:派生 `ProcedureBase`,在父 `OnUpdate` / 异步回调里 `ChangeState<T>(procedureOwner)`。
 

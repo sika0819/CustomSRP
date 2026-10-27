@@ -175,6 +175,7 @@ namespace Game.Editor
 
             // Prefabs only — .uxml/.uss ride as deps. CollectAll + SupportExtensionless
             // dual-mapped LoadingForm.prefab/.uxml → "Location have existed" warnings.
+            // NormalIgnoreRule 已忽略 /Editor/：注销联调弹窗在 Editor/UI，不会进包。
             AddGroup(package, "GameUI", "Assets/GameMain/UI", "AddressByFolderAndFileNameAndExt", nameof(PackSeparately), nameof(CollectPrefab));
             AddGroup(package, "GameEntity", "Assets/GameMain/Entity", nameof(AddressByFolderAndFileName), nameof(PackDirectory), nameof(CollectAll));
             AddGroup(package, "IslandPresets", "Assets/GameMain/Environment/IslandPresets", nameof(AddressByFileName), nameof(PackDirectory), nameof(CollectAll));

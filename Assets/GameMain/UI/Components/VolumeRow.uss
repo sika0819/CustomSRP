@@ -52,7 +52,8 @@
 
 .volume-row__knob {
     position: absolute;
-    left: 726px;
+    /* Design max: Boluo dragIcon center x=332 vs track center → left 696.5 (not trackRight-144=726). */
+    left: 696.5px;
     top: 116px;
     width: 144px;
     height: 144px;

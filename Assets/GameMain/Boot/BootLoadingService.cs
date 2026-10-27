@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 using Object = UnityEngine.Object;
+using UGF = UnityGameFramework.Runtime.GameEntry;
 
 namespace Game
 {
@@ -23,6 +24,7 @@ namespace Game
         static string _tip = "正在进入世界...";
         static Coroutine _smooth;
         static Coroutine _fade;
+        static Coroutine _poolRelease;
         static LoadingForm _form;
 
         public static bool IsVisible =>
@@ -46,6 +48,7 @@ namespace Game
             _tip = "正在进入世界...";
             _smooth = null;
             _fade = null;
+            _poolRelease = null;
             _form = null;
         }
 
@@ -110,15 +113,15 @@ namespace Game
 
         public static void FadeHide(float duration = 1f)
         {
-            // 二次进岛：上一轮 Leave 可能把 _hiding 钉死，再 FadeHide 会直接 return，罩永远不关。
-            if (_hiding && AliveForm() == null)
+            // 二次进岛：上一轮 Leave 可能把 _hiding 钉死；若 form 仍在却直接 return，
+            // 会卡在「即将进入...」且 Uncover 以为 IsVisible=false 不再强关。
+            if (_hiding)
             {
+                Log.Warning("[BootLoadingService] FadeHide while _hiding — force Hide then continue");
                 Hide();
-                return;
+                // Hide 后若业务仍要淡出，下面 !_visible 会再 Hide 一次（幂等）。
             }
 
-            if (_hiding)
-                return;
             if (!_visible)
             {
                 Hide();
@@ -167,8 +170,12 @@ namespace Game
                 UiAssets.CloseGroup("Loading");
             }
 
-            // 核选项：场景里残留的 LoadingForm（UIManager 已关但 UITK 仍画）
-            ForceDestroyAllLoadingForms();
+            // 禁止 Destroy 仍归 UIManager 实例池 / RecycleQueue 管的 LoadingForm：
+            // Close 后实例会进池，硬删 → 下次 OpenUIForm 同步 Spawn 出已毁 GO →
+            // YooUIFormHelper.CreateUIForm → "UI form instance is invalid."
+            // 视觉靠 OnClose/ForceVeilOff；真正卸实例走对象池 Release。
+            DestroyOrphanLoadingForms();
+            ScheduleReleaseUnusedUiInstances();
             BootEarlyCover.HideIfAny();
 
             _form = null;
@@ -178,27 +185,74 @@ namespace Game
             _targetProgress = 0f;
         }
 
-        static void ForceDestroyAllLoadingForms()
+        /// <summary>
+        /// Only scene leftovers without <see cref="UIForm"/> (never opened via GF).
+        /// GF-managed instances always have UIForm after CreateUIForm — leave those alone.
+        /// </summary>
+        static void DestroyOrphanLoadingForms()
         {
             LoadingForm[] forms = Object.FindObjectsByType<LoadingForm>(FindObjectsInactive.Include);
+            int n = 0;
             for (int i = 0; i < forms.Length; i++)
             {
                 LoadingForm f = forms[i];
                 if (f == null)
                     continue;
+                if (f.GetComponent<UIForm>() != null)
+                    continue;
                 f.ForceVeilOff();
                 Object.Destroy(f.gameObject);
+                n++;
             }
 
-            if (forms.Length > 0)
-                Log.Warning("[BootLoadingService] ForceDestroyAllLoadingForms count=" + forms.Length);
+            if (n > 0)
+                Log.Warning("[BootLoadingService] DestroyOrphanLoadingForms count=" + n);
+        }
+
+        /// <summary>
+        /// Drop unused UI instance-pool entries (incl. Targets already destroyed by older Hide).
+        /// Must run after UIManager has recycled Close → Unspawn; same-frame is too early.
+        /// </summary>
+        static void ScheduleReleaseUnusedUiInstances()
+        {
+            MonoBehaviour host = GameEntry.Base;
+            if (host == null)
+            {
+                ReleaseUnusedUiInstancesNow();
+                return;
+            }
+
+            if (_poolRelease != null)
+                host.StopCoroutine(_poolRelease);
+            _poolRelease = host.StartCoroutine(ReleaseUnusedUiInstancesNextFrame());
+        }
+
+        static IEnumerator ReleaseUnusedUiInstancesNextFrame()
+        {
+            // UIManager.Update recycles Close → pool on the same GameFramework tick;
+            // wait one player frame so Unspawn has landed before ReleaseAllUnused.
+            yield return null;
+            _poolRelease = null;
+            ReleaseUnusedUiInstancesNow();
+        }
+
+        static void ReleaseUnusedUiInstancesNow()
+        {
+            ObjectPoolComponent pools = UGF.GetComponent<ObjectPoolComponent>();
+            pools?.ReleaseAllUnused();
         }
 
         static IEnumerator FadeHideRoutine(float duration)
         {
+            // 二次进岛 Prefill 把帧率打到 <1fps 时，按帧淡出可达数十秒；用墙钟硬切。
+            const float WallClockCapSec = 1.2f;
+            float wallStart = Time.realtimeSinceStartup;
+
             float settle = 0.12f;
             while (settle > 0f)
             {
+                if (Time.realtimeSinceStartup - wallStart > WallClockCapSec)
+                    break;
                 settle -= Time.unscaledDeltaTime;
                 TickSmooth(Time.unscaledDeltaTime * 4f);
                 yield return null;
@@ -215,6 +269,8 @@ namespace Game
 
             while (t < dur)
             {
+                if (Time.realtimeSinceStartup - wallStart > WallClockCapSec)
+                    break;
                 t += Time.unscaledDeltaTime;
                 float a = Mathf.Lerp(from, 0f, Mathf.Clamp01(t / dur));
                 AliveForm()?.SetCoverAlpha(a);
@@ -234,16 +290,17 @@ namespace Game
 
             var uiForm = GameEntry.UI.GetUIForm(UiAssets.LoadingForm);
             _form = uiForm?.Logic as LoadingForm;
-            // HasUIForm 但 Logic 已毁：先拆再开，避免假死罩挡死画面。
+            // HasUIForm 但 Logic 已毁：先关组再开；勿 Destroy（会毒化 UI 实例池）。
             if (_form == null && GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
             {
                 UiAssets.CloseGroup("Loading");
-                ForceDestroyAllLoadingForms();
                 uiForm = null;
             }
 
             if (_form == null)
             {
+                // 清掉池里已毁 Target（旧 ForceDestroy 遗留），否则同步 Spawn → CreateUIForm 报 invalid。
+                ReleaseUnusedUiInstancesNow();
                 // Close 同帧可能仍 HasUIForm：仍尝试 Open；GF 对同 asset 重复 Open 会失败并打日志，下帧 EnsureForm 再试。
                 if (!GameEntry.UI.HasUIForm(UiAssets.LoadingForm)
                     && !GameEntry.UI.IsLoadingUIForm(UiAssets.LoadingForm))
@@ -327,6 +384,9 @@ namespace Game
                 host.StopCoroutine(_fade);
                 _fade = null;
             }
+
+            // Do not stop _poolRelease here — Show() calls StopRoutines and must not
+            // cancel a Hide()-scheduled pool purge that clears poisoned instances.
         }
     }
 }

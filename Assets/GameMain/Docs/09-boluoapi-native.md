@@ -17,6 +17,7 @@
 | [BoluoApi/BoluoApiEnvironment.cs](../BoluoApi/BoluoApiEnvironment.cs) | 130 | 网关环境（dev/test/prerelease/product）+ base url |
 | [BoluoApi/BoluoDeviceInfo.cs](../BoluoApi/BoluoDeviceInfo.cs) | 262 | 设备/渠道/appId/版本/品牌等请求头字段 |
 | [BoluoApi/BoluoDeviceLoginClient.cs](../BoluoApi/BoluoDeviceLoginClient.cs) | 430 | 换票三步 |
+| [BoluoApi/BoluoPhoneLoginClient.cs](../BoluoApi/BoluoPhoneLoginClient.cs) | — | Editor 手机号验证码/密码登录（正式账号） |
 | [BoluoApi/Signature/SignatureLib.cs](../BoluoApi/Signature/SignatureLib.cs) | 135 | `libSignKit` 签名 |
 | [BoluoApi/BankUpgradeClient.cs](../BoluoApi/BankUpgradeClient.cs) | 361 | `upgrade/bank` 目录拉取 |
 | [BoluoApi/BankDownloader.cs](../BoluoApi/BankDownloader.cs) | 1681 | Bank 文件下载（队列 + MD5 + 落盘 + 载入引擎） |
@@ -72,7 +73,8 @@ static bool IsSkyworthGmj();
 ```
 1. boluoRsa       → cipherText
 2. boluoDeviceLogin → deviceToken
-3. touristLogin   → userToken
+3. touristLogin   → userToken（游客）
+   或 mobileLogin / passwordLogin → userToken（正式账号，Editor 联调）
 ```
 
 ```csharp
@@ -80,6 +82,11 @@ static UniTask<bool> EnsureUserTokenAsync();
 static UniTask<bool> EnsureUserTokenAsync(bool failFast);
 static UniTask<bool> EnsureDeviceTokenAsync();
 static UniTask<bool> EnsureDeviceTokenAsync(bool failFast);
+
+// BoluoPhoneLoginClient（Editor 窗口 GameMain/Boluo/编辑器登录 → 手机登录）
+static UniTask<LoginResult> RequestVerifyCodeAsync(mobile, nation = "+86");
+static UniTask<LoginResult> MobileLoginAsync(mobile, verifyCode, nation = "+86");
+static UniTask<LoginResult> PasswordLoginAsync(mobile, password, nation = "+86");
 ```
 
 请求头：`deviceToken` `userToken` `deviceId` `channel` `version` `healthChannel`
@@ -163,8 +170,8 @@ static string GenerateSign(string jsonBody, string fixedNonceStr = null);
 
 | blob | 行为 |
 |---|---|
-| `token` 或 `expire\ttoken` | 旧格式 → `isGuest=true`，无 userId，**不写进度盘** |
-| `expire\ttoken\tisGuest\tuserId` | 新格式；`isGuest` 为 `0`/`1`；正式账号须 `isGuest=0` 且 `userId` 非空 |
+| `token` 或 `expire\ttoken` | 旧格式 → `isGuest=true`，常无 userId → **不写进度盘** |
+| `expire\ttoken\tisGuest\tuserId` | 新格式；进度盘按 `userId` 分桶（有 userId 即可读写，不因 `isGuest=1` 拒写） |
 
 **`HostLeaveIsland`（107）**
 

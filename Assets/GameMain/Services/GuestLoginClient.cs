@@ -8,8 +8,8 @@ using UnityGameFramework.Runtime;
 namespace Game
 {
     /// <summary>
-    /// 编辑器/独立包游客登录。对齐 BoluoUnity：优先本地游客会话进岛；
-    /// 可选尝试公共域 touristLogin（失败则回退本地游客，不挡进岛）。
+    /// 游客登录辅助。Editor 默认不再自动游客（见 <see cref="EditorLoginGate"/> /
+    /// 手机号登录窗）；仅显式「游客进岛」或真机路径调用本类。
     /// </summary>
     public static class GuestLoginClient
     {

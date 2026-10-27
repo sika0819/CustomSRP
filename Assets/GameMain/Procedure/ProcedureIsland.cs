@@ -1,6 +1,7 @@
 using System.Collections;
 using Cysharp.Threading.Tasks;
 using Game.BoluoApi;
+using Game.Native;
 using GameFramework.Procedure;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -36,9 +37,16 @@ namespace Game
         /// <summary>递增以作废进行中的 <see cref="UncoverAsync"/>（退登时勿再 Hide 加载罩）。</summary>
         static int _uncoverGeneration;
 
+        /// <summary>进程内进岛次数（含二次退登重进）；供 Load/telemetry。</summary>
+        static int _enterCount;
+
         /// <summary>供 <see cref="IslandStartupWarmup"/> 检测揭罩是否已作废。</summary>
         public static int UncoverGeneration =>
             System.Threading.Interlocked.CompareExchange(ref _uncoverGeneration, 0, 0);
+
+        /// <summary>当前进程第几次进入 ProcedureIsland（1=冷启）。</summary>
+        public static int EnterCount =>
+            System.Threading.Interlocked.CompareExchange(ref _enterCount, 0, 0);
 
         public static void RequestReturnToGuestLogin()
         {
@@ -48,6 +56,7 @@ namespace Game
         protected override void OnEnter(ProcedureOwner procedureOwner)
         {
             base.OnEnter(procedureOwner);
+            int enter = System.Threading.Interlocked.Increment(ref _enterCount);
             System.Threading.Interlocked.Exchange(ref _returnToGuestLogin, 0);
             _phase = Phase.Services;
             _hudOpened = false;
@@ -59,6 +68,8 @@ namespace Game
                 BootLoadingService.Show("正在进入世界...", BootLoadingService.VisualPrepareMin);
             else
                 BootLoadingService.ReportProgress(BootLoadingService.VisualPrepareMin, "正在进入世界...");
+            Log.Info(
+                $"[ProcedureIsland] enter #{enter} reclaimBusy={IslandLeaveAssetReclaim.IsBusy}");
             EnsureSingleAudioListener();
         }
 
@@ -123,6 +134,9 @@ namespace Game
                 Log.Info("[ProcedureIsland] HostLeave → ProcedureGuestLogin");
                 // 作废揭罩：否则 UncoverAsync 延迟 Hide 会拆掉下面刚 Show 的加载罩。
                 System.Threading.Interlocked.Increment(ref _uncoverGeneration);
+                // 先于 Close Main：IdleImmersive.Dispose 会 OnExitImmersive；
+                // 若不 suppress，会 Resume 镜面并与后续 World.Release/二次 Prefill 抢帧。
+                IslandImmersiveSoftUnload.CancelForWorldTeardown();
                 // 先松预设/相机闩，再关 UI（OnClose 也会 Abort，此处防 Mid-Leave 丢帧）。
                 PendingDownloadIntent.Clear();
                 GameEntry.Presets?.AbortTransition();
@@ -172,6 +186,12 @@ namespace Game
                 WanosAudio.WanosEngine.Unload("ProcedureIsland.OnLeave");
                 GameEntry.World?.Release();
                 _worldLoadStarted = false;
+                // Release 松 handle 后立刻排队卸未用包体；GuestLogin 等 Arm 时空窗消化。
+                IslandLeaveAssetReclaim.ScheduleAfterWorldRelease();
+            }
+            else
+            {
+                IslandLeaveAssetReclaim.Cancel();
             }
 
             base.OnLeave(procedureOwner, isShutdown);
@@ -195,6 +215,8 @@ namespace Game
                     // 有存档则恢复天气/时段；否则跟墙钟并写入首份快照。
                     GameEntry.Weather?.RestoreOrApplyLocalClock();
                     GameEntry.Music?.ApplySavedVolumes();
+                    // Prefill 焦点必须是本账号/游客桶恢复后的相机位；勿等 World 后再 InitAndArm。
+                    EnsureJoystickCamera();
                     BootLoadingService.ReportProgress(0.71f, "正在进入世界...");
                     _phase = Phase.World;
                     break;
@@ -216,7 +238,8 @@ namespace Game
                         _worldLoadRoutine = host.StartCoroutine(LoadWorld());
                     }
 
-                    if (GameEntry.World == null || !GameEntry.World.IsLoaded)
+                    // 近场 Prefill 就绪即可进岛；远场 Prefill / 草 / Nav 在 Load 协程里后台继续。
+                    if (GameEntry.World == null || !GameEntry.World.IsNearReady)
                         break;
 
                     GameEntry.Weather?.PushVisuals();
@@ -224,7 +247,12 @@ namespace Game
                     break;
 
                 case Phase.Camera:
-                    EnsureJoystickCamera();
+                    // Services 已 InitAndArm（供 Prefill 焦点）；地形就绪后必须重贴，
+                    // 否则二次进岛会带着「无碰撞期间」的位姿揭罩（掉地底）。
+                    if (IslandJoystickCamera.Current == null)
+                        EnsureJoystickCamera();
+                    else
+                        IslandPlayerPosSave.ReplantAfterTerrainReady(IslandJoystickCamera.Current);
                     BootLoadingService.ReportProgress(BootLoadingService.CameraPrepareMax, "正在进入岛屿");
                     _phase = Phase.Hud;
                     break;
@@ -274,58 +302,86 @@ namespace Game
         static async UniTaskVoid UncoverAsync()
         {
             int gen = System.Threading.Interlocked.CompareExchange(ref _uncoverGeneration, 0, 0);
-            // Android：jar 内 bank 须先落到 persistent，Ambience Retain 才能找到 Ocean_Calm_Quad 等。
-            await BankUpgradeBootstrap.EnsureLocalBanksReadyAsync();
+
+            // bank 解压 / Critical 不挡揭罩（地形就绪即可进）；音效后台补上。
+            StartAudioAfterBanksAsync(gen).Forget();
+
             if (gen != _uncoverGeneration)
                 return;
 
-            // Device first, then DSP (macOS WanosDSP_StartEngine needs playback device open).
-            WanosAudio.WanosEngine.EnablePlayback("ProcedureIsland.Uncover");
-            WanosAudio.WanosEngine.StartEngine("ProcedureIsland.Uncover");
-            WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover");
-            // Volumes may have been applied before device open — re-push 0–100 RTPCs now.
-            GameEntry.Music?.ApplySavedVolumes();
-            AudioInteractionBootstrap.StartAfterUncover();
-            // Cue Music1_1 as soon as bank is ready (does not wait for full Critical wave).
-            BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();
-            if (gen != _uncoverGeneration)
-                return;
-
-            // Gmj：揭罩前扫视向预热 PSO；随后压低 spawn 与首转错开。
-            await IslandStartupWarmup.RunAsync(gen);
-            if (gen != _uncoverGeneration)
-                return;
+            // 先揭罩 + 放行触摸，再做 Gmj 预热。
+            // 二次进岛 Prefill 抢主线程时，揭罩前 warmup 会把「即将进入」拖成几十秒（有声无画面）。
             EnvStreamingConfig.BeginPostUncoverQuiet();
-
-            // 二次进岛：清 Panel 残留 + 预设/相机闩，避免有声但不能走。
             UnlockLocomotionAfterUncover();
-            BootLoadingService.FadeHide(1f);
-            // FadeHide 若被上一轮 Leave 打断卡在 _hiding，补一刀立刻关罩。
-            await UniTask.Delay(1100, DelayType.UnscaledDeltaTime);
-            if (gen != _uncoverGeneration)
-                return;
-
-            if (BootLoadingService.IsVisible || BootLoadingService.HasForm)
+            const float fadeSec = 0.35f;
+            BootLoadingService.FadeHide(fadeSec);
+            // 墙钟超时：帧率被 Prefill 打穿时 UniTask.Delay(帧) 也会拖很久。
+            float wallStart = Time.realtimeSinceStartup;
+            const float wallCap = 1.5f;
+            while (BootLoadingService.IsVisible || BootLoadingService.HasForm)
             {
-                Log.Warning("[ProcedureIsland] loading still up after FadeHide — force Hide + CloseGroup Loading");
-                BootLoadingService.Hide();
-                if (GameEntry.UI != null)
-                    UiAssets.CloseGroup("Loading");
-            }
+                if (gen != _uncoverGeneration)
+                    return;
+                if (Time.realtimeSinceStartup - wallStart >= wallCap)
+                {
+                    Log.Warning("[ProcedureIsland] FadeHide wall-clock cap — force Hide");
+                    break;
+                }
 
-            // 再确认：假死罩 / UITK 残留必须清掉，否则会出现「IslandMain 在跑、画面仍『正在进入岛屿』」。
-            await UniTask.Yield();
-            if (gen != _uncoverGeneration)
-                return;
+                await UniTask.Yield(PlayerLoopTiming.Update);
+            }
 
             BootLoadingService.Hide();
             if (GameEntry.UI != null)
                 UiAssets.CloseGroup("Loading");
+            // 加载罩已撤 → 立刻 Notify(2)，宿主抬 islandHudReady 放行触摸；
+            // 勿等 Prefill/Nav/Grass 的 IslandWorldReady（否则揭罩后长时间点不动）。
+            UnlockLocomotionAfterUncover();
+            NativeBridgeFacade.NotifyIslandReady();
             Log.Info(
                 "[ProcedureIsland] uncover settle HasForm="
                 + BootLoadingService.HasForm
                 + " IsVisible="
-                + BootLoadingService.IsVisible);
+                + BootLoadingService.IsVisible
+                + " IslandReady notified");
+
+            // Gmj PSO 预热挪到揭罩后；再延迟松闩，防宿主晚推 overlay 钉死行走。
+            PostUncoverWarmupAndRelockAsync(gen).Forget();
+        }
+
+        static async UniTaskVoid PostUncoverWarmupAndRelockAsync(int gen)
+        {
+            IslandStartupWarmup.RunAsync(gen).Forget();
+            await UniTask.Delay(200, DelayType.UnscaledDeltaTime);
+            if (gen != _uncoverGeneration)
+                return;
+            UnlockLocomotionAfterUncover();
+            await UniTask.Delay(600, DelayType.UnscaledDeltaTime);
+            if (gen != _uncoverGeneration)
+                return;
+            UnlockLocomotionAfterUncover();
+        }
+
+        static async UniTaskVoid StartAudioAfterBanksAsync(int gen)
+        {
+            await BankUpgradeBootstrap.EnsureLocalBanksReadyAsync();
+            if (gen != _uncoverGeneration)
+                return;
+
+            WanosAudio.WanosEngine.EnablePlayback("ProcedureIsland.Uncover");
+            WanosAudio.WanosEngine.StartEngine("ProcedureIsland.Uncover");
+            WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover");
+            GameEntry.Music?.ApplySavedVolumes();
+            AudioInteractionBootstrap.StartAfterUncover();
+            // 一出声就推负一屏：须先显式 Arm（PublishPlayingForced 不再自动 Arm，避免退登拆除后
+            // 残留回调重开闸拉 FGS → ForegroundServiceDidNotStartInTimeException）。
+            if (gen != _uncoverGeneration)
+                return;
+            NowPlayingService.ArmSession();
+            if (gen != _uncoverGeneration)
+                return;
+            NowPlayingService.PublishPlayingForced();
+            BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();
         }
 
         static void UnlockLocomotionAfterUncover()
@@ -340,14 +396,22 @@ namespace Game
                 {
                     UiAssets.CloseGroup("Panel");
                     UiAssets.CloseGroup("Dialog");
+                    // Loading 残留会挡 UITK 命中 → 摇杆收不到指针。
+                    if (GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
+                        UiAssets.CloseGroup("Loading");
                 }
                 Native.NativeOverlayGate.Apply(present: 0, touchEnabled: 1, bottomHidden: 0);
+                NativeBridgeFacade.SyncOverlayFromGate();
             }
             catch (System.Exception e)
             {
                 Log.Warning("[ProcedureIsland] UnlockLocomotionAfterUncover: " + e.Message);
             }
-            Log.Info("[ProcedureIsland] UnlockLocomotionAfterUncover");
+            Log.Info(
+                "[ProcedureIsland] UnlockLocomotionAfterUncover " +
+                $"presetBusy={GameEntry.Presets?.IsTransitioning == true} " +
+                $"overlayBlock={Native.NativeOverlayGate.BlocksLocomotion} " +
+                $"popup={HudOverlayGate.HasPopup()}");
         }
     }
 }

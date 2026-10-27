@@ -47,7 +47,28 @@ namespace Game
         public int TrimUnusedPrefabHandles() =>
             _streamer != null ? _streamer.TrimUnusedPrefabHandles() : 0;
 
-        public IEnumerator Run(Transform focus, System.Action<float, string> reportProgress)
+        /// <summary>
+        /// 切预设后把焦点附近未生成的 MapItem 铺齐；全量路径无操作。
+        /// 截图 / READY 前调用，避免画面空缺。
+        /// </summary>
+        public IEnumerator CatchUpAroundFocus(System.Action<float, string> report = null)
+        {
+            if (_streamer == null || !IsReady)
+                yield break;
+
+            yield return _streamer.CatchUpAroundFocus(report);
+
+            if (_colliderLod != null && _focus != null)
+            {
+                float colRadius = Mathf.Max(48f, EnvStreamingConfig.MeshColliderEnableRadius);
+                _colliderLod.ForceRefreshNear(_focus.position, colRadius);
+            }
+        }
+
+        public IEnumerator Run(
+            Transform focus,
+            System.Action<float, string> reportProgress,
+            System.Action onNearReady = null)
         {
             if (_started)
                 yield break;
@@ -69,6 +90,16 @@ namespace Game
 
             const float fillMin = 0.81f;
             const float fillMax = BootLoadingService.TerrainPrepareMax;
+            bool nearSignaled = false;
+            void SignalNearReady()
+            {
+                if (nearSignaled)
+                    return;
+                nearSignaled = true;
+                ForceRefreshCollidersNearFocus();
+                onNearReady?.Invoke();
+            }
+
             if (_allMapItems.Count > 0)
             {
                 if (EnvStreamingConfig.ResolveStreamingEnabled())
@@ -76,12 +107,19 @@ namespace Game
                     _streamer = gameObject.GetComponent<EnvItemStreamerLite>()
                                 ?? gameObject.AddComponent<EnvItemStreamerLite>();
                     _streamer.Initialize(_allMapItems, _categoryParents, transform, _focus, _colliderLod);
-                    yield return _streamer.PrefillAroundFocus(fillMin, fillMax, reportProgress);
+                    yield return _streamer.PrefillAroundFocus(
+                        fillMin, fillMax, reportProgress, SignalNearReady);
+                    _streamer.BeginStreamingAfterPrefill();
                 }
                 else
                 {
                     yield return FullSpawnBudgeted(fillMin, fillMax, reportProgress);
+                    SignalNearReady();
                 }
+            }
+            else
+            {
+                SignalNearReady();
             }
 
             reportProgress?.Invoke(fillMax, "正在铺装氛围特效...");
@@ -89,17 +127,21 @@ namespace Game
             yield return EnvMapItemExtras.Spawn(
                 transform, _categoryParents, _ownedHandles, n => _extrasSpawnedCount = n);
 
-            // 首铺结束后立刻按焦点打开近处碰撞（不等 RefreshLoop 首拍）。
-            if (_colliderLod != null && _focus != null)
-            {
-                float colRadius = Mathf.Max(48f, EnvStreamingConfig.MeshColliderEnableRadius);
-                _colliderLod.ForceRefreshNear(_focus.position, colRadius);
-            }
+            // extras 后再扫一拍碰撞（Near 时已 Force 过一拍）。
+            ForceRefreshCollidersNearFocus();
 
             IsReady = true;
             Log.Info(
                 $"[MapItem] ready items={_allMapItems.Count} spawned={SpawnedCount} " +
                 $"extras={_extrasSpawnedCount} streaming={EnvStreamingConfig.ResolveStreamingEnabled()}");
+        }
+
+        void ForceRefreshCollidersNearFocus()
+        {
+            if (_colliderLod == null || _focus == null)
+                return;
+            float colRadius = Mathf.Max(48f, EnvStreamingConfig.MeshColliderEnableRadius);
+            _colliderLod.ForceRefreshNear(_focus.position, colRadius);
         }
 
         public void Release()
@@ -276,7 +318,7 @@ namespace Game
                 _colliderLod?.Register(instance, pos);
                 _fullSpawnedCount++;
 
-                if (sw.ElapsedMilliseconds >= EnvStreamingConfig.FinalizePerFrameBudgetMs)
+                if (sw.ElapsedMilliseconds >= EnvStreamingConfig.EffectiveFinalizePerFrameBudgetMs)
                 {
                     float t = total > 0 ? (float)(i + 1) / total : 1f;
                     report?.Invoke(Mathf.Lerp(progressMin, progressMax, t), "正在铺装环境...");

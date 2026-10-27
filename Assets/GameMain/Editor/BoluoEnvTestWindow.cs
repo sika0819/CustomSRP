@@ -213,7 +213,7 @@ namespace Game.Editor
                 {
                     EditorGUILayout.HelpBox(
                         "进入 Play 后可：换取 deviceToken（boluoRsa → boluoDeviceLogin）/ 重拉 upgrade/bank。\n" +
-                        "菜单 GameMain/Boluo/Editor Guest Login/Try Remote TouristLogin 需开启才会在启动链换票。",
+                        "登录：GameMain/Boluo/编辑器登录（游客登录 / 手机登录）。",
                         MessageType.Info);
                     return;
                 }

@@ -27,7 +27,7 @@ namespace Game
         static float _nextSaveAt = -1f;
         static bool _armed;
 
-        /// <summary>下次进岛用默认出生点（首次登录 / 退出登录后）。由 Init 消费并清除。</summary>
+        /// <summary>下次进岛用默认出生点（注销清桶等）。普通退登不置位，以便登回同账号恢复分桶坐标。由 Init 消费并清除。</summary>
         public static bool UseDefaultPlayerPosNextLoad { get; set; }
 
         public static bool ShouldSuppressSave => _suppressCount > 0;
@@ -51,6 +51,8 @@ namespace Game
 
         /// <summary>
         /// 进岛相机就绪后调用：按优先级设位，并启动周期保存。
+        /// 此时地形可能尚未 Instantiate；垂直运动由相机在 <c>IsTerrainReady</c> 前冻结，
+        /// 地形就绪后再调 <see cref="ReplantAfterTerrainReady"/> 用高度图重贴。
         /// </summary>
         public static void InitAndArm(IslandJoystickCamera cam)
         {
@@ -64,6 +66,22 @@ namespace Game
                 $"[IslandPlayerPosSave] armed disk={BoluoGamePersistence.AllowsAccountProgressDisk} " +
                 $"guest={GuestSession.IsGuest} userId={GuestSession.UserId ?? ""} " +
                 $"hasPos={BoluoGamePersistence.HasPlayerPositionSaved()}");
+        }
+
+        /// <summary>
+        /// 地形+海就绪后重跑出生优先级：<see cref="IslandJoystickCamera.Teleport"/> 会
+        /// <c>SampleGround</c>，此时高度图可用，避免二次进岛仍停在无碰撞时的作者 Y 或海床。
+        /// </summary>
+        public static void ReplantAfterTerrainReady(IslandJoystickCamera cam)
+        {
+            if (cam == null)
+                return;
+
+            ApplySpawnPriority(cam);
+            Log.Info(
+                "[IslandPlayerPosSave] replant after terrain " +
+                $"pos={cam.transform.position.ToString("F1")} " +
+                $"yaw={cam.YawDegrees:F1}");
         }
 
         public static void Tick()
@@ -122,7 +140,7 @@ namespace Game
                 return false;
             }
 
-            // 同周期一并落盘天气与 BGM（游客门控在 Persist / Capture 内）
+            // 同周期一并落盘天气与 BGM（userId 门控在 Persist / Capture 内）
             var weather = GameEntry.Weather;
             if (weather != null)
                 BoluoGameSave.CaptureIslandAtmosphere(
@@ -147,6 +165,15 @@ namespace Game
         {
             void ApplyDefault() =>
                 cam.Teleport(IslandSpawnPose.DefaultPos, IslandSpawnPose.DefaultYawDegrees);
+
+            // 游客不读写进度盘：始终默认出生，避免迁到正式账号坐标或残留 guest 桶。
+            if (GuestSession.IsGuest)
+            {
+                UseDefaultPlayerPosNextLoad = false;
+                ApplyDefault();
+                Log.Info("[IslandPlayerPosSave] default spawn (guest — no progress disk)");
+                return;
+            }
 
             if (UseDefaultPlayerPosNextLoad)
             {

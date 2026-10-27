@@ -5,7 +5,7 @@
 ## 职责与边界
 
 - `BoluoGameSave`：内存态存档模型 + setter（**UI 层 0–1**）。
-- `BoluoGamePersistence`：PlayerPrefs 键层（**落盘层 0–100**），游客隔离 + **按 userId 分桶**。
+- `BoluoGamePersistence`：PlayerPrefs 键层（**落盘层 0–100**），游客不落盘 + 正式账号 **按 userId 分桶**。
 - `IslandPlayerPosSave`：相机坐标周期保存（10s 一并落盘天气 / BGM）/ 出生优先级。
 - `DownloadedUnplayedManager`：红点「已下载未试听」集合。
 - `AccountPasswordLoginThrottle`：账号密码失败锁定。
@@ -98,7 +98,8 @@ const float SaveIntervalSeconds = 10f;
 const float SaveStartDelaySeconds = 10f;
 
 static bool UseDefaultPlayerPosNextLoad { get; set; }   // 注销后置 true
-static void InitAndArm(IslandJoystickCamera cam);
+static void InitAndArm(IslandJoystickCamera cam);       // Services：先设位供 Prefill
+static void ReplantAfterTerrainReady(IslandJoystickCamera cam); // Camera：地形就绪后重贴
 static void Tick();                  // ProcedureIsland 每帧；到期 TrySaveCurrent(flush:true)
 static bool TrySaveCurrent(flush=false, ignoreSuppress=false);  // 位置 + 天气 + BGM
 static bool TrySaveCurrentAndFlush(); // force + flush（退登前 / pause / OnLeave）
@@ -119,20 +120,22 @@ static string PresetKey(string displayName);   // "p:{name}"
 ## 出生点优先级（`IslandPlayerPosSave.ApplySpawnPriority`）
 
 ```
-1. UseDefaultPlayerPosNextLoad 为 true  → 默认出生点（注销后）
-2. 首次运行（无 DaoYuFirstRunComplete.{userId}） → 默认出生点 + 打标记
-3. 有存档坐标                          → 恢复坐标
-4. 其它                                → 默认出生点
+1. 游客会话                            → 默认出生点（不读盘）
+2. UseDefaultPlayerPosNextLoad 为 true → 默认出生点（注销后）
+3. 首次运行（无 DaoYuFirstRunComplete.{userId}） → 默认出生点 + 打标记
+4. 有存档坐标                          → 恢复坐标
+5. 其它                                → 默认出生点
 ```
 
 默认出生点来自 `Entity/IslandSpawnPose.cs`：兜底 `(610.0767, 12.80065, 706.1781)`，yaw `130.443`。
 
-## 游客隔离与分桶（关键）
+## 分桶门控（关键）
 
 读写进度要求：`IsLoggedIn && !IsGuest && !string.IsNullOrEmpty(UserId)`。
-- 游客 / 旧 blob 无 userId：一律不读写进度键。
-- 正式账号：键为 `BaseKey.{userId}`；普通退登保留；注销 `ClearAccountBoundProgress(userId)`。
-- Hybrid 宿主须下发 `expire\ttoken\tisGuest\tuserId`（见 [09-boluoapi-native.md](09-boluoapi-native.md)）。
+- **游客**（含 Editor 本地游客 / touristLogin）：一律不读写进度键；进岛用默认出生点；会话内态不落盘。
+- 无 userId / 未登录 / 旧 blob 无 userId：一律不读写进度键。
+- 正式账号有 userId：键为 `BaseKey.{userId}`；普通退登保留；注销 `ClearAccountBoundProgress(userId)`。
+- Hybrid 正式账号仍应下发 `expire\ttoken\t0\tuserId`（见 [09-boluoapi-native.md](09-boluoapi-native.md)）。
 
 ## 日志 tag
 
@@ -142,7 +145,9 @@ static string PresetKey(string displayName);   // "p:{name}"
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 存档不落盘 / 坐标不恢复 | 仍被标游客，或 blob 无 userId | 看 `[DeviceLogin] guest=` / `userId=`；`BuildDebugSnapshot()` |
+| 存档不落盘 / 坐标不恢复 | 游客 / 无 userId（旧 blob / 未登录） | 看 `[IslandPlayerPosSave] armed disk=` / `guest=` / `userId=`；`BuildDebugSnapshot()` |
+| 游客进岛却在正式账号坐标 | 旧版游客也按 userId 落盘并迁走无后缀 `PlayerPos` | 现游客门控 + 强制默认出生；清 `PlayerPos.guest_*` 残留可选 |
+| 退登后再进掉地底 | Services 就 `InitAndArm`，地形未就绪时 CC 重力下坠；Camera 阶段未重贴 | 无地形时相机冻结垂直；`IsTerrainReady` 后 `ReplantAfterTerrainReady`；`SampleGround` 跳过海/河床 |
 | 退登后再登同账号丢进度 | 误走了 `ExecuteAccountDeleted` / `a=1` | 普通退登用 `a=0` / `ExecuteLeave` |
 | 注销后仍恢复旧位置 | 未走 `a=1` 或未清桶 | 宿主注销成功推 `HostLeaveIsland a=1` |
 | 音量条能动但引擎不变 | 0–1 / 0–100 量纲 | `SetMusicVolume01` 内部已 ×100 |
@@ -150,4 +155,4 @@ static string PresetKey(string displayName);   // "p:{name}"
 | 崩溃后存档丢失 | 旧版周期写未 `PlayerPrefs.Save()` | 现周期 / 退登 / pause 均 flush；看 `[IslandPlayerPosSave] saved ok` |
 | 退登后再登丢最后位置 | 旧版先 `GuestSession.Clear` 再 OnLeave 存 | `ExecuteLeave` 清会话前先 `TrySaveCurrentAndFlush` |
 | 首次进岛不按存档走 | `DaoYuFirstRunComplete.{userId}` 标记未打 | 清对应桶 Prefs 复现 |
-| 正式账号仍不存 | 宿主 blob 仍游客 / 无 userId | `[IslandPlayerPosSave] skip save — disk gated`；`BuildDebugSnapshot()` |
+| 有会话仍不存 | blob / 会话缺 userId | `[IslandPlayerPosSave] skip save — disk gated`；`BuildDebugSnapshot()` |

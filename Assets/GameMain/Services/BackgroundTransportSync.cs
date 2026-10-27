@@ -7,7 +7,7 @@ using WanosAudio;
 namespace Game
 {
     /// <summary>
-    /// 后台传输计划：前台把当前专辑推给 Android 原生；回前台对账原生可能切过的曲。
+    /// 后台传输计划：Single/Loop 推当前专辑，Shuffle 推全部专辑；回前台对账原生可能切过的曲。
     /// iOS 无对等 API → 三方法全部 no-op。
     /// </summary>
     public static class BackgroundTransportSync
@@ -28,7 +28,7 @@ namespace Game
 #endif
 
         /// <summary>
-        /// 把当前专辑可播曲目打成 Java 约定 JSON 推给原生。
+        /// 推后台传输计划：Single/Loop = 当前专辑；Shuffle = 全部专辑可播曲。
         /// 无曲目 / 当前曲 bank 未就绪 → Clear。
         /// </summary>
         public static void PublishPlan()
@@ -51,38 +51,34 @@ namespace Game
                 return;
             }
 
-            var tracks = MusicCatalog.GetTracks(album);
-            if (tracks.Count == 0)
-            {
-                ClearPlan();
-                return;
-            }
-
             Scratch.Clear();
             int currentInPlan = -1;
-            for (int i = 0; i < tracks.Count; i++)
+            bool shuffleAll = music.PlayMode == MusicPlayMode.Shuffle;
+
+            if (shuffleAll)
             {
-                MusicTrack t = tracks[i];
-                if (string.IsNullOrEmpty(t.EventName) || string.IsNullOrEmpty(t.BankName))
-                    continue;
-                if (!WanosBankPaths.Instance.TryResolve(t.BankName, out string path))
-                    continue;
-                // 与 Java looksLikeWanosBank / 原生 loadBank 门禁对齐：坏文件不进计划
-                if (!WanosBankStore.IsLikelyValidBankFile(path))
-                    continue;
-
-                if (i == track)
-                    currentInPlan = Scratch.Count;
-
-                Scratch.Add(new PlanEntry
+                for (int a = 0; a < MusicCatalog.AlbumCount; a++)
                 {
-                    Name = t.MusicName ?? "",
-                    Event = t.EventName,
-                    Bank = t.BankName,
-                    Guid = t.BankGuid ?? "",
-                    Path = path,
-                    Loaded = WanosBankStore.IsLoaded(t.BankName),
-                });
+                    var albumTracks = MusicCatalog.GetTracks(a);
+                    for (int i = 0; i < albumTracks.Count; i++)
+                    {
+                        if (!TryAppendPlanTrack(albumTracks[i], out int addedAt))
+                            continue;
+                        if (a == album && i == track)
+                            currentInPlan = addedAt;
+                    }
+                }
+            }
+            else
+            {
+                var tracks = MusicCatalog.GetTracks(album);
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    if (!TryAppendPlanTrack(tracks[i], out int addedAt))
+                        continue;
+                    if (i == track)
+                        currentInPlan = addedAt;
+                }
             }
 
             if (Scratch.Count == 0 || currentInPlan < 0)
@@ -113,6 +109,33 @@ namespace Game
             AndroidBackgroundTransport.SetPlan(Sb.ToString());
 #endif
         }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        /// <returns>false if track skipped; <paramref name="indexInScratch"/> is Scratch index when added.</returns>
+        static bool TryAppendPlanTrack(MusicTrack t, out int indexInScratch)
+        {
+            indexInScratch = -1;
+            if (string.IsNullOrEmpty(t.EventName) || string.IsNullOrEmpty(t.BankName))
+                return false;
+            if (!WanosBankPaths.Instance.TryResolve(t.BankName, out string path))
+                return false;
+            // 与 Java looksLikeWanosBank / 原生 loadBank 门禁对齐：坏文件不进计划
+            if (!WanosBankStore.IsLikelyValidBankFile(path))
+                return false;
+
+            indexInScratch = Scratch.Count;
+            Scratch.Add(new PlanEntry
+            {
+                Name = t.MusicName ?? "",
+                Event = t.EventName,
+                Bank = t.BankName,
+                Guid = t.BankGuid ?? "",
+                Path = path,
+                Loaded = WanosBankStore.IsLoaded(t.BankName),
+            });
+            return true;
+        }
+#endif
 
         public static void ClearPlan()
         {
@@ -147,15 +170,13 @@ namespace Game
             // RestoreForegroundAudio 在 Resync 之后会再清一次（覆盖负一屏暂停）。
             NowPlayingService.NoteUserPaused(paused);
 
-            if (string.Equals(music.CurrentEventName, eventName, System.StringComparison.OrdinalIgnoreCase))
-                return;
-
             if (!MusicCatalog.TryFindByEventName(eventName, out int albumIdx, out int trackIdx))
             {
                 Log.Warning($"[BackgroundTransportSync] Resync: unknown event={eventName}");
                 return;
             }
 
+            // 同曲也对账：重挂 voice + Loop/Shuffle Break（等本曲播完再自动下一首）。
             music.AdoptTrack(albumIdx, trackIdx);
             Log.Info($"[BackgroundTransportSync] Resync adopted album={albumIdx} track={trackIdx} event={eventName} paused={paused}");
 #endif

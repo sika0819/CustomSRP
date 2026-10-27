@@ -4,8 +4,8 @@ using GameFramework.Event;
 namespace Game.Native
 {
     /// <summary>
-    /// N→U: 原生侧要 Unity 显/隐 HUD 上的"我的"红点。
-    /// 当前业务未直接消费；保留 EventArgs 以便 UI 层后续 Subscribe。
+    /// N→U: 原生侧要 Unity 显/隐 HUD「我的」红点（Imp 102）。
+    /// iOS：未绑 Apple ID → Visible；Android：恒 false。由 IslandMainForm 消费。
     /// </summary>
     public sealed class NativeProfileBadgeEventArgs : GameEventArgs
     {

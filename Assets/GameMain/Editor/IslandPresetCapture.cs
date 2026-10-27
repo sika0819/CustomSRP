@@ -13,6 +13,7 @@ namespace Game.Editor
 {
     /// <summary>
     /// Play 里依次切岛屿预设 1–10，主相机渲 3840×2160，不含 UI。
+    /// 进 Play 后自动 <see cref="EditorLoginGate.RequestGuestProceed"/> 走游客登录，不弹窗等人点。
     /// 通过关掉 UIDocument.enabled（非仅 opacity），避免 CustomSRP DrawUIOverlay 把 HUD/FPS 画进 RT。
     /// 菜单：GameMain/Boluo/截图/各预设 4K 无 UI；也可丢 Temp/capture_preset_4k。
     /// </summary>
@@ -27,8 +28,10 @@ namespace Game.Editor
         const float LandscapeHFovDeg = 90f;
         const int FirstScheme = 1;
         const int LastScheme = 10;
-        const float SettleSeconds = 3.0f;
+        /// <summary>MapItem CatchUp 结束后再等一小会儿，让天气/雾/草绑定稳住。</summary>
+        const float SettleSeconds = 0.75f;
         const float WorldReadyTimeout = 120f;
+        const float CatchUpTimeout = 90f;
 
         static readonly string[] FallbackNames =
         {
@@ -114,7 +117,9 @@ namespace Game.Editor
             SessionState.SetBool(SessionKey, true);
             SessionState.SetInt(SessionPhase, EditorApplication.isPlaying ? 2 : 1);
             _phaseStart = EditorApplication.timeSinceStartup;
-            Log.Info($"[Preset4K] 开始 → {OutDir}  {(EditorApplication.isPlaying ? "已在 Play" : "将进入 Play")}");
+            // 尽早闩上游客放行；GuestLogin.OnEnter 会 Reset，WaitWorldReady 里会反复补。
+            EditorLoginGate.RequestGuestProceed();
+            Log.Info($"[Preset4K] 开始 → {OutDir}  {(EditorApplication.isPlaying ? "已在 Play" : "将进入 Play")}（游客登录）");
         }
 
         static async Task RunAsync()
@@ -161,6 +166,10 @@ namespace Game.Editor
                             continue;
                         }
 
+                        // 等一帧让相机落点写入 focus，再铺齐附近 MapItem，最后短 settle。
+                        await DelaySeconds(0.05f);
+                        if (!await WaitMapItemsCaughtUp())
+                            Debug.LogWarning($"[Preset4K] MapItem CatchUp 超时/跳过 scheme={schemeId}");
                         await DelaySeconds(SettleSeconds);
                         if (_cancel || !EditorApplication.isPlaying)
                             break;
@@ -202,16 +211,38 @@ namespace Game.Editor
         static async Task<bool> WaitWorldReady()
         {
             double start = EditorApplication.timeSinceStartup;
+            bool closedLoginUi = false;
             while (EditorApplication.timeSinceStartup - start < WorldReadyTimeout)
             {
                 if (_cancel || !EditorApplication.isPlaying)
                     return false;
+
+                // GuestLogin.OnEnter 会 ResetSessionFlags；轮询补 Request，免等人点「游客登录进岛」。
+                if (!EditorLoginGate.HasFormalSession)
+                    EditorLoginGate.RequestGuestProceed();
+
+                if (!closedLoginUi && EditorLoginGate.GuestProceedRequested)
+                {
+                    CloseEditorLoginWindow();
+                    closedLoginUi = true;
+                }
+
                 if (IsWorldReady() && Camera.main != null)
                     return true;
                 await Task.Delay(250);
             }
 
             return IsWorldReady() && Camera.main != null;
+        }
+
+        static void CloseEditorLoginWindow()
+        {
+            var wins = Resources.FindObjectsOfTypeAll<BoluoPhoneLoginWindow>();
+            for (int i = 0; i < wins.Length; i++)
+            {
+                if (wins[i] != null)
+                    wins[i].Close();
+            }
         }
 
         static bool IsWorldReady()
@@ -232,6 +263,67 @@ namespace Game.Editor
                 if (_cancel || !EditorApplication.isPlaying)
                     return;
                 await Task.Delay(100);
+            }
+        }
+
+        /// <summary>
+        /// 在 Play 主线程上跑 <see cref="EnvMapItemSpawner.CatchUpAroundFocus"/>，
+        /// 直到附近物体铺齐或超时。全量路径 / 未就绪时直接成功返回。
+        /// </summary>
+        static async Task<bool> WaitMapItemsCaughtUp()
+        {
+            var world = IslandWorldService.Instance
+                ?? UnityEngine.Object.FindAnyObjectByType<IslandWorldService>();
+            EnvMapItemSpawner spawner = world != null ? world.MapItemSpawner : null;
+            if (spawner == null || !spawner.IsReady)
+                return true;
+
+            if (world == null)
+                return true;
+
+            bool done = false;
+            bool started = false;
+            try
+            {
+                world.StartCoroutine(CatchUpRoutine(spawner, () => done = true));
+                started = true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Preset4K] CatchUp start failed: {e.Message}");
+                return false;
+            }
+
+            if (!started)
+                return false;
+
+            double start = EditorApplication.timeSinceStartup;
+            while (!done)
+            {
+                if (_cancel || !EditorApplication.isPlaying)
+                    return false;
+                if (EditorApplication.timeSinceStartup - start > CatchUpTimeout)
+                {
+                    Debug.LogWarning($"[Preset4K] CatchUp timeout {CatchUpTimeout}s");
+                    return false;
+                }
+
+                await Task.Delay(50);
+            }
+
+            Log.Info($"[Preset4K] map items caught up spawned={spawner.SpawnedCount}");
+            return true;
+        }
+
+        static System.Collections.IEnumerator CatchUpRoutine(EnvMapItemSpawner spawner, Action onDone)
+        {
+            try
+            {
+                yield return spawner.CatchUpAroundFocus();
+            }
+            finally
+            {
+                onDone?.Invoke();
             }
         }
 

@@ -92,6 +92,14 @@ namespace Game
                 _removedAtFrame[id] = Time.frameCount;
             }
 
+            public void ClearSlots()
+            {
+                Matrices.Clear();
+                Instances.Clear();
+                _goIdToSlot.Clear();
+                _removedAtFrame.Clear();
+            }
+
             /// <summary>
             /// Dirty sync: only rewrite matrices when transform.hasChanged, or force
             /// every <paramref name="forceFull"/> call (periodic sweep for destroyed GOs).
@@ -150,6 +158,39 @@ namespace Game
             return _instance;
         }
 
+        /// <summary>
+        /// 退岛 / World.Release：清空合批。否则二次 Prefill 叠在失效 Mesh/Material
+        /// 与幽灵实例上，LateUpdate DrawAll 会把主线程打到卡死（「正在铺装环境」）。
+        /// </summary>
+        public static void ClearAll()
+        {
+            if (_instance == null)
+                return;
+            _instance.Clear();
+        }
+
+        void Clear()
+        {
+            for (int i = 0; i < _buckets.Count; i++)
+            {
+                Bucket bucket = _buckets[i];
+                // 实例由 streamer Destroy；此处只拆槽位，避免再 SetRenderersEnabled。
+                bucket.Matrices.Clear();
+                bucket.Instances.Clear();
+                bucket.ClearSlots();
+            }
+
+            _buckets.Clear();
+            _prototypes.Clear();
+            _assetIdToIndex.Clear();
+            _bbAssetIdToIndex.Clear();
+            _bbNameToIndex.Clear();
+            _nameToIndex.Clear();
+            _syncFrame = 0;
+            _cachedCam = null;
+            _cachedCamFrame = -1;
+        }
+
         public void SetMaxDist(float maxDist)
         {
             if (maxDist > 0f)
@@ -204,7 +245,7 @@ namespace Game
         }
 
         /// <summary>
-        /// Far-tree single-card billboard prototype (Y-facing material instance).
+        /// Far-tree cross-billboard prototype (front/side snap + yaw material instance).
         /// Separate key space from <see cref="AddPrototype"/> so LOD0 veg and tree bb coexist.
         /// </summary>
         public int AddBillboardPrototype(GameObject prefabAsset, bool mainCameraOnly)
@@ -220,7 +261,7 @@ namespace Game
                     prefabAsset, out Mesh mesh, out Material sharedMat, out Bounds localBounds))
                 return -1;
 
-            Material material = EnvTreeBillboardUtil.CreateYBillboardMaterial(sharedMat);
+            Material material = EnvTreeBillboardUtil.CreateCrossBillboardMaterial(sharedMat);
             if (mesh == null || material == null)
                 return -1;
 

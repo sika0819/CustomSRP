@@ -4,7 +4,8 @@ using UnityGameFramework.Runtime;
 namespace Game
 {
     /// <summary>
-    /// 主存档内存模型：进岛加载、变更即 Persist。游客会话使用默认值且不落盘。
+    /// 主存档内存模型：进岛加载、变更即 Persist。
+    /// 落盘门控见 <see cref="BoluoGamePersistence.AllowsAccountProgressDisk"/>（正式账号按 userId 分桶；游客不落盘）。
     /// </summary>
     public static class BoluoGameSave
     {
@@ -66,10 +67,10 @@ namespace Game
                 $"music={_data.hasMusicTrack} bank={_data.musicBankName}");
         }
 
-        /// <summary>无主存档时，从既有 Setting 音量键迁移一次（正式账号）。</summary>
+        /// <summary>无主存档时，从既有 Setting 音量键迁移一次。</summary>
         static void MigrateVolumesFromSettingIfNeeded(string raw)
         {
-            if (GuestSession.IsGuest || !string.IsNullOrEmpty(raw))
+            if (!BoluoGamePersistence.AllowsAccountProgressDisk || !string.IsNullOrEmpty(raw))
                 return;
             if (GameEntry.Setting == null)
                 return;
@@ -190,7 +191,7 @@ namespace Game
             }
         }
 
-        /// <summary>写入当前岛上天气/时段快照（游客不落盘）。</summary>
+        /// <summary>写入当前岛上天气/时段快照（无 userId 时 Persist 为空操作）。</summary>
         public static void CaptureIslandAtmosphere(
             IslandWeatherKind kind,
             int level,
@@ -234,7 +235,7 @@ namespace Game
             return true;
         }
 
-        /// <summary>写入当前 BGM bank/event（游客不落盘）。</summary>
+        /// <summary>写入当前 BGM bank/event（无 userId 时 Persist 为空操作）。</summary>
         public static void CaptureMusicTrack(string bankName, string eventName)
         {
             if (string.IsNullOrEmpty(bankName))

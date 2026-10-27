@@ -76,6 +76,7 @@ namespace Game
         VisualElement _hudIcons;
         VisualElement _presetIcon;
         VisualElement _healthIcon;
+        VisualElement _profileBadge;
         Label _presetLabel;
         IVisualElementScheduledItem _presetLabelHide;
         float _presetLabelAlpha;
@@ -103,12 +104,14 @@ namespace Game
             OnClick("timerBackground", () => NativeBridgeFacade.HudTimer());
             _presetIcon = Root.Q("presetIcon");
             _healthIcon = Root.Q("defaultState2");
-#if UNITY_ANDROID && !UNITY_EDITOR
-            if (_healthIcon != null)
-                _healthIcon.style.display = DisplayStyle.None;
-#else
-            OnClick("defaultState2", () => NativeBridgeFacade.HudHealth());
-#endif
+            // 「我的」红点：默认灭；原生 Push 102 再亮（仅 iOS Apple 未绑定）。
+            _profileBadge = Root.Q("profile")?.Q("badge");
+            ApplyProfileBadgeVisible(false);
+            // 健康入口：Android 无产品页，USS 默认 none；仅 iOS / Editor 注册点击并由 ShowHideIcon 显隐。
+            if (!HideHealthHudIcon)
+                OnClick("defaultState2", () => NativeBridgeFacade.HudHealth());
+            else
+                ApplyHealthIconVisible(false);
             HudBottomIcons.Bind(ApplyBottomIconsVisible);
             OnClick("timeBackground2", CycleTimePeriod);
 
@@ -211,10 +214,18 @@ namespace Game
             HudBottomIcons.Unbind(ApplyBottomIconsVisible);
             _presetIcon = null;
             _healthIcon = null;
+            _profileBadge = null;
 
             UnsubscribeHudEvents();
             base.OnClose(isShutdown, userData);
         }
+
+        /// <summary>
+        /// 健康 HUD：Android 真机恒隐（无健康页）；Editor / iOS 可显。
+        /// RuntimePlatform 判定：Editor 选 Android 目标时仍可预览健康入口。
+        /// </summary>
+        static bool HideHealthHudIcon =>
+            Application.platform == RuntimePlatform.Android;
 
         /// <summary>
         /// Boluo ShowHideIcon：仅底部预设 + 健康；Android 健康入口始终隐藏。
@@ -224,13 +235,20 @@ namespace Game
             if (_presetIcon != null)
                 _presetIcon.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
 
+            ApplyHealthIconVisible(visible);
+        }
+
+        void ApplyHealthIconVisible(bool visible)
+        {
             if (_healthIcon == null)
                 return;
-#if UNITY_ANDROID && !UNITY_EDITOR
-            _healthIcon.style.display = DisplayStyle.None;
-#else
+            if (HideHealthHudIcon)
+            {
+                _healthIcon.style.display = DisplayStyle.None;
+                return;
+            }
+
             _healthIcon.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
-#endif
         }
 
         void ResubscribeHudEvents()
@@ -242,6 +260,7 @@ namespace Game
             GameEntry.Event.Subscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
             GameEntry.Event.Subscribe(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest);
             GameEntry.Event.Subscribe(NativeTimerEventArgs.EventId, OnNativeTimer);
+            GameEntry.Event.Subscribe(NativeProfileBadgeEventArgs.EventId, OnNativeProfileBadge);
         }
 
         void UnsubscribeHudEvents()
@@ -257,6 +276,8 @@ namespace Game
                 GameEntry.Event.Unsubscribe(PresetTransitionRequestEventArgs.EventId, OnPresetTransitionRequest);
             if (GameEntry.Event.Check(NativeTimerEventArgs.EventId, OnNativeTimer))
                 GameEntry.Event.Unsubscribe(NativeTimerEventArgs.EventId, OnNativeTimer);
+            if (GameEntry.Event.Check(NativeProfileBadgeEventArgs.EventId, OnNativeProfileBadge))
+                GameEntry.Event.Unsubscribe(NativeProfileBadgeEventArgs.EventId, OnNativeProfileBadge);
         }
 
         public override void OnUpdate(float elapseSeconds, float realElapseSeconds)
@@ -457,6 +478,22 @@ namespace Game
         void OnWeatherChanged(object sender, GameEventArgs e) => SyncWeatherIcon();
 
         void OnNativeTimer(object sender, GameEventArgs e) => SyncTimerIcon();
+
+        void OnNativeProfileBadge(object sender, GameEventArgs e)
+        {
+            if (e is NativeProfileBadgeEventArgs args)
+                ApplyProfileBadgeVisible(args.Visible);
+        }
+
+        /// <summary>
+        /// HUD「我的」红点：iOS Apple 未绑定亮；Android 原生恒推 false。
+        /// </summary>
+        void ApplyProfileBadgeVisible(bool visible)
+        {
+            if (_profileBadge == null)
+                return;
+            _profileBadge.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+        }
 
         /// <summary>
         /// 跟 NativeTimerService（原生 TimerProgress / Editor NativeEditorHud 推送）画定时环。

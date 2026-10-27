@@ -5,15 +5,17 @@ namespace Game
 {
     /// <summary>
     /// 游戏进度 / 本地偏好 PlayerPrefs 统一入口。
-    /// 游客：不写岛内进度键，且主存档、位置、首进岛、下载红点、活动弹窗日期等不读磁盘。
-    /// 正式账号：进度键按 userId 分桶（<c>BaseKey.userId</c>）；退登保留，仅注销清该桶。
+    /// 正式账号（非游客）且有 userId：进度键按 userId 分桶（<c>BaseKey.userId</c>）；退登保留，仅注销清该桶。
+    /// 游客 / 无 userId / 未登录：不读写岛内进度（默认出生、会话内态不落盘，避免脏键串号或迁走正式账号坐标）。
     /// 账号 token / 设备 token 由 <see cref="BoluoApi.BoluoSession"/> 管理，不在此类。
     /// </summary>
     public static class BoluoGamePersistence
     {
         static bool IsGuestSession => GuestSession.IsGuest;
 
-        /// <summary>正式账号、已登录且有 userId 才读写岛内进度（游客 / 无 userId / 退登后都不碰盘）。</summary>
+        /// <summary>
+        /// 正式账号已登录且有 userId 才读写岛内进度。游客（含 Editor 本地游客 / touristLogin）一律不碰盘。
+        /// </summary>
         public static bool AllowsAccountProgressDisk =>
             GuestSession.IsLoggedIn
             && !IsGuestSession

@@ -31,7 +31,10 @@ namespace Game.Native
         public static void HudTimer() => HudIcon(MsgType.HudIconTimer);
         public static void HudHealth() => HudIcon(MsgType.HudIconHealth);
 
-        /// <summary>岛面可看就关原生启动页。HUD 未就绪也可以发；重复调用会被丢掉。</summary>
+        /// <summary>
+        /// 加载罩 FadeHide 完成后发：宿主抬 islandHudReady、放行触摸并关启动页。
+        /// 重复调用会被丢掉（世界 Prefill 收尾的补发无害）。
+        /// </summary>
         public static void IslandReady()
         {
             if (Interlocked.Exchange(ref _islandReadySent, 1) != 0)

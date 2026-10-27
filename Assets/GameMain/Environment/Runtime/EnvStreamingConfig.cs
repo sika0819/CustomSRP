@@ -102,34 +102,46 @@ namespace Game
         public static int DespawnPerFrameBudget = 16;
 
         /// <summary>
-        /// 揭罩后短时压低 spawn/finalize（不改环半径）。与首转 / PSO 预热错开毛刺。
+        /// 揭罩后 / 远场 Prefill 压低 spawn/finalize（不改环半径）。
+        /// Hold 到 <see cref="ClearPostUncoverQuiet"/>（IsLoaded）；定时器仅兜底。
         /// </summary>
         static float _postUncoverQuietUntil = -1f;
-        const float PostUncoverQuietSeconds = 4f;
-        const float PostUncoverSpawnScale = 0.35f;
-        const float PostUncoverFinalizeScale = 0.5f;
+        static bool _quietHoldUntilClear;
+        const float PostUncoverQuietSeconds = 12f;
+        // 二次进岛远场 Prefill / StreamLoop：再压一档，避免揭罩后仍 ~8FPS。
+        const float PostUncoverSpawnScale = 0.2f;
+        const float PostUncoverFinalizeScale = 0.35f;
 
-        /// <summary>Gmj：揭罩起压低分帧铺装约 <see cref="PostUncoverQuietSeconds"/> 秒。</summary>
+        /// <summary>
+        /// 全真机档（含 Editor Play）：压低分帧铺装直至 <see cref="ClearPostUncoverQuiet"/>。
+        /// </summary>
         public static void BeginPostUncoverQuiet()
         {
-            if (DeviceGraphicsPolicy.Current != DeviceGraphicsClass.Gmj)
-                return;
+            _quietHoldUntilClear = true;
             _postUncoverQuietUntil = Time.unscaledTime + PostUncoverQuietSeconds;
         }
 
-        public static void ClearPostUncoverQuiet() => _postUncoverQuietUntil = -1f;
+        public static void ClearPostUncoverQuiet()
+        {
+            _quietHoldUntilClear = false;
+            _postUncoverQuietUntil = -1f;
+        }
 
         static bool InPostUncoverQuiet =>
-            _postUncoverQuietUntil > 0f && Time.unscaledTime < _postUncoverQuietUntil;
+            _quietHoldUntilClear
+            || (_postUncoverQuietUntil > 0f && Time.unscaledTime < _postUncoverQuietUntil);
+
+        /// <summary>揭罩后 Quiet Hold（含远场 Prefill）：Streamer 可强制每实例让帧。</summary>
+        public static bool IsPostUncoverQuiet => InPostUncoverQuiet;
 
         public static int EffectiveSpawnPerFrameBudget =>
             InPostUncoverQuiet
-                ? Mathf.Max(2, Mathf.RoundToInt(SpawnPerFrameBudget * PostUncoverSpawnScale))
+                ? Mathf.Max(1, Mathf.RoundToInt(SpawnPerFrameBudget * PostUncoverSpawnScale))
                 : SpawnPerFrameBudget;
 
         public static float EffectiveFinalizePerFrameBudgetMs =>
             InPostUncoverQuiet
-                ? Mathf.Max(0.8f, FinalizePerFrameBudgetMs * PostUncoverFinalizeScale)
+                ? Mathf.Max(0.5f, FinalizePerFrameBudgetMs * PostUncoverFinalizeScale)
                 : FinalizePerFrameBudgetMs;
         /// <summary>
         /// 近距启用 MeshCollider。须明显大于走路半秒路程，否则高速接近大石时
@@ -471,6 +483,20 @@ namespace Game
             if (IsSmallTreeCategory(category))
                 return Mathf.Max(runtimeShowDistance, GuanmuShowDistance);
             return runtimeShowDistance;
+        }
+
+        /// <summary>
+        /// Prefill 近场段：cap 在 Ring0 / TreeRing0，且 ≥ <see cref="MeshColliderEnableRadius"/>，
+        /// 供 IsNearReady 揭罩（远场仍走 <see cref="GetPrefillShowDistance"/>）。
+        /// </summary>
+        public static float GetPrefillNearShowDistance(string category, float runtimeShowDistance)
+        {
+            float full = GetPrefillShowDistance(category, runtimeShowDistance);
+            float ring = IsTreeCategory(category) && !IsSmallTreeCategory(category)
+                ? TreeRing0EnterRadius
+                : Ring0EnterRadius;
+            ring = Mathf.Max(ring, MeshColliderEnableRadius);
+            return Mathf.Min(full, ring);
         }
 
         public static float GetHideDistance(string category, string prefabName, out float showDistance)

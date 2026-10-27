@@ -123,7 +123,10 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     half3 wetSpec = (half3)_SpecColor.rgb * (1.0h + wet * 0.35h);
 
 #if defined(_CLIPPING)
-    clip(alpha - (half)GetCutoff(config));
+    // Boluo TreeCrossBillboard: contour mesh hugs atlas alpha — do not clip
+    // billboard cards (mip-averaged alpha punches holes + black fringe when walking).
+    if (crossBbEarly < 0.5 && yBbEarly < 0.5)
+        clip(alpha - (half)GetCutoff(config));
 #endif
 
     half3 geometricNormal = normalize((half3)input.normalWS);
@@ -185,15 +188,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     // Far Cross / Y impostor: baked OS normals → OilFoliageLighting (BoluoUnity LitAlbedoObject).
     if (crossBbFrag > 0.5 || yBbFrag > 0.5)
     {
-#if !defined(OIL_MOBILE_PERF)
-        // EdgeFade only for Cross (Y card already faces camera).
-        if (crossBbFrag > 0.5)
-        {
-            half3 viewBb = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
-            half ndotv = abs(dot(normalWS, viewBb));
-            clip(ndotv - (half)_EdgeFade);
-        }
-#endif
+        // Contour + yaw-to-camera: no EdgeFade clip (was punching silhouette holes).
         half3 bakedN = (half3)SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, config.baseUV).rgb;
         half3 bb = OilTreeCrossBillboardShade(
             albedo, bakedN, (half)_NormalStrength, surface, config.fragment.screenUV);

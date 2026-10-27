@@ -244,20 +244,25 @@ namespace Game
             UiAssets.OpenDialog(UiAssets.AgreementForm, data);
         }
 
+#if UNITY_EDITOR
         /// <summary>
-        /// Show account cancellation reminder.
+        /// 编辑器联调：注销确认期弹窗（资源在 Editor/UI，不进发包）。
         /// </summary>
         public static void ShowCancelAccountReminder(
             Action onLoginAndStopCancel,
-            Action onCancel = null)
+            Action onCancel = null,
+            string body = null)
         {
             var data = new CancelAccountReminderForm.UserData
             {
                 OnLoginAndStopCancel = onLoginAndStopCancel,
                 OnCancel = onCancel,
             };
+            if (!string.IsNullOrEmpty(body))
+                data.Body = body;
             UiAssets.OpenDialog(UiAssets.CancelAccountReminderForm, data);
         }
+#endif
 
         #endregion
 

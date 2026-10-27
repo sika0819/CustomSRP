@@ -12,7 +12,7 @@
 
 #effectVolume #knob {
     position: absolute;
-    left: 726px;
+    left: 696.5px;
     top: 116px;
     width: 144px;
     height: 144px;

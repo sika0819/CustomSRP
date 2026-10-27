@@ -717,23 +717,57 @@ public class WanosMusicPlayerNative {
     public void clearLogoutStopLatch() {
         shouldStop = false;
         userPaused = false;
+        WIAEngineJNI.setPlaybackActive(true);
         Log.i(TAG, "clearLogoutStopLatch");
+    }
+
+    /**
+     * 退登 / 切 Login 拆除：撤掉排队 NowPlaying、关闸、停 FGS。
+     * 必须在 LoadScene(Login) 前由 C# CleanupAfterLogout 调用，
+     * 否则残留 mainHandler 推送会在主线程拥堵时误拉起 FGS 超时杀进程。
+     */
+    public void teardownForLogout() {
+        ++playGeneration;
+        shouldStop = true;
+        userPaused = true;
+        try {
+            mainHandler.removeCallbacksAndMessages(null);
+        } catch (Exception e) {
+            Log.w(TAG, "teardownForLogout removeCallbacks: " + e.getMessage());
+        }
+        audioFocusManager.abandonFocus();
+        stopMediaPlaybackForegroundService();
+        WIAEngineJNI.setPlaybackActive(false);
+        Log.i(TAG, "teardownForLogout");
     }
 
     /**
      * Unity {@code MusicPlaylist} 直发 PostEvent 起播时调用：补 AudioFocus + unmute。
      * CustomSRP 不再走 {@link #play(int, int)}，否则真机无焦点/mute 影子态会导致有 PostEvent 无听感。
+     * <p>
+     * 拆除期（{@link #teardownForLogout} 已 {@code setPlaybackActive(false)}）直接 return：
+     * 禁止重开闸、禁止 {@code startForegroundService}——Login 场景加载拥堵时会
+     * ForegroundServiceDidNotStartInTimeException 杀进程。FGS 只由
+     * {@code updateNowPlayingInfo(isPlaying=true)} → {@code notifyNowPlayingChanged} 拉起。
      */
     public void ensureAudibleForUnityPlayback() {
+        if (!WIAEngineJNI.isPlaybackActive()) {
+            Log.w(TAG, "ensureAudibleForUnityPlayback skipped: playback inactive (logout teardown)");
+            return;
+        }
         userPaused = false;
         shouldStop = false;
         playbackExecutor.execute(() -> {
+            if (!WIAEngineJNI.isPlaybackActive()) {
+                Log.w(TAG, "ensureAudibleForUnityPlayback aborted: became inactive");
+                return;
+            }
             if (!ensureFocusBeforeAudible("unity_play")) {
                 Log.w(TAG, "ensureAudibleForUnityPlayback: focus failed — stay muted");
                 return;
             }
             runGuardedUnmuteOnCurrentThread("unity_play");
-            startMediaPlaybackForegroundService();
+            // 不在此处 start FGS：与 NowPlaying isPlaying 守卫同一路径，避免拆除窗口误拉。
             Log.i(TAG, "ensureAudibleForUnityPlayback: focus+unmute done");
         });
     }
@@ -1207,6 +1241,10 @@ public class WanosMusicPlayerNative {
 
     /** 根据 playlist 当前索引更新 NowPlaying（主线程调用，如 Playing 回调时） */
     private void updateNowPlayingForCurrentTrack() {
+        if (shouldStop || !WIAEngineJNI.isPlaybackActive()) {
+            Log.d(TAG, "updateNowPlayingForCurrentTrack skipped: stopped/inactive");
+            return;
+        }
         if (playlist == null || playlist.musicLists.isEmpty()) return;
         int li = playlist.currentListIndex;
         int mi = playlist.currentMusicIndex;
@@ -2464,6 +2502,10 @@ public class WanosMusicPlayerNative {
 
     /** 按当前曲目刷新锁屏/通知栏元数据，并指定播放/暂停状态（用于媒体控制暂停/续播时同步图标）。 */
     private void updateNowPlayingPlayingState(boolean playing) {
+        if (shouldStop || !WIAEngineJNI.isPlaybackActive()) {
+            Log.d(TAG, "updateNowPlayingPlayingState skipped: stopped/inactive");
+            return;
+        }
         String name = "";
         if (playlist != null && !playlist.musicLists.isEmpty()) {
             int li = playlist.currentListIndex;

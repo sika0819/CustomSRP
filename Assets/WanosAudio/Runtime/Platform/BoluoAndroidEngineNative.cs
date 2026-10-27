@@ -25,6 +25,46 @@ namespace WanosAudio
 #endif
         }
 
+        /// <summary>
+        /// 播放会话闸。false：拆除期拒绝 NowPlaying / 停 FGS；进岛 Arm 再置 true。
+        /// </summary>
+        public static void SetPlaybackActive(bool active)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WIAEngineJNIClass))
+                    jc.CallStatic("setPlaybackActive", active);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] setPlaybackActive failed: {ex.Message}");
+            }
+#endif
+        }
+
+        /// <summary>
+        /// 退登拆除：撤 native 排队 NowPlaying、关闸、停 FGS（须在 LoadScene Login 前）。
+        /// </summary>
+        public static void TeardownForLogout()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("teardownForLogout");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] teardownForLogout failed: {ex.Message}");
+                SetPlaybackActive(false);
+            }
+#endif
+        }
+
         public static void MarkUserPausedFromUnity(bool paused)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR

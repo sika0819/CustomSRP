@@ -1,13 +1,12 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
 namespace Game
 {
     /// <summary>
-    /// Far-tree single-card billboard helpers: extract LOD_Billboard mesh/mat,
-    /// enable GPU camera-facing (Y-yaw), build lightweight proxy GOs.
-    /// Legacy 8-vert front/side crosses are stripped to the front card at runtime.
+    /// Far-tree cross-billboard helpers: extract LOD_Billboard mesh/mat,
+    /// enable GPU front/side snap + yaw-to-camera (Boluo Cross path).
+    /// Contour meshes hug atlas alpha so OilNPR can skip cutout black fringe.
     /// </summary>
     public static class EnvTreeBillboardUtil
     {
@@ -17,13 +16,8 @@ namespace Game
         public static readonly int ReceiveShadowsId = Shader.PropertyToID("_ReceiveShadows");
         public static readonly int ShadowsId = Shader.PropertyToID("_Shadows");
 
-        /// <summary>Legacy MatchBillboardHeight front/side atlas crosses.</summary>
-        const int CrossBillboardVertCount = 8;
-
         /// <summary>OilNPR KeywordEnum(On, Clip, Dither, Off).</summary>
         const float ShadowsOff = 3f;
-
-        static readonly Dictionary<EntityId, Mesh> SingleCardBySource = new();
 
         public static bool TryFindBillboardRenderer(GameObject prefab, out MeshRenderer mr, out MeshFilter filter)
         {
@@ -91,7 +85,7 @@ namespace Game
             localBounds = new Bounds(Vector3.zero, Vector3.one);
             if (!TryFindBillboardRenderer(prefab, out MeshRenderer mr, out MeshFilter filter))
                 return false;
-            mesh = EnsureSingleCardMesh(filter.sharedMesh);
+            mesh = filter.sharedMesh;
             sharedMat = mr.sharedMaterial;
             // Expand XZ so frustum culling survives GPU yaw (card swings around Y).
             Bounds b = mesh.bounds;
@@ -101,82 +95,21 @@ namespace Game
         }
 
         /// <summary>
-        /// 8-vert front/side crosses → keep front quad only (indices 0..5 / verts 0..3).
-        /// Other meshes returned unchanged.
+        /// Runtime material instance: Cross front/side snap + yaw to camera.
+        /// Does not dirty the shared asset. Far impostors skip shadow cast/receive.
         /// </summary>
-        public static Mesh EnsureSingleCardMesh(Mesh source)
-        {
-            if (source == null)
-                return null;
-            if (source.vertexCount != CrossBillboardVertCount)
-                return source;
-
-            EntityId id = source.GetEntityId();
-            if (SingleCardBySource.TryGetValue(id, out Mesh cached) && cached != null)
-                return cached;
-
-            if (!source.isReadable)
-            {
-                Debug.LogWarning(
-                    "[EnvTreeBillboard] cross mesh not readable, cannot strip to single card: " +
-                    source.name);
-                return source;
-            }
-
-            Vector3[] srcV = source.vertices;
-            Vector3[] srcN = source.normals;
-            Vector2[] srcUv = source.uv;
-            int[] srcT = source.triangles;
-            if (srcV == null || srcV.Length < 4 || srcT == null || srcT.Length < 6)
-                return source;
-
-            var dstV = new Vector3[4];
-            var dstN = new Vector3[4];
-            var dstUv = new Vector2[4];
-            for (int i = 0; i < 4; i++)
-            {
-                dstV[i] = srcV[i];
-                dstN[i] = srcN != null && srcN.Length > i ? srcN[i] : Vector3.back;
-                dstUv[i] = srcUv != null && srcUv.Length > i ? srcUv[i] : Vector2.zero;
-            }
-
-            var dstT = new int[6];
-            for (int i = 0; i < 6; i++)
-                dstT[i] = srcT[i];
-
-            var mesh = new Mesh
-            {
-                name = source.name + " (SingleCard)",
-                hideFlags = HideFlags.DontSave
-            };
-            mesh.vertices = dstV;
-            mesh.normals = dstN;
-            mesh.uv = dstUv;
-            mesh.triangles = dstT;
-            mesh.RecalculateBounds();
-            mesh.UploadMeshData(false);
-
-            SingleCardBySource[id] = mesh;
-            return mesh;
-        }
-
-        /// <summary>
-        /// Runtime material instance: continuous Y-yaw to face camera. Does not dirty the asset.
-        /// Always single-card (<c>_OilYBillboard</c>); Cross path stays off.
-        /// Defaults: no shadow cast / receive (far impostors skip atlas + PCF).
-        /// </summary>
-        public static Material CreateYBillboardMaterial(Material shared)
+        public static Material CreateCrossBillboardMaterial(Material shared)
         {
             if (shared == null)
                 return null;
             Material inst = Object.Instantiate(shared);
-            inst.name = shared.name + " (YBillboard)";
+            inst.name = shared.name + " (CrossBillboard)";
 
-            if (inst.HasProperty(OilCrossBillboardId))
-                inst.SetFloat(OilCrossBillboardId, 0f);
             if (inst.HasProperty(OilYBillboardId))
-                inst.SetFloat(OilYBillboardId, 1f);
-            // Thin impostors: never lose the facing side to back-face cull.
+                inst.SetFloat(OilYBillboardId, 0f);
+            if (inst.HasProperty(OilCrossBillboardId))
+                inst.SetFloat(OilCrossBillboardId, 1f);
+            // Thin cards: keep facing side if snap briefly mis-predicts.
             if (inst.HasProperty(CullId))
                 inst.SetFloat(CullId, (float)CullMode.Off);
 
@@ -184,6 +117,10 @@ namespace Game
             inst.enableInstancing = true;
             return inst;
         }
+
+        /// <summary>Deprecated alias — prefer <see cref="CreateCrossBillboardMaterial"/>.</summary>
+        public static Material CreateYBillboardMaterial(Material shared) =>
+            CreateCrossBillboardMaterial(shared);
 
         /// <summary>OilNPR: Shadows=Off + disable ShadowCaster; ReceiveShadows off.</summary>
         public static void ApplyNoShadows(Material mat)
@@ -213,8 +150,8 @@ namespace Game
             mr.receiveShadows = false;
         }
 
-        /// <summary>Swap LOD_Billboard to single-card mesh + camera-facing material instances.</summary>
-        public static void ApplyYBillboardToLodBillboardChildren(GameObject instance)
+        /// <summary>Swap LOD_Billboard mats to Cross camera-facing instances (keep contour mesh).</summary>
+        public static void ApplyCrossBillboardToLodBillboardChildren(GameObject instance)
         {
             if (instance == null)
                 return;
@@ -227,27 +164,24 @@ namespace Game
                 MeshRenderer mr = renderers[i];
                 if (mr == null || mr.sharedMaterial == null)
                     continue;
-                MeshFilter filter = mr.GetComponent<MeshFilter>();
-                if (filter != null && filter.sharedMesh != null)
-                {
-                    Mesh single = EnsureSingleCardMesh(filter.sharedMesh);
-                    if (single != filter.sharedMesh)
-                        filter.sharedMesh = single;
-                }
 
                 Material[] shared = mr.sharedMaterials;
                 if (shared == null || shared.Length == 0)
                     continue;
                 var copies = new Material[shared.Length];
                 for (int m = 0; m < shared.Length; m++)
-                    copies[m] = CreateYBillboardMaterial(shared[m]);
+                    copies[m] = CreateCrossBillboardMaterial(shared[m]);
                 mr.sharedMaterials = copies;
                 ApplyNoShadows(mr);
             }
         }
 
+        /// <summary>Deprecated alias — prefer <see cref="ApplyCrossBillboardToLodBillboardChildren"/>.</summary>
+        public static void ApplyYBillboardToLodBillboardChildren(GameObject instance) =>
+            ApplyCrossBillboardToLodBillboardChildren(instance);
+
         /// <summary>
-        /// Lightweight proxy: single MeshFilter/MeshRenderer with camera-facing material.
+        /// Lightweight proxy: single MeshFilter/MeshRenderer with Cross material.
         /// No LODGroup / bark / leaf.
         /// </summary>
         public static GameObject BuildBillboardProxy(
@@ -266,7 +200,7 @@ namespace Game
             var filter = go.AddComponent<MeshFilter>();
             filter.sharedMesh = mesh;
             var mr = go.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = CreateYBillboardMaterial(sharedMat);
+            mr.sharedMaterial = CreateCrossBillboardMaterial(sharedMat);
             ApplyNoShadows(mr);
             return go;
         }

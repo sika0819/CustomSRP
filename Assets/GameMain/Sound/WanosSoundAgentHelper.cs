@@ -11,6 +11,9 @@ namespace Game
     /// <summary>GF SoundAgentHelper backed by Wanos PostEvent.</summary>
     public sealed class WanosSoundAgentHelper : SoundAgentHelperBase
     {
+        /// <summary>Last Music-group voice id (0 = none). Used by <see cref="MusicPlaylist.AdoptTrack"/>.</summary>
+        static ulong _activeMusicVoiceId;
+
         Transform _cachedTransform;
         WanosSoundAsset _asset;
         EntityLogic _bindingEntity;
@@ -30,6 +33,13 @@ namespace Game
         EventHandler<ResetSoundAgentEventArgs> _resetHandler;
 
         public override bool IsPlaying => _playing;
+
+        /// <summary>Peek the active Music PostEvent voice without stopping it.</summary>
+        public static bool TryGetActiveMusicVoice(out ulong voiceId)
+        {
+            voiceId = _activeMusicVoiceId;
+            return voiceId != 0;
+        }
 
         public override float Length => 0f;
 
@@ -133,11 +143,12 @@ namespace Game
                 return;
             }
 
-            // Music BGM: PostEvent with Playing/Ended callback so MusicPlaylist can Break / auto-next.
+            // Music BGM: must Post on MusicObjectId so Break_Music shares the same game object.
             if (IsMusicAsset())
             {
-                _instanceId = WanosNative.Instance.PostEvent(
-                    0, _asset.EventName, WanosEventCallbackQueue.Entry);
+                _instanceId = WanosInteraction.PostMusicEvent(
+                    _asset.EventName, WanosEventCallbackQueue.Entry);
+                _activeMusicVoiceId = _instanceId;
                 MusicPlaylist.Instance.AttachMusicVoice(_instanceId);
             }
             else
@@ -158,10 +169,12 @@ namespace Game
                 // Detach before Stop_Music so Ended from stop does not auto-next.
                 if (_instanceId != 0)
                 {
+                    if (_activeMusicVoiceId == _instanceId)
+                        _activeMusicVoiceId = 0;
                     MusicPlaylist.Instance.DetachMusicVoice(_instanceId);
                     WanosNative.Instance.RemoveEventStateCallback(_instanceId);
                 }
-                WanosNative.Instance.PostEvent(0, "Stop_Music");
+                WanosInteraction.PostMusicEvent("Stop_Music");
             }
 
             _playing = false;
@@ -183,7 +196,7 @@ namespace Game
         {
             _volumeWhenPause = _volume;
             if (_asset != null && _asset.EventName.IndexOf("Music", StringComparison.OrdinalIgnoreCase) >= 0)
-                WanosNative.Instance.PostEvent(0, "Pause_Music");
+                WanosInteraction.PostMusicEvent("Pause_Music");
             else
                 WanosEngine.PauseAll();
             _playing = false;
@@ -193,7 +206,7 @@ namespace Game
         {
             _volume = _volumeWhenPause;
             if (_asset != null && _asset.EventName.IndexOf("Music", StringComparison.OrdinalIgnoreCase) >= 0)
-                WanosNative.Instance.PostEvent(0, "Resume_Music");
+                WanosInteraction.PostMusicEvent("Resume_Music");
             else
                 WanosEngine.ResumeAll();
             _playing = true;
@@ -204,6 +217,8 @@ namespace Game
         {
             if (_instanceId != 0)
             {
+                if (_activeMusicVoiceId == _instanceId)
+                    _activeMusicVoiceId = 0;
                 MusicPlaylist.Instance.DetachMusicVoice(_instanceId);
                 WanosNative.Instance.RemoveEventStateCallback(_instanceId);
             }

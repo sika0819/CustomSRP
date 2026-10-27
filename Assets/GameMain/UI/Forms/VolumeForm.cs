@@ -18,6 +18,13 @@ namespace Game
         /// </summary>
         const float MinFillWidth = 204f;
 
+        /// <summary>
+        /// Boluo <c>InGameTiaoJieView</c> dragIcon anchoredX (center pivot) relative to track center.
+        /// Do not park by aligning knob right edge to track right — that overshoots by ~29.5px.
+        /// </summary>
+        const float KnobCenterMin = -331f;
+        const float KnobCenterMax = 332f;
+
         protected override bool SlidesUpFromBottom => true;
         protected override bool HidesBottomHudIcons => true;
 
@@ -93,8 +100,7 @@ namespace Game
             {
                 if (!knob.HasPointerCapture(evt.pointerId))
                     return;
-                float width = track.layout.width;
-                float travel = Mathf.Max(width - MinFillWidth, 1f);
+                float travel = Mathf.Max(KnobCenterMax - KnobCenterMin, 1f);
                 float localX = track.WorldToLocal(evt.position).x;
                 value = Mathf.Clamp01(dragStartValue + (localX - dragStartLocalX) / travel);
                 PushVolume(settingKey, value);
@@ -160,11 +166,11 @@ namespace Game
                 return;
 
             float trackWidth = track.layout.width;
-            float travel = Mathf.Max(trackWidth - MinFillWidth, 0f);
-            // Design max (value=1): left = track.x + trackWidth - KnobSize (726 when track is 867@x=3).
-            // Design min (value=0): that max minus fill travel — park left, animate via translate.
-            float knobLeftMax = track.layout.x + trackWidth - KnobSize;
-            float knobLeftMin = knobLeftMax - travel;
+            // Boluo: knob is center-pivoted at KnobCenterMin/Max vs track center; UITK uses top-left.
+            float trackCenterX = track.layout.x + trackWidth * 0.5f;
+            float halfKnob = KnobSize * 0.5f;
+            float knobLeftMin = trackCenterX + KnobCenterMin - halfKnob;
+            float travel = KnobCenterMax - KnobCenterMin; // 663; equals trackWidth - MinFillWidth
             knob.style.left = knobLeftMin;
             knob.style.translate = new Translate(travel * value, 0f);
 

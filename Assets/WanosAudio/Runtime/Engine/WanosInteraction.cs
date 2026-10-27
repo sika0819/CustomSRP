@@ -285,6 +285,24 @@ namespace WanosAudio
             return WanosNative.Instance.PostEvent(objectId, eventName);
         }
 
+        /// <summary>
+        /// Post BGM control / Play on the fixed <see cref="MusicObjectId"/>.
+        /// Break/Stop must share this object with Play, or macOS WIA never ends the loop.
+        /// </summary>
+        public static ulong PostMusicEvent(
+            string eventName,
+            WanosEventCallbackQueue.NativeEntry callback = null)
+        {
+            if (string.IsNullOrEmpty(eventName))
+                return 0;
+            if (!WanosNative.Instance.IsCreated)
+                return 0;
+            EnsureObject(MusicObjectId, "Music");
+            return callback != null
+                ? WanosNative.Instance.PostEvent(MusicObjectId, eventName, callback)
+                : WanosNative.Instance.PostEvent(MusicObjectId, eventName);
+        }
+
         public static ulong PostEvent(string eventName, GameObject emitter)
         {
             if (string.IsNullOrEmpty(eventName) || !IsReady || emitter == null)

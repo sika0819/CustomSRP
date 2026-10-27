@@ -107,6 +107,14 @@ namespace Game.BoluoApi
 
             if (GameEntry.Music != null)
             {
+                // 退登 Cleanup 已 Disarm：禁止再 PlayIndex → EnsureAudible / PublishPlayingForced
+                // 在 LoadScene(Login) 窗口重开闸拉 FGS（ForegroundServiceDidNotStartInTimeException）。
+                if (!NowPlayingService.IsArmed)
+                {
+                    Log.Warning("[BankUpgradeBootstrap] critical cue skipped — NowPlaying not armed");
+                    return false;
+                }
+
                 if (!MusicCatalog.IsReady || MusicCatalog.AlbumCount == 0)
                 {
                     Log.Warning(

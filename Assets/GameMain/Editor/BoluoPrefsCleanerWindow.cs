@@ -53,13 +53,13 @@ namespace Game.Editor
         static readonly (string Label, string Key, string Note)[] ProgressKeys =
         {
             ("主存档 JSON (BoluoSaveData)", BoluoGamePersistence.Keys.BoluoSaveData, "音量/天气联动/疗愈/推荐/压力频控"),
-            ("角色位置 (PlayerPos)", BoluoGamePersistence.Keys.PlayerPos, "周期 ~10s"),
-            ("首进岛完成 (DaoYuFirstRunComplete)", BoluoGamePersistence.Keys.DaoYuFirstRunComplete, null),
+            ("角色位置 (PlayerPos)", BoluoGamePersistence.Keys.PlayerPos, "正式账号周期 ~10s；游客不读写"),
+            ("首进岛完成 (DaoYuFirstRunComplete)", BoluoGamePersistence.Keys.DaoYuFirstRunComplete, "游客不读写"),
             ("教程标记 (TutorialType)", BoluoGamePersistence.Keys.TutorialType, "游客不写"),
             ("功能介绍 (GongNengView)", BoluoGamePersistence.Keys.GongNengView, "游客不写"),
             ("位置权限已请求", BoluoGamePersistence.Keys.LocationPermissionRequested, "游客不写；写时 Flush"),
             ("下载未播红点 JSON", BoluoGamePersistence.Keys.DownloadedUnplayed, "游客不读不写"),
-            ("世界睡眠日弹窗日期", BoluoGamePersistence.Keys.ActivityWorldSleepPopupDate, null),
+            ("世界睡眠日弹窗日期", BoluoGamePersistence.Keys.ActivityWorldSleepPopupDate, "游客不读写"),
             ("Apple 用户 ID", BoluoGamePersistence.Keys.AppleUserIdKey, "游客可写"),
             ("首次联网探测完成", BoluoGamePersistence.Keys.FirstNetworkProbeComplete, null),
             ("账号密码节流手机号索引", BoluoGamePersistence.Keys.AccPwPhoneRegistry, "换行分隔"),

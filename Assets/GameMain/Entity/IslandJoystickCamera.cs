@@ -413,6 +413,18 @@ namespace Game
                 return;
             }
 
+            // 地形未就绪（含退登 World.Release 后、二次进岛加载中）：禁止重力下坠。
+            // InitAndArm 在 Services 就 Teleport，若此处仍积分垂直速度，会在揭罩前掉进地底。
+            if (!IsWorldGroundReady())
+            {
+                _verticalSpeed = 0f;
+                IslandLocomotionState.IsWalking = false;
+                LocomotionInput.ClearAll();
+                ApplyRenderScale(false);
+                transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
+                return;
+            }
+
             ConsumeLookInput();
             ConsumeMoveInput(dt);
 
@@ -444,6 +456,15 @@ namespace Game
             MoveBody(motion);
 
             transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
+        }
+
+        /// <summary>
+        /// Terrain+ocean 已挂到场景；退登 Release 或尚未 Load 完时为 false。
+        /// </summary>
+        static bool IsWorldGroundReady()
+        {
+            IslandWorldService world = IslandWorldService.Instance ?? GameEntry.World;
+            return world != null && world.IsTerrainReady;
         }
 
         void ConsumeLookInput()
@@ -929,6 +950,9 @@ namespace Game
             {
                 // 树干/墙面法线接近水平；只取朝上的表面，避免落在树冠上。
                 if (GroundHits[i].normal.y < GroundNormalMinY)
+                    continue;
+                // 海/河碰撞体是床底，取最低点会把 Teleport 钉进地底。
+                if (IsWaterSurfaceCollider(GroundHits[i].collider))
                     continue;
                 if (GroundHits[i].point.y >= bestY)
                     continue;

@@ -50,12 +50,13 @@ namespace Game
             BoluoSession.LoadFromPrefs();
             string prevId = BoluoSession.UserId ?? "";
             string nextId = userId ?? "";
-            // 热切账号：只重置内存，旧 userId 分桶进度保留；新账号读自己的桶。
-            if (!string.IsNullOrEmpty(prevId)
-                && !string.IsNullOrEmpty(nextId)
-                && !string.Equals(prevId, nextId, StringComparison.Ordinal))
+            // userId 变化（含退登后空→新票）：只重置内存，分桶盘保留；下次 Load/InitAndArm 读新桶。
+            // 勿要求 prev 非空——Leave 已 Clear，否则游客↔账号热切会跳过重置。
+            if (!string.Equals(prevId, nextId, StringComparison.Ordinal)
+                && !string.IsNullOrEmpty(nextId))
             {
-                BoluoLogout.ResetInMemoryForAccountSwitch("userId switched");
+                BoluoLogout.ResetInMemoryForAccountSwitch(
+                    string.IsNullOrEmpty(prevId) ? "session apply after leave" : "userId switched");
             }
 
             BoluoSession.ApplyUserSession(
@@ -67,12 +68,31 @@ namespace Game
 
         public static void ApplyLocalEditorGuest()
         {
+            // 已有游客票则复用，避免每次点「游客进岛」/ 兜底路径都换新 token。
+            BoluoSession.LoadFromPrefs();
+            if (BoluoSession.IsGuest && !string.IsNullOrEmpty(BoluoSession.UserToken)
+                && !string.IsNullOrEmpty(BoluoSession.UserId))
+                return;
+
             string device = SystemInfo.deviceUniqueIdentifier;
             if (string.IsNullOrEmpty(device))
                 device = "editor";
-            string id = "guest_" + Mathf.Abs(device.GetHashCode()).ToString("x8");
-            string token = "editor_guest_" + id + "_" + DateTime.UtcNow.Ticks.ToString("x");
+            // 稳定 id：勿用 string.GetHashCode（跨进程不稳定）。
+            string id = "guest_" + StableHex8(device);
+            string token = "editor_guest_" + id;
             ApplyUserSession(token, id, isGuest: true);
+        }
+
+        static string StableHex8(string raw)
+        {
+            unchecked
+            {
+                uint hash = 2166136261u;
+                string s = raw ?? "";
+                for (int i = 0; i < s.Length; i++)
+                    hash = (hash ^ s[i]) * 16777619u;
+                return (hash & 0xFFFFFFFFu).ToString("x8");
+            }
         }
 
         public static void Clear()
