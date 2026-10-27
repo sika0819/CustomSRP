@@ -9,6 +9,7 @@ Shader "Hidden/CustomSRP/Post FX Stack"
         HLSLINCLUDE
         #include "../ShaderLibrary/Common.hlsl"
         #include "PostFXStackPasses.hlsl"
+        // _CanvasGrain is float4: xy = grain/weave, z = phone cell size.
         ENDHLSL
 
         Pass
@@ -186,6 +187,17 @@ Shader "Hidden/CustomSRP/Post FX Stack"
             #pragma target 3.5
             #pragma vertex DefaultPassVertex
             #pragma fragment OilRainPassFragment
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Oil Warp"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilWarpPassFragment
             ENDHLSL
         }
     }

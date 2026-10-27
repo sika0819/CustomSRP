@@ -244,10 +244,12 @@ namespace WanosAudio
 
             try
             {
-                if (!IsLikelyValidBankFile(absolutePath))
+                // Rain_Small 在原 bank 里只播一遍。加载副本，不改 StreamingAssets 原文件。
+                string loadPath = WanosBankSeamlessLoopPatch.ResolveEngineLoadPath(absolutePath);
+                if (!IsLikelyValidBankFile(loadPath))
                 {
                     Debug.LogWarning(
-                        $"[{LogTag}] skip native LoadBank — invalid/unsupported bank={stem} path={absolutePath}");
+                        $"[{LogTag}] skip native LoadBank — invalid/unsupported bank={stem} path={loadPath}");
                     lock (Gate)
                         Failed.Add(stem);
                     return false;
@@ -256,7 +258,7 @@ namespace WanosAudio
                 WanosResult r;
                 try
                 {
-                    r = WanosNative.Instance.LoadBank(absolutePath);
+                    r = WanosNative.Instance.LoadBank(loadPath);
                 }
                 catch (Exception e)
                 {

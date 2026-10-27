@@ -400,6 +400,8 @@ namespace Game
 
         void DrawAll()
         {
+            if (EnvItemStreamerLite.PrefillSuppressRender)
+                return;
             Camera cam = ResolveCamera();
             if (cam == null)
                 return;

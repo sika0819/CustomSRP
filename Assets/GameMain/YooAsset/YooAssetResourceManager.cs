@@ -263,7 +263,18 @@ namespace Game
                 yield break;
             }
 
-            yield return handle;
+            yield return YooResourceModule.WaitUntilDone(
+                () => handle.IsDone, "UI LoadAsset " + assetName);
+            if (!handle.IsDone)
+            {
+                string timeout = string.IsNullOrEmpty(YooResourceModule.LastError)
+                    ? "timed out"
+                    : YooResourceModule.LastError;
+                Log.Error("[YooGF] LoadAsset timed out: " + assetName + " — " + timeout);
+                loadAssetCallbacks.LoadAssetFailureCallback?.Invoke(
+                    assetName, LoadResourceStatus.AssetError, timeout, userData);
+                yield break;
+            }
 
             float elapsed = Time.realtimeSinceStartup - start;
             if (handle.Status != EOperationStatus.Succeed || handle.AssetObject == null)

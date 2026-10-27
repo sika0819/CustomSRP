@@ -567,7 +567,7 @@ namespace Game.BoluoApi
             public string msg;
         }
 
-        [Serializable]
+        // Newtonsoft 反序列化。JToken 不能进 Unity 序列化，不加 [Serializable]，避免 UAC1001。
         class UserLoginResponse
         {
             public int code;
@@ -575,7 +575,6 @@ namespace Game.BoluoApi
             public UserLoginData data;
         }
 
-        [Serializable]
         class UserLoginData
         {
             public string token;
@@ -585,7 +584,6 @@ namespace Game.BoluoApi
             public string cancelMsg;
         }
 
-        [Serializable]
         class StopCancelResponse
         {
             public int code;
@@ -593,7 +591,6 @@ namespace Game.BoluoApi
             public StopCancelData data;
         }
 
-        [Serializable]
         class StopCancelData
         {
             public string token;

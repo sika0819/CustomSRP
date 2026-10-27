@@ -24,15 +24,29 @@ namespace Game
             Done,
         }
 
+        const float WorldLoadCapSeconds = 180f;
+        const float UncoverCapSeconds = 30f;
+
         Phase _phase;
         bool _hudOpened;
         bool _worldLoadStarted;
+        bool _worldLoadFinished;
         bool _fadeStarted;
+        bool _uncoverForced;
         float _hudWait;
+        float _worldSince;
+        float _uncoverSince;
         Coroutine _worldLoadRoutine;
 
         /// <summary>宿主 HostLeaveIsland：下一帧退回 GuestLogin，便于再次 Arm 进岛。</summary>
         static int _returnToGuestLogin;
+
+        /// <summary>仍在本轮 ProcedureIsland 里，且还没收到退登。迟到的世界就绪不得再 Notify。</summary>
+        static int _alive;
+
+        public static bool AcceptsIslandReadyNotify =>
+            System.Threading.Volatile.Read(ref _alive) != 0
+            && System.Threading.Volatile.Read(ref _returnToGuestLogin) == 0;
 
         /// <summary>递增以作废进行中的 <see cref="UncoverAsync"/>（退登时勿再 Hide 加载罩）。</summary>
         static int _uncoverGeneration;
@@ -56,13 +70,18 @@ namespace Game
         protected override void OnEnter(ProcedureOwner procedureOwner)
         {
             base.OnEnter(procedureOwner);
+            System.Threading.Interlocked.Exchange(ref _alive, 1);
             int enter = System.Threading.Interlocked.Increment(ref _enterCount);
             System.Threading.Interlocked.Exchange(ref _returnToGuestLogin, 0);
             _phase = Phase.Services;
             _hudOpened = false;
             _worldLoadStarted = false;
+            _worldLoadFinished = false;
             _fadeStarted = false;
+            _uncoverForced = false;
             _hudWait = 0f;
+            _worldSince = 0f;
+            _uncoverSince = 0f;
             // HasForm 可能是假死罩：用 IsVisible，否则 ReportProgress 在 !_visible 时直接 return。
             if (!BootLoadingService.IsVisible)
                 BootLoadingService.Show("正在进入世界...", BootLoadingService.VisualPrepareMin);
@@ -121,9 +140,54 @@ namespace Game
 
         IEnumerator LoadWorld()
         {
-            IslandWorldService world = GameEntry.World ?? IslandWorldService.Ensure();
-            yield return world.Load((p, tip) => BootLoadingService.ReportProgress(p, tip));
+            try
+            {
+                IslandWorldService world = GameEntry.World ?? IslandWorldService.Ensure();
+                yield return world.Load((p, tip) => BootLoadingService.ReportProgress(p, tip));
+            }
+            finally
+            {
+                _worldLoadFinished = true;
+                _worldLoadRoutine = null;
+            }
+        }
+
+        /// <summary>
+        /// 世界阶段不能再空等：打一条 Error，松开铺装闩，继续相机 / 揭罩。
+        /// </summary>
+        void ContinuePastWorld(string reason)
+        {
+            Log.Error("[ProcedureIsland] " + reason + " — continue island entry");
+            if (_worldLoadRoutine != null && GameEntry.Base != null)
+                GameEntry.Base.StopCoroutine(_worldLoadRoutine);
             _worldLoadRoutine = null;
+            _worldLoadStarted = true;
+            _worldLoadFinished = true;
+            EnvItemStreamerLite.ReleasePrefillHold();
+            BootLoadingService.ReportProgress(
+                BootLoadingService.TerrainPrepareMax, "世界加载未完成，继续进入...");
+            if (_phase == Phase.Services || _phase == Phase.World)
+                _phase = Phase.Camera;
+            else if (_phase != Phase.Done)
+                _phase = Phase.Uncover;
+        }
+
+        static void ForceUncoverNow()
+        {
+            if (!AcceptsIslandReadyNotify)
+                return;
+            int gen = System.Threading.Interlocked.CompareExchange(ref _uncoverGeneration, 0, 0);
+            EnvItemStreamerLite.ReleasePrefillHold();
+            if (gen != _uncoverGeneration)
+                return;
+            BootLoadingService.Hide();
+            IslandJoystickCamera.Current?.ReleaseSpawnHold();
+            if (GameEntry.UI != null && GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
+                UiAssets.CloseGroup("Loading");
+            if (gen != _uncoverGeneration)
+                return;
+            UnlockLocomotionAfterUncover();
+            NativeBridgeFacade.NotifyIslandReady();
         }
 
         protected override void OnUpdate(ProcedureOwner procedureOwner, float elapseSeconds, float realElapseSeconds)
@@ -158,11 +222,32 @@ namespace Game
                 return;
             }
 
-            TickPhase();
+            try
+            {
+                TickPhase();
+            }
+            catch (System.Exception e)
+            {
+                Log.Error("[ProcedureIsland] phase " + _phase + " threw — " + e);
+                if (_phase == Phase.Uncover || _phase == Phase.Done)
+                {
+                    if (!_uncoverForced)
+                    {
+                        _uncoverForced = true;
+                        ForceUncoverNow();
+                        _phase = Phase.Done;
+                    }
+                }
+                else
+                {
+                    ContinuePastWorld("phase threw: " + e.Message);
+                }
+            }
         }
 
         protected override void OnLeave(ProcedureOwner procedureOwner, bool isShutdown)
         {
+            System.Threading.Interlocked.Exchange(ref _alive, 0);
             // 任意离开岛流程都作废揭罩，避免延迟 Hide 打到 GuestLogin 的加载罩。
             System.Threading.Interlocked.Increment(ref _uncoverGeneration);
 
@@ -170,6 +255,7 @@ namespace Game
             {
                 GameEntry.Base.StopCoroutine(_worldLoadRoutine);
                 _worldLoadRoutine = null;
+                EnvItemStreamerLite.ReleasePrefillHold();
             }
 
             // 杀进程 / 正常离岛落盘。退登路径已在 ExecuteLeave 清会话前 flush；此处会话仍在时再兜底一刀。
@@ -182,8 +268,9 @@ namespace Game
             {
                 IslandPlayerPosSave.ResetSession();
                 AudioInteractionBootstrap.Shutdown();
+                // 只停 DSP，不 Destroy 引擎。Destroy 会清掉已加载的 bank，重登时主线程
+                // 同步 LoadBank 和近场 Prefill 叠在一起，LoadBank 不返回，罩停在「正在铺装环境」。
                 WanosAudio.WanosEngine.StopEngine("ProcedureIsland.OnLeave");
-                WanosAudio.WanosEngine.Unload("ProcedureIsland.OnLeave");
                 GameEntry.World?.Release();
                 _worldLoadStarted = false;
                 // Release 松 handle 后立刻排队卸未用包体；GuestLogin 等 Arm 时空窗消化。
@@ -226,24 +313,64 @@ namespace Game
                     {
                         if (!YooResourceModule.IsInitialized)
                         {
-                            Log.Error("YooAsset not initialized — cannot load island world.");
+                            ContinuePastWorld(
+                                "YooAsset not initialized — cannot load island world. last="
+                                + (YooResourceModule.LastError ?? "none"));
                             break;
                         }
 
                         MonoBehaviour host = GameEntry.Base;
                         if (host == null)
+                        {
+                            ContinuePastWorld("GameEntry.Base null — cannot start world load");
                             break;
+                        }
 
                         _worldLoadStarted = true;
+                        _worldLoadFinished = false;
+                        _worldSince = Time.realtimeSinceStartup;
                         _worldLoadRoutine = host.StartCoroutine(LoadWorld());
+                        if (_worldLoadRoutine == null)
+                        {
+                            ContinuePastWorld("StartCoroutine(LoadWorld) returned null");
+                            break;
+                        }
+
+                        if (_worldLoadFinished)
+                            _worldLoadRoutine = null;
                     }
 
                     // 近场 Prefill 就绪即可进岛；远场 Prefill / 草 / Nav 在 Load 协程里后台继续。
-                    if (GameEntry.World == null || !GameEntry.World.IsNearReady)
+                    if (GameEntry.World != null && GameEntry.World.IsNearReady)
+                    {
+                        GameEntry.Weather?.PushVisuals();
+                        _phase = Phase.Camera;
                         break;
+                    }
 
-                    GameEntry.Weather?.PushVisuals();
-                    _phase = Phase.Camera;
+                    if (_worldLoadFinished)
+                    {
+                        // 地形或海洋没实例化出来时不要停在 World，也不要跳过铺装。
+                        // 卸包和二次加载叠在一起时，下一帧重试才能再拿到实例。
+                        Log.Error(
+                            "[ProcedureIsland] terrain/ocean not ready — retry world load next frame"
+                            + (GameEntry.World != null && GameEntry.World.LoadFailed ? " LoadFailed" : "")
+                            + (string.IsNullOrEmpty(YooResourceModule.LastError)
+                                ? ""
+                                : " yoo=" + YooResourceModule.LastError));
+                        _worldLoadStarted = false;
+                        _worldLoadFinished = false;
+                        _worldLoadRoutine = null;
+                        break;
+                    }
+
+                    if (_worldSince > 0f
+                        && Time.realtimeSinceStartup - _worldSince >= WorldLoadCapSeconds)
+                    {
+                        ContinuePastWorld(
+                            "world load exceeded " + WorldLoadCapSeconds.ToString("0") + "s");
+                    }
+
                     break;
 
                 case Phase.Camera:
@@ -258,6 +385,13 @@ namespace Game
                     break;
 
                 case Phase.Hud:
+                    if (GameEntry.UI == null)
+                    {
+                        Log.Error("[ProcedureIsland] UI missing — uncover without HUD");
+                        _phase = Phase.Uncover;
+                        break;
+                    }
+
                     if (!_hudOpened)
                     {
                         _hudOpened = true;
@@ -290,12 +424,28 @@ namespace Game
                     if (!_fadeStarted)
                     {
                         _fadeStarted = true;
+                        _uncoverSince = Time.realtimeSinceStartup;
                         Log.Info("[ProcedureIsland] FadeHide loading cover");
                         UncoverAsync().Forget();
                     }
 
-                    if (!BootLoadingService.IsVisible && !GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
+                    bool loadingFormOpen = GameEntry.UI != null
+                        && GameEntry.UI.HasUIForm(UiAssets.LoadingForm);
+                    if (!BootLoadingService.IsVisible && !loadingFormOpen)
                         _phase = Phase.Done;
+                    else if (!_uncoverForced
+                        && _uncoverSince > 0f
+                        && Time.realtimeSinceStartup - _uncoverSince >= UncoverCapSeconds)
+                    {
+                        _uncoverForced = true;
+                        Log.Error(
+                            "[ProcedureIsland] uncover still covered after "
+                            + UncoverCapSeconds.ToString("0")
+                            + "s — force hide");
+                        ForceUncoverNow();
+                        _phase = Phase.Done;
+                    }
+
                     break;
             }
         }
@@ -308,11 +458,19 @@ namespace Game
             // 与远场 Prefill 叠在揭罩帧上时，主线程会打出可见卡顿。
             try
             {
-                await StartAudioBeforeUncover(gen);
+                UniTask audio = StartAudioBeforeUncover(gen);
+                int winner = await UniTask.WhenAny(
+                    audio,
+                    UniTask.Delay(20000, DelayType.UnscaledDeltaTime));
+                if (winner != 0)
+                {
+                    Log.Error(
+                        "[ProcedureIsland] audio before uncover exceeded 20s — uncover anyway");
+                }
             }
             catch (System.Exception e)
             {
-                Log.Warning("[Hitch] audio before uncover failed: " + e.Message);
+                Log.Error("[ProcedureIsland] audio before uncover failed: " + e.Message);
             }
 
             if (gen != _uncoverGeneration)
@@ -337,17 +495,22 @@ namespace Game
                     return;
                 if (Time.realtimeSinceStartup - wallStart >= wallCap)
                 {
-                    Log.Warning("[ProcedureIsland] FadeHide wall-clock cap — force Hide");
+                    Log.Error("[ProcedureIsland] FadeHide wall-clock cap — force Hide");
                     break;
                 }
 
                 await UniTask.Yield(PlayerLoopTiming.Update);
             }
 
+            if (gen != _uncoverGeneration)
+                return;
+
             BootLoadingService.Hide();
             IslandJoystickCamera.Current?.ReleaseSpawnHold();
             if (GameEntry.UI != null)
                 UiAssets.CloseGroup("Loading");
+            if (gen != _uncoverGeneration)
+                return;
             // 加载罩已撤 → 立刻 Notify(2)，宿主抬 islandHudReady 放行触摸；
             // 勿等 Prefill/Nav/Grass 的 IslandWorldReady（否则揭罩后长时间点不动）。
             UnlockLocomotionAfterUncover();

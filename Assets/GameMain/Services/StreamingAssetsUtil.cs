@@ -31,11 +31,21 @@ namespace Game
         /// Copy a StreamingAssets file to a real filesystem path.
         /// Android: UnityWebRequest from jar; elsewhere: File.Copy.
         /// </summary>
-        public static async UniTask<bool> CopyFileToAsync(string relativePath, string destAbsolutePath)
+        public static UniTask<bool> CopyFileToAsync(string relativePath, string destAbsolutePath)
         {
             if (string.IsNullOrEmpty(relativePath) || string.IsNullOrEmpty(destAbsolutePath))
-                return false;
+                return UniTask.FromResult(false);
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return CopyFileFromJarAsync(relativePath, destAbsolutePath);
+#else
+            return UniTask.FromResult(CopyFileFromDisk(relativePath, destAbsolutePath));
+#endif
+        }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        static async UniTask<bool> CopyFileFromJarAsync(string relativePath, string destAbsolutePath)
+        {
             string full = Combine(relativePath);
             try
             {
@@ -43,14 +53,17 @@ namespace Game
                 if (!string.IsNullOrEmpty(destDir))
                     Directory.CreateDirectory(destDir);
 
-#if UNITY_ANDROID && !UNITY_EDITOR
                 using (UnityWebRequest req = UnityWebRequest.Get(full))
                 {
+                    req.timeout = 60;
                     await req.SendWebRequest();
                     if (req.result != UnityWebRequest.Result.Success
                         || req.downloadHandler?.data == null
                         || req.downloadHandler.data.Length == 0)
                     {
+                        Log.Error(
+                            "[StreamingAssets] copy failed " + relativePath + " — "
+                            + (req.error ?? "empty"));
                         return false;
                     }
 
@@ -61,19 +74,35 @@ namespace Game
                     File.Move(tmp, destAbsolutePath);
                     return true;
                 }
+            }
+            catch (Exception e)
+            {
+                Log.Error($"[StreamingAssets] CopyFileTo failed {relativePath}: {e.Message}");
+                return false;
+            }
+        }
 #else
+        static bool CopyFileFromDisk(string relativePath, string destAbsolutePath)
+        {
+            string full = Combine(relativePath);
+            try
+            {
+                string destDir = Path.GetDirectoryName(destAbsolutePath);
+                if (!string.IsNullOrEmpty(destDir))
+                    Directory.CreateDirectory(destDir);
+
                 if (!File.Exists(full))
                     return false;
                 File.Copy(full, destAbsolutePath, overwrite: true);
                 return true;
-#endif
             }
             catch (Exception e)
             {
-                Log.Warning($"[StreamingAssets] CopyFileTo failed {relativePath}: {e.Message}");
+                Log.Error($"[StreamingAssets] CopyFileTo failed {relativePath}: {e.Message}");
                 return false;
             }
         }
+#endif
 
         public static bool TryReadTextSync(string relativePath, out string text)
         {
@@ -123,9 +152,13 @@ namespace Game
 #if UNITY_ANDROID && !UNITY_EDITOR
             using (UnityWebRequest req = UnityWebRequest.Get(full))
             {
+                req.timeout = 15;
                 yield return req.SendWebRequest();
                 if (req.result != UnityWebRequest.Result.Success)
                 {
+                    Log.Error(
+                        "[StreamingAssets] read failed " + relativePath + " — "
+                        + (req.error ?? "request failed"));
                     done?.Invoke(false, req.error);
                     yield break;
                 }
@@ -142,17 +175,35 @@ namespace Game
         }
 
         /// <summary>Async text read (Android jar-safe). Prefer over bare ReadTextCoroutine.</summary>
-        public static async UniTask<(bool ok, string text)> ReadTextAsync(string relativePath)
+        public static UniTask<(bool ok, string text)> ReadTextAsync(string relativePath)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return ReadTextFromJarAsync(relativePath);
+#else
+            string full = Combine(relativePath);
+            if (TryReadTextSync(relativePath, out string text))
+                return UniTask.FromResult((true, text));
+            return UniTask.FromResult((false, "missing " + full));
+#endif
+        }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        static async UniTask<(bool ok, string text)> ReadTextFromJarAsync(string relativePath)
         {
             string full = Combine(relativePath);
-#if UNITY_ANDROID && !UNITY_EDITOR
             try
             {
                 using (UnityWebRequest req = UnityWebRequest.Get(full))
                 {
+                    req.timeout = 15;
                     await req.SendWebRequest();
                     if (req.result != UnityWebRequest.Result.Success)
+                    {
+                        Log.Error(
+                            "[StreamingAssets] read failed " + relativePath + " — "
+                            + (req.error ?? "request failed"));
                         return (false, req.error ?? "request failed");
+                    }
                     return (true, req.downloadHandler?.text ?? "");
                 }
             }
@@ -160,12 +211,8 @@ namespace Game
             {
                 return (false, e.Message);
             }
-#else
-            if (TryReadTextSync(relativePath, out string text))
-                return (true, text);
-            return (false, "missing " + full);
-#endif
         }
+#endif
 
         public static BootManifest LoadBootManifestOrDefault()
         {

@@ -143,16 +143,37 @@ namespace Game
             }
 
             _running = true;
+            _prefillActive = false;
             StartCoroutine(StreamLoop());
             Log.Info(
                 $"[EnvItemStreamerLite] init items={_items.Count} streaming=on " +
                 $"native={(_native != null)}");
         }
 
+        bool _prefillActive;
+        /// <summary>铺装时跳过世界几何。摄像机仍画加载界面，避免 Game 视图报没有摄像机。</summary>
+        public static bool PrefillSuppressRender { get; private set; }
+
+        /// <summary>进岛加载被放弃时松开铺装闩，避免流送协程一直让在 Prefill。</summary>
+        public static void ReleasePrefillHold()
+        {
+            PrefillSuppressRender = false;
+            if (Current != null)
+                Current._prefillActive = false;
+        }
+
         public IEnumerator PrefillAroundFocus(float progressMin, float progressMax, System.Action<float, string> report)
         {
             if (_focus == null)
                 yield break;
+
+            // 铺装期间关掉流送。两条协程同时 LoadAssetAsync，离岛后再进会叠在未完成的
+            // LoadFromFile 上，主线程卡死在「正在铺装环境」。
+            _prefillActive = true;
+            // 摄像机保持开启：关掉它时 Game 视图会写 “Display 1 No cameras rendering”，
+            // 加载条也画不出来。世界几何由 CameraRenderer 在此标志下跳过。
+            PrefillSuppressRender = true;
+            PrefillFrameGate.Begin();
 
             Vector3 p = _focus.position;
             var near = new List<int>(512);
@@ -187,7 +208,9 @@ namespace Game
             int done = 0;
             int skippedVisible = 0;
             Log.Info($"[EnvItemStreamerLite] prefill begin near={total} items={_items.Count}");
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            report?.Invoke(progressMin, "正在铺装环境...");
+            // 二次进岛时 yield return null 交出去的那一帧不再回来。铺装在这一次调用里做完，
+            // 同步 LoadAssetSync，中间不把协程交回玩家循环。
             for (int k = 0; k < near.Count; k++)
             {
                 int idx = near[k];
@@ -199,8 +222,11 @@ namespace Game
                     continue;
                 }
 
-                GameObject prefab = null;
-                yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go, "prefill");
+                PrefillFrameGate.Phase = 2;
+                PrefillFrameGate.Done = done;
+                GameObject prefab = LoadPrefabNow(item.Location, item.EditorPath, "prefill");
+                PrefillFrameGate.Phase = 3;
+                PrefillFrameGate.Done = done;
                 if (prefab == null)
                 {
                     Log.Warning(
@@ -222,23 +248,12 @@ namespace Game
 
                 FinalizeSpawned(idx, spawned.Go, prefab, spawned.Tier);
                 done++;
-                if (instMs >= 8)
+                PrefillFrameGate.Done = done;
+                if (instMs >= 8 || (done % 20) == 0)
                 {
                     Log.Info(
-                        $"[EnvItemStreamerLite] instantiate slow ms={instMs} " +
-                        $"done={done}/{total} name={item.PrefabName} loc={item.Location}");
-                }
-
-                if (sw.ElapsedMilliseconds >= EnvStreamingConfig.FinalizePerFrameBudgetMs)
-                {
-                    float t = total > 0 ? (float)done / total : 1f;
-                    report?.Invoke(Mathf.Lerp(progressMin, progressMax, t), "正在铺装环境...");
-                    Log.Info(
-                        $"[EnvItemStreamerLite] prefill tick {done}/{total} " +
-                        $"skipVisible={skippedVisible} name={item.PrefabName}");
-                    yield return null;
-                    Log.Info($"[EnvItemStreamerLite] prefill resumed done={done}/{total}");
-                    sw.Restart();
+                        $"[EnvItemStreamerLite] prefill sync {done}/{total} " +
+                        $"instMs={instMs} name={item.PrefabName}");
                 }
             }
 
@@ -246,6 +261,10 @@ namespace Game
             Log.Info(
                 $"[EnvItemStreamerLite] prefill spawned={_spawnedCount}/{_items.Count} " +
                 $"near={total} skipVisible={skippedVisible}");
+            _prefillActive = false;
+            PrefillSuppressRender = false;
+            PrefillFrameGate.End();
+            yield break;
         }
 
         IEnumerator StreamLoop()
@@ -261,7 +280,7 @@ namespace Game
                     continue;
                 }
 
-                if (EnvStreamingConfig.IsPostUncoverQuiet)
+                if (_prefillActive || EnvStreamingConfig.IsPostUncoverQuiet)
                 {
                     yield return null;
                     continue;
@@ -839,6 +858,62 @@ namespace Game
             _ = name;
         }
 
+        GameObject LoadPrefabNow(string location, string editorPath, string phase)
+        {
+            if (!string.IsNullOrEmpty(location)
+                && _prefabCache.TryGetValue(location, out GameObject cached)
+                && cached != null)
+                return cached;
+
+            GameObject prefab = null;
+            bool trackLoad = !string.IsNullOrEmpty(location);
+            if (trackLoad)
+                _loadingLocations.Add(location);
+            var loadSw = System.Diagnostics.Stopwatch.StartNew();
+            Log.Info($"[EnvItemStreamerLite] load sync begin phase={phase} loc={location}");
+            try
+            {
+                bool locationValid = YooResourceModule.IsInitialized
+                    && YooResourceModule.DefaultPackage != null
+                    && !string.IsNullOrEmpty(location)
+                    && YooResourceModule.DefaultPackage.CheckLocationValid(location);
+                if (locationValid)
+                {
+                    AssetHandle handle = YooResourceModule.DefaultPackage.LoadAssetSync<GameObject>(location);
+                    if (handle != null && handle.Status == EOperationStatus.Succeed)
+                    {
+                        prefab = handle.AssetObject as GameObject;
+                        _prefabHandles[location] = handle;
+                    }
+                    else
+                    {
+                        Log.Warning(
+                            "[EnvItemStreamerLite] load sync fail loc=" + location +
+                            " status=" + (handle != null ? handle.Status.ToString() : "null") +
+                            " err=" + handle?.LastError);
+                        handle?.Release();
+                    }
+                }
+            }
+            finally
+            {
+                if (trackLoad)
+                    _loadingLocations.Remove(location);
+            }
+
+            Log.Info(
+                $"[EnvItemStreamerLite] load sync end phase={phase} loc={location} " +
+                $"ms={loadSw.ElapsedMilliseconds} ok={prefab != null}");
+
+#if UNITY_EDITOR
+            if (prefab == null && !string.IsNullOrEmpty(editorPath))
+                prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(editorPath);
+#endif
+            if (prefab != null && !string.IsNullOrEmpty(location))
+                _prefabCache[location] = prefab;
+            return prefab;
+        }
+
         IEnumerator LoadPrefab(string location, string editorPath, System.Action<GameObject> onDone, string phase)
         {
             if (!string.IsNullOrEmpty(location)
@@ -898,6 +973,9 @@ namespace Game
             if (_released)
                 return;
             _released = true;
+            _prefillActive = false;
+            PrefillSuppressRender = false;
+            PrefillFrameGate.End();
             _running = false;
             StopAllCoroutines();
             for (int i = 0; i < _items.Count; i++)

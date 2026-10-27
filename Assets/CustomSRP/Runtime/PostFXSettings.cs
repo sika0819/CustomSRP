@@ -253,6 +253,36 @@ namespace CustomSRP
         public OilFilterSettings OilFilter => oilFilter;
 
         [Serializable]
+        public struct OilWarpSettings
+        {
+            [Tooltip("Immersive full-screen oil UV warp (breath-driven). Off when strength is 0.")]
+            public bool enabled;
+
+            [Tooltip("Caps immersive breath×weight strength.")]
+            [Range(0f, 1f)]
+            public float maxStrength;
+
+            [Tooltip("Noise / flow spatial scale.")]
+            [Range(0.4f, 2.5f)]
+            public float scale;
+
+            [Tooltip("Max UV offset in texels at full strength.")]
+            [Range(3f, 14f)]
+            public float maxTexels;
+        }
+
+        [SerializeField]
+        OilWarpSettings oilWarp = new OilWarpSettings
+        {
+            enabled = true,
+            maxStrength = 0.55f,
+            scale = 1.05f,
+            maxTexels = 5f
+        };
+
+        public OilWarpSettings OilWarp => oilWarp;
+
+        [Serializable]
         public struct CanvasSettings
         {
             [Tooltip("Procedural canvas weave after tonemapping. Not film grain.")]

@@ -30,9 +30,12 @@ namespace Game
                 _started = true;
                 MonoBehaviour host = GameEntry.Base;
                 if (host != null)
-                    _routine = host.StartCoroutine(RunInit());
+                    _routine = host.StartCoroutine(RunInitGuarded());
                 else
+                {
+                    Log.Error("[InitYooAsset] GameEntry.Base null — skip Yoo init and continue to login");
                     _finished = true;
+                }
             }
 
             if (!_finished)
@@ -52,13 +55,41 @@ namespace Game
             base.OnLeave(procedureOwner, isShutdown);
         }
 
+        IEnumerator RunInitGuarded()
+        {
+            IEnumerator inner = RunInit();
+            while (true)
+            {
+                bool moved;
+                try
+                {
+                    moved = inner.MoveNext();
+                }
+                catch (System.Exception e)
+                {
+                    Log.Error("[InitYooAsset] init threw — continue to login. " + e);
+                    _finished = true;
+                    _routine = null;
+                    yield break;
+                }
+
+                if (!moved)
+                {
+                    _routine = null;
+                    yield break;
+                }
+
+                yield return inner.Current;
+            }
+        }
+
         IEnumerator RunInit()
         {
             BootLoadingService.ReportProgress(0.12f, "YooAsset 初始化");
             yield return YooResourceModule.InitDefaultPackageCoroutine((ok, err) =>
             {
                 if (!ok)
-                    Log.Warning($"[InitYooAsset] init failed, continue: {err}");
+                    Log.Error($"[InitYooAsset] init failed, continue to login: {err}");
             });
 
             if (YooResourceModule.IsInitialized)
@@ -74,7 +105,7 @@ namespace Game
                     (ok, err) =>
                     {
                         if (!ok)
-                            Log.Warning($"[InitYooAsset] download failed, continue: {err}");
+                            Log.Error($"[InitYooAsset] download failed, continue to login: {err}");
                     });
             }
 

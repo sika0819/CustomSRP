@@ -211,7 +211,7 @@ float3 ApplyColorGradingLUT(float3 color)
         _ColorGradingLUTParameters.yz);
 }
 
-float2 _CanvasGrain;
+float4 _CanvasGrain;
 
 float CanvasHash(float2 p)
 {
@@ -226,8 +226,20 @@ float3 ApplyCanvasWeave(float3 color, float2 uv)
         return color;
 
     float2 px = uv * _ScreenParams.xy;
-    float n = CanvasHash(floor(px)) - 0.5;
-    float2 cell = floor(px * (1.0 / 3.0));
+    float n;
+    float2 cell;
+    // _CanvasGrain.z > 1: one hash on a phone-sized cell. Else the authored 3px tooth.
+    [branch]
+    if (_CanvasGrain.z > 1.0)
+    {
+        cell = floor(px / max(_CanvasGrain.z, 3.0));
+        n = CanvasHash(cell) - 0.5;
+    }
+    else
+    {
+        n = CanvasHash(floor(px)) - 0.5;
+        cell = floor(px * (1.0 / 3.0));
+    }
     float weave = (frac(cell.x * 0.5) - 0.5) + (frac(cell.y * 0.5) - 0.5);
     float luma = dot(color, float3(0.299, 0.587, 0.114));
     float mid = saturate(1.0 - abs(luma - 0.42) * 1.7);
@@ -337,5 +349,7 @@ float4 OilRainPassFragment(Varyings input) : SV_TARGET
 
     return color;
 }
+
+#include "OilWarpPass.hlsl"
 
 #endif

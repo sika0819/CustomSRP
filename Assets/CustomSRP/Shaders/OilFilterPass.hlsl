@@ -155,6 +155,9 @@ float4 OilFilterPassFragment(Varyings input) : SV_TARGET
     half3 sharpChr = sharp / max(sharpL, 1e-3h);
     half3 chr = lerp(sharpChr, oilChr, lerp(0.88h, 0.72h, farW));
     half keepL = lerp(0.75h, 0.45h, farW);
+    // Narrow buffers: chroma-only smear is lost in the upscale. Shift value too. Same taps.
+    half lowRes = (half)saturate((800.0 - _OilFilterTexelSize.z) / 350.0);
+    keepL = lerp(keepL, keepL * 0.55h, lowRes);
     half lumaOut = lerp(oilL, sharpL, keepL);
     col = chr * lumaOut;
     col = lerp(sharp, col, oilAmt);

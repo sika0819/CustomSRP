@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 
 namespace Game.BoluoApi
 {
-    [Serializable]
+    // Newtonsoft 反序列化。bool? 不能进 Unity 序列化，不加 [Serializable]，避免 UAC1001。
     public class BankUpgradeResponse
     {
         public int code;
@@ -12,7 +12,6 @@ namespace Game.BoluoApi
         public BankUpgradeData data;
     }
 
-    [Serializable]
     public class BankUpgradeData
     {
         public string appVersion;

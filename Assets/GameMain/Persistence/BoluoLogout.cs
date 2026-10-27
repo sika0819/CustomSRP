@@ -40,6 +40,9 @@ namespace Game
             PresetWeatherHold.Abort();
             IslandJoystickCamera.Current?.ForceUnlockLocomotion();
             NowPlayingService.CleanupAfterLeaveIsland();
+            AudioAppLifecycle.ResetSession();
+            WanosAudio.WanosEngine.DisarmPlaybackSession("BoluoLogout." + reason);
+            Game.BoluoApi.BankDownloader.PauseForLeave();
             IslandPlayerPosSave.ResetSession();
             BoluoGameSave.ResetSession();
             DownloadedUnplayedManager.ResetSession();

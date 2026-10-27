@@ -105,6 +105,8 @@ namespace Game.Native
         /// </summary>
         static void OnWorldReady(object sender, GameFramework.Event.GameEventArgs e)
         {
+            if (!Game.ProcedureIsland.AcceptsIslandReadyNotify)
+                return;
             NotifyIslandReady();
         }
 

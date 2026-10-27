@@ -65,10 +65,20 @@ namespace CustomSRP
             buffer.SetGlobalFloat(finalSrcBlendId, 1f);
             buffer.SetGlobalFloat(finalDstBlendId, 0f);
             PostFXSettings.CanvasSettings canvas = _stack.Settings.Canvas;
+            // zw.x = canvas cell in backbuffer pixels. 0 keeps the authored 3px tooth.
+            // Phone pixels are too small for that tooth; bin to ~1/80 of the short side.
+            float canvasCellPx = 0f;
+            if (canvas.enabled && Application.isMobilePlatform)
+            {
+                float shortSide = Mathf.Min(
+                    _stack.Camera.pixelWidth, _stack.Camera.pixelHeight);
+                canvasCellPx = Mathf.Max(shortSide / 80f, 6f);
+            }
+
             buffer.SetGlobalVector(
                 canvasGrainId,
                 canvas.enabled
-                    ? new Vector4(canvas.grain, canvas.weave, 0f, 0f)
+                    ? new Vector4(canvas.grain, canvas.weave, canvasCellPx, 0f)
                     : Vector4.zero);
 
             if (_scaleMode != ScaleMode.None)
@@ -125,6 +135,9 @@ namespace CustomSRP
 
             TextureHandle colorSource = BloomPass.Record(renderGraph, stack, textures);
             colorSource = OilFilterPass.Record(renderGraph, stack, colorSource, textures);
+            // Immersive oil UV warp: after the edge filter, before rain and grading.
+            // Inactive (strength 0) returns the same handle and allocates nothing.
+            colorSource = OilWarpPass.Record(renderGraph, stack, colorSource);
 
             // OilRain screen-space water ripples run AFTER OilFilter (which likes our
             // strong colour edges), BEFORE the colour grading pass (which would shift hue).

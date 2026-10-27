@@ -207,7 +207,10 @@ namespace Game
             el.pickingMode = PickingMode.Ignore;
             el.style.position = Position.Absolute;
             el.style.backgroundColor = fill;
-            el.style.unityBackgroundScaleMode = ScaleMode.ScaleToFit;
+            el.style.backgroundSize = new BackgroundSize(BackgroundSizeType.Contain);
+            el.style.backgroundPositionX = new BackgroundPosition(BackgroundPositionKeyword.Center);
+            el.style.backgroundPositionY = new BackgroundPosition(BackgroundPositionKeyword.Center);
+            el.style.backgroundRepeat = new BackgroundRepeat(Repeat.NoRepeat, Repeat.NoRepeat);
             el.style.overflow = Overflow.Visible;
             el.style.flexShrink = 0;
             el.style.display = DisplayStyle.None;

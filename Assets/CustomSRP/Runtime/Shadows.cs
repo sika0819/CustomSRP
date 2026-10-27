@@ -29,7 +29,7 @@ namespace CustomSRP
 
         ShadowSettings _settings;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         static int _setupLogCounter;
 #endif
 
@@ -52,7 +52,7 @@ namespace CustomSRP
             otherShadows.Setup(settings);
 
             // [SRP][Shadow.Setup] 每 60 帧打一次,打印当前配置 + 平台信息,便于真机排查"为啥没阴影"
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if ((_setupLogCounter++ & 63) == 0)
             {
                 Log.Info(string.Format(
@@ -92,7 +92,7 @@ namespace CustomSRP
                 otherAtlasSize, 1f / otherAtlasSize));
 
             // [SRP][Shadow.Render] 每 60 帧打一次,看最终有多少 directional/other 影子光被纳入绘制
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if ((_setupLogCounter & 63) == 0)
             {
                 Log.Info(string.Format(

@@ -135,7 +135,7 @@ namespace CustomSRP
                 VisibleLight visibleLight = visibleLights[i];
                 Light light = visibleLight.light;
                 bool layerOk = (light.renderingLayerMask & renderingLayerMask) != 0;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
                 bool isShadowCapable = light.shadows != LightShadows.None && light.shadowStrength > 0f;
 #endif
                 Vector4 shadowData = default;
@@ -190,7 +190,7 @@ namespace CustomSRP
                 }
 
                 // [SRP][Shadow.Light] 每 60 帧把每个光源过一次,看 ReserveShadows 给的是什么
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
                 if ((Time.frameCount & 63) == 0)
                 {
                     Log.Info(string.Format(
@@ -203,7 +203,7 @@ namespace CustomSRP
 #endif
             }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if ((Time.frameCount & 63) == 0)
             {
                 Log.Info(string.Format(

@@ -14,9 +14,13 @@ namespace WanosAudio
         static bool _playbackEnabled;
         static bool _eventPostAllowed;
 
-        /// <summary>最后一次写入引擎的音量（0–1 UI 量纲），用于回前台重推。</summary>
+        /// <summary>最后一次要写入的音量（0–1 UI 量纲）。引擎未创建时也会更新，供回前台重推。</summary>
         static float _lastMusicVolume01 = 1f;
         static float _lastFxVolume01 = 1f;
+
+        /// <summary>该值是否已经写进当前引擎实例。卸载 / 重置会话后清掉，同值才会再写一次。</summary>
+        static bool _musicVolumeApplied;
+        static bool _fxVolumeApplied;
 
         /// <summary>
         /// 音频被打断标记：系统 / 其它 App 抢焦点、原生 muted 回调置位。
@@ -54,6 +58,8 @@ namespace WanosAudio
             _playbackEnabled = false;
             _eventPostAllowed = false;
             _interrupted = false;
+            _musicVolumeApplied = false;
+            _fxVolumeApplied = false;
             WanosInteraction.ResetSession();
             WanosBankStore.ResetSession();
         }
@@ -93,9 +99,21 @@ namespace WanosAudio
             Debug.Log($"[{LogTag}] StartEngine ({reason ?? "<no-reason>"}) ok={ok}");
         }
 
+        /// <summary>
+        /// 离岛：关掉「可以出声 / 可以业务 Post」和打断标记。不 Destroy、不清 bank 登记。
+        /// </summary>
+        public static void DisarmPlaybackSession(string reason)
+        {
+            _playbackEnabled = false;
+            _eventPostAllowed = false;
+            ClearInterrupted(reason);
+            Debug.Log($"[{LogTag}] playback disarmed ({reason ?? "<no-reason>"})");
+        }
+
         /// <summary>Stop the DSP audio thread. Safe on all platforms (optional export).</summary>
         public static void StopEngine(string reason = null)
         {
+            DisarmPlaybackSession(reason ?? "StopEngine");
             if (!WanosNative.Instance.IsCreated)
                 return;
             WanosNative.Instance.StopAllVoices(500);
@@ -149,6 +167,8 @@ namespace WanosAudio
         {
             _eventPostAllowed = false;
             _playbackEnabled = false;
+            _musicVolumeApplied = false;
+            _fxVolumeApplied = false;
 
             if (!WanosNative.Instance.IsCreated)
                 return;
@@ -235,8 +255,9 @@ namespace WanosAudio
         {
             if (!WanosNative.Instance.IsCreated)
                 return;
-            SetVolumeParameter(MusicVolumeParam, _lastMusicVolume01);
-            SetVolumeParameter(FxVolumeParam, _lastFxVolume01);
+            // 引擎 mute / 设备重建后 RTPC 可能回到默认值，同值也要重写。
+            ApplyVolumeParameter(MusicVolumeParam, _lastMusicVolume01, force: true);
+            ApplyVolumeParameter(FxVolumeParam, _lastFxVolume01, force: true);
         }
 
         public static bool ShouldAllowPostEvent(string eventName)
@@ -279,9 +300,15 @@ namespace WanosAudio
         /// <para>
         /// 量纲是硬约定：引擎 RTPC 量程 0–100，把 0–1 的 UI 值原样透传过去 = 0.8% 音量 = 听不到。
         /// 所有音量必须走本方法，不要直接调 <see cref="WanosNative.SetParameter"/>。
+        /// 与当前引擎实例里已写入的值相同则直接返回，不打原生。
         /// </para>
         /// </summary>
         public static void SetVolumeParameter(string paramName, float normalized01)
+        {
+            ApplyVolumeParameter(paramName, normalized01, force: false);
+        }
+
+        static void ApplyVolumeParameter(string paramName, float normalized01, bool force)
         {
             if (paramName != MusicVolumeParam && paramName != FxVolumeParam)
             {
@@ -290,15 +317,31 @@ namespace WanosAudio
                 return;
             }
 
-            float engineValue = Mathf.Clamp01(normalized01) * 100f;
+            float clamped = Mathf.Clamp01(normalized01);
+            bool music = paramName == MusicVolumeParam;
+            bool unchanged = music
+                ? _musicVolumeApplied && Mathf.Approximately(clamped, _lastMusicVolume01)
+                : _fxVolumeApplied && Mathf.Approximately(clamped, _lastFxVolume01);
+            if (!force && unchanged)
+                return;
+
             // 缓存 UI 量纲：回前台恢复时按缓存重推（引擎侧 RTPC 可能被重置回默认值）。
-            if (paramName == MusicVolumeParam)
-                _lastMusicVolume01 = Mathf.Clamp01(normalized01);
-            else if (paramName == FxVolumeParam)
-                _lastFxVolume01 = Mathf.Clamp01(normalized01);
+            if (music)
+                _lastMusicVolume01 = clamped;
+            else
+                _lastFxVolume01 = clamped;
+
+            if (!WanosNative.Instance.IsCreated)
+                return;
+
+            float engineValue = clamped * 100f;
             // 走 SetParameterEngineValue：这里已经是 0–100 引擎量纲，不该再被 0–1 量纲护栏判定。
             WanosNative.Instance.SetParameterEngineValue(paramName, engineValue);
-            Debug.Log($"[{LogTag}] SetVolumeParameter {paramName}={engineValue:F1} (ui={normalized01:F3})");
+            if (music)
+                _musicVolumeApplied = true;
+            else
+                _fxVolumeApplied = true;
+            Debug.Log($"[{LogTag}] SetVolumeParameter {paramName}={engineValue:F1} (ui={clamped:F3})");
         }
 
         /// <summary>

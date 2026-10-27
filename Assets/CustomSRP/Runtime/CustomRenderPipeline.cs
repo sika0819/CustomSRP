@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Game;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
@@ -78,8 +79,12 @@ namespace CustomSRP
                 for (int i = 0; i < cameras.Count; i++)
                 {
                     Camera camera = cameras[i];
-                    OilPlanarReflection.RenderBefore(
-                        context, camera, _renderGraph, _cameraRenderer, _settings);
+                    // 铺装只留主相机清屏 + 加载 UI，镜像相机会把整岛再画一遍。
+                    if (!EnvItemStreamerLite.PrefillSuppressRender)
+                    {
+                        OilPlanarReflection.RenderBefore(
+                            context, camera, _renderGraph, _cameraRenderer, _settings);
+                    }
                     BeginCameraRendering(context, camera);
                     try
                     {

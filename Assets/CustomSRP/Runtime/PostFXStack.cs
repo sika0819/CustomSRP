@@ -22,7 +22,8 @@ namespace CustomSRP
             FXAA,
             FXAAWithLuma,
             OilFilter,
-            OilRain
+            OilRain,
+            OilWarp
         }
 
         public static readonly int

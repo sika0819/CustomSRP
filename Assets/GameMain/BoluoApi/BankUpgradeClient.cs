@@ -59,6 +59,7 @@ namespace Game.BoluoApi
             string responseText = null;
             bool transportOk = false;
             long lastHttpCode = 0;
+            string lastTransportError = null;
             bool didAuthRetry = false;
 
             for (int authRound = 0; authRound < 2; authRound++)
@@ -66,6 +67,7 @@ namespace Game.BoluoApi
                 responseText = null;
                 transportOk = false;
                 lastHttpCode = 0;
+                lastTransportError = null;
 
                 await Http.SendWithRetry(
                     () =>
@@ -93,40 +95,122 @@ namespace Game.BoluoApi
                             responseText = req.downloadHandler?.text;
                             transportOk = true;
                         }
+                        else if (req != null)
+                        {
+                            lastTransportError = string.IsNullOrEmpty(req.error)
+                                ? $"HTTP {req.responseCode}"
+                                : req.error;
+                        }
+                        else if (string.IsNullOrEmpty(lastTransportError))
+                        {
+                            lastTransportError = "no network";
+                        }
+
                         req?.Dispose();
                     },
                     req => req != null && req.result == UnityWebRequest.Result.Success,
                     (attempt, delay, err) =>
-                        Log.Warning($"[BankUpgrade] retry attempt={attempt} wait={delay:0.#}s err={err}"))
+                    {
+                        lastTransportError = err;
+                        Log.Warning($"[BankUpgrade] retry attempt={attempt} wait={delay:0.#}s err={err}");
+                    })
                     .ToUniTask();
 
-                if (transportOk)
-                    break;
-
-                // 401：刷新原生 token 后重试一轮
-                if (!didAuthRetry && lastHttpCode == 401
-                    && Game.Native.NativeSession.IsHybridAvailable())
+                if (!transportOk)
                 {
-                    didAuthRetry = true;
-                    Log.Warning("[BankUpgrade] HTTP 401 → EnsureDeviceToken force refresh");
-                    BoluoSession.ClearDeviceToken();
-                    Game.Native.NativeSession.EnsureDeviceToken(forceRefresh: true);
-                    continue;
+                    // HTTP 401：本地过期时间还没到，服务端已拒绝。清票后强制换票再打一轮。
+                    if (!didAuthRetry && lastHttpCode == 401)
+                    {
+                        didAuthRetry = true;
+                        if (await RefreshExpiredDeviceTokenAsync("HTTP 401"))
+                            continue;
+                        Fail("升级失败：deviceToken 已过期，刷新失败");
+                        return null;
+                    }
+
+                    break;
                 }
 
-                break;
+                if (TryParseResponse(responseText, out var data, out bool deviceTokenExpired, out string failReason))
+                    return data;
+
+                // 业务码 400「deviceToken 已过期」同样是 HTTP 200，原先在解析处直接失败，不会进 401 分支。
+                if (!didAuthRetry && deviceTokenExpired)
+                {
+                    didAuthRetry = true;
+                    if (await RefreshExpiredDeviceTokenAsync("业务码 deviceToken 已过期"))
+                        continue;
+                    Fail(string.IsNullOrEmpty(failReason)
+                        ? "升级失败：deviceToken 已过期，刷新失败"
+                        : failReason);
+                    return null;
+                }
+
+                Fail(failReason);
+                return null;
             }
 
             if (!transportOk)
+                Fail(DescribeTransport(lastHttpCode, lastTransportError));
+
+            return null;
+        }
+
+        /// <summary>终态失败：打日志，并在加载罩上方弹出原因。过期票换票成功不走这里。</summary>
+        static void Fail(string reason)
+        {
+            if (string.IsNullOrEmpty(reason))
+                reason = "升级失败";
+            Log.Error($"[BankUpgrade] {reason}");
+            UiDialogService.ShowRequestFailure(reason);
+        }
+
+        static string DescribeTransport(long httpCode, string err)
+        {
+            if (Application.internetReachability == NetworkReachability.NotReachable
+                || string.Equals(err, "no network", StringComparison.OrdinalIgnoreCase))
+                return "升级失败：无网络";
+            if (httpCode > 0)
             {
-                Log.Error("[BankUpgrade] HTTP transport failed after retries");
-                return null;
+                return string.IsNullOrEmpty(err) || err.StartsWith("HTTP ", StringComparison.Ordinal)
+                    ? $"升级失败：HTTP {httpCode}"
+                    : $"升级失败：HTTP {httpCode} {err}";
             }
 
-            if (!TryParseResponse(responseText, out var data))
-                return null;
+            if (!string.IsNullOrEmpty(err))
+                return $"升级失败：{err}";
+            return "升级失败：网络请求失败";
+        }
 
-            return data;
+        /// <summary>
+        /// 服务端业务文案。本地过期时间可能还没到（或原生 expire=0 被写成 24h 占位），不能只看 Prefs。
+        /// </summary>
+        static bool IsDeviceTokenExpiredMessage(string msg)
+        {
+            if (string.IsNullOrEmpty(msg))
+                return false;
+            return msg.IndexOf("deviceToken", StringComparison.OrdinalIgnoreCase) >= 0
+                && msg.IndexOf("过期", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>
+        /// 丢掉本地 deviceToken，再走换票。Hybrid 向宿主 Query 20 强制刷新；Editor 走 boluoRsa。
+        /// </summary>
+        static async UniTask<bool> RefreshExpiredDeviceTokenAsync(string reason)
+        {
+            Log.Warning($"[BankUpgrade] {reason} → clear deviceToken and refresh");
+            BoluoSession.ClearDeviceToken();
+            bool ok = await BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true);
+            if (!ok || string.IsNullOrEmpty(BoluoSession.DeviceToken))
+            {
+                Log.Warning("[BankUpgrade] deviceToken refresh failed");
+                return false;
+            }
+
+            Log.Info(
+                $"[BankUpgrade] deviceToken refreshed len={BoluoSession.DeviceToken.Length} " +
+                $"expire={BoluoSession.DeviceTokenExpireTime}");
+            return true;
         }
 
         public static UniTask<Dictionary<string, string>> BuildSignedHeaders(string bodyJson)
@@ -153,12 +237,15 @@ namespace Game.BoluoApi
             };
         }
 
-        static bool TryParseResponse(string json, out BankUpgradeData data)
+        static bool TryParseResponse(
+            string json, out BankUpgradeData data, out bool deviceTokenExpired, out string failReason)
         {
             data = null;
+            deviceTokenExpired = false;
+            failReason = null;
             if (string.IsNullOrEmpty(json))
             {
-                Log.Error("[BankUpgrade] empty response");
+                failReason = "升级失败：服务器返回空";
                 return false;
             }
 
@@ -173,26 +260,32 @@ namespace Game.BoluoApi
             }
             catch (Exception e)
             {
-                Log.Error($"[BankUpgrade] JSON parse fail: {e.Message}");
+                Log.Warning($"[BankUpgrade] JSON parse fail: {e.Message}");
+                failReason = "升级失败：响应无法解析";
                 return false;
             }
 
             if (resp == null)
             {
-                Log.Error("[BankUpgrade] response null");
+                failReason = "升级失败：响应为空";
                 return false;
             }
 
             if (resp.code != 0)
             {
-                // 业务错误不走传输重试
-                Log.Error($"[BankUpgrade] business error code={resp.code} msg={resp.msg}");
+                deviceTokenExpired = IsDeviceTokenExpiredMessage(resp.msg);
+                failReason = string.IsNullOrEmpty(resp.msg)
+                    ? $"升级失败：code={resp.code}"
+                    : $"升级失败：{resp.msg}";
+                // 过期留给调用方清票换票；换票成功不弹。其它业务错误由调用方弹 Toast。
+                if (deviceTokenExpired)
+                    Log.Warning($"[BankUpgrade] business error code={resp.code} msg={resp.msg}");
                 return false;
             }
 
             if (resp.data == null)
             {
-                Log.Error("[BankUpgrade] data null");
+                failReason = "升级失败：数据为空";
                 return false;
             }
 

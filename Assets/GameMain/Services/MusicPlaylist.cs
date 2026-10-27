@@ -69,13 +69,6 @@ namespace Game
         bool _breakPostedForVoice;
 
         /// <summary>
-        /// SetPlayMode 切到 Loop/Shuffle 时 voice 尚未挂上：Attach 后补 Break（等播完，不掐断）。
-        /// </summary>
-        bool _breakWhenVoiceAttached;
-
-        bool _voiceHooked;
-
-        /// <summary>
         /// 用户主动停过曲目（Stop）。回前台恢复时不能把停掉的曲目重新拉起来，
         /// 但「暂停」要恢复（需求：不管什么暂停状态，回前台都恢复音乐）。
         /// </summary>
@@ -147,12 +140,32 @@ namespace Game
                 _instance._musicSerialId = -1;
                 _instance._musicVoiceId = 0;
                 _instance._breakPostedForVoice = false;
-                _instance._breakWhenVoiceAttached = false;
                 _instance._voiceGeneration++;
                 _instance.IsPlaying = false;
                 _instance._stoppedByUser = false;
             }
             NowPlayingService.CleanupAfterLeaveIsland();
+        }
+
+        /// <summary>
+        /// 离岛：解绑 voice、作废进行中的切歌兜底，并保持「用户已停」。
+        /// 不要走 <see cref="ResetSession"/>：那里会把 <c>_stoppedByUser</c> 抬回 false，
+        /// 回前台 <c>EnsureMusicRestored</c> 会把曲目拉起来。
+        /// </summary>
+        public void DisarmAfterLeave()
+        {
+            UnhookVoiceStates();
+            if (_musicSerialId >= 0 && GameEntry.Sound != null)
+            {
+                GameEntry.Sound.StopSound(_musicSerialId);
+                _musicSerialId = -1;
+            }
+
+            _musicVoiceId = 0;
+            _breakPostedForVoice = false;
+            _voiceGeneration++;
+            IsPlaying = false;
+            _stoppedByUser = true;
         }
 
         /// <summary>
@@ -163,7 +176,6 @@ namespace Game
             EnsureVoiceHook();
             _musicVoiceId = voiceId;
             _breakPostedForVoice = false;
-            _breakWhenVoiceAttached = false;
             int gen = ++_voiceGeneration;
 
             // 不在 Attach 立刻 Break：引擎可能尚未 Playing，过早 Break 会被吞，
@@ -181,7 +193,6 @@ namespace Game
             if (voiceId != 0 && voiceId == _musicVoiceId)
                 _musicVoiceId = 0;
             _breakPostedForVoice = false;
-            _breakWhenVoiceAttached = false;
             _voiceGeneration++;
         }
 
@@ -223,8 +234,7 @@ namespace Game
             PlayMode = mode;
 
             // Loop/Shuffle：只发 Break，等本曲播完再 Ended→Next（不中途 Stop）。
-            // Single：不 Break，引擎继续自循环。
-            _breakWhenVoiceAttached = false;
+            // Single：不 Break，引擎继续自循环。voice 还没挂上时由 Attach 后的 fallback 补 Break。
             if (IsPlaying && IsListAdvanceMode(mode))
             {
                 if (_musicVoiceId == 0
@@ -236,8 +246,6 @@ namespace Game
 
                 if (_musicVoiceId != 0)
                     TryPostBreak("SetPlayMode");
-                else
-                    _breakWhenVoiceAttached = true;
             }
 
             if (GameEntry.Setting != null)
@@ -450,16 +458,14 @@ namespace Game
         void EnsureVoiceHook()
         {
             // 先卸再挂：WanosEventCallbackQueue.ResetSession 可能把 StateChanged 置空，
-            // 若只靠 _voiceHooked 短路会永久收不到 Playing/Ended。
+            // 短路“已经挂过”会永久收不到 Playing/Ended。
             WanosEventCallbackQueue.StateChanged -= OnMusicVoiceState;
             WanosEventCallbackQueue.StateChanged += OnMusicVoiceState;
-            _voiceHooked = true;
         }
 
         void UnhookVoiceStates()
         {
             WanosEventCallbackQueue.StateChanged -= OnMusicVoiceState;
-            _voiceHooked = false;
         }
 
         void TryPostBreak(string reason)

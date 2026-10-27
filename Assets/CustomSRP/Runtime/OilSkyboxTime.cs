@@ -567,6 +567,7 @@ namespace CustomSRP
             // EnsureOnSkybox → SyncFromWeatherService writes WeatherService Hours/Look into
             // timeOfDay before Apply, so the prefab noon default never reaches the first frame.
             OilAtmosphereDriver.EnsureOnSkybox();
+            OilWarpDriver.EnsureOnSkybox();
             if (driveSun && sun == null)
             {
                 ResolveSunLight();

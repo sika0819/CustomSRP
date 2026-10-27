@@ -12,8 +12,8 @@ half3 SamplePaintSeamless(float2 worldXZ, float tileMeters)
     float tile = max(tileMeters, 80.0);
     float2 uv = worldXZ / tile;
 #if defined(OIL_MOBILE_PERF)
-    // Seam blend is invisible at renderScale 0.5 — one tap.
-    return (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, uv).rgb;
+    // Seam blend is invisible at renderScale 0.5 — one tap, biased so the stroke mip survives.
+    return (half3)SAMPLE_TEXTURE2D_BIAS(_PaintMap, sampler_PaintMap, uv, -1.25).rgb;
 #else
     float2 f = frac(uv);
     float2 edge = min(f, 1.0 - f);

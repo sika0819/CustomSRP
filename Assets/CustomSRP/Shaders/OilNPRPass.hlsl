@@ -151,6 +151,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     surface.smoothness = (half)_Smoothness;
     surface.fresnelStrength = 0.0;
 #if defined(OIL_MOBILE_PERF)
+    // Foliage returns before the NPR block and never reads this. NPR overwrites it.
     surface.dither = 0.5;
 #else
     surface.dither = InterleavedGradientNoise(config.fragment.positionSS, 0);
@@ -201,6 +202,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     }
 
 #if defined(OIL_MOBILE_PERF)
+    surface.dither = InterleavedGradientNoise(config.fragment.positionSS, 0);
     half3 color = OilNPRLighting(
         surface,
         albedo,
@@ -214,7 +216,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         (half)_ShadeLift,
         brush,
         (half)_ShadowWobble,
-        0.0h,
+        0.2h,
         surface.smoothness,
         config.fragment.screenUV);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush);

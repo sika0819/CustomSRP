@@ -215,7 +215,6 @@ namespace CustomSRP.Editor
             if (px == null || px.Length < 64)
                 return false;
             int opaque = 0;
-            int distinct = 0;
             Color32 first = px[0];
             bool allSame = true;
             for (int i = 0; i < px.Length; i++)

@@ -27,6 +27,8 @@ namespace Game
             public float Seconds;
             public float AnchoredY;
             public bool Error;
+            /// <summary>加载罩深度高于 Tip，启动期失败必须抬到罩子上面才看得见。</summary>
+            public bool AboveLoading;
         }
 
         static bool _hasPending;
@@ -39,7 +41,8 @@ namespace Game
             string message,
             float seconds = 1.6f,
             float anchoredY = DefaultAnchoredY,
-            bool error = false)
+            bool error = false,
+            bool aboveLoading = false)
         {
             _pending = new Request
             {
@@ -47,6 +50,7 @@ namespace Game
                 Seconds = seconds,
                 AnchoredY = anchoredY,
                 Error = error,
+                AboveLoading = aboveLoading,
             };
             _hasPending = true;
 

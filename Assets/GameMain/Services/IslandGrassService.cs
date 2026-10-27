@@ -128,9 +128,13 @@ namespace Game
 #if UNITY_ANDROID && !UNITY_EDITOR
                 using (var req = UnityEngine.Networking.UnityWebRequest.Get(streamingPath))
                 {
+                    req.timeout = 15;
                     yield return req.SendWebRequest();
-                    if (req.result == UnityEngine.Networking.UnityWebRequest.Result.Success
-                        && req.downloadHandler?.data != null
+                    if (req.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+                    {
+                        Log.Error("[IslandGrass] StreamingAssets bake read failed — " + req.error);
+                    }
+                    else if (req.downloadHandler?.data != null
                         && req.downloadHandler.data.Length > 0)
                     {
                         onDone?.Invoke(req.downloadHandler.data);

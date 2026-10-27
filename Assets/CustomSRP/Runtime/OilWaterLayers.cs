@@ -117,7 +117,7 @@ namespace CustomSRP
             }
 
             Renderer[] renderers = Object.FindObjectsByType<Renderer>(
-                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                FindObjectsInactive.Exclude);
             for (int i = 0; i < renderers.Length; i++)
             {
                 Renderer renderer = renderers[i];

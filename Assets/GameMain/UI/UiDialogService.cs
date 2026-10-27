@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 namespace Game
 {
@@ -15,6 +16,8 @@ namespace Game
         // Active progress form reference so callers can update progress.
         static DownloadProgressForm _activeProgressForm;
         static int _activeProgressSerial;
+        static string _lastRequestFailure;
+        static float _lastRequestFailureTime;
 
         #region Toast
 
@@ -32,6 +35,21 @@ namespace Game
         public static void ShowErrorToast(string message)
         {
             UiTipToast.ShowMessage(message, 4f, error: true);
+        }
+
+        /// <summary>
+        /// 启动期请求失败。气泡抬到加载罩之上，同一文案 8 秒内不重复，避免换票重试刷屏。
+        /// </summary>
+        public static void ShowRequestFailure(string reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+                reason = "请求失败";
+            float now = Time.realtimeSinceStartup;
+            if (reason == _lastRequestFailure && now - _lastRequestFailureTime < 8f)
+                return;
+            _lastRequestFailure = reason;
+            _lastRequestFailureTime = now;
+            UiTipToast.ShowMessage(reason, 5f, error: true, aboveLoading: true);
         }
 
         #endregion

@@ -29,13 +29,18 @@ half3 OilNPRAmbient(Surface surfaceWS)
 }
 
 // Soft poster bands: keep oil masses, feather edges so shadow steps aren't chalk lines.
+// Phone buffers are 0.375–0.5 then bilinear-upscaled; a 0.58 shoulder vanishes into Lambert.
 half QuantizeNdotL(half ndotL, half steps)
 {
     steps = max(steps, 2.0h);
     half n = saturate(ndotL) * (steps - 1.0h);
     half i = floor(n);
     half f = frac(n);
+#if defined(OIL_MOBILE_PERF)
+    half feather = 0.28h;
+#else
     half feather = 0.58h;
+#endif
     f = smoothstep(0.5h - feather * 0.5h, 0.5h + feather * 0.5h, f);
     return (i + f) / (steps - 1.0h);
 }
@@ -227,11 +232,7 @@ half3 OilNPRLightingEx(
             unlit = lerp(unlit, max(unlit, warmUmbra * 0.65h + other * 0.35h), 0.55h);
         }
 
-#if defined(OIL_MOBILE_PERF)
-        return unlit;
-#else
         return OilDitherQuantize(unlit, (half)surfaceWS.dither, quantize);
-#endif
     }
 
     DirectionalLightData lightData = _DirectionalLightData[0];
@@ -262,13 +263,15 @@ half3 OilNPRLightingEx(
     // Ocean / River: no cascade shadow → umbra dead code; shadeLift hardcoded 0.28.
     half lit = halfLambert * lerp(0.28h, 1.0h, attSoft);
 #endif
-#if !defined(OIL_MOBILE_PERF)
     lit += ((half)surfaceWS.dither - 0.5h) * (quantize > 0.001h ? (1.0h / steps) : 0.0h);
-#endif
     half litCont = saturate(lit);
     lit = QuantizeNdotL(litCont, steps);
-    // Mix a little continuous shade so oil masses stay, chalk steps don't.
+    // Phone upscale eats a wide shoulder. Keep more of the step; desktop stays soft.
+#if defined(OIL_MOBILE_PERF)
+    lit = lerp(lit, litCont, 0.14h);
+#else
     lit = lerp(lit, litCont, 0.32h);
+#endif
 
     // lightColor is VisibleLight.finalColor (OilSkyboxTime LightPresets × intensity).
     half lightPeak = max(1e-3h, max(lightColor.r, max(lightColor.g, lightColor.b)));

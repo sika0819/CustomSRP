@@ -44,6 +44,9 @@ namespace Game
         /// 近场（地形 / 海 / 地图物件）已铺完。草和后续流送仍可在 <see cref="Load"/> 里继续。
         /// </summary>
         public bool IsNearReady { get; private set; }
+
+        /// <summary>本轮 Load 已结束且近场没铺上。Procedure 用来停止空等。</summary>
+        public bool LoadFailed { get; private set; }
         public EnvMapItemSpawner MapItemSpawner => _mapItemSpawner;
         public GameObject TerrainInstance => _terrainInstance;
         public GameObject OceanInstance => _oceanInstance;
@@ -72,8 +75,21 @@ namespace Game
 
         public IEnumerator Load(System.Action<float, string> reportProgress)
         {
+            LoadFailed = false;
             if (_loaded)
+            {
+                if (!IsNearReady && _terrainInstance != null)
+                    IsNearReady = true;
+                if (!IsNearReady)
+                {
+                    Log.Error(
+                        "[IslandWorld] marked loaded but terrain/ocean missing — release and retry");
+                    Release();
+                    LoadFailed = true;
+                }
+
                 yield break;
+            }
 
             // 出生点配置最先加载：SpawnMapItems / ApplySpawnPose 都要读它。
             yield return LoadSpawnPose();
@@ -90,10 +106,11 @@ namespace Game
             if (_terrainInstance == null)
             {
                 Log.Error(
-                    "YooAsset missing location '{0}' ({1}).",
+                    "YooAsset missing location '{0}' ({1}). Island entry will not wait.",
                     SceneAssets.IslandTerrainLocation,
                     SceneAssets.IslandTerrainPrefabPath);
                 Release();
+                LoadFailed = true;
                 yield break;
             }
 
@@ -109,10 +126,11 @@ namespace Game
             if (_oceanInstance == null)
             {
                 Log.Error(
-                    "YooAsset missing location '{0}' ({1}).",
+                    "YooAsset missing location '{0}' ({1}). Island entry will not wait.",
                     SceneAssets.IslandOceanLocation,
                     SceneAssets.IslandOceanPrefabPath);
                 Release();
+                LoadFailed = true;
                 yield break;
             }
 

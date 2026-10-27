@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 using YooAsset;
@@ -18,6 +19,9 @@ namespace Game
         public static EPlayMode ActivePlayMode { get; private set; }
         public static string PackageVersion { get; private set; }
         public static string LastError { get; private set; }
+
+        /// <summary>单次 Yoo 操作超过此时长仍未完成，视为卡死并放弃等待。</summary>
+        public const float OperationWaitCapSeconds = 45f;
 
         /// <summary>
         /// Editor re-enter without Domain Reload leaves YooAssets static state alive.
@@ -150,8 +154,8 @@ namespace Game
                 yield break;
             }
 
-            while (initOp != null && !initOp.IsDone)
-                yield return null;
+            if (initOp != null)
+                yield return WaitUntilDone(() => initOp.IsDone, "InitializeAsync");
 
             if (initOp == null || initOp.Status != EOperationStatus.Succeed)
             {
@@ -166,8 +170,7 @@ namespace Game
             // (including EditorSimulate / Offline). Always RequestPackageVersion + UpdatePackageManifest.
             {
                 var versionOp = package.RequestPackageVersionAsync();
-                while (!versionOp.IsDone)
-                    yield return null;
+                yield return WaitUntilDone(() => versionOp.IsDone, "RequestPackageVersion");
 
                 if (versionOp.Status != EOperationStatus.Succeed)
                 {
@@ -180,8 +183,7 @@ namespace Game
 
                 PackageVersion = versionOp.PackageVersion;
                 var manifestOp = package.UpdatePackageManifestAsync(PackageVersion);
-                while (!manifestOp.IsDone)
-                    yield return null;
+                yield return WaitUntilDone(() => manifestOp.IsDone, "UpdatePackageManifest");
 
                 if (manifestOp.Status != EOperationStatus.Succeed)
                 {
@@ -261,8 +263,27 @@ namespace Game
             };
 
             downloader.BeginDownload();
+            float stallAt = Time.realtimeSinceStartup;
+            long lastBytes = downloader.CurrentDownloadBytes;
+            const float stallCapSeconds = 60f;
             while (!downloader.IsDone)
+            {
+                long bytes = downloader.CurrentDownloadBytes;
+                if (bytes != lastBytes)
+                {
+                    lastBytes = bytes;
+                    stallAt = Time.realtimeSinceStartup;
+                }
+                else if (Time.realtimeSinceStartup - stallAt >= stallCapSeconds)
+                {
+                    LastError = "download stalled " + stallCapSeconds.ToString("0")
+                        + "s bytes=" + lastBytes;
+                    Log.Error("[YooAsset] " + LastError + " — stop waiting so boot can continue");
+                    break;
+                }
+
                 yield return null;
+            }
 
             if (downloader.Status != EOperationStatus.Succeed)
             {
@@ -305,7 +326,7 @@ namespace Game
         /// <summary>Load an addressed asset; caller owns the handle (Release when done).</summary>
         public static IEnumerator LoadAssetCoroutine<T>(
             string location,
-            System.Action<T, AssetHandle> onDone) where T : Object
+            System.Action<T, AssetHandle> onDone) where T : UnityEngine.Object
         {
             LastError = null;
             if (!IsInitialized || DefaultPackage == null)
@@ -326,18 +347,46 @@ namespace Game
             Log.Info($"[YooAsset] handle enter loc={location}");
             AssetHandle handle = DefaultPackage.LoadAssetAsync<T>(location);
             Log.Info($"[YooAsset] handle created loc={location} done={handle.IsDone}");
-            yield return handle;
-            Log.Info($"[YooAsset] handle resume loc={location} status={handle.Status}");
+            // 不要 yield return handle。Handle.Current 是 Provider（也是 IEnumerator），
+            // Unity 会嵌套抽干它；Provider 没完成时 MoveNext 一直为 true，主线程不再渲染。
+            yield return WaitUntilDone(() => handle.IsDone, "LoadAsset " + location);
+            Log.Info($"[YooAsset] handle resume loc={location} status={handle.Status} done={handle.IsDone}");
 
-            if (handle.Status != EOperationStatus.Succeed)
+            if (!handle.IsDone || handle.Status != EOperationStatus.Succeed)
             {
-                LastError = handle.LastError;
+                if (handle.IsDone)
+                    LastError = handle.LastError;
+                else if (string.IsNullOrEmpty(LastError))
+                    LastError = "LoadAsset timed out";
                 Log.Error($"[YooAsset] Load failed location={location}: {LastError}");
                 onDone?.Invoke(null, handle);
                 yield break;
             }
 
             onDone?.Invoke(handle.AssetObject as T, handle);
+        }
+
+        /// <summary>
+        /// 轮询到完成或墙钟上限。超时打 Error 并返回，调用方按失败继续，避免进岛协程永远停在 yield。
+        /// </summary>
+        public static IEnumerator WaitUntilDone(Func<bool> isDone, string what, float capSeconds = OperationWaitCapSeconds)
+        {
+            if (isDone == null || isDone())
+                yield break;
+
+            float start = Time.realtimeSinceStartup;
+            float cap = capSeconds > 0f ? capSeconds : OperationWaitCapSeconds;
+            while (!isDone())
+            {
+                if (Time.realtimeSinceStartup - start >= cap)
+                {
+                    LastError = what + " timed out after " + cap.ToString("0") + "s";
+                    Log.Error("[YooAsset] " + LastError + " — stop waiting so island entry can continue");
+                    yield break;
+                }
+
+                yield return null;
+            }
         }
 
         /// <summary>Load + InstantiateSync; caller owns the handle until the instance is destroyed.</summary>

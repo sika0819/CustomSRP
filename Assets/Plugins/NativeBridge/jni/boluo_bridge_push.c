@@ -108,19 +108,23 @@ static void BoluoPumpUnityForMedia(void)
     }
 }
 
-JNIEXPORT void JNICALL
+JNIEXPORT jboolean JNICALL
 Java_com_wanos_boluo_unity_BoluoUnityPlugin_nativePush(
     JNIEnv *env, jobject thiz,
     jint type, jint a, jint b, jint c)
 {
     (void)env;
     (void)thiz;
+    /* 接收端还没 RegisterPush 时 Push 会被丢掉，调用方必须知道。 */
+    if (atomic_load(&g_push) == NULL)
+        return JNI_FALSE;
     int pump = type == 104 || type == 103;
     if (pump)
         BoluoPumpUnityForMedia();
     BoluoImp_Push((int32_t)type, (int32_t)a, (int32_t)b, (int32_t)c);
     if (pump)
         BoluoPumpUnityForMedia();
+    return JNI_TRUE;
 }
 #endif
 

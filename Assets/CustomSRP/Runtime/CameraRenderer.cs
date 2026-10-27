@@ -12,7 +12,7 @@ namespace CustomSRP
 
         static readonly CameraSettings DefaultCameraSettings = new CameraSettings();
 
-#if !(UNITY_EDITOR || DEVELOPMENT_BUILD)
+#if !(UNITY_INCLUDE_INSTRUMENTATION)
         static readonly ProfilingSampler DefaultReleaseBuildProfilingSampler =
             new ProfilingSampler("Other Camera");
 #endif
@@ -44,7 +44,7 @@ namespace CustomSRP
             LightingPass.Cleanup();
         }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         static ProfilingSampler GetDefaultProfileSampler(Camera camera) =>
             ProfilingSampler.Get(camera.cameraType);
 #else
@@ -60,6 +60,15 @@ namespace CustomSRP
         {
             if (camera.pixelWidth <= 0 || camera.pixelHeight <= 0)
             {
+                return;
+            }
+
+            // 铺装时不画世界：全场景每帧更重，Present 会把主线程停死。
+            // 仍清屏并画 UI，Game 视图才认这台摄像机在渲染，加载条才能往前走。
+            if (EnvItemStreamerLite.PrefillSuppressRender)
+            {
+                if (camera.cameraType == CameraType.Game)
+                    RenderCoverOnly(context, camera);
                 return;
             }
 
@@ -351,6 +360,24 @@ namespace CustomSRP
             finally
             {
                 CommandBufferPool.Release(commandBuffer);
+            }
+        }
+
+        static void RenderCoverOnly(ScriptableRenderContext context, Camera camera)
+        {
+            CommandBuffer cmd = CommandBufferPool.Get("Prefill Cover");
+            try
+            {
+                cmd.SetupCameraProperties(camera);
+                cmd.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+                cmd.ClearRenderTarget(true, true, new Color(0.09f, 0.07f, 0.05f, 1f));
+                context.ExecuteCommandBuffer(cmd);
+                context.DrawUIOverlay(camera);
+                context.Submit();
+            }
+            finally
+            {
+                CommandBufferPool.Release(cmd);
             }
         }
     }

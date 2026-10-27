@@ -5,13 +5,12 @@ using UnityGameFramework.Runtime;
 namespace Game
 {
     /// <summary>
-    /// 退岛 World.Release 之后、二次 Prefill 之前回收 Yoo 未用包体。
-    /// SoftUnload 故意跳过 UnloadUnused（怕和 Prefill 抢帧）；此处改到 GuestLogin 等 Arm
-    /// 的空窗执行，避免二次进岛 RSS 顶满导致 ~8FPS。
+    /// 退岛 World.Release 之后卸掉不再引用的 Yoo bundle。
+    /// 包体留着时，二次 Prefill 会在旧资源还占着内存的情况下再实例化一套，
+    /// 主线程在铺到几十个物体后不再渲染。先空等几帧让 Destroy 落地，再卸。
     /// </summary>
     public static class IslandLeaveAssetReclaim
     {
-        const float WaitCapSeconds = 8f;
         const int YooUnloadLoops = 8;
 
         static int _generation;
@@ -41,21 +40,11 @@ namespace Game
             _routine = host.StartCoroutine(Run(gen));
         }
 
-        /// <summary>进岛 Load / ChangeState 前挡住，避免 Prefill 与卸载叠主线程。</summary>
+        /// <summary>进岛 Load / ChangeState 前挡住，卸完才放行，避免 Prefill 与卸载叠主线程。</summary>
         public static IEnumerator WaitIfBusy()
         {
-            if (!_busy)
-                yield break;
-
-            float start = Time.realtimeSinceStartup;
-            while (_busy && Time.realtimeSinceStartup - start < WaitCapSeconds)
+            while (_busy)
                 yield return null;
-
-            if (_busy)
-            {
-                Log.Warning(
-                    "[IslandLeaveAssetReclaim] WaitIfBusy wall-cap — proceed (unload still running)");
-            }
         }
 
         /// <summary>关机 / 强杀流程作废进行中的回收。</summary>
@@ -116,6 +105,17 @@ namespace Game
                 yield break;
             }
 
+            // Destroy 落帧后再卸。加载协程已改为按帧等待，避免和 Unload 叠在同一次 LoadFromFile 上。
+            for (int i = 0; i < 6; i++)
+                yield return null;
+            if (gen != _generation)
+            {
+                _busy = false;
+                _routine = null;
+                _host = null;
+                yield break;
+            }
+
             Log.Info("[IslandLeaveAssetReclaim] begin Yoo UnloadUnused after leave");
             yield return YooResourceModule.UnloadUnusedAssetsCoroutine(YooUnloadLoops);
             if (gen != _generation)
@@ -125,6 +125,9 @@ namespace Game
                 _host = null;
                 yield break;
             }
+
+            Log.Info("[IslandLeaveAssetReclaim] begin Resources.UnloadUnusedAssets pass2");
+            yield return Resources.UnloadUnusedAssets();
 
             // 轻量托管回收；加载罩盖着，可接受一次尖刺。
             System.GC.Collect();

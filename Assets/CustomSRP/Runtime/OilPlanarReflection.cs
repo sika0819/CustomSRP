@@ -450,7 +450,7 @@ namespace CustomSRP
         {
             _ocean = null;
             OilOceanSurface[] oceans = Object.FindObjectsByType<OilOceanSurface>(
-                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                FindObjectsInactive.Exclude);
             float best = float.MaxValue;
             for (int i = 0; i < oceans.Length; i++)
             {
@@ -476,7 +476,7 @@ namespace CustomSRP
             }
 
             Renderer[] renderers = Object.FindObjectsByType<Renderer>(
-                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                FindObjectsInactive.Exclude);
             float lowest = float.MaxValue;
             bool found = false;
             for (int i = 0; i < renderers.Length; i++)

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 
@@ -34,6 +35,21 @@ namespace Game.Editor.BuildTool
             BuildTargetGroup.iOS,
             BuildTargetGroup.Standalone
         };
+
+        static NamedBuildTarget NamedTarget(BuildTargetGroup group)
+        {
+            switch (group)
+            {
+                case BuildTargetGroup.Android:
+                    return NamedBuildTarget.Android;
+                case BuildTargetGroup.iOS:
+                    return NamedBuildTarget.iOS;
+                case BuildTargetGroup.Standalone:
+                    return NamedBuildTarget.Standalone;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(group), group, "未映射的构建平台");
+            }
+        }
 
         public enum CIEnvironment
         {
@@ -367,7 +383,8 @@ namespace Game.Editor.BuildTool
 
             foreach (BuildTargetGroup group in TargetPlatforms)
             {
-                var defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(group)
+                NamedBuildTarget named = NamedTarget(group);
+                var defines = PlayerSettings.GetScriptingDefineSymbols(named)
                     .Split(';').Where(d => !string.IsNullOrEmpty(d)).ToList();
                 var before = new HashSet<string>(defines, StringComparer.Ordinal);
                 defines.RemoveAll(d =>
@@ -377,7 +394,7 @@ namespace Game.Editor.BuildTool
                 var after = new HashSet<string>(defines, StringComparer.Ordinal);
                 if (before.SetEquals(after))
                     continue;
-                PlayerSettings.SetScriptingDefineSymbolsForGroup(group, string.Join(";", defines));
+                PlayerSettings.SetScriptingDefineSymbols(named, string.Join(";", defines));
                 changed = true;
             }
 
@@ -626,7 +643,7 @@ namespace Game.Editor.BuildTool
             if (!string.IsNullOrEmpty(config.AndroidKeyPass))
                 PlayerSettings.Android.keyaliasPass = config.AndroidKeyPass;
 
-            PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
+            PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
 
             bool yishu = string.Equals(config.AndroidFlavor, "yishu", StringComparison.Ordinal);
             if (!string.IsNullOrEmpty(config.AndroidAbi))

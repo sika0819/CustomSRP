@@ -40,6 +40,7 @@ namespace Game.BoluoApi
         };
 
         static bool _started;
+        static int _runId;
         static bool _fatal;
         static UniTaskCompletionSource _catalogTcs = new UniTaskCompletionSource();
         static UniTaskCompletionSource _criticalTcs = new UniTaskCompletionSource();
@@ -58,12 +59,28 @@ namespace Game.BoluoApi
             BankDownloader.ResetSession();
         }
 
+        /// <summary>离岛：允许下一次用户票落地后再 Start。不重跑进程级 ResetSession。</summary>
+        public static void InvalidateAfterLeave()
+        {
+            _started = false;
+            _runId++;
+        }
+
         public static void Start(bool loadIntoEngine = false)
         {
             if (_started)
                 return;
+
+            BoluoSession.LoadFromPrefs();
+            if (string.IsNullOrEmpty(BoluoSession.UserToken))
+            {
+                Log.Info("[BankUpgradeBootstrap] skip start — userToken not ready");
+                return;
+            }
+
             _started = true;
-            RunAsync(loadIntoEngine).Forget();
+            int run = _runId;
+            RunAsync(loadIntoEngine, run).Forget();
         }
 
         /// <summary>
@@ -254,7 +271,7 @@ namespace Game.BoluoApi
             return win == 0 && !_fatal;
         }
 
-        public static async UniTaskVoid RunAsync(bool loadIntoEngine = false)
+        public static async UniTaskVoid RunAsync(bool loadIntoEngine = false, int runId = -1)
         {
             try
             {
@@ -269,21 +286,25 @@ namespace Game.BoluoApi
 
                 bool deviceOk = await BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true);
                 bool userOk = await BoluoDeviceLoginClient.EnsureUserTokenAsync(failFast: true);
-                if (!deviceOk)
-                    Log.Warning("[BankUpgradeBootstrap] deviceToken missing — upgrade/bank may fail");
+                if (runId >= 0 && runId != _runId)
+                    return;
                 if (!userOk)
-                    Log.Warning(
-                        "[BankUpgradeBootstrap] userToken missing — upgrade/bank returns empty banks");
-
-                if (!deviceOk || !userOk)
                 {
+                    // 只清这一轮。离岛或新一轮 Start 已经换了 runId 时不要把新的 _started 打掉。
+                    if (runId < 0 || runId == _runId)
+                        _started = false;
                     int local = PresetBankCatalog.SetFromLocalStreaming();
                     Log.Warning(
-                        $"[BankUpgradeBootstrap] tokens incomplete deviceOk={deviceOk} userOk={userOk} " +
+                        $"[BankUpgradeBootstrap] userToken missing deviceOk={deviceOk} " +
                         $"— skip HTTP, local banks={local}");
                     ReleaseCriticalFromLocal(loadIntoEngine);
                     _catalogTcs.TrySetResult();
                     return;
+                }
+
+                if (!deviceOk)
+                {
+                    Log.Warning("[BankUpgradeBootstrap] deviceToken missing — upgrade/bank may fail");
                 }
 
                 var data = await BankUpgradeClient.RequestUpgradeBank(failFast: true);
@@ -352,6 +373,7 @@ namespace Game.BoluoApi
             {
                 _fatal = true;
                 Log.Error($"[BankUpgradeBootstrap] fatal: {e.Message}");
+                UiDialogService.ShowRequestFailure("升级失败：" + e.Message);
                 _criticalTcs.TrySetResult();
                 _catalogTcs.TrySetResult();
             }

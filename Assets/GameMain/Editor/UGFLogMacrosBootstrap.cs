@@ -13,6 +13,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEngine;
 
 namespace Game.Editor
@@ -34,13 +35,13 @@ namespace Game.Editor
         // 兼容 Unity 6 的所有活跃 BuildTargetGroup。
         // 包含全部的目标组，方便第一次开工程时一次性铺好；
         // 后续如果用户/项目要求某个目标关掉，自行再编辑就 OK。
-        static readonly BuildTargetGroup[] TargetGroups =
+        static readonly NamedBuildTarget[] TargetGroups =
         {
-            BuildTargetGroup.Standalone,
-            BuildTargetGroup.Android,
-            BuildTargetGroup.iOS,
-            BuildTargetGroup.WebGL,
-            BuildTargetGroup.tvOS,
+            NamedBuildTarget.Standalone,
+            NamedBuildTarget.Android,
+            NamedBuildTarget.iOS,
+            NamedBuildTarget.WebGL,
+            NamedBuildTarget.tvOS,
         };
 
         const string PrefKey = "CustomSRP.UGFLogMacrosBootstrap.Applied";
@@ -77,7 +78,7 @@ namespace Game.Editor
 
             foreach (var group in DistinctGroups())
             {
-                string current = PlayerSettings.GetScriptingDefineSymbolsForGroup(group) ?? string.Empty;
+                string current = PlayerSettings.GetScriptingDefineSymbols(group) ?? string.Empty;
                 var set = new HashSet<string>(
                     current.Split(';', ',')
                            .Select(s => s.Trim())
@@ -92,7 +93,7 @@ namespace Game.Editor
                 if (added > 0)
                 {
                     string merged = string.Join(";", set);
-                    PlayerSettings.SetScriptingDefineSymbolsForGroup(group, merged);
+                    PlayerSettings.SetScriptingDefineSymbols(group, merged);
                     AssetDatabase.SaveAssets();
                     anyChanged = true;
                     report.Add($"  +{group} : +{added} symbols -> {merged}");
@@ -121,7 +122,7 @@ namespace Game.Editor
         }
 
         // 去重，防止未来扩展列表时塞到重复枚举值。
-        static IEnumerable<BuildTargetGroup> DistinctGroups()
+        static IEnumerable<NamedBuildTarget> DistinctGroups()
         {
             var seen = new HashSet<string>();
             foreach (var g in TargetGroups)

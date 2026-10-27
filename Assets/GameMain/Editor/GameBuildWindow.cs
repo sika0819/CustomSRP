@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -421,7 +422,7 @@ namespace Game.Editor
 
         void ApplyAndroidPlayerSettings()
         {
-            var android = BuildTargetGroup.Android;
+            var android = NamedBuildTarget.Android;
 
             PlayerSettings.SetApplicationIdentifier(android, AndroidPackageId);
             PlayerSettings.productName = AndroidProductName;
@@ -501,7 +502,7 @@ namespace Game.Editor
 
         void ApplyIOSPlayerSettings()
         {
-            var ios = BuildTargetGroup.iOS;
+            var ios = NamedBuildTarget.iOS;
 
             PlayerSettings.SetApplicationIdentifier(ios, AndroidPackageId.Replace("com.customsrp.", "com.customsrp.ios."));
             PlayerSettings.productName = AndroidProductName;

@@ -82,6 +82,7 @@ namespace Game.BoluoApi
         static readonly List<ActiveSlot> Actives = new List<ActiveSlot>();
 
         static bool _runnerActive;
+        static bool _pausedForLeave;
 
         struct LocalReadyCacheEntry
         {
@@ -101,8 +102,38 @@ namespace Game.BoluoApi
             || StartupQueue.Count > 0
             || NormalQueue.Count > 0;
 
+        /// <summary>
+        /// 离岛：中止进行中的 UnityWebRequest，队列先留着但不泵。
+        /// Abort 走 <c>removeFileOnAbort=false</c>，半成品 .tmp 留下次续传。
+        /// </summary>
+        public static void PauseForLeave()
+        {
+            _pausedForLeave = true;
+            for (int i = 0; i < Actives.Count; i++)
+            {
+                if (Actives[i] != null)
+                    Actives[i].Abort = true;
+            }
+
+            Log.Info(
+                $"[BankDownloader] pause for leave actives={Actives.Count} " +
+                $"userQ={UserQueue.Count} startQ={StartupQueue.Count} normalQ={NormalQueue.Count}");
+        }
+
+        /// <summary>换票成功后恢复离岛前暂停的队列。</summary>
+        public static void ResumeAfterLeave()
+        {
+            if (!_pausedForLeave)
+                return;
+            _pausedForLeave = false;
+            Log.Info("[BankDownloader] resume after leave");
+            if (UserQueue.Count > 0 || StartupQueue.Count > 0 || NormalQueue.Count > 0 || Actives.Count > 0)
+                EnsureRunner();
+        }
+
         public static void ResetSession()
         {
+            _pausedForLeave = false;
             _runnerActive = false;
             _startupParallelSlots = MaxStartupSlots;
             Entries.Clear();
@@ -460,7 +491,10 @@ namespace Game.BoluoApi
                 if (item.State == BankDownloadState.Ready)
                 {
                     if (loadIntoEngine)
+                    {
+                        await WaitUntilLoadingCoverHidden();
                         TryLoadBank(item);
+                    }
                     NotifyBankReady(item.BankName);
                     loadCount++;
                     loadsThisFrame++;
@@ -741,6 +775,12 @@ namespace Game.BoluoApi
             {
                 while (true)
                 {
+                    if (_pausedForLeave)
+                    {
+                        await UniTask.Yield(PlayerLoopTiming.Update);
+                        continue;
+                    }
+
                     PumpStarts();
                     if (Actives.Count == 0
                         && UserQueue.Count == 0
@@ -765,7 +805,8 @@ namespace Game.BoluoApi
                 Log.Info("[BankDownloader] RunLoop END");
             }
 
-            if (UserQueue.Count > 0 || StartupQueue.Count > 0 || NormalQueue.Count > 0 || Entries.Count > 0)
+            if (!_pausedForLeave
+                && (UserQueue.Count > 0 || StartupQueue.Count > 0 || NormalQueue.Count > 0 || Entries.Count > 0))
                 EnsureRunner();
         }
 
@@ -869,6 +910,7 @@ namespace Game.BoluoApi
                 {
                     if (entry.LoadIntoEngine)
                     {
+                        await WaitUntilLoadingCoverHidden();
                         TryLoadBank(entry.Item);
                         await UniTask.Yield(PlayerLoopTiming.Update);
                     }
@@ -1594,6 +1636,15 @@ namespace Game.BoluoApi
         {
             EnsureParentDir(tmpPath);
             TryDelete(tmpPath);
+        }
+
+        /// <summary>
+        /// 加载罩还在时不进原生 LoadBank。那次调用占住主线程，近场 Prefill 无法揭罩。
+        /// </summary>
+        static async UniTask WaitUntilLoadingCoverHidden()
+        {
+            while (BootLoadingService.IsVisible)
+                await UniTask.Yield(PlayerLoopTiming.Update);
         }
 
         static void TryLoadBank(BankDownloadItem item)

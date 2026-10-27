@@ -40,6 +40,15 @@ namespace Game
         static float _windWritten = float.NaN;
         static float _rainWritten = float.NaN;
         static float _foggyWritten = float.NaN;
+        /// <summary>
+        /// Rain RTPC at the moment <c>Play_Rain</c> was posted.
+        /// Bank blend: small 0–55, medium starts at 32. A voice posted at 中/大
+        /// does not arm Rain_Small when the parameter later falls to 30.
+        /// </summary>
+        static float _rainPostedAt = float.NaN;
+
+        /// <summary>Rain_Medium blend clip min. 小雨 is 30, so values below this are small-only.</summary>
+        const float LightRainExclusiveMax = 32f;
 
         public static void Start()
         {
@@ -62,6 +71,7 @@ namespace Game
             _contentAudioPaused = false;
             _windMissing = false;
             _rainMissing = false;
+            _rainPostedAt = float.NaN;
         }
 
         public static void SetContentAudioPaused(bool paused)
@@ -90,6 +100,7 @@ namespace Game
             WriteLogicalRtpc(FoggyParam, 0f, ref _foggyLogical, ref _foggyWritten);
             StopLoopKeepBank(ref _windPlaying, WanosInteraction.WindObjectId, WindStop);
             StopLoopKeepBank(ref _rainPlaying, WanosInteraction.RainObjectId, RainStop);
+            _rainPostedAt = float.NaN;
         }
 
         public static void Refresh() => ApplyFromWeather();
@@ -223,14 +234,39 @@ namespace Game
 
             if (wantRain)
             {
+                // 大雨/中雨已在播时，只把 Rain RTPC 降到 30 不会拉起 Rain_Small
+                // （0 档起声、或小雨那条已经按 loop_times=1 放完，抬/降参数都补不回来）。
+                // 虹膜把 RTPC 乘到 0 时不要在这一帧重起：0 档 Play_Rain 起不来小雨。
+                if (NeedsLightRainRearm(rain) && rain * ContentAudioDuck.Level01 >= 1f)
+                {
+                    Log.Info(
+                        $"[WeatherAudio] rearm Play_Rain light rtpc={rain:F1} postedAt={_rainPostedAt:F1}");
+                    StopLoopKeepBank(ref _rainPlaying, WanosInteraction.RainObjectId, RainStop);
+                    _rainPostedAt = float.NaN;
+                }
+
                 _rainMissing = false;
+                bool wasPlaying = _rainPlaying;
                 StartLoop(ref _rainPlaying, WanosInteraction.RainObjectId, RainBank, RainPlay,
                     ref _rainBankHeld, ref _rainMissing);
+                if (_rainPlaying && !wasPlaying)
+                    _rainPostedAt = rain;
             }
             else
+            {
                 StopLoop(ref _rainPlaying, WanosInteraction.RainObjectId, RainStop, ref _rainBankHeld, RainBank);
+                _rainPostedAt = float.NaN;
+            }
 
             RainWaterProximityService.EvaluateNow();
+        }
+
+        static bool NeedsLightRainRearm(float rain)
+        {
+            return _rainPlaying
+                   && !float.IsNaN(_rainPostedAt)
+                   && _rainPostedAt >= LightRainExclusiveMax
+                   && rain < LightRainExclusiveMax;
         }
 
         static void WriteLogicalRtpc(string name, float logical, ref float logicalField, ref float writtenField)

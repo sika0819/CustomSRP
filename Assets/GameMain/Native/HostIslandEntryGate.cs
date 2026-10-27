@@ -13,14 +13,22 @@ namespace Game.Native
     public static class HostIslandEntryGate
     {
         static int _armed;
+        static int _generation;
 
         public static bool IsArmed => Volatile.Read(ref _armed) != 0;
+
+        /// <summary>
+        /// Leave，以及 Arm 从 0 变成 1，各加一代。已经是 1 时再来的 106 不加代。
+        /// 进行中的换票记下这一代，代际变了就丢掉手里的票。
+        /// </summary>
+        public static int Generation => Volatile.Read(ref _generation);
 
         /// <summary>早于 Procedure / NativeBridgeFacade.Init，避免 enterGame Push 先到丢弃。</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void Bootstrap()
         {
             _armed = 0;
+            _generation = 0;
             MessageRouter.Register(MsgType.HostArmIslandEntry, (_, __, ___) => Arm());
             MessageRouter.Register(MsgType.HostLeaveIsland, (a, __, ___) => Leave(a));
         }
@@ -36,8 +44,11 @@ namespace Game.Native
 
         public static void Arm()
         {
-            if (Interlocked.Exchange(ref _armed, 1) == 0)
-                Log.Info("[IMP] HostIslandEntryGate armed");
+            if (Interlocked.Exchange(ref _armed, 1) != 0)
+                return;
+
+            Interlocked.Increment(ref _generation);
+            Log.Info($"[IMP] HostIslandEntryGate armed gen={Generation}");
         }
 
         public static void Reset()
@@ -55,6 +66,7 @@ namespace Game.Native
         /// </param>
         public static void Leave(int leaveReason = MsgType.HostLeaveReasonLogout)
         {
+            Interlocked.Increment(ref _generation);
             Reset();
             NativeMessages.ResetIslandReadyFlag();
             NativeOverlayGate.Apply(present: 0, touchEnabled: 1, bottomHidden: 0);
@@ -62,9 +74,10 @@ namespace Game.Native
                 Game.BoluoLogout.ExecuteAccountDeleted();
             else
                 Game.BoluoLogout.ExecuteLeave();
+            Game.BoluoApi.BankUpgradeBootstrap.InvalidateAfterLeave();
             Game.ProcedureIsland.RequestReturnToGuestLogin();
             Log.Info(
-                $"[IMP] HostLeaveIsland reason={leaveReason} — gates reset, return to GuestLogin requested");
+                $"[IMP] HostLeaveIsland reason={leaveReason} gen={Generation} — gates reset, return to GuestLogin requested");
         }
     }
 }

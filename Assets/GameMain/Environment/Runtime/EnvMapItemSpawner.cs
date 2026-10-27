@@ -169,9 +169,13 @@ namespace Game
 #if UNITY_ANDROID && !UNITY_EDITOR
                 using (var req = UnityEngine.Networking.UnityWebRequest.Get(streamingPath))
                 {
+                    req.timeout = 15;
                     yield return req.SendWebRequest();
-                    if (req.result == UnityEngine.Networking.UnityWebRequest.Result.Success
-                        && req.downloadHandler != null
+                    if (req.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+                    {
+                        Log.Error("[MapItem] StreamingAssets AllMapItem.bytes failed — " + req.error);
+                    }
+                    else if (req.downloadHandler != null
                         && req.downloadHandler.data != null
                         && req.downloadHandler.data.Length > 0)
                     {

@@ -146,6 +146,7 @@ namespace Game
         {
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
             music?.Stop(publish: false);
+            music?.DisarmAfterLeave();
             _userManuallyPaused = false;
             // 先 Disarm，堵住拆除窗口里 PublishFromPlaylist 再推非空 title。
             _armed = false;

@@ -41,10 +41,10 @@ namespace Game.Native
 
         static int _systemUiVisibilityValue;
         static int _flagsValue;
+        static uint _statusBarColor = 0xff000000;
 #endif
 
         static States _statusBarState = States.VisibleOverContent;
-        static uint _statusBarColor = 0xff000000;
         static bool _isStatusBarTranslucent;
         static bool _statusBarIconsDark;
 

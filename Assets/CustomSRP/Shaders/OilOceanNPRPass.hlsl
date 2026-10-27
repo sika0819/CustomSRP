@@ -352,7 +352,8 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     half3 paint;
     {
 #if defined(OIL_MOBILE_PERF)
-        paint = (half3)SAMPLE_TEXTURE2D(_PaintMap, sampler_PaintMap, paintSt).rgb;
+        // Same one tap. Bias keeps Monet strokes out of the half-res mip.
+        paint = (half3)SAMPLE_TEXTURE2D_BIAS(_PaintMap, sampler_PaintMap, paintSt, -1.25).rgb;
 #else
         float2 paintDx = ddx(paintSt);
         float2 paintDy = ddy(paintSt);

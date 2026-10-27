@@ -332,7 +332,8 @@ half CanvasStroke(float yaw, float elev)
         elev * (scale * 0.16) * _OilCanvas_ST.y + _OilCanvas_ST.w);
 
 #if defined(OIL_MOBILE_PERF)
-    half canvas = (half)SAMPLE_TEXTURE2D(_OilCanvas, sampler_OilCanvas, uv).r;
+    // Same one tap. Negative bias undoes the extra mip from renderScale 0.375–0.5.
+    half canvas = (half)SAMPLE_TEXTURE2D_BIAS(_OilCanvas, sampler_OilCanvas, uv, -1.25).r;
 #else
     float2 f = frac(uv);
     float2 edge = min(f, 1.0 - f);

@@ -128,15 +128,22 @@ namespace Game.BoluoApi
                     return true;
                 }
 
-                // Hybrid 宿主暂无票：禁止回落 Prefs 旧游客票（游客升正式窗口）。
+                // Hybrid 宿主暂无票：清掉 Unity 侧任何旧用户票，停在罩上等宿主。
+                // 107 已经 Clear 之后 Prefs 是空的，若继续往下会 POST touristLogin，
+                // 把「正要登正式账号」锁成 Unity 游客票。
                 BoluoSession.LoadFromPrefs();
-                if (!string.IsNullOrEmpty(BoluoSession.UserToken) && BoluoSession.IsGuest)
+                if (!string.IsNullOrEmpty(BoluoSession.UserToken))
                 {
                     Log.Warning(
-                        "[DeviceLogin] hybrid empty userToken — clear stale Unity guest Prefs, wait host");
+                        "[DeviceLogin] hybrid empty userToken — clear stale Unity session, wait host");
                     Game.GuestSession.Clear();
-                    return false;
                 }
+                else
+                {
+                    Log.Warning("[DeviceLogin] hybrid empty userToken — wait host");
+                }
+
+                return false;
             }
 
             BoluoSession.LoadFromPrefs();
@@ -177,7 +184,7 @@ namespace Game.BoluoApi
                 return true;
             }
 
-            // Hybrid：原生 SSOT 换票 / 读票；失败则回退 Unity boluoRsa（GuestLogin 断网空票时否则 bank 永不下）
+            // Hybrid：设备票只向宿主要。失败停在罩上重试，不让 Unity 自己 boluoRsa / deviceLogin。
             if (Game.Native.NativeSession.IsHybridAvailable())
             {
                 bool ok = Game.Native.NativeSession.EnsureDeviceToken(forceRefresh: true);
@@ -186,21 +193,11 @@ namespace Game.BoluoApi
                     Log.Info(
                         $"[DeviceLogin] hybrid native token len={BoluoSession.DeviceToken.Length} " +
                         $"expire={BoluoSession.DeviceTokenExpireTime}");
-                    if (string.IsNullOrEmpty(BoluoSession.UserToken)
-                        && Game.Native.NativeSession.TryGetUserSession(
-                            out string userToken, out bool userGuest, out string userId)
-                        && !string.IsNullOrEmpty(userToken))
-                    {
-                        Game.GuestSession.ApplyUserSession(userToken, userId, userGuest);
-                        Log.Info(
-                            $"[DeviceLogin] hybrid userToken len={userToken.Length} " +
-                            $"guest={userGuest} userId={userId}");
-                    }
-
                     return true;
                 }
 
-                Log.Warning("[DeviceLogin] hybrid EnsureDeviceToken failed — fallback Unity boluoRsa");
+                Log.Warning("[DeviceLogin] hybrid EnsureDeviceToken failed — stay on cover, no Unity ticket");
+                return false;
             }
 
             string userBase = BoluoApiEnvironment.ResolveUserApiBase();
@@ -220,6 +217,7 @@ namespace Game.BoluoApi
             }
 
             int maxAttempts = failFast ? 1 : MaxTicketAttempts;
+            string lastFail = null;
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
                 if (attempt > 1)
@@ -231,7 +229,8 @@ namespace Game.BoluoApi
                 var (cipher, cipherFail) = await RequestCipherTextAsync(failFast);
                 if (string.IsNullOrEmpty(cipher))
                 {
-                    Log.Warning($"[DeviceLogin] {cipherFail ?? "boluoRsa 未拿到 cipherText"}");
+                    lastFail = cipherFail ?? "boluoRsa 未拿到 cipherText";
+                    Log.Warning($"[DeviceLogin] {lastFail}");
                     continue;
                 }
 
@@ -244,12 +243,15 @@ namespace Game.BoluoApi
                     return true;
                 }
 
-                Log.Warning($"[DeviceLogin] {loginFail ?? "boluoDeviceLogin 未拿到 deviceToken"}");
+                lastFail = loginFail ?? "boluoDeviceLogin 未拿到 deviceToken";
+                Log.Warning($"[DeviceLogin] {lastFail}");
             }
 
             Log.Error(
                 "[DeviceLogin] deviceToken 换票失败 — 后续 upgrade/bank 易 400。" +
                 " Editor 常见原因是 UnityWebRequest 连不上 wanos-common-*。");
+            UiDialogService.ShowRequestFailure(
+                string.IsNullOrEmpty(lastFail) ? "登录失败：deviceToken 换票失败" : $"登录失败：{lastFail}");
             return false;
         }
 
@@ -349,12 +351,14 @@ namespace Game.BoluoApi
             if (!transportOk)
             {
                 Log.Warning($"[DeviceLogin] touristLogin 网络失败（{url}）");
+                UiDialogService.ShowRequestFailure("登录失败：游客登录网络失败");
                 return false;
             }
 
             if (string.IsNullOrEmpty(responseText))
             {
                 Log.Warning("[DeviceLogin] touristLogin 空响应");
+                UiDialogService.ShowRequestFailure("登录失败：游客登录返回空");
                 return false;
             }
 
@@ -366,12 +370,17 @@ namespace Game.BoluoApi
             catch (Exception e)
             {
                 Log.Warning($"[DeviceLogin] touristLogin 解析失败: {e.Message}");
+                UiDialogService.ShowRequestFailure("登录失败：游客登录响应无法解析");
                 return false;
             }
 
             if (resp == null || resp.code != 0 || resp.data == null || string.IsNullOrEmpty(resp.data.token))
             {
                 Log.Warning($"[DeviceLogin] touristLogin code={resp?.code} msg={resp?.msg}");
+                UiDialogService.ShowRequestFailure(
+                    string.IsNullOrEmpty(resp?.msg)
+                        ? $"登录失败：游客登录 code={resp?.code}"
+                        : $"登录失败：{resp.msg}");
                 return false;
             }
 
