@@ -1542,6 +1542,8 @@ namespace CustomSRP.Editor
             }
 
             material.SetColor("_BaseColor", Color.white);
+            material.DisableKeyword("_CANVAS_ON");
+            material.DisableKeyword("_INTERNAL_EDGE_ON");
             _ = canvas;
 
             material.SetFloat("_PaintThickness", 0.12f);

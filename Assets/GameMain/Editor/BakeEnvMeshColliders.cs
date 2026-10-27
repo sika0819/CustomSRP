@@ -96,18 +96,6 @@ namespace Game.Editor
 
             try
             {
-                if (IsTreePrefabPath(prefabPath))
-                {
-                    dirty |= RemoveTreeColliders(root);
-                    if (dirty)
-                    {
-                        PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
-                        updated++;
-                    }
-
-                    return updated;
-                }
-
                 // ShiTou / large rocks may lack a MeshCollider on the prefab — add one
                 // before baking so runtime never cooks the non-readable render mesh.
                 // Includes size-gated rocks (e.g. SM_Env_Rock_01) that EnvRockColliders
@@ -175,32 +163,6 @@ namespace Game.Editor
             }
 
             return updated;
-        }
-
-        static bool IsTreePrefabPath(string prefabPath)
-        {
-            if (string.IsNullOrEmpty(prefabPath))
-                return false;
-            string norm = prefabPath.Replace('\\', '/');
-            return norm.IndexOf("/Prefabs/DaoYu1/Songshu/", System.StringComparison.OrdinalIgnoreCase) >= 0
-                   || norm.IndexOf("/Prefabs/DaoYu1/Lvshu/", System.StringComparison.OrdinalIgnoreCase) >= 0
-                   || norm.IndexOf("/Prefabs/DaoYu1/Yeshu/", System.StringComparison.OrdinalIgnoreCase) >= 0
-                   || norm.IndexOf("/Prefabs/DaoYu1/Guanmu/", System.StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        static bool RemoveTreeColliders(GameObject root)
-        {
-            Collider[] cols = root.GetComponentsInChildren<Collider>(true);
-            bool dirty = false;
-            for (int i = 0; i < cols.Length; i++)
-            {
-                if (cols[i] == null)
-                    continue;
-                Object.DestroyImmediate(cols[i]);
-                dirty = true;
-            }
-
-            return dirty;
         }
 
         static bool IsLargeRockPrefabPath(string prefabPath)

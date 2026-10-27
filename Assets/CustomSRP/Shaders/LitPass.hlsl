@@ -105,9 +105,9 @@ float4 LitPassFragment(Varyings input) : SV_TARGET
     float3 color = GetLighting(config.fragment, surface, brdf, gi);
     color += GetEmission(config);
 #if defined(_PREMULTIPLY_ALPHA)
-    color = ApplyOilFog(color, surface.depth, (half)surface.alpha, input.positionWS);
+    color = ApplyFog(color, surface.depth, surface.alpha);
 #else
-    color = ApplyOilFog(color, surface.depth, 0.5, input.positionWS);
+    color = ApplyFog(color, surface.depth);
 #endif
     return float4(color, GetFinalAlpha(surface.alpha));
 }

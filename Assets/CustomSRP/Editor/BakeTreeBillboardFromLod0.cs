@@ -197,7 +197,6 @@ namespace CustomSRP.Editor
                 DilateRgbIntoTransparent(atlas, Cutoff);
                 BackupExisting(albedoPath, name);
                 WritePng(atlas, albedoPath);
-                WriteContourMesh(prefabPath, name, atlas, quadSize, sb);
                 sb.AppendLine($"OK {name} size={quadSize.x:F1}x{quadSize.y:F1}");
                 return true;
             }
@@ -216,6 +215,7 @@ namespace CustomSRP.Editor
             if (px == null || px.Length < 64)
                 return false;
             int opaque = 0;
+            int distinct = 0;
             Color32 first = px[0];
             bool allSame = true;
             for (int i = 0; i < px.Length; i++)
@@ -556,57 +556,8 @@ namespace CustomSRP.Editor
                 dirty = true;
             }
 
-            if (!importer.mipMapsPreserveCoverage)
-            {
-                importer.mipMapsPreserveCoverage = true;
-                importer.alphaTestReferenceValue = Cutoff;
-                dirty = true;
-            }
-
             if (dirty)
                 importer.SaveAndReimport();
-        }
-
-        /// <summary>
-        /// Contour mesh from noon atlas so OilNPR billboard path can skip alpha clip
-        /// without rectangular black fringes (Boluo CrossBillboardContour).
-        /// </summary>
-        static void WriteContourMesh(
-            string prefabPath, string prefabName, Texture2D atlas, Vector2 quadSize, StringBuilder sb)
-        {
-            string folder = BillboardFolder(prefabPath, prefabName);
-            string meshPath = $"{folder}/{prefabName}_BillboardMesh.asset";
-            var existing = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
-            float yPivot = 0f;
-            if (existing != null
-                && OilTreeBillboardContourMesh.TryRecoverFullQuad(existing, out Vector2 recovered, out yPivot))
-                quadSize = recovered;
-            else
-                yPivot = 0f;
-
-            Mesh generated = OilTreeBillboardContourMesh.Build(
-                atlas, quadSize, yPivot, Cutoff);
-            if (generated == null || generated.vertexCount < 4)
-            {
-                sb.AppendLine($"WARN contour empty {prefabName}");
-                if (generated != null)
-                    Object.DestroyImmediate(generated);
-                return;
-            }
-
-            generated.name = prefabName + "_BillboardMesh";
-            if (existing != null)
-            {
-                EditorUtility.CopySerialized(generated, existing);
-                existing.name = generated.name;
-                Object.DestroyImmediate(generated);
-                EditorUtility.SetDirty(existing);
-            }
-            else
-            {
-                Directory.CreateDirectory(ToAbs(folder));
-                AssetDatabase.CreateAsset(generated, meshPath);
-            }
         }
 
         static void EnsureBackupDir()

@@ -27,17 +27,6 @@ namespace Game
             SetRecursive(go.transform, ReflectionSkipLayerIndex);
         }
 
-        /// <summary>Same layer as <see cref="Apply"/>, but only this subtree
-        /// (LOD_Billboard on a full tree). The rest of the prefab still reflects.</summary>
-        public static void ApplySubtree(Transform root)
-        {
-            if (root == null || !ReflectionSkipLayerReady)
-            {
-                return;
-            }
-            SetRecursive(root, ReflectionSkipLayerIndex);
-        }
-
         static void SetRecursive(Transform root, int layer)
         {
             root.gameObject.layer = layer;

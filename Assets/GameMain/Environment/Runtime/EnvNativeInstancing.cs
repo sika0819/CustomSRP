@@ -1,14 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityGameFramework.Runtime;
 
 namespace Game
 {
     /// <summary>
-    /// Android Native RenderMeshInstanced 合批（无 GPUI）。Editor/iOS 为 no-op。
-    /// 进合批的物体会退出 SRP（LODGroup + Renderer 关掉），并用私有材质绘制。
-    /// 共享材质仍留给 MeshRenderer，避免 SRP Batcher 和 DrawMeshInstanced 画同一份 Material。
+    /// Android Native DrawMeshInstanced 合批（无 GPUI）。Editor/iOS 为 no-op。
     /// </summary>
     public sealed class EnvNativeInstancing : MonoBehaviour
     {
@@ -35,20 +32,12 @@ namespace Game
         float _shadowCastMaxDist = EnvStreamingConfig.ShadowCastMaxDist;
         Camera _cachedCam;
         int _cachedCamFrame = -1;
-        float _hitchDrawLogAt = -1000f;
-#if UNITY_ANDROID && !UNITY_EDITOR
-        float _hitchProtoLogAt = -1000f;
-        float _hitchBbLogAt = -1000f;
-#endif
 
         sealed class Prototype
         {
             public string Name;
             public Mesh Mesh;
             public Material Material;
-            public bool OwnsMaterial;
-            /// <summary>Prefab 子节点网格相对根的矩阵。实例矩阵 = 根 localToWorld × 此值。</summary>
-            public Matrix4x4 MeshLocalToRoot = Matrix4x4.identity;
             public Bounds LocalBounds;
             public bool CanCastShadows;
             public bool MainCameraOnly;
@@ -63,7 +52,7 @@ namespace Game
 
             public int Count => Matrices.Count;
 
-            public bool Add(GameObject go, Matrix4x4 meshLocalToRoot)
+            public bool Add(GameObject go)
             {
                 if (go == null)
                     return false;
@@ -75,7 +64,7 @@ namespace Game
 
                 _removedAtFrame.Remove(id);
                 _goIdToSlot[id] = Matrices.Count;
-                Matrices.Add(go.transform.localToWorldMatrix * meshLocalToRoot);
+                Matrices.Add(go.transform.localToWorldMatrix);
                 Instances.Add(go);
                 return true;
             }
@@ -103,20 +92,12 @@ namespace Game
                 _removedAtFrame[id] = Time.frameCount;
             }
 
-            public void ClearSlots()
-            {
-                Matrices.Clear();
-                Instances.Clear();
-                _goIdToSlot.Clear();
-                _removedAtFrame.Clear();
-            }
-
             /// <summary>
             /// Dirty sync: only rewrite matrices when transform.hasChanged, or force
             /// every <paramref name="forceFull"/> call (periodic sweep for destroyed GOs).
             /// Far tree billboards are static in world space (yaw is GPU).
             /// </summary>
-            public void SyncMatrices(bool forceFull, Matrix4x4 meshLocalToRoot)
+            public void SyncMatrices(bool forceFull)
             {
                 for (int i = Instances.Count - 1; i >= 0; i--)
                 {
@@ -130,7 +111,7 @@ namespace Game
                     Transform t = go.transform;
                     if (!forceFull && !t.hasChanged)
                         continue;
-                    Matrices[i] = t.localToWorldMatrix * meshLocalToRoot;
+                    Matrices[i] = t.localToWorldMatrix;
                     t.hasChanged = false;
                 }
             }
@@ -169,46 +150,6 @@ namespace Game
             return _instance;
         }
 
-        /// <summary>
-        /// 退岛 / World.Release：清空合批。否则二次 Prefill 叠在失效 Mesh/Material
-        /// 与幽灵实例上，LateUpdate DrawAll 会把主线程打到卡死（「正在铺装环境」）。
-        /// </summary>
-        public static void ClearAll()
-        {
-            if (_instance == null)
-                return;
-            _instance.Clear();
-        }
-
-        void Clear()
-        {
-            for (int i = 0; i < _buckets.Count; i++)
-            {
-                Bucket bucket = _buckets[i];
-                // 实例由 streamer Destroy；此处只拆槽位，避免再 SetRenderersEnabled。
-                bucket.Matrices.Clear();
-                bucket.Instances.Clear();
-                bucket.ClearSlots();
-            }
-
-            for (int i = 0; i < _prototypes.Count; i++)
-            {
-                Prototype proto = _prototypes[i];
-                if (proto.OwnsMaterial && proto.Material != null)
-                    Destroy(proto.Material);
-            }
-
-            _buckets.Clear();
-            _prototypes.Clear();
-            _assetIdToIndex.Clear();
-            _bbAssetIdToIndex.Clear();
-            _bbNameToIndex.Clear();
-            _nameToIndex.Clear();
-            _syncFrame = 0;
-            _cachedCam = null;
-            _cachedCamFrame = -1;
-        }
-
         public void SetMaxDist(float maxDist)
         {
             if (maxDist > 0f)
@@ -234,24 +175,12 @@ namespace Game
             if (_assetIdToIndex.TryGetValue(assetId, out int existing))
                 return existing;
 
-            var hitchSw = System.Diagnostics.Stopwatch.StartNew();
-            if (!TryExtractLod0(
-                    prefabAsset, out Mesh mesh, out Material shared, out Bounds localBounds,
-                    out Matrix4x4 meshLocalToRoot))
-            {
-                NoteHitch(ref _hitchProtoLogAt, "AddPrototype", prefabAsset.name, hitchSw);
+            if (!TryExtractLod0(prefabAsset, out Mesh mesh, out Material material, out Bounds localBounds))
                 return -1;
-            }
 
-            // 私有副本：不要改共享材质的 enableInstancing。
-            // 共享材质还挂在大树 / 未进合批的 MeshRenderer 上，SRP Batcher 和
-            // RenderMeshInstanced 不能共用同一份 Material，否则真机会叠一层或整批丢。
-            Material material = CreateInstancedMaterial(shared);
-            if (material == null)
-            {
-                NoteHitch(ref _hitchProtoLogAt, "AddPrototype", prefabAsset.name, hitchSw);
-                return -1;
-            }
+            // Unity 6：INSTANCING_ON 为 local keyword，EnableKeyword 会报错并跳过；只设 enableInstancing。
+            if (material != null)
+                material.enableInstancing = true;
 
             int index = _prototypes.Count;
             var proto = new Prototype
@@ -259,8 +188,6 @@ namespace Game
                 Name = prefabAsset.name,
                 Mesh = mesh,
                 Material = material,
-                OwnsMaterial = true,
-                MeshLocalToRoot = meshLocalToRoot,
                 LocalBounds = localBounds,
                 CanCastShadows = canCastShadows,
                 MainCameraOnly = mainCameraOnly,
@@ -270,7 +197,6 @@ namespace Game
             _assetIdToIndex[assetId] = index;
             if (!_nameToIndex.ContainsKey(proto.Name))
                 _nameToIndex[proto.Name] = index;
-            NoteHitch(ref _hitchProtoLogAt, "AddPrototype", proto.Name, hitchSw);
             return index;
 #else
             return -1;
@@ -278,7 +204,7 @@ namespace Game
         }
 
         /// <summary>
-        /// Far-tree cross-billboard prototype (front/side snap + yaw material instance).
+        /// Far-tree single-card billboard prototype (Y-facing material instance).
         /// Separate key space from <see cref="AddPrototype"/> so LOD0 veg and tree bb coexist.
         /// </summary>
         public int AddBillboardPrototype(GameObject prefabAsset, bool mainCameraOnly)
@@ -290,22 +216,13 @@ namespace Game
             if (_bbAssetIdToIndex.TryGetValue(assetId, out int existing))
                 return existing;
 
-            var hitchSw = System.Diagnostics.Stopwatch.StartNew();
             if (!EnvTreeBillboardUtil.TryExtractBillboard(
                     prefabAsset, out Mesh mesh, out Material sharedMat, out Bounds localBounds))
-            {
-                NoteHitch(ref _hitchBbLogAt, "AddBillboardPrototype", prefabAsset.name, hitchSw);
                 return -1;
-            }
 
-            // 近树 LOD_Billboard 的 MeshRenderer 用缓存那份（SRP）。合批再拷一份。
-            Material cross = EnvTreeBillboardUtil.CreateCrossBillboardMaterial(sharedMat);
-            Material material = CreateInstancedMaterial(cross);
+            Material material = EnvTreeBillboardUtil.CreateYBillboardMaterial(sharedMat);
             if (mesh == null || material == null)
-            {
-                NoteHitch(ref _hitchBbLogAt, "AddBillboardPrototype", prefabAsset.name, hitchSw);
                 return -1;
-            }
 
             int index = _prototypes.Count;
             string protoName = prefabAsset.name + "#bb";
@@ -314,9 +231,6 @@ namespace Game
                 Name = protoName,
                 Mesh = mesh,
                 Material = material,
-                OwnsMaterial = true,
-                // 代理把广告牌网格放在根上，不要再乘 prefab 子节点偏移。
-                MeshLocalToRoot = Matrix4x4.identity,
                 LocalBounds = localBounds,
                 CanCastShadows = false,
                 MainCameraOnly = mainCameraOnly,
@@ -326,7 +240,6 @@ namespace Game
             _bbAssetIdToIndex[assetId] = index;
             if (!_bbNameToIndex.ContainsKey(prefabAsset.name))
                 _bbNameToIndex[prefabAsset.name] = index;
-            NoteHitch(ref _hitchBbLogAt, "AddBillboardPrototype", protoName, hitchSw);
             return index;
 #else
             return -1;
@@ -377,11 +290,10 @@ namespace Game
             if (go.GetComponentInChildren<MeshRenderer>(true) == null)
                 return false;
 
-            if (!_buckets[protoIndex].Add(go, _prototypes[protoIndex].MeshLocalToRoot))
+            if (!_buckets[protoIndex].Add(go))
                 return false;
 
-            // 进了 DrawMeshInstanced 就退出 SRP。LODGroup 每帧会把 Renderer 打开，必须一起关掉。
-            SetSrpSuppressed(go, true);
+            SetRenderersEnabled(go, false);
             return true;
 #else
             return false;
@@ -394,7 +306,7 @@ namespace Game
             if (go != null && protoIndex >= 0 && protoIndex < _buckets.Count)
                 _buckets[protoIndex].Remove(go);
             if (go != null)
-                SetSrpSuppressed(go, false);
+                SetRenderersEnabled(go, true);
 #endif
         }
 
@@ -407,7 +319,6 @@ namespace Game
 
         void DrawAll()
         {
-            var hitchSw = System.Diagnostics.Stopwatch.StartNew();
             Camera cam = ResolveCamera();
             if (cam == null)
                 return;
@@ -427,7 +338,7 @@ namespace Game
 
                 // Full sweep every 30 frames to drop destroyed GOs; otherwise dirty-only.
                 bool forceSync = (_syncFrame % 30) == 0;
-                bucket.SyncMatrices(forceSync, proto.MeshLocalToRoot);
+                bucket.SyncMatrices(forceSync);
                 // Shadow-capable prototypes (big trees / buildings) split into a near
                 // casting batch and a far non-casting batch, mirroring the streamer's
                 // per-distance ShadowCastMaxDist toggle. Prototypes that never cast
@@ -481,20 +392,6 @@ namespace Game
                     FlushBatch(cam, proto, _batch, batchCount, ShadowCastingMode.Off);
                 }
             }
-
-            NoteHitch(ref _hitchDrawLogAt, "DrawAll", "protos=" + _prototypes.Count, hitchSw);
-        }
-
-        void NoteHitch(ref float lastLogAt, string kind, string name, System.Diagnostics.Stopwatch sw)
-        {
-            long ms = sw.ElapsedMilliseconds;
-            if (ms < 16)
-                return;
-            float now = Time.realtimeSinceStartup;
-            if (now - lastLogAt < 0.5f)
-                return;
-            lastLogAt = now;
-            Log.Info("[Hitch] " + kind + " name=" + name + " ms=" + ms);
         }
 
         static void FlushBatch(
@@ -542,63 +439,14 @@ namespace Game
             return _cachedCam;
         }
 
-        /// <summary>
-        /// SRP Batcher 画 MeshRenderer；本类画 RenderMeshInstanced。同一物体只能走一条。
-        /// 关掉 LODGroup 后再压 Renderer，避免 LOD 在裁剪阶段把它们交回 SRP。
-        /// </summary>
-        static void SetSrpSuppressed(GameObject go, bool suppressed)
+        static void SetRenderersEnabled(GameObject go, bool enabled)
         {
-            var lodGroups = go.GetComponentsInChildren<LODGroup>(true);
             var renderers = go.GetComponentsInChildren<Renderer>(true);
-
-            // 退出合批时先打开 Renderer，再交还 LODGroup，避免把所有 LOD 同时画出来。
-            // 进入合批时先关 LODGroup（它会把当前 LOD 打开），再把 Renderer 压掉。
-            if (!suppressed)
-                ApplyRendererSuppression(renderers, false);
-
-            for (int i = 0; i < lodGroups.Length; i++)
-            {
-                if (lodGroups[i] != null)
-                    lodGroups[i].enabled = !suppressed;
-            }
-
-            if (suppressed)
-                ApplyRendererSuppression(renderers, true);
-        }
-
-        static void ApplyRendererSuppression(Renderer[] renderers, bool suppressed)
-        {
             for (int i = 0; i < renderers.Length; i++)
             {
-                Renderer renderer = renderers[i];
-                if (renderer == null)
-                    continue;
-                renderer.forceRenderingOff = suppressed;
-                renderer.enabled = !suppressed;
+                if (renderers[i] != null)
+                    renderers[i].enabled = enabled;
             }
-        }
-
-        /// <summary>
-        /// 合批专用材质。不改共享材质：共享材质仍给没进合批的 MeshRenderer，走 SRP Batcher。
-        /// Unity 6 的 INSTANCING_ON 是 local keyword，不能 EnableKeyword。
-        /// </summary>
-        static Material CreateInstancedMaterial(Material shared)
-        {
-            if (shared == null)
-                return null;
-            var material = new Material(shared)
-            {
-                name = shared.name + " (NativeBatch)",
-                enableInstancing = true
-            };
-            return material;
-        }
-
-        static Matrix4x4 MeshLocalToRootOf(Transform root, Transform meshTransform)
-        {
-            if (root == null || meshTransform == null || meshTransform == root)
-                return Matrix4x4.identity;
-            return root.worldToLocalMatrix * meshTransform.localToWorldMatrix;
         }
 
         static string StripSpawnIndexPrefix(string name)
@@ -617,14 +465,11 @@ namespace Game
             return name.Substring(space + 1);
         }
 
-        static bool TryExtractLod0(
-            GameObject prefab, out Mesh mesh, out Material material, out Bounds localBounds,
-            out Matrix4x4 meshLocalToRoot)
+        static bool TryExtractLod0(GameObject prefab, out Mesh mesh, out Material material, out Bounds localBounds)
         {
             mesh = null;
             material = null;
             localBounds = new Bounds(Vector3.zero, Vector3.one);
-            meshLocalToRoot = Matrix4x4.identity;
 
             MeshRenderer mr = null;
             int lod0MeshRendererCount = 0;
@@ -657,10 +502,8 @@ namespace Game
                 mr = all[0];
                 lod0MeshRendererCount = 1;
             }
-            else if (lod0MeshRendererCount != 1 || HasMeshRendererOutsideLod(prefab, lodGroup))
+            else if (lod0MeshRendererCount != 1)
             {
-                // 树干+树叶、或 LOD 名单外的网格：合批只画一块就会把其余关掉。
-                // 整棵留在 MeshRenderer，让 SRP 一次创建全部部件。
                 return false;
             }
 
@@ -668,7 +511,8 @@ namespace Game
             if (filter == null || filter.sharedMesh == null || mr.sharedMaterial == null)
                 return false;
 
-            // 多材质只画 submesh 0，其余槽位在关掉 Renderer 后会消失。
+            // Submesh loop not implemented — multi-mat would leave later slots undrawn
+            // after SetRenderersEnabled(false).
             Material[] mats = mr.sharedMaterials;
             if (mats != null && mats.Length > 1)
                 return false;
@@ -676,46 +520,7 @@ namespace Game
             mesh = filter.sharedMesh;
             material = mr.sharedMaterial;
             localBounds = mesh.bounds;
-            meshLocalToRoot = MeshLocalToRootOf(prefab.transform, mr.transform);
             return true;
-        }
-
-        /// <summary>LOD 名单外还有网格时，合批不能只带走 LOD0。</summary>
-        static bool HasMeshRendererOutsideLod(GameObject prefab, LODGroup lodGroup)
-        {
-            if (prefab == null || lodGroup == null)
-                return false;
-            LOD[] lods = lodGroup.GetLODs();
-            MeshRenderer[] all = prefab.GetComponentsInChildren<MeshRenderer>(true);
-            for (int i = 0; i < all.Length; i++)
-            {
-                MeshRenderer renderer = all[i];
-                if (renderer == null)
-                    continue;
-                bool listed = false;
-                if (lods != null)
-                {
-                    for (int l = 0; l < lods.Length && !listed; l++)
-                    {
-                        Renderer[] renderers = lods[l].renderers;
-                        if (renderers == null)
-                            continue;
-                        for (int r = 0; r < renderers.Length; r++)
-                        {
-                            if (renderers[r] == renderer)
-                            {
-                                listed = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (!listed)
-                    return true;
-            }
-
-            return false;
         }
 
         static Bounds TransformBounds(Bounds local, Matrix4x4 localToWorld)

@@ -10,14 +10,13 @@ Shader "CustomSRP/OilNPR"
         _PaintThickness ("Paint Thickness", Range(0, 2)) = 0.18
 
         _ShadeSteps ("Shade Steps", Range(2, 8)) = 4
-        [Gamma] _Metallic ("Metallic", Range(0, 1)) = 0
         [HDR] _SpecColor ("Specular Color", Color) = (0.5, 0.5, 0.5, 1)
         _Smoothness ("Smoothness (Blinn-Phong exponent base)", Range(0, 1)) = 0
-        _Fresnel ("Fresnel Strength", Range(0, 1)) = 0.25
-        // Shore / wet rocks: set on the material (e.g. ShiTou_Shore). Inland mats stay 0.
-        _Wetness ("Wetness", Range(0, 1)) = 0
+        _ShadeLift ("Shade Lift", Range(0, 1)) = 0.42
+        _ShadowLift ("Shadow Lift", Range(0, 1.5)) = 0.95
+        _ShadowWobble ("Shadow Brush Edge", Range(0, 1)) = 0.45
         _ShadowBrushScale ("Shadow Brush Scale", Range(0.2, 8)) = 1.8
-        _OutlineBrushMap ("Shadow Brush Mask", 2D) = "white" {}
+        _AmbientColor ("Ambient", Color) = (0.55, 0.5, 0.44, 1)
 
         // 0=Mesh UV, 1=World triplanar, 2=Object triplanar（与旧 Boluo LitStrokeRock 枚举一致）
         // 单向三向：单张 _BaseMap 从 X/Y/Z 三轴采样后按 |N| 混合。
@@ -55,7 +54,7 @@ Shader "CustomSRP/OilNPR"
             "PerformanceChecks" = "False"
         }
 
-        LOD 300
+        LOD 200
 
         HLSLINCLUDE
         #include "../ShaderLibrary/Common.hlsl"
@@ -76,66 +75,6 @@ Shader "CustomSRP/OilNPR"
             // multi_compile：Yoo/AB 叶片材质不进主包场景时，shader_feature 会被剥掉 → 真机无裁剪/无影。
             #pragma multi_compile_local _ _CLIPPING
             #pragma multi_compile_local _ _RECEIVE_SHADOWS
-            // Match TerrainLit / Lit other-shadow PCF (mobile stripper drops Med/High).
-            #pragma multi_compile _ _SHADOW_FILTER_MEDIUM _SHADOW_FILTER_HIGH
-            #pragma multi_compile _ OIL_MOBILE_PERF
-            #pragma multi_compile_instancing
-            #pragma vertex OilNPRPassVertex
-            #pragma fragment OilNPRPassFragment
-            #include "OilNPRPass.hlsl"
-            ENDHLSL
-        }
-
-        Pass
-        {
-            Name "ShadowCaster"
-            Tags { "LightMode" = "ShadowCaster" }
-
-            ColorMask 0
-            Cull [_Cull]
-
-            HLSLPROGRAM
-            #pragma target 3.5
-            #pragma multi_compile_local _ _SHADOWS_CLIP
-            #pragma shader_feature_local _SHADOWS_DITHER
-            #pragma multi_compile_instancing
-            #pragma vertex ShadowCasterPassVertex
-            #pragma fragment ShadowCasterPassFragment
-            #include "ShadowCasterPass.hlsl"
-            ENDHLSL
-        }
-    }
-
-    SubShader
-    {
-        Tags
-        {
-            "RenderType" = "Opaque"
-            "Queue" = "Geometry"
-            "PerformanceChecks" = "False"
-        }
-
-        LOD 150
-
-        HLSLINCLUDE
-        #include "../ShaderLibrary/Common.hlsl"
-        #include "OilNPRInput.hlsl"
-        ENDHLSL
-
-        Pass
-        {
-            Name "Forward"
-            Tags { "LightMode" = "CustomLit" }
-
-            Blend [_SrcBlend] [_DstBlend]
-            ZWrite [_ZWrite]
-            Cull [_Cull]
-
-            HLSLPROGRAM
-            #pragma target 3.5
-            #pragma multi_compile_local _ _CLIPPING
-            #pragma multi_compile_local _ _RECEIVE_SHADOWS
-            #pragma multi_compile _ _SHADOW_FILTER_MEDIUM _SHADOW_FILTER_HIGH
             #pragma multi_compile _ OIL_MOBILE_PERF
             #pragma multi_compile_instancing
             #pragma vertex OilNPRPassVertex

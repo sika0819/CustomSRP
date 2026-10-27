@@ -1,16 +1,29 @@
+using UnityEngine;
+
 namespace Game
 {
     /// <summary>
-    /// Coarse low-end gate for preset transition FX (walk during exit, black-hold length).
-    /// Delegates to <see cref="DeviceGraphicsPolicy"/> (<see cref="DeviceGraphicsClass.Low"/>).
+    /// Coarse device tier for preset transition FX (walk during exit, black-hold length).
     /// </summary>
     public static class IslandGraphicsTier
     {
         /// <summary>
-        /// Phone Low tier — skip exit walk, shorten black hold.
-        /// Editor / desktop High / Mid / Gmj are not low-end.
+        /// Mobile with ≤4 GB system RAM — skip exit walk, shorten black hold.
+        /// Editor / desktop always high tier.
         /// </summary>
-        public static bool IsLowEnd =>
-            DeviceGraphicsPolicy.Current == DeviceGraphicsClass.Low;
+        public static bool IsLowEnd
+        {
+            get
+            {
+#if UNITY_EDITOR
+                return false;
+#else
+                if (!Application.isMobilePlatform)
+                    return false;
+                return SystemInfo.systemMemorySize > 0
+                    && SystemInfo.systemMemorySize <= 4096;
+#endif
+            }
+        }
     }
 }

@@ -12,7 +12,7 @@
 | `WeatherService` | [Services/WeatherService.cs](../Services/WeatherService.cs) | 时刻 / 天气 / 雾 / look 状态 |
 | `PresetService` | [Services/PresetService.cs](../Services/PresetService.cs) | 预设列表与切换（虹膜过场状态机） |
 | `AtmospherePropService` + `AtmospherePropRegistry` | [Services/AtmospherePropService.cs](../Services/AtmospherePropService.cs) | 昼夜 FX 道具、篝火天气门控 |
-| `IslandWorldService` | [Services/IslandWorldService.cs](../Services/IslandWorldService.cs) | 地形 / 海面 / 内陆水 / MapItem / NavMesh / 草地装配 |
+| `IslandWorldService` | [Services/IslandWorldService.cs](../Services/IslandWorldService.cs) | 地形 / 海面 / 内陆水 / MapItem / 草地装配 |
 | `IslandGrassService` | [Services/IslandGrassService.cs](../Services/IslandGrassService.cs) | 草地 sidecar 载入 → 反射交给 SRP |
 | `IslandMobileTune` | [Services/IslandMobileTune.cs](../Services/IslandMobileTune.cs) | 地形生成后的移动端灯光 / 云 / 地形 LOD 调优 |
 | `NowPlayingService` | [Services/NowPlayingService.cs](../Services/NowPlayingService.cs) | 系统媒体卡片（负一屏）；顺带推后台传输计划 |
@@ -107,7 +107,7 @@ static event Action<bool> OnInlandWaterReady;
 
 IEnumerator Load(System.Action<float,string> reportProgress);
 // 顺序：出生位姿 → 地形 → 海面 → IslandMobileTune.ApplyAfterTerrainSpawn
-//      → 内陆水 → MapItem → NavMesh → 草地 → 触发 IslandWorldReadyEventArgs
+//      → 内陆水 → MapItem → 草地 → 触发 IslandWorldReadyEventArgs
 void Release();
 ```
 
@@ -143,7 +143,6 @@ static void ApplyAfterTerrainSpawn(GameObject terrainInstance);
 | 资源 | 地址 |
 |---|---|
 | 地形 / 海面 / 内陆水 | `IslandTerrain` / `IslandOcean` / `IslandInlandWater` |
-| NavMesh | `IslandNavMesh` |
 | 出生位姿 | `IslandSpawnPose` |
 | 草地 sidecar | `Island_GrassBake`（编辑器 `Assets/AssetRaw/Configs/Island_GrassBake.bytes`，也可在 `StreamingAssets/Island_GrassBake.bytes`） |
 | MapItem | `MapItem` + `AllMapItem` + `MapItemExtras` |
@@ -151,7 +150,7 @@ static void ApplyAfterTerrainSpawn(GameObject terrainInstance);
 
 ## 日志 tag
 
-`[IslandWorld]` `[IslandNavMesh]` `[IslandGrass]` `[IslandSpawnPose]` `[IslandMobileTune]` `[DevicePresetShot]`
+`[IslandWorld]` `[IslandGrass]` `[IslandSpawnPose]` `[IslandMobileTune]` `[DevicePresetShot]`
 
 ## 已知坑与排查手法
 

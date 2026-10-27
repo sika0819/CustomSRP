@@ -31,10 +31,7 @@ namespace Game.Native
         public static void HudTimer() => HudIcon(MsgType.HudIconTimer);
         public static void HudHealth() => HudIcon(MsgType.HudIconHealth);
 
-        /// <summary>
-        /// 加载罩 FadeHide 完成后发：宿主抬 islandHudReady、放行触摸并关启动页。
-        /// 重复调用会被丢掉（世界 Prefill 收尾的补发无害）。
-        /// </summary>
+        /// <summary>岛面可看就关原生启动页。HUD 未就绪也可以发；重复调用会被丢掉。</summary>
         public static void IslandReady()
         {
             if (Interlocked.Exchange(ref _islandReadySent, 1) != 0)
@@ -85,6 +82,7 @@ namespace Game.Native
         public static event System.Action Changed;
 
         static int _fpsBeforeYield = int.MinValue;
+        static int _intervalBeforeYield = 1;
 
         /// <summary>雨强度变化时调用；若正 YieldsGpu 则重算 fps/interval。</summary>
         public static void SetRainActiveForYield(bool active)
@@ -111,7 +109,10 @@ namespace Game.Native
             if (YieldsGpu)
             {
                 if (_fpsBeforeYield == int.MinValue)
+                {
                     _fpsBeforeYield = Application.targetFrameRate;
+                    _intervalBeforeYield = Mathf.Max(1, OnDemandRendering.renderFrameInterval);
+                }
 
                 // 不 UnityPause：pause 清 GL，关页会闪相机蓝。隔帧提交，Surface 留最后一帧。
                 // 雨天：30fps / interval 2，雨帘可滚且仍让出 GPU（配合 renderScale 0.25）。

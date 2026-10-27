@@ -25,8 +25,6 @@ namespace Game
         readonly List<AssetHandle> _inlandChildHandles = new List<AssetHandle>(8);
         readonly List<MapItemData> _extrasCache = new List<MapItemData>(64);
         bool _loaded;
-        bool _terrainReady;
-        bool _nearReady;
 
         /// <summary>Fires once after inland water is loaded (or confirmed missing). Safe to poll for null.</summary>
         public static event Action<bool> OnInlandWaterReady;
@@ -40,14 +38,12 @@ namespace Game
         /// <summary>单例入口，供 <see cref="WaterSurfaceProbe"/> 等 static 类访问。</summary>
         public static IslandWorldService Instance { get; private set; }
 
-        /// <summary>地形+海已实例化；相机可解冻竖直运动。揭罩请等 <see cref="IsNearReady"/>。</summary>
-        public bool IsTerrainReady => _terrainReady;
-
-        /// <summary>近场 MapItem + 近碰撞已铺；Procedure 可揭罩 / Notify。远场 Prefill / Nav / 草仍可后台继续。</summary>
-        public bool IsNearReady => _nearReady;
-
-        /// <summary>世界全量就绪（含 Prefill / Nav / 草）；此后恢复平面反射。</summary>
         public bool IsLoaded => _loaded;
+
+        /// <summary>
+        /// 近场（地形 / 海 / 地图物件）已铺完。草和后续流送仍可在 <see cref="Load"/> 里继续。
+        /// </summary>
+        public bool IsNearReady { get; private set; }
         public EnvMapItemSpawner MapItemSpawner => _mapItemSpawner;
         public GameObject TerrainInstance => _terrainInstance;
         public GameObject OceanInstance => _oceanInstance;
@@ -78,25 +74,6 @@ namespace Game
         {
             if (_loaded)
                 yield break;
-
-            _terrainReady = false;
-            _nearReady = false;
-
-            // 退登回收若仍在跑，先等完再 Prefill（GuestLogin 通常已等过；此处双保险）。
-            if (IslandLeaveAssetReclaim.IsBusy)
-            {
-                Log.Info(
-                    $"[IslandWorld] Load wait reclaim enter=#{ProcedureIsland.EnterCount}");
-                yield return IslandLeaveAssetReclaim.WaitIfBusy();
-            }
-
-            Log.Info(
-                $"[IslandWorld] Load begin enter=#{ProcedureIsland.EnterCount} " +
-                $"reclaimBusy={IslandLeaveAssetReclaim.IsBusy}");
-
-            // 二次进岛：压住镜面 + 再清原生合批，避免 Prefill 与残留 Draw/镜像抢主线程。
-            IslandImmersiveSoftUnload.SuspendPlanarForWorldLoad();
-            EnvNativeInstancing.ClearAll();
 
             // 出生点配置最先加载：SpawnMapItems / ApplySpawnPose 都要读它。
             yield return LoadSpawnPose();
@@ -141,41 +118,34 @@ namespace Game
 
             IslandMobileTune.ApplyAfterTerrainSpawn(_terrainInstance);
 
-            // 地形+海：相机解冻；揭罩等近场 Prefill（IsNearReady）。
-            _terrainReady = true;
-            reportProgress?.Invoke(BootLoadingService.TerrainPrepareMax, "地形就绪，正在进入...");
-            Log.Info("[IslandWorld] terrain+ocean ready — waiting near Prefill for uncover");
-
             reportProgress?.Invoke(0.79f, "正在加载河流瀑布...");
             yield return SpawnInlandWater();
-            InlandWaterReady = _inlandWaterInstance != null;
-            OnInlandWaterReady?.Invoke(_inlandWaterInstance != null);
 
-            Log.Info("[Hitch] prefill begin reclaimBusy=" + IslandLeaveAssetReclaim.IsBusy);
             reportProgress?.Invoke(0.80f, "正在铺装环境...");
             yield return SpawnMapItems(reportProgress);
-
-            reportProgress?.Invoke(0.84f, "正在加载可行走区域...");
-            IslandNavMeshService nav = IslandNavMeshService.Ensure();
-            yield return nav.Load();
+            IsNearReady = _terrainInstance != null;
 
             reportProgress?.Invoke(0.86f, "正在铺装草地...");
             IslandGrassService grass = GameEntry.Grass ?? IslandGrassService.Ensure();
             yield return grass.Load();
 
+            // 水体最近点改成运行期直接从场景采样（见 WaterSurfaceProbe），
+            // 不再加载任何烘焙的水域资源。
+
+            InlandWaterReady = _inlandWaterInstance != null;
             _loaded = true;
-            EnvStreamingConfig.ClearPostUncoverQuiet();
-            IslandImmersiveSoftUnload.AllowPlanarResumeAfterWorldReady();
+            OnInlandWaterReady?.Invoke(_inlandWaterInstance != null);
             int mapCount = _mapItemSpawner != null ? _mapItemSpawner.MapItemCount : 0;
             int spawned = _mapItemSpawner != null ? _mapItemSpawner.SpawnedCount : 0;
             int extras = _mapItemSpawner != null ? _mapItemSpawner.ExtrasSpawnedCount : 0;
 
             Log.Info(
-                "[IslandWorld] loaded enter=" + ProcedureIsland.EnterCount +
-                " terrain=" + (_terrainInstance != null) +
+                "[IslandWorld] loaded terrain=" + (_terrainInstance != null) +
                 " ocean=" + (_oceanInstance != null) +
                 " inland=" + (_inlandWaterInstance != null) +
                 " mapItems=" + mapCount + " spawned=" + spawned + " extras=" + extras);
+
+            reportProgress?.Invoke(BootLoadingService.TerrainPrepareMax, "正在准备场景...");
 
             if (GameEntry.Event != null)
                 GameEntry.Event.Fire(this, IslandWorldReadyEventArgs.Create(mapCount, spawned, extras));
@@ -183,11 +153,7 @@ namespace Game
 
         public void Release()
         {
-            IslandImmersiveSoftUnload.CancelForWorldTeardown();
-            // 双保险：streamer.Release 也会 Clear；无 streaming 路径时仍须清合批。
-            EnvNativeInstancing.ClearAll();
             (GameEntry.Grass ?? IslandGrassService.Active)?.Release();
-            IslandNavMeshService.Instance?.Release();
 
             if (_mapItemSpawner != null)
             {
@@ -255,10 +221,8 @@ namespace Game
                 OnInlandWaterReady?.Invoke(false);
             }
 
-            _terrainReady = false;
-            _nearReady = false;
             _loaded = false;
-            EnvStreamingConfig.ClearPostUncoverQuiet();
+            IsNearReady = false;
         }
 
         /// <summary>
@@ -455,11 +419,14 @@ namespace Game
             _mapItemSpawner = _mapItemRoot.GetComponent<EnvMapItemSpawner>()
                               ?? _mapItemRoot.AddComponent<EnvMapItemSpawner>();
 
-            // 勿强行改相机位：Procedure 可能已揭罩并用存档位 InitAndArm；Prefill 只跟焦点。
-            Transform focus = null;
+            // 相机已由进岛设位摆好。这里只拿它当流送焦点，不能改 position：
+            // 写成 DefaultPos 会把眼睛按回注视点高度，揭罩时看起来像掉下去。
+            Transform focus;
             Camera main = Camera.main;
             if (main != null)
+            {
                 focus = main.transform;
+            }
             else
             {
                 var focusGo = new GameObject("MapItemFocus");
@@ -467,15 +434,7 @@ namespace Game
                 focus = focusGo.transform;
             }
 
-            yield return _mapItemSpawner.Run(focus, reportProgress, MarkNearReady);
-        }
-
-        void MarkNearReady()
-        {
-            if (_nearReady)
-                return;
-            _nearReady = true;
-            Log.Info("[IslandWorld] near ready — uncover may proceed; far Prefill / Nav / grass continue");
+            yield return _mapItemSpawner.Run(focus, reportProgress);
         }
 
         void OnDestroy()

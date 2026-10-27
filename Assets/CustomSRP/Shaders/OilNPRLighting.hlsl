@@ -1,29 +1,16 @@
 #ifndef CUSTOM_OIL_NPR_LIGHTING_INCLUDED
 #define CUSTOM_OIL_NPR_LIGHTING_INCLUDED
 
-// Fixed-tap oil filter (not float[] PCF — GLES/half break). Soft cascade always —
-// OilNPR has no _SOFT_CASCADE_BLEND multi_compile; dither cascade reads as stripes.
+// Single-tap shadow for GLES3 / half fragment shaders (PCF float[] vs min16float[] breaks compile).
 #define OIL_NPR_HARD_DIRECTIONAL_SHADOW
-#define _SOFT_CASCADE_BLEND
 
 #include "../ShaderLibrary/Surface.hlsl"
 #include "../ShaderLibrary/Shadows.hlsl"
 #include "../ShaderLibrary/Light.hlsl"
-// Oil NPR must NOT include BRDF.hlsl — Lit owns the metallic BRDF path.
-// Shared shade/posterize helpers only (no GetBRDF / DirectBRDF).
-#include "../ShaderLibrary/OilBrdfCommon.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
-#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ImageBasedLighting.hlsl"
 #include "OilPaintNoise.hlsl"
 #include "OilTreeCrossBillboard.hlsl"
 #include "OilVegetationLighting.hlsl"
-
-TEXTURECUBE(unity_SpecCube0);
-SAMPLER(samplerunity_SpecCube0);
-
-#ifndef OIL_NPR_MIN_REFLECTIVITY
-#define OIL_NPR_MIN_REFLECTIVITY 0.04h
-#endif
 
 // Real IBL: SH9 directional ambient sampled by surface normal (天顶→地平渐变).
 // Vegetation uses OilVegetationAmbient; _OilPeriodAmbient declared in OilVegetationLighting.
@@ -41,139 +28,65 @@ half3 OilNPRAmbient(Surface surfaceWS)
     return OilSampleSHDirectional((half3)surfaceWS.normal);
 }
 
-// Compat wrapper — shared implementation in OilBrdfCommon.
+// Soft poster bands: keep oil masses, feather edges so shadow steps aren't chalk lines.
 half QuantizeNdotL(half ndotL, half steps)
 {
-    return OilQuantizeNdotL(ndotL, steps);
+    steps = max(steps, 2.0h);
+    half n = saturate(ndotL) * (steps - 1.0h);
+    half i = floor(n);
+    half f = frac(n);
+    half feather = 0.58h;
+    f = smoothstep(0.5h - feather * 0.5h, 0.5h + feather * 0.5h, f);
+    return (i + f) / (steps - 1.0h);
 }
 
-// Lightweight metal remap for NPR only (not Lit GetBRDF).
-half OilNPROneMinusReflectivity(half metallic)
+// Wide lit falloff. The brush only nicks the edge; the body stays a soft diffuse wash.
+half PainterlyLitAmount(half attenuation, half brush, half wobble)
 {
-    half range = 1.0h - OIL_NPR_MIN_REFLECTIVITY;
-    return range - saturate(metallic) * range;
+    half warped = attenuation + (brush - 0.5h) * wobble * 0.85h;
+    return smoothstep(0.02h, 0.92h, warped);
 }
 
-half3 OilNPRDiffuseAlbedo(half3 albedo, half metallic)
+// Two pigment tones inside the umbra, striped by brush mask.
+// _OIL_NO_VIOLET_UMBRA swaps the hardcoded violet pigment for white, so the
+// shadow side reads as the material's own coolTint instead of pushing magenta.
+// Water planes sit in heavy shadow (banks, cliffs) and the violet was dominating.
+half3 PainterlyUmbra(
+    half3 albedo,
+    half3 ambient,
+    half3 coolTint,
+    half3 warmTint,
+    half brush,
+    half lift)
 {
-    return albedo * OilNPROneMinusReflectivity(metallic);
-}
+    // Umbra is a cool violet pigment. Warm paint only breaks the stroke, it does not gray it out.
+#if defined(_OIL_NO_VIOLET_UMBRA)
+    half3 violet = half3(1.0h, 1.0h, 1.0h);
+#else
+    half3 violet = half3(0.50h, 0.38h, 0.76h);
+#endif
+    half3 cool = albedo * lerp(coolTint, violet, 0.62h);
+    half3 warm = albedo * lerp(warmTint, violet, 0.28h);
+    half3 pigment = lerp(warm, cool, saturate(0.64h + brush * 0.36h));
 
-half3 OilNPRSpecF0(half3 albedo, half3 specularColor, half metallic)
-{
-    half m = saturate(metallic);
-    half3 dielectric = lerp(half3(OIL_NPR_MIN_REFLECTIVITY, OIL_NPR_MIN_REFLECTIVITY, OIL_NPR_MIN_REFLECTIVITY), specularColor, 1.0h - m);
-    return lerp(dielectric, albedo, m);
+    pigment *= lerp(0.9h, 1.12h, brush);
+
+    half3 wash = ambient * albedo;
+    half3 umbra = wash * 1.05h + pigment * max(lift, 0.8h);
+#if !defined(_OIL_NO_VIOLET_UMBRA)
+    umbra = max(umbra, albedo * violet * 0.42h);
+#endif
+    return umbra;
 }
 
 // forcedAttenuation < 0 samples the camera cascade. A large flat receiver
 // otherwise draws that sphere as a disk that slides with the camera.
-
-// Port of URP Simple Lit's LightingSpecular (Blinn-Phong).
-// smoothness: 0→2 (very rough), 1→512 (mirror-like).
-// URP Simple Lit uses exp2(10*s+1): 2→2048. We halve the exponent for a softer spec.
-half OilNPRSpecularTerm(half3 N, half3 H, half smoothness)
-{
-    half NdotH = saturate(dot(N, H));
-    // Gentler exponent curve for the oil-paint feel.
-    half shininess = exp2(5.0h * smoothness + 1.0h);
-    return pow(NdotH, shininess);
-}
-
-// Additive Blinn-Phong specular, capped so NPR painterly feel stays dominant.
-// specularThreshold > 0 steps the lobe into oil glint masses (River/Waterfall UI).
-half3 OilNPRLightSpecular(
-    half3 lightColor,
-    half3 L,
-    half3 N,
-    half3 V,
-    half3 specColor,
-    half smoothness,
-    half attenuation,
-    half specularThreshold)
-{
-    if (smoothness < 0.01h || any(specColor <= 0.0h))
-    {
-        return 0.0h;
-    }
-
-    half3 H = normalize(L + V);
-    half spec = OilNPRSpecularTerm(N, H, smoothness);
-    if (specularThreshold > 0.001h)
-    {
-        half edge = max(0.04h, 1.0h - specularThreshold);
-        half stepped = smoothstep(specularThreshold - edge, specularThreshold + edge * 0.25h, spec);
-        spec = lerp(spec, stepped * spec, 0.85h);
-    }
-
-    // Clamp specular strength so it doesn't overpower the NPR bands.
-    return lightColor * specColor * spec * attenuation;
-}
-
-half3 OilNPRLightSpecular(
-    half3 lightColor,
-    half3 L,
-    half3 N,
-    half3 V,
-    half3 specColor,
-    half smoothness,
-    half attenuation)
-{
-    return OilNPRLightSpecular(
-        lightColor, L, N, V, specColor, smoothness, attenuation, 0.0h);
-}
-
-// Fresnel × (SH or SpecCube) oil environment; mobile stays SH-only.
-half3 OilNPREnvironment(Surface surfaceWS, half3 albedo, half3 ambient)
-{
-    half metal = (half)saturate(surfaceWS.metallic);
-    half smooth = (half)saturate(surfaceWS.smoothness);
-    half3 N = (half3)surfaceWS.normal;
-    half3 V = (half3)surfaceWS.viewDirection;
-    half ndotV = saturate(dot(N, V));
-    half fresnel = Pow4(1.0h - ndotV);
-    fresnel *= saturate(smooth * 0.85h + metal);
-    if (fresnel < 1e-4h && metal < 0.01h)
-    {
-        return 0.0h;
-    }
-
-    half3 f0 = OilNPRSpecF0(
-        albedo,
-        half3(OIL_NPR_MIN_REFLECTIVITY, OIL_NPR_MIN_REFLECTIVITY, OIL_NPR_MIN_REFLECTIVITY),
-        metal);
-    half3 env = ambient;
-#if !defined(OIL_MOBILE_PERF)
-    if (metal > 0.05h || smooth > 0.35h)
-    {
-        float perceptualRoughness =
-            PerceptualSmoothnessToPerceptualRoughness(surfaceWS.smoothness);
-        float3 uvw = reflect(-surfaceWS.viewDirection, surfaceWS.normal);
-        uvw = OilBrdfWarpReflectDir(uvw, surfaceWS.position, perceptualRoughness);
-        float mip = PerceptualRoughnessToMipmapLevel(perceptualRoughness);
-        mip += OilBrdfEnvMipBias(perceptualRoughness);
-        float4 environment = SAMPLE_TEXTURECUBE_LOD(
-            unity_SpecCube0, samplerunity_SpecCube0, uvw, mip);
-        env = (half3)DecodeHDREnvironment(environment, unity_SpecCube0_HDR);
-        env = OilStylizeEnvSpec(env);
-    }
+#ifndef OIL_SHADE_BAND
+#define OIL_SHADE_BAND 0.28h
 #endif
-    return env * f0 * max(fresnel, metal * 0.25h) * (0.4h + 0.6h * metal);
-}
 
-// Soft blob Other light for Oil NPR (TerrainOilNPR / OilNPR / grass share this).
-//
-// RCA: TerrainLit "soft" rim is mostly other-shadow PCF, NOT Unity Square×Square/r².
-// That Unity geom still paints a chalk isocontour on flat ground; mobile skips the
-// atlas so the disk edge is pure hard att. Fix = one cheap smooth falloff (no
-// multi-tap, no 1/r² rings, no QuantizeNdotL). Desktop still multiplies soft PCF.
-Light GetOilSoftOtherLight(
-    int index,
-    Surface surfaceWS
-#if !defined(OIL_MOBILE_PERF)
-    , ShadowData shadowData
-#endif
-)
+// Mobile campfire fill: range×spot×1/r², no point-shadow tap.
+Light GetOtherLightNoShadow(int index, Surface surfaceWS)
 {
     OtherLightData data = _OtherLightData[index];
     Light light;
@@ -182,39 +95,19 @@ Light GetOilSoftOtherLight(
     float3 ray = position - surfaceWS.position;
     light.direction = normalize(ray);
     float distanceSqr = max(dot(ray, ray), 0.00001);
-    light.renderingLayerMask = asuint(data.directionAndMask.w);
-
-    // tNorm: 0 at center → 1 at Unity range. Finish fade before range so the
-    // Forward+ / Light.range hard-zero never shows as a 1px rim.
-    float tNorm = sqrt(distanceSqr * data.position.w);
-    // Tighter toe than 0.12→0.88 — wide soft + high gain washed night sand white.
-    half rangeAtt = 1.0h - smoothstep(0.05h, 0.72h, (half)tNorm);
-    // Near InverseSquare energy (not flat blob). 0.035 was ~7× too soft at 5–10 m.
-    half core = rcp(1.0h + (half)distanceSqr * 0.11h);
-
+    float rangeAttenuation = Square(
+        saturate(1.0 - Square(distanceSqr * data.position.w)));
     float3 spotDirection = data.directionAndMask.xyz;
-    float spotLin = saturate(
-        dot(spotDirection, light.direction) * data.spotAngle.x + data.spotAngle.y);
-    half spotAtt = smoothstep(0.0h, 1.0h, (half)spotLin);
-
-    // Light.color already carries intensity — no 2.55× dump onto night ground.
-    half att = spotAtt * rangeAtt * core;
-
-#if !defined(OIL_MOBILE_PERF)
-    OtherShadowData otherShadowData = GetOtherShadowData(data.shadowData);
-    otherShadowData.lightPositionWS = position;
-    otherShadowData.lightDirectionWS = light.direction;
-    otherShadowData.spotDirectionWS = spotDirection;
-    otherShadowData.strength *= shadowData.strength;
-    att *= (half)GetOtherShadowAttenuation(
-        otherShadowData, shadowData, surfaceWS);
-#endif
-
-    light.attenuation = att;
+    light.renderingLayerMask = asuint(data.directionAndMask.w);
+    float spotAttenuation = Square(
+        saturate(dot(spotDirection, light.direction) *
+            data.spotAngle.x + data.spotAngle.y));
+    light.attenuation = spotAttenuation * rangeAttenuation / distanceSqr;
     return light;
 }
 
-// Forward+ Point/Spot soft fill. Water: OIL_NPR_NO_OTHER_LIGHTS (no disk on ocean).
+// Forward+ Point/Spot：油画分带 + 暖色本地填充（篝火等）。
+// 平躺水面定义 OIL_NPR_NO_OTHER_LIGHTS，避免点光衰减读成圆形光斑。
 half3 OilNPROtherLights(
     Surface surfaceWS,
     half3 albedo,
@@ -234,26 +127,20 @@ half3 OilNPROtherLights(
     int first = tile.GetFirstLightIndexInTile();
     int last = tile.GetLastLightIndexInTile();
 #if defined(OIL_MOBILE_PERF)
-    // Campfire only; no other-shadow atlas taps (FireController also sets Shadows=None).
-    last = first;
+    // Campfire + one spare; skip GetOtherShadowAttenuation.
+    last = min(last, first + 1);
 #endif
-    // shadeSteps intentionally unused: QuantizeNdotL × radial att = chalk rings on ground.
-    half metal = (half)saturate(surfaceWS.metallic);
-    half3 diffuseAlbedo = OilNPRDiffuseAlbedo(albedo, metal);
+    half steps = max(shadeSteps * 0.5h, 2.0h);
     half3 sum = 0.0h;
 #if !defined(OIL_MOBILE_PERF)
-    half smooth = (half)saturate(surfaceWS.smoothness);
-    half3 specF0 = OilNPRSpecF0(albedo, half3(0.04h, 0.04h, 0.04h), metal);
-    half3 V = (half3)surfaceWS.viewDirection;
     ShadowData shadowData = GetShadowData(surfaceWS);
 #endif
     for (int j = first; j <= last; j++)
     {
 #if defined(OIL_MOBILE_PERF)
-        Light light = GetOilSoftOtherLight(tile.GetLightIndex(j), surfaceWS);
+        Light light = GetOtherLightNoShadow(tile.GetLightIndex(j), surfaceWS);
 #else
-        Light light = GetOilSoftOtherLight(
-            tile.GetLightIndex(j), surfaceWS, shadowData);
+        Light light = GetOtherLight(tile.GetLightIndex(j), surfaceWS, shadowData);
 #endif
         if ((surfaceWS.renderingLayerMask & light.renderingLayerMask) == 0u)
         {
@@ -262,32 +149,53 @@ half3 OilNPROtherLights(
 
         half3 L = (half3)light.direction;
         half att = (half)light.attenuation;
-        if (att <= 1e-5h)
+        if (att <= 1e-4h)
         {
             continue;
         }
 
-        // Continuous half-Lambert only (no poster bands → no concentric rings).
-        half shade = saturate(dot(N, L) * 0.5h + 0.5h);
+        half halfLambert = saturate(dot(N, L) * 0.5h + 0.5h);
+        half band = QuantizeNdotL(halfLambert, steps);
         half3 lc = (half3)light.color;
-#if !defined(OIL_MOBILE_PERF)
-        // Att toe: collapse chroma so warm fill → cool night isn't a hue cliff.
-        half luma = max(lc.r, max(lc.g, lc.b));
-        half3 lcDim = half3(luma, luma * 0.90h, luma * 0.78h) * 0.30h;
-        half chromaKeep = smoothstep(0.0h, 0.45h, att);
-        lc = lerp(lcDim, lc, chromaKeep);
-#endif
-        sum += diffuseAlbedo * lc * (shade * att);
-#if !defined(OIL_MOBILE_PERF)
-        if (metal > 0.01h || smooth > 0.01h)
-        {
-            sum += OilNPRLightSpecular(lc, L, N, V, specF0, smooth, att);
-        }
-#endif
+        // Direct band + soft fill so night fire warms the umbra instead of only a hard edge.
+        sum += albedo * lc * (band * att + att * 0.4h);
     }
 
     return sum;
 #endif
+}
+
+// Port of URP Simple Lit's LightingSpecular (Blinn-Phong).
+// smoothness: 0→2 (very rough), 1→512 (mirror-like).
+// URP Simple Lit uses exp2(10*s+1): 2→2048. We halve the exponent for a softer spec.
+half OilNPRSpecularTerm(half3 N, half3 H, half smoothness)
+{
+    half NdotH = saturate(dot(N, H));
+    // Gentler exponent curve for the oil-paint feel.
+    half shininess = exp2(5.0h * smoothness + 1.0h);
+    return pow(NdotH, shininess);
+}
+
+// Additive Blinn-Phong specular, capped so NPR painterly feel stays dominant.
+half3 OilNPRLightSpecular(
+    half3 lightColor,
+    half3 L,
+    half3 N,
+    half3 V,
+    half3 specColor,
+    half smoothness,
+    half attenuation)
+{
+    if (smoothness < 0.01h || any(specColor <= 0.0h))
+    {
+        return 0.0h;
+    }
+
+    half3 H = normalize(L + V);
+    half spec = OilNPRSpecularTerm(N, H, smoothness);
+    // Clamp specular strength so it doesn't overpower the NPR bands.
+    // The light tint keeps it feeling painted rather than plastic.
+    return lightColor * specColor * spec * attenuation;
 }
 
 // Core lighting with specular support.
@@ -295,37 +203,28 @@ half3 OilNPRLightingEx(
     Surface surfaceWS,
     half3 albedo,
     half3 ambient,
-    half3 shadowTint,
-    half3 shadowWarm,
     half3 specularColor,
     half specularThreshold,
     half shadeSteps,
     half paintRim,
     half brush,
+    half shadowWobble,
     half forcedAttenuation,
     half quantize,
     half smoothness,
     float2 screenUV)
 {
-    half metal = (half)saturate(surfaceWS.metallic);
-    half3 diffuseAlbedo = OilNPRDiffuseAlbedo(albedo, metal);
-    half3 specF0 = OilNPRSpecF0(albedo, specularColor, metal);
     half3 N = (half3)surfaceWS.normal;
     half3 other = OilNPROtherLights(surfaceWS, albedo, N, shadeSteps, screenUV);
-    half3 env = OilNPREnvironment(surfaceWS, albedo, ambient);
 
     if (GetDirectionalLightCount() <= 0)
     {
-        half3 unlit = ambient * diffuseAlbedo + paintRim * ambient + other + env;
-        // Soft fire pull — keep local, don't re-lift a wide soft pool into white.
-        half fireW = smoothstep(0.02h, 0.18h, length(other));
-        if (fireW > 1e-4h)
+        half3 unlit = ambient * albedo + paintRim * ambient + other;
+        // Night fire: pull umbra toward warm local light instead of pure violet.
+        if (any(other > 1e-4h))
         {
-            half3 warmUmbra = diffuseAlbedo * half3(0.40h, 0.20h, 0.08h);
-            unlit = lerp(
-                unlit,
-                max(unlit, warmUmbra * 0.45h + other * 0.25h),
-                fireW * 0.35h);
+            half3 warmUmbra = albedo * half3(0.55h, 0.28h, 0.12h);
+            unlit = lerp(unlit, max(unlit, warmUmbra * 0.65h + other * 0.35h), 0.55h);
         }
 
 #if defined(OIL_MOBILE_PERF)
@@ -351,24 +250,17 @@ half3 OilNPRLightingEx(
     // Poster bands with soft edges. Hard cascade tap still darkens, but feather the jump.
     half halfLambert = saturate(dot(N, L) * 0.5h + 0.5h);
     half steps = max(shadeSteps, 2.0h);
-    // Same nightAmt as foliage (light luma + oilFill period) so a brighter moon
-    // still gets fill/key treatment — pure lightLum*4 collapses once intensity rises.
-    half lightLumEarly = OilVegMainLightLuma(lightColor);
-    half nightAmt = OilVegetationNightAmount(lightLumEarly);
-#if defined(OIL_NPR_NO_OTHER_LIGHTS) || defined(OIL_WATER_GREY_UMBRA)
-    // Ocean / River: no cascade shadow → umbra dead code; shadeLift stays day value.
     half attSoft = smoothstep(0.05h, 0.55h, attenuation);
-    half lit = halfLambert * lerp(0.28h, 1.0h, attSoft);
-#elif defined(TERRAIN_SHADOW_RECEIVER)
-    // Terrain cast: day keeps a soft floor (noon blobs weren't charcoal); night drops hard.
-    half attSoft = smoothstep(0.02h, 0.38h, attenuation);
-    half shadeLift = lerp(0.18h, 0.02h, nightAmt);
-    half lit = halfLambert * lerp(shadeLift, 1.0h, attSoft);
+#if defined(TERRAIN_SHADOW_RECEIVER)
+    // Day keeps a 0.22 floor so bands don't chalk. Night moon luma is ~0.03, and that
+    // floor holds full shadow against the lit ground until the cast shape disappears.
+    half keyLum = dot(lightColor, half3(0.2126h, 0.7152h, 0.0722h));
+    half dayLit = saturate(keyLum * 2.5h);
+    half shadowKeep = lerp(0.02h, 0.22h, dayLit);
+    half lit = halfLambert * lerp(shadowKeep, 1.0h, attSoft);
 #else
-    // Day shadeLift higher → softer noon umbra; night lower → moon cast reads darker.
-    half attSoft = smoothstep(0.05h, 0.55h, attenuation);
-    half shadeLift = lerp(0.40h, 0.08h, nightAmt);
-    half lit = halfLambert * lerp(shadeLift, 1.0h, attSoft);
+    // Ocean / River: no cascade shadow → umbra dead code; shadeLift hardcoded 0.28.
+    half lit = halfLambert * lerp(0.28h, 1.0h, attSoft);
 #endif
 #if !defined(OIL_MOBILE_PERF)
     lit += ((half)surfaceWS.dither - 0.5h) * (quantize > 0.001h ? (1.0h / steps) : 0.0h);
@@ -380,118 +272,60 @@ half3 OilNPRLightingEx(
 
     // lightColor is VisibleLight.finalColor (OilSkyboxTime LightPresets × intensity).
     half lightPeak = max(1e-3h, max(lightColor.r, max(lightColor.g, lightColor.b)));
-    // Night: SH often near-black while foliage NightKeep stays readable — floor with oilFill
-    // and punch moon key so lit−umbra (= key) has absolute contrast on terrain.
-    half3 amb = ambient;
-    half3 keyColor = lightColor;
-    half ambW = 0.45h;
-#if defined(TERRAIN_SHADOW_RECEIVER)
-    // Day key compressed — noon light≈1.5 × bright sand chalked LDR (no tonemap).
-    // Night still punches moon key; ambW stays modest so midtones don't milk.
-    keyColor = lightColor * 0.68h;
-    ambW = 0.40h;
-#endif
-    if (nightAmt > 0.01h)
-    {
-        half3 period = (half3)_OilPeriodAmbient.rgb;
-        amb = max(amb, period * lerp(0.40h, 0.65h, nightAmt));
-#if defined(TERRAIN_SHADOW_RECEIVER)
-        // Lit ground keeps fill; umbra uses a lower weight below so cast reads darker.
-        ambW = lerp(0.40h, 0.68h, nightAmt);
-        keyColor = lightColor * lerp(0.68h, 2.05h, nightAmt);
+    half3 litColor = albedo * (ambient * 0.45h + lightColor);
+#if defined(_OIL_NO_VIOLET_UMBRA)
+    half3 umbraColor = albedo * half3(0.18h, 0.20h, 0.24h) + half3(0.02h, 0.022h, 0.025h);
 #else
-        ambW = lerp(0.45h, 0.60h, nightAmt);
-        keyColor = lightColor * lerp(1.0h, 1.65h, nightAmt);
+    half3 umbraColor = albedo * half3(0.2h, 0.14h, 0.36h) + half3(0.02h, 0.012h, 0.035h);
 #endif
-    }
-    half3 ambTerm = amb * ambW;
-    half3 litColor = diffuseAlbedo * (ambTerm + keyColor);
+    // Daytime umbra is an absolute pigment. Night moon luma is ~0.03, so that pigment is
+    // brighter than the moonlit ground and cast shadows read white. Night uses a cool
+    // albedo fill: lit ground stays readable, the cast shape is a darker slice of it.
+    half umbraHueMix = 0.4h;
 #if defined(TERRAIN_SHADOW_RECEIVER)
-    // Soft highlight ceiling — preserve pigment, avoid chalk flats on lit slopes.
-    litColor = min(litColor, diffuseAlbedo * 1.12h + half3(0.04h, 0.035h, 0.028h));
+    half3 nightLit = albedo * half3(0.11h, 0.13h, 0.18h) + albedo * lightColor;
+    half3 nightUmbra = albedo * half3(0.035h, 0.040h, 0.055h);
+    litColor = lerp(nightLit, litColor, dayLit);
+    umbraColor = lerp(nightUmbra, umbraColor, dayLit);
+    umbraHueMix *= dayLit;
 #endif
-#if defined(OIL_NPR_NO_OTHER_LIGHTS) || defined(OIL_WATER_GREY_UMBRA)
-    // Water (ocean / river / waterfall): grey shade bands — no cool teal→magenta night.
-    half3 umbraColor = diffuseAlbedo * half3(0.18h, 0.20h, 0.24h) + half3(0.02h, 0.022h, 0.025h);
-#elif defined(TERRAIN_SHADOW_RECEIVER)
-    // Terrain cast umbra: still cooler than props, but day pigment lifted (was too deep at noon).
-    half3 pigment = half3(0.12h, 0.16h, 0.26h);
-    half3 baseUmbra = diffuseAlbedo * pigment + half3(0.012h, 0.014h, 0.022h);
-    half3 tinted = lerp(diffuseAlbedo * shadowTint * 0.55h, diffuseAlbedo * shadowWarm * 0.5h, saturate(brush));
-    half3 umbraColor = lerp(baseUmbra, tinted, 0.40h);
-#else
-    // Teal-blue pigment + call-site cool/warm tint. Avoid magenta (night rocks went purple).
-    half3 pigment = half3(0.22h, 0.28h, 0.38h);
-    half3 baseUmbra = diffuseAlbedo * pigment + half3(0.022h, 0.026h, 0.040h);
-    half3 tinted = lerp(diffuseAlbedo * shadowTint, diffuseAlbedo * shadowWarm, saturate(brush));
-    half3 umbraColor = lerp(baseUmbra, tinted, 0.55h);
-#endif
-    // Mild light-hue pull so noon warmth does not dirty the cool umbra.
-    // Terrain: weaker pull — was re-lifting cast umbra after the deeper pigment.
-    half3 lightHue = lightColor / lightPeak;
-#if defined(TERRAIN_SHADOW_RECEIVER)
-    umbraColor = lerp(umbraColor, diffuseAlbedo * lightHue * 0.2h + lightColor * 0.1h, 0.08h);
-#else
-    umbraColor = lerp(umbraColor, diffuseAlbedo * lightHue * 0.2h + lightColor * 0.1h, 0.18h);
-#endif
-    // Night: cut ambient fill + tighten vs litColor so moon cast isn't washed out
-    // (user: 白天阴影太深，夜晚阴影太浅).
-    if (nightAmt > 0.01h)
-    {
-#if defined(OIL_NPR_NO_OTHER_LIGHTS) || defined(OIL_WATER_GREY_UMBRA)
-        half3 nightUmbra = diffuseAlbedo * (amb * 0.22h) * half3(0.88h, 0.92h, 1.0h);
-        umbraColor = lerp(umbraColor, nightUmbra, nightAmt * 0.85h);
-        umbraColor = min(umbraColor, litColor * lerp(1.0h, 0.62h, nightAmt));
-#elif defined(TERRAIN_SHADOW_RECEIVER)
-        half3 nightUmbra = diffuseAlbedo * (amb * 0.14h) * half3(0.62h, 0.72h, 0.92h);
-        umbraColor = lerp(umbraColor, nightUmbra, nightAmt * 0.95h);
-        umbraColor = min(umbraColor, litColor * lerp(1.0h, 0.30h, nightAmt));
-#else
-        half3 nightUmbra = diffuseAlbedo * (amb * 0.20h) * half3(0.70h, 0.80h, 0.98h);
-        umbraColor = lerp(umbraColor, nightUmbra, nightAmt * 0.90h);
-        umbraColor = min(umbraColor, litColor * lerp(1.0h, 0.45h, nightAmt));
-#endif
-    }
+    // Ocean / River: _RECEIVE_SHADOWS=0 → no cascade shadow → umbra never reached.
+    // shadowTint / shadowWarm / shadowLift / shadeLift hardcoded to 0; kept for API compat.
 #if defined(OIL_MOBILE_PERF)
+    // One period pull + campfire warm; skip hue/rim/paintRim/ceil.
+    half3 lightHue = lightColor / lightPeak;
+    umbraColor = lerp(umbraColor, albedo * lightHue * 0.2h + lightColor * 0.1h, umbraHueMix);
+    if (any(other > 1e-4h))
     {
-        // Narrower/softer than 0→0.12×0.5 — wide soft other was bleaching night umbra.
-        half warmMix = smoothstep(0.02h, 0.20h, length(other));
-        umbraColor = lerp(
-            umbraColor,
-            diffuseAlbedo * half3(0.40h, 0.20h, 0.08h) + other * 0.18h,
-            warmMix * 0.32h);
+        umbraColor = lerp(umbraColor, albedo * half3(0.48h, 0.24h, 0.1h) + other * 0.25h, 0.5h);
     }
     // Most env mats ship Smoothness=0 — skip view normalize + Blinn path.
     half3 spec = 0.0h;
-    if (smoothness >= 0.01h && any(specF0 > 0.0h))
+    if (smoothness >= 0.01h && any(specularColor > 0.0h))
     {
         half3 V = normalize((half3)(_WorldSpaceCameraPos - surfaceWS.position));
-        spec = OilNPRLightSpecular(
-            lightColor, L, N, V, specF0, smoothness, attenuation, specularThreshold);
+        spec = OilNPRLightSpecular(lightColor, L, N, V, specularColor, smoothness, attenuation);
     }
-    half3 colorM = lerp(umbraColor, litColor, lit) + other + spec + env;
-    colorM += paintRim * ambient * 0.15h;
-    return colorM;
+    return lerp(umbraColor, litColor, lit) + other + spec;
 #else
+    half3 lightHue = lightColor / lightPeak;
+    umbraColor = lerp(umbraColor, albedo * lightHue * 0.2h + lightColor * 0.1h, umbraHueMix);
+    if (any(other > 1e-4h))
     {
-        half warmMix = smoothstep(0.02h, 0.20h, length(other));
-        umbraColor = lerp(
-            umbraColor,
-            diffuseAlbedo * half3(0.40h, 0.20h, 0.08h) + other * 0.18h,
-            warmMix * 0.40h);
+        half warmMix = saturate(length(other) * 1.8h);
+        umbraColor = lerp(umbraColor, albedo * half3(0.48h, 0.24h, 0.1h) + other * 0.25h, warmMix * 0.7h);
     }
 
-    half3 color = lerp(umbraColor, litColor, lit) + other + env;
+    half3 color = lerp(umbraColor, litColor, lit) + other;
     half3 V = (half3)surfaceWS.viewDirection;
     half inv = 1.0h - saturate(dot(N, V));
     half rim = inv * inv;
-    color += diffuseAlbedo * lerp(half3(1.0h, 0.78h, 0.48h), lightHue, 0.55h) * rim * 0.08h;
+    color += albedo * lerp(half3(1.0h, 0.78h, 0.48h), lightHue, 0.55h) * rim * 0.08h;
     color += paintRim * ambient * 0.15h;
-    half3 ceilC = diffuseAlbedo * (0.85h + saturate(lightPeak) * 0.9h) + lightColor * 0.12h + other;
+    half3 ceilC = albedo * (0.85h + saturate(lightPeak) * 0.9h) + lightColor * 0.12h + other;
     color = min(color, ceilC);
-    // Blinn-Phong specular from main directional light (metal F0).
-    half3 mainSpec = OilNPRLightSpecular(
-        lightColor, L, N, V, specF0, smoothness, attenuation, specularThreshold);
+    // Blinn-Phong specular from main directional light.
+    half3 mainSpec = OilNPRLightSpecular(lightColor, L, N, V, specularColor, smoothness, attenuation);
     color += mainSpec;
     return color;
 #endif
@@ -541,7 +375,10 @@ half3 OilTreeCrossBillboardShade(
 }
 
 // Wrapper: sample cascade shadows (forcedAttenuation < 0).
-// Ambient is sampled via OilNPRAmbient so callers can't flatten the IBL gradient.
+// shadowTint/shadowWarm/shadowLift/shadeLift: dead code for water (RECEIVE_SHADOWS=0).
+// Kept for terrain/basemap call site API compat.
+// `ambient` is now a no-op — ambient is sampled via OilNPRAmbient(surfaceWS) internally
+// so callers can't accidentally inject a flat color and break the IBL gradient.
 half3 OilNPRLighting(
     Surface surfaceWS,
     half3 albedo,
@@ -551,16 +388,19 @@ half3 OilNPRLighting(
     half specularThreshold,
     half shadeSteps,
     half paintRim,
+    half shadowLift,
+    half shadeLift,
     half brush,
+    half shadowWobble,
     half quantize,
     half smoothness,
     float2 screenUV)
 {
     half3 ambient = OilNPRAmbient(surfaceWS);
     return OilNPRLightingEx(
-        surfaceWS, albedo, ambient, shadowTint, shadowWarm, specularColor,
+        surfaceWS, albedo, ambient, specularColor,
         specularThreshold, shadeSteps, paintRim,
-        brush, -1.0h, quantize, smoothness, screenUV);
+        brush, shadowWobble, -1.0h, quantize, smoothness, screenUV);
 }
 
 #endif

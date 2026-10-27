@@ -121,12 +121,7 @@ half3 OilVegetationDirect(
     // Half-Lambert: dusk low sun still warms up-facing grass (matches terrain NPR wrap).
     half ndotl = saturate(dot(N, L) * 0.5h + 0.5h);
     half att = saturate(attenuation);
-    // Match OilNPR day/night umbra: residual key at noon, harder moon cast at night.
-    half nightAmt = OilVegetationNightAmount(lightLum);
-    half shadeFloor = lerp(0.28h, 0.04h, nightAmt);
-    half attPaint = lerp(shadeFloor, 1.0h, smoothstep(0.05h, 0.55h, att));
-    half ambScale = lerp(1.0h, lerp(1.0h, 0.58h, nightAmt), 1.0h - att);
-    return albedo * (lightColor * ndotl * attPaint + ambient * ambScale);
+    return albedo * (lightColor * ndotl * att + ambient);
 }
 
 // BoluoNightKeepFoliage: soft night floor only — keep crowns from crushing, not glowing.

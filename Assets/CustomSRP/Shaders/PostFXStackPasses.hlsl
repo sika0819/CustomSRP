@@ -220,49 +220,32 @@ float CanvasHash(float2 p)
     return frac((p3.x + p3.y) * p3.z);
 }
 
-// Linen tooth after LUT. Old path was ~±1% and mid-gated to luma≈0.42 → invisible.
 float3 ApplyCanvasWeave(float3 color, float2 uv)
 {
     if (_CanvasGrain.x <= 0.0001 && _CanvasGrain.y <= 0.0001)
         return color;
 
-    // Thread pitch ~2.2 px at native res; readable on phone without looking like noise.
     float2 px = uv * _ScreenParams.xy;
-    float warp = sin(px.x * 2.85);
-    float weft = sin(px.y * 2.85);
-    // Cross ridges where warp/weft meet — the “canvas” read.
-    float linen = warp * weft;
-    float threads = (warp + weft) * 0.5;
-    float n = CanvasHash(floor(px * 0.5)) * 2.0 - 1.0;
-
+    float n = CanvasHash(floor(px)) - 0.5;
+    float2 cell = floor(px * (1.0 / 3.0));
+    float weave = (frac(cell.x * 0.5) - 0.5) + (frac(cell.y * 0.5) - 0.5);
     float luma = dot(color, float3(0.299, 0.587, 0.114));
-    // Broad tone coverage; only taper pure black / clipped white a little.
-    float mid = saturate(luma * 4.0) * saturate((1.05 - luma) * 3.5);
-    mid = max(mid, 0.45);
-
-    float grain = n * _CanvasGrain.x;
-    float weave = (linen * 0.65 + threads * 0.35) * _CanvasGrain.y;
-    float delta = (grain + weave) * mid;
-    // Multiply alone vanishes in shadows; add a little absolute tooth.
-    return saturate(color * (1.0 + delta) + delta * 0.22);
-}
-
-float3 FinalizePostColor(float3 color, float2 uv)
-{
-    return ApplyCanvasWeave(ApplyColorGradingLUT(color), uv);
+    float mid = saturate(1.0 - abs(luma - 0.42) * 1.7);
+    float delta = (n * _CanvasGrain.x + weave * _CanvasGrain.y) * mid;
+    return saturate(color * (1.0 + delta));
 }
 
 float4 ApplyColorGradingPassFragment(Varyings input) : SV_TARGET
 {
     float4 color = GetSource(input.screenUV);
-    color.rgb = FinalizePostColor(color.rgb, input.screenUV);
+    color.rgb = ApplyCanvasWeave(ApplyColorGradingLUT(color.rgb), input.screenUV);
     return color;
 }
 
 float4 ApplyColorGradingWithLumaPassFragment(Varyings input) : SV_TARGET
 {
     float4 color = GetSource(input.screenUV);
-    color.rgb = FinalizePostColor(color.rgb, input.screenUV);
+    color.rgb = ApplyCanvasWeave(ApplyColorGradingLUT(color.rgb), input.screenUV);
     color.a = sqrt(Luminance(color.rgb));
     return color;
 }
@@ -274,12 +257,11 @@ float4 FinalPassFragmentRescale(Varyings input) : SV_TARGET
     float4 color = _CopyBicubic
         ? GetSourceBicubic(input.screenUV)
         : GetSource(input.screenUV);
-    color.rgb = FinalizePostColor(color.rgb, input.screenUV);
+    color.rgb = ApplyCanvasWeave(ApplyColorGradingLUT(color.rgb), input.screenUV);
     return color;
 }
 
 #include "OilFilterPass.hlsl"
-#include "OilWarpPass.hlsl"
 
 // =============================================================================
 // OilRainPassFragment — screen-space water surface ripple post-process.
@@ -326,10 +308,13 @@ float OilRainRingAt(float2 uv, float4 ripple, float time)
     return ring * fade;
 }
 
-float3 ApplyOilRainRipples(float3 color, float2 uv)
+float4 OilRainPassFragment(Varyings input) : SV_TARGET
 {
+    float4 color = GetSource(input.screenUV);
+
+    // Sample depth — skip far plane (no water to ripple there)
     float rawDepth = SAMPLE_TEXTURE2D_LOD(
-        _CameraDepthTexture_ForRain, sampler_CameraDepthTexture_ForRain, uv, 0).r;
+        _CameraDepthTexture_ForRain, sampler_CameraDepthTexture_ForRain, input.screenUV, 0).r;
     if (rawDepth >= 0.9999)
         return color;
 
@@ -341,30 +326,15 @@ float3 ApplyOilRainRipples(float3 color, float2 uv)
     for (int i = 0; i < OIL_RAIN_MAX_RIPPLES; i++)
     {
         if (i >= count) break;
-        accum += OilRainRingAt(uv, _OilRainRipplePositions[i], time);
+        accum += OilRainRingAt(input.screenUV, _OilRainRipplePositions[i], time);
     }
 
     accum = saturate(accum) * _OilRainRippleOpacity;
-    color += accum * 0.18;
-    color = lerp(color, color * float3(0.85, 0.95, 1.05), accum * 0.6);
-    return color;
-}
 
-float4 OilRainPassFragment(Varyings input) : SV_TARGET
-{
-    float4 color = GetSource(input.screenUV);
-    color.rgb = ApplyOilRainRipples(color.rgb, input.screenUV);
-    return color;
-}
+    // Add subtle bright ring and slight colour tint (water ambient)
+    color.rgb += accum * 0.18;
+    color.rgb = lerp(color.rgb, color.rgb * float3(0.85, 0.95, 1.05), accum * 0.6);
 
-// Rain + LUT + canvas (+ optional bicubic source) → camera target.
-float4 OilRainFinalPassFragment(Varyings input) : SV_TARGET
-{
-    float4 color = _CopyBicubic
-        ? GetSourceBicubic(input.screenUV)
-        : GetSource(input.screenUV);
-    color.rgb = ApplyOilRainRipples(color.rgb, input.screenUV);
-    color.rgb = FinalizePostColor(color.rgb, input.screenUV);
     return color;
 }
 

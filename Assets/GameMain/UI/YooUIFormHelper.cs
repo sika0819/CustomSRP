@@ -11,29 +11,15 @@ namespace Game
     {
         public override object InstantiateUIForm(object uiFormAsset)
         {
-            var prefab = uiFormAsset as GameObject;
-            if (prefab == null)
-            {
-                Log.Error("UI form asset is not a GameObject (got "
-                    + (uiFormAsset == null ? "null" : uiFormAsset.GetType().Name) + ").");
-                return null;
-            }
-
-            return Instantiate(prefab);
+            return Instantiate((Object)uiFormAsset);
         }
 
         public override IUIForm CreateUIForm(object uiFormInstance, IUIGroup uiGroup, object userData)
         {
-            // Unity fake-null: destroyed pooled GO still boxes as GameObject to `as`,
-            // but == null is true — classic after BootLoadingService ForceDestroy + pool Spawn.
             GameObject gameObject = uiFormInstance as GameObject;
             if (gameObject == null)
             {
-                bool destroyedUnityObject = uiFormInstance is Object unityObj && unityObj == null;
-                Log.Error(destroyedUnityObject
-                    ? "UI form instance is invalid (destroyed — UI instance pool likely poisoned)."
-                    : "UI form instance is invalid (type="
-                        + (uiFormInstance == null ? "null" : uiFormInstance.GetType().Name) + ").");
+                Log.Error("UI form instance is invalid.");
                 return null;
             }
 

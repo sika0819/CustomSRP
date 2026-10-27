@@ -2057,18 +2057,15 @@ MonoBehaviour:
     copyColor: 0
     copyDepth: 0
     overridePostFX: 1
-    postFXSettings: {fileID: 11400000, guid: d0751bd5b3e8d4fd68f993c713e13cc1, type: 2}
+    postFXSettings: {fileID: 11400000, guid: e4e19a006335d4890a0949daf5201512, type: 2}
     finalBlendMode:
       source: 1
       destination: 0
-    renderingLayerMask:
-      serializedVersion: 0
-      m_Bits: 4294967295
+    renderingLayerMask: -1
     maskLights: 0
     renderScaleMode: 0
     renderScale: 1
     allowFXAA: 0
-    ignoreFog: 0
     keepAlpha: 0
 --- !u!20 &970825146
 Camera:
@@ -3005,7 +3002,7 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1307568828}
   m_Enabled: 1
-  serializedVersion: 13
+  serializedVersion: 12
   m_Type: 1
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_Intensity: 1.15
@@ -3057,7 +3054,7 @@ Light:
   m_UseBoundingSphereOverride: 0
   m_UseViewFrustumForShadowCasterCull: 1
   m_ForceVisible: 0
-  m_ShapeRadius: 0
+  m_ShadowRadius: 0
   m_ShadowAngle: 0
   m_LightUnit: 1
   m_LuxAtDistance: 1
@@ -3070,13 +3067,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1307568828}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.9315323, y: -0.06769675, z: 0.232257, w: 0.27151698}
+  m_LocalRotation: {x: 0.3477229, y: -0.22585355, z: 0.08669706, w: 0.9058491}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 147.5, y: -28, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1337932043
 GameObject:
   m_ObjectHideFlags: 0
@@ -4012,14 +4009,11 @@ MonoBehaviour:
     finalBlendMode:
       source: 1
       destination: 0
-    renderingLayerMask:
-      serializedVersion: 0
-      m_Bits: 4294967295
+    renderingLayerMask: -1
     maskLights: 0
     renderScaleMode: 0
     renderScale: 1
     allowFXAA: 1
-    ignoreFog: 0
     keepAlpha: 0
 --- !u!20 &1753983654
 Camera:

@@ -21,7 +21,7 @@ namespace CustomSRP
         [Range(0f, 1f)] public float StormCloudDensity = 0.85f;
 
         /// <summary>Default ExpSquared density when no preset has been applied.</summary>
-        public const float DefaultFogDensity = 0.003f;
+        public const float DefaultFogDensity = 0.001f;
 
         static readonly int FogDensityId = Shader.PropertyToID("_FogDensity");
 
@@ -30,8 +30,6 @@ namespace CustomSRP
         float _fogDensity = DefaultFogDensity;
         int _syncedCelestialLookId = -1;
         bool _presetEventBound;
-        bool _weatherBlending;
-        float _blendFoggy;
 
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterSceneLoad)]
         static void AutoAttach() => EnsureOnSkybox();
@@ -168,35 +166,6 @@ namespace CustomSRP
             ApplyWeatherVisuals();
         }
 
-        public void SetWeatherBlend(
-            IslandWeatherKind fromKind, int fromLevel,
-            IslandWeatherKind toKind, int toLevel,
-            float t)
-        {
-            t = Mathf.Clamp01(t);
-            EvaluateWeatherVisuals(fromKind, fromLevel, out float cloud0, out float rain0, out float foggy0);
-            EvaluateWeatherVisuals(toKind, toLevel, out float cloud1, out float rain1, out float foggy1);
-
-            _kind = toKind;
-            _level = Mathf.Clamp(toLevel, 0, 3);
-
-            float cloud = Mathf.Lerp(cloud0, cloud1, t);
-            float rain = Mathf.Lerp(rain0, rain1, t);
-            float foggy = Mathf.Lerp(foggy0, foggy1, t);
-
-            if (CloudLayer != null)
-                CloudLayer.coverage = cloud;
-
-            ApplyRainIntensity(rain);
-            // FoggyShaderWeight reads _blendFoggy while blending; keep absolute fog from SetFogDensity.
-            _blendFoggy = foggy;
-            _weatherBlending = t < 1f;
-            ApplyFogSettings();
-            Shader.SetGlobalFloat(FogDensityId, FoggyShaderWeight());
-            if (!_weatherBlending)
-                _blendFoggy = 0f;
-        }
-
         public void SetFogDensity(float exponentialSquaredDensity)
         {
             _fogDensity = Mathf.Max(0f, exponentialSquaredDensity);
@@ -297,8 +266,6 @@ namespace CustomSRP
                 OilSkyboxTime.PlaceSunForView(
                     camFwd, OilSkyboxTime.DawnSunElevationDeg, out Vector3 sunDir, out Vector3 moonDir);
                 SkyboxTime.SetCelestialLookPlacement(lookId, sunDir, moonDir);
-                // 清晨起床: rotate cloud ring so the gap faces the sun.
-                ClearCloudsFromCelestial(sunDir);
                 return;
             }
 
@@ -310,23 +277,6 @@ namespace CustomSRP
                 out Vector3 sleepSun,
                 out Vector3 sleepMoon);
             SkyboxTime.SetCelestialLookPlacement(lookId, sleepSun, sleepMoon);
-            // 准备入睡 / night sleep pins: rotate cloud ring so gap faces the moon.
-            ClearCloudsFromCelestial(sleepMoon);
-        }
-
-        void ClearCloudsFromCelestial(Vector3 bodyDir)
-        {
-            if (CloudLayer == null)
-                CloudLayer = FindAnyObjectByType<OilCloudLayer>();
-            if (CloudLayer == null)
-                return;
-
-            Vector3 flat = new Vector3(bodyDir.x, 0f, bodyDir.z);
-            if (flat.sqrMagnitude < 1e-6f)
-                return;
-
-            float bodyYaw = Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg;
-            CloudLayer.YawDegrees = bodyYaw - OilCloudLayer.GapLocalDegrees;
         }
 
         static Vector3 ResolveCameraForward()
@@ -344,27 +294,10 @@ namespace CustomSRP
 
         void ApplyWeatherVisuals()
         {
-            _weatherBlending = false;
-            _blendFoggy = 0f;
-            EvaluateWeatherVisuals(_kind, _level, out float cloud, out float rain, out _);
-
-            if (CloudLayer != null)
-                CloudLayer.coverage = cloud;
-
-            ApplyRainIntensity(rain);
-            ApplyFogSettings();
-            Shader.SetGlobalFloat(FogDensityId, FoggyShaderWeight());
-        }
-
-        void EvaluateWeatherVisuals(
-            IslandWeatherKind kind, int level,
-            out float cloud, out float rainIntensity, out float foggyWeight)
-        {
-            int lv = Mathf.Clamp(level, 0, 3);
-            float t = lv / 3f;
-            cloud = lv <= 0 || kind == IslandWeatherKind.Clear
+            float t = _level / 3f;
+            float cloud = _level <= 0 || _kind == IslandWeatherKind.Clear
                 ? ClearCloudDensity
-                : kind switch
+                : _kind switch
                 {
                     IslandWeatherKind.Cloud => Mathf.Lerp(0.4f, 0.7f, t),
                     IslandWeatherKind.Wind => Mathf.Lerp(0.35f, 0.55f, t),
@@ -373,32 +306,33 @@ namespace CustomSRP
                     _ => ClearCloudDensity,
                 };
 
+            if (CloudLayer != null)
+                CloudLayer.coverage = cloud;
+
+            // Drive rain visual intensity from weather state.
+            SetRainIntensity();
+
+            ApplyFogSettings();
+            Shader.SetGlobalFloat(FogDensityId, FoggyShaderWeight());
+        }
+
+        void SetRainIntensity()
+        {
+            var settings = OilRainSettings.Current;
+            if (settings == null) return;
+
             // Map weather level → rain intensity (L1/L2/L3 → 0.4 / 0.7 / 1.0).
-            rainIntensity = 0f;
-            if (kind == IslandWeatherKind.Rain && lv > 0)
+            // level/3 made L1 too faint on mobile quality scale.
+            float rainIntensity = 0f;
+            if (_kind == IslandWeatherKind.Rain && _level > 0)
             {
-                rainIntensity = lv switch
+                rainIntensity = _level switch
                 {
                     1 => 0.4f,
                     2 => 0.7f,
                     _ => 1f,
                 };
             }
-
-            foggyWeight = kind == IslandWeatherKind.Foggy && lv > 0 ? t : 0f;
-        }
-
-        void SetRainIntensity()
-        {
-            EvaluateWeatherVisuals(_kind, _level, out _, out float rain, out _);
-            ApplyRainIntensity(rain);
-        }
-
-        void ApplyRainIntensity(float rainIntensity)
-        {
-            var settings = OilRainSettings.Current;
-            if (settings == null) return;
-
             // Preset iris close / black / half-open: force dry so rain never punches through.
             if (PresetWeatherHold.IsHeld)
                 rainIntensity = 0f;
@@ -417,11 +351,16 @@ namespace CustomSRP
             if (SkyboxTime == null)
                 ResolveRefs();
 
-            // WeatherService writes absolute ExpSquared density (base 0.003; Foggy
-            // L1/L2/L3 → 0.006 / 0.009 / 0.012). Do not re-scale here.
+            // Note: TOD fog-density scaling (Cozy fogDensityMultiplier) is intentionally
+            // removed — the weather panel writes an absolute ExpSquared density
+            // (WeatherService.FogDensity) and the user-facing knob is now authoritative.
+            // We still lift the haze during Foggy weather
+            // (Boluo Foggy dens 2→5 / mul 1.53 ≈ up to ~1.7×).
+            float foggyScale = foggyT > 0.001f ? Mathf.Lerp(1f, 1.7f, foggyT) : 1f;
+
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogDensity = Mathf.Max(0f, _fogDensity);
+            RenderSettings.fogDensity = Mathf.Max(0f, _fogDensity * foggyScale);
 
             float period = SkyboxTime != null ? SkyboxTime.CurrentPeriod() : OilSkyboxTime.HoursToPeriod(12f);
             OilSkyboxTime.EvaluateFog(period, out Color tint);
@@ -431,8 +370,6 @@ namespace CustomSRP
 
         float FoggyShaderWeight()
         {
-            if (_weatherBlending)
-                return _blendFoggy;
             if (_kind != IslandWeatherKind.Foggy || _level <= 0)
                 return 0f;
             return _level / 3f;

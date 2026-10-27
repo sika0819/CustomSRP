@@ -81,46 +81,10 @@ namespace CustomSRP
             int visibleLightIndex,
             CullingResults cullingResults)
         {
-            // Mobile: cap the real-time shadow-casting other-light count at 8 (vs 16 desktop)
-            // to keep the other-shadow atlas affordable on tile-based GPUs.
-            if (light.shadows == LightShadows.None || light.shadowStrength <= 0f)
-            {
-                return new Vector4(0f, 0f, 0f, -1f);
-            }
-            int effectiveMax = Application.isMobilePlatform
-                ? Mathf.Min(8, MaxLightCount)
-                : MaxLightCount;
-
-            float maskChannel = -1f;
-            LightBakingOutput lightBaking = light.bakingOutput;
-            if (lightBaking.lightmapBakeType == LightmapBakeType.Mixed
-                && lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask)
-            {
-                UsesShadowMask = true;
-                maskChannel = lightBaking.occlusionMaskChannel;
-            }
-
-            bool isPoint = light.type == LightType.Point;
-            int newLightCount = _lightCount + (isPoint ? 6 : 1);
-            if (newLightCount > effectiveMax
-                || !cullingResults.GetShadowCasterBounds(visibleLightIndex, out _))
-            {
-                return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);
-            }
-
-            _lights[_lightCount] = new ShadowedLight
-            {
-                visibleLightIndex = visibleLightIndex,
-                slopeScaleBias = light.shadowBias,
-                normalBias = light.shadowNormalBias,
-                isPoint = isPoint
-            };
-
-            var data = new Vector4(
-                light.shadowStrength, _lightCount,
-                isPoint ? 1f : 0f, maskChannel);
-            _lightCount = newLightCount;
-            return data;
+            // Point/Spot do not render real-time shadows. Strength <= 0 makes
+            // GetOtherShadowAttenuation return 1, and HasLights stays false so
+            // OtherShadowsPass skips the atlas draw and shadow-caster cull.
+            return new Vector4(0f, 0f, 0f, -1f);
         }
 
         public Handles GetHandles(

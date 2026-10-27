@@ -14,6 +14,8 @@ namespace CustomSRP
 
         static readonly ShaderTagId[] ShaderTagIds =
         {
+            // OilNPR hull outline (Name=Outline). Before CustomLit so ink sits under shade.
+            new ShaderTagId("OilOutline"),
             new ShaderTagId("SRPDefaultUnlit"),
             new ShaderTagId("CustomLit")
         };

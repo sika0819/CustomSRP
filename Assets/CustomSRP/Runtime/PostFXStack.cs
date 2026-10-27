@@ -22,14 +22,7 @@ namespace CustomSRP
             FXAA,
             FXAAWithLuma,
             OilFilter,
-            OilFilterHQ,
-            OilFilterHalf,
-            OilFilterCompose,
-            OilRain,
-            OilFilterComposeFinal,
-            OilFilterHQFinal,
-            OilRainFinal,
-            OilWarp
+            OilRain
         }
 
         public static readonly int
@@ -49,9 +42,6 @@ namespace CustomSRP
         public CameraSettings.FinalBlendMode FinalBlendMode { get; set; }
 
         public PostFXSettings Settings { get; set; }
-
-        /// <summary>Per-camera gate from CustomRenderPipelineCamera.allowFXAA.</summary>
-        public bool AllowFXAA { get; set; }
 
         public void Draw(UnsafeCommandBuffer buffer, TextureHandle to, Pass pass)
         {

@@ -17,8 +17,7 @@ namespace Game
         const string CmdFileName = "preset_shot_cmd.txt";
         const string PoseFileName = "preset_pose.txt";
         const string LogTag = "[DevicePresetShot]";
-        /// <summary>MapItem CatchUp 结束后再等一小会儿，让天气/雾/草绑定稳住。</summary>
-        const float SettleSeconds = 0.75f;
+        const float SettleSeconds = 2.5f;
         const float PollSeconds = 0.35f;
 
         float _nextPoll;
@@ -137,9 +136,6 @@ namespace Game
             else
                 Log.Warning($"{LogTag} Presets null");
 
-            // 等一帧让相机落点写入 focus，再铺齐附近 MapItem。
-            yield return null;
-            yield return WaitMapItemsCaughtUp();
             yield return new WaitForSecondsRealtime(SettleSeconds);
 
             // 再藏一次，防止切预设时 UI 又被刷出来。
@@ -149,21 +145,6 @@ namespace Game
 
             Log.Info($"{LogTag} READY id={presetId}");
             _busy = false;
-        }
-
-        IEnumerator WaitMapItemsCaughtUp()
-        {
-            EnvMapItemSpawner spawner = GameEntry.World != null
-                ? GameEntry.World.MapItemSpawner
-                : null;
-            if (spawner == null || !spawner.IsReady)
-            {
-                Log.Warning($"{LogTag} MapItemSpawner not ready — settle only");
-                yield break;
-            }
-
-            yield return spawner.CatchUpAroundFocus();
-            Log.Info($"{LogTag} map items caught up spawned={spawner.SpawnedCount}");
         }
 
         void HideUi()

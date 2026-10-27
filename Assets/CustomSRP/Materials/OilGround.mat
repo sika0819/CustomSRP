@@ -12,6 +12,7 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - _CANVAS_ON
   - _RECEIVE_SHADOWS
   m_InvalidKeywords:
   - _SHADOWS_ON
@@ -28,12 +29,8 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 2800000, guid: f520725ac1518489f8a8d260a0cbaa74, type: 3}
+        m_Texture: {fileID: 2800000, guid: 03e47099befef42f6b76b4f333eb5d88, type: 3}
         m_Scale: {x: 2.2, y: 2.2}
-        m_Offset: {x: 0, y: 0}
-    - _BumpMap:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _CanvasMap:
         m_Texture: {fileID: 2800000, guid: a51a64e32efa94668b8e9ee87caf6e1e, type: 3}
@@ -48,19 +45,10 @@ Material:
     - _Canvas: 1
     - _CanvasStrength: 0.05
     - _Clipping: 0
-    - _Cull: 2
     - _Cutoff: 0.5
     - _DstBlend: 0
-    - _EdgeFade: 0.12
     - _EdgeStrength: 0.35
-    - _Fresnel: 0.25
     - _InternalEdge: 0
-    - _Metallic: 0
-    - _NormalStrength: 0.85
-    - _OilCrossBillboard: 0
-    - _OilFoliage: 0
-    - _OilFoliageSkipDay: 0
-    - _OilYBillboard: 0
     - _Outline: 0
     - _OutlineBreak: 0.1
     - _OutlineBrushScale: 2.5
@@ -68,7 +56,7 @@ Material:
     - _OutlineNoiseScale: 3.5
     - _OutlineWidth: 0.03
     - _OutlineWobble: 0.85
-    - _PaintThickness: 0.12
+    - _PaintThickness: 0.1
     - _ReceiveShadows: 1
     - _ShadeLift: 0.48
     - _ShadeSteps: 3
@@ -76,12 +64,8 @@ Material:
     - _ShadowLift: 1.05
     - _ShadowWobble: 0.55
     - _Shadows: 0
-    - _Smoothness: 0
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
-    - _TriplanarTiling: 0.25
-    - _Wetness: 0
-    - _WorldTriplanar: 0
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 0.5, g: 0.52, b: 0.44, a: 1}
@@ -90,7 +74,6 @@ Material:
     - _OutlineColor: {r: 0.16, g: 0.11, b: 0.08, a: 1}
     - _ShadowTint: {r: 0.36, g: 0.46, b: 0.62, a: 1}
     - _ShadowWarm: {r: 0.58, g: 0.48, b: 0.3, a: 1}
-    - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
     - _SpecularColor: {r: 0.55, g: 0.48, b: 0.4, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

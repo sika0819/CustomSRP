@@ -16,11 +16,5 @@ namespace Game
 
         /// <summary>True if OilPlanarReflection actually re-rendered the mirror this frame.</summary>
         public static bool MirrorRenderedThisFrame { get; set; }
-
-        /// <summary>
-        /// One-shot: next mirror gate must draw (startup look warmup / sky TOD /
-        /// preset eye snap). Consumed by CustomSRP <c>OilPlanarReflection</c>.
-        /// </summary>
-        public static bool ForceMirrorRedraw { get; set; }
     }
 }

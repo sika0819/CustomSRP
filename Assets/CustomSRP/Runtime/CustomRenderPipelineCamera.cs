@@ -16,7 +16,7 @@ namespace CustomSRP
 
         public CameraSettings Settings => settings ??= new CameraSettings();
 
-#if UNITY_EDITOR || UNITY_INCLUDE_INSTRUMENTATION
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         void OnEnable() => _sampler = null;
 #endif
     }

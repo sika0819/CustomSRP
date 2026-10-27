@@ -98,13 +98,10 @@ namespace CustomSRP
         [Tooltip("走完 24 小时一圈的秒数。")]
         public float cycleSeconds = 180f;
 
-        [Tooltip("Lighting 里的 Skybox 材质；Stars 等参数以该材质为准，本组件只写 _Period。")]
+        [Tooltip("Lighting 里的 Skybox 材质；Brush / Stars 等参数以该材质为准，本组件只写 _Period。")]
         public Material skyboxMaterial;
         public Light sun;
         public bool driveSun = true;
-
-        [SerializeField, HideInInspector]
-        Texture fogCanvasWeave;
 
         [Header("Color Override")]
         [Tooltip("打开后天空、雾、环境光、主光颜色用下面这组，不再跟时间表走。日月方向仍跟时钟。")]
@@ -185,6 +182,8 @@ namespace CustomSRP
         int _celestialLookId;
 
         float _lastSyncedPeriod = float.NaN;
+        bool _celestialClockDirty;
+        bool _fogCanvasPushed;
 
         /// <summary>Guards Apply against OnValidate re-entry when writing Light / Transform.</summary>
         static int skyboxApplyDepth;
@@ -253,11 +252,11 @@ namespace CustomSRP
                         0x8A, 0x60, 0x48, 0xE0, 0xA0, 0x70,
                         0xFF, 0xB0, 0x60, 0.65f, 0xE8, 0xC0, 0xA8);
                     return true;
-                case 2: // 独自旅行 — 青白天、薄荷植被；雾用薄荷灰，忌 #7EC8C8 青墙
+                case 2: // 独自旅行 — 青白天、薄荷植被
                     set = Poster(
                         0xA9, 0xC3, 0xDD, 0x8E, 0xC8, 0xD4, 0x7E, 0xC8, 0xC8,
                         0x5A, 0xA8, 0xB8, 0x7E, 0xD0, 0xC0,
-                        0xF2, 0xF7, 0xF4, 1.15f, 0xC0, 0xD4, 0xC8);
+                        0xF2, 0xF7, 0xF4, 1.15f, 0x7E, 0xC8, 0xC8);
                     return true;
                 case 3: // 午后放松 — 奶油天空、青绿植被、暖金雾
                     set = Poster(
@@ -321,8 +320,8 @@ namespace CustomSRP
                 ground = horizon * 0.55f,
                 sunDisc = night ? new Color(0.75f, 0.82f, 0.95f, 1f) : new Color(1f, 0.98f, 0.92f, 1f),
                 sunGlow = night ? new Color(0.45f, 0.55f, 0.75f, 1f) : horizon,
-                moonDisc = night ? new Color(0.90f, 0.93f, 0.96f, 1f) : Color.black,
-                moonGlow = night ? new Color(0.66f, 0.74f, 0.84f, 1f) : Color.black,
+                moonDisc = night ? new Color(0.85f, 0.90f, 1f, 1f) : Color.black,
+                moonGlow = night ? new Color(0.45f, 0.55f, 0.80f, 1f) : Color.black,
                 lightColor = new Color(lR / 255f, lG / 255f, lB / 255f, 1f),
                 lightIntensity = lightIntensity,
                 fogColor = new Color(fR / 255f, fG / 255f, fB / 255f, 1f),
@@ -352,14 +351,58 @@ namespace CustomSRP
 
         public void SetTimeOfDay(float hours)
         {
-            timeOfDay = Mathf.Repeat(hours, 24f);
+            hours = Mathf.Repeat(hours, 24f);
+            // Idle clock must not restamp sky globals. A slot switch moves hours
+            // (WeatherService SmoothStep) or the look blend, and only then Apply.
+            if (SkyClockUnchanged(hours))
+                return;
+
+            float previousHours = _appliedHours;
+            timeOfDay = hours;
             s_clockHours = timeOfDay;
             timeOfDayVersion = TimeOfDayVersionHours;
+            _celestialClockDirty = false;
+            RememberSkyClock(hours);
             Apply(markDirty: Application.isPlaying);
-            if (Application.isPlaying && driveSun)
+            // Lerp steps are a few minutes per frame. Scanning lights there hitches the fade.
+            if (Application.isPlaying && driveSun
+                && (float.IsNaN(previousHours) || HourDelta(previousHours, hours) > 1f))
             {
                 DisableCompetingDirectionalLights();
             }
+        }
+
+        float _appliedHours = float.NaN;
+        float _appliedBlendT = -1f;
+        bool _appliedBlendOpen;
+        OilSkyLookId _appliedLook = (OilSkyLookId)(-1);
+
+        static float HourDelta(float a, float b)
+        {
+            float dh = Mathf.Abs(a - b);
+            return dh > 12f ? 24f - dh : dh;
+        }
+
+        bool SkyClockUnchanged(float hours)
+        {
+            if (_celestialClockDirty || float.IsNaN(_appliedHours))
+                return false;
+
+            if (HourDelta(hours, _appliedHours) > 0.0001f)
+                return false;
+            if (_appliedBlendOpen != LookBlendOpen)
+                return false;
+            if (Mathf.Abs(_appliedBlendT - s_blendT) > 0.0001f)
+                return false;
+            return _appliedLook == s_activeLookId;
+        }
+
+        void RememberSkyClock(float hours)
+        {
+            _appliedHours = hours;
+            _appliedBlendT = s_blendT;
+            _appliedBlendOpen = LookBlendOpen;
+            _appliedLook = s_activeLookId;
         }
 
         /// <summary>
@@ -524,7 +567,6 @@ namespace CustomSRP
             // EnsureOnSkybox → SyncFromWeatherService writes WeatherService Hours/Look into
             // timeOfDay before Apply, so the prefab noon default never reaches the first frame.
             OilAtmosphereDriver.EnsureOnSkybox();
-            OilWarpDriver.EnsureOnSkybox();
             if (driveSun && sun == null)
             {
                 ResolveSunLight();
@@ -595,7 +637,7 @@ namespace CustomSRP
 
         /// <summary>
         /// Scene Lighting skybox when it is Oil; otherwise the assigned asset.
-        /// No runtime clone — Stars stay on the shared material for live tweaking.
+        /// No runtime clone — Brush / Stars stay on the shared material for live tweaking.
         /// </summary>
         Material ActiveSkyMaterial()
         {
@@ -832,11 +874,11 @@ namespace CustomSRP
                 RenderSettings.fogMode = FogMode.ExponentialSquared;
             }
 
-            // Lighting window defaults (~0.1+) milk ExpSquared into a white slab.
-            // Authored Foggy L3 is 0.012 — clamp only values above that band.
-            if (RenderSettings.fogDensity > 0.12f)
+            // Lighting window default / manual density (~0.1+) milks ExpSquared into a white slab.
+            // Authored haze stays near 0.001; clamp only pathological values.
+            if (RenderSettings.fogDensity > 0.05f)
             {
-                RenderSettings.fogDensity = 0.003f;
+                RenderSettings.fogDensity = 0.001f;
             }
 
             if (RenderSettings.fogColor != fog)
@@ -941,8 +983,13 @@ namespace CustomSRP
         /// </summary>
         public void ReleaseCelestialLookForClock()
         {
+            if (!_hasCelestialOverride && _celestialLookId == 0)
+                return;
+
             _hasCelestialOverride = false;
             _celestialLookId = 0;
+            // Next SetTimeOfDay must Apply once so orbits replace the frozen dirs.
+            _celestialClockDirty = true;
         }
 
         /// <summary>Boluo PlaceSunForLook: sun on camera azimuth at elevationDeg.</summary>
@@ -1227,6 +1274,7 @@ namespace CustomSRP
             if (s_overrideColors)
             {
                 PushOverrideLookGlobals();
+                MarkLookAnchorsUploaded();
                 return;
             }
 
@@ -1243,6 +1291,7 @@ namespace CustomSRP
 
             UploadLookAnchors();
             Shader.SetGlobalFloat(OilSkySunriseId, CurrentSunriseWeight(s_clockHours));
+            MarkLookAnchorsUploaded();
         }
 
         /// <summary><paramref name="overwrite"/> replaces the buffers; otherwise lerps toward this look by <paramref name="lerpT"/>.</summary>
@@ -1293,6 +1342,36 @@ namespace CustomSRP
             }
         }
 
+        static OilSkyLookId _uploadedLook = (OilSkyLookId)(-1);
+        static OilSkyLookId _uploadedBlendFrom;
+        static OilSkyLookId _uploadedBlendTo;
+        static float _uploadedBlendT = -1f;
+        static bool _uploadedBlendOpen;
+        static bool _uploadedOverride;
+
+        static bool LookAnchorsDirty()
+        {
+            if (_uploadedOverride != s_overrideColors || _uploadedBlendOpen != LookBlendOpen)
+                return true;
+            if (_uploadedLook != s_activeLookId)
+                return true;
+            if (!LookBlendOpen)
+                return false;
+            return _uploadedBlendFrom != s_blendFrom
+                || _uploadedBlendTo != s_blendTo
+                || Mathf.Abs(_uploadedBlendT - s_blendT) > 0.0005f;
+        }
+
+        static void MarkLookAnchorsUploaded()
+        {
+            _uploadedOverride = s_overrideColors;
+            _uploadedBlendOpen = LookBlendOpen;
+            _uploadedLook = s_activeLookId;
+            _uploadedBlendFrom = s_blendFrom;
+            _uploadedBlendTo = s_blendTo;
+            _uploadedBlendT = s_blendT;
+        }
+
         static void UploadLookAnchors()
         {
             Shader.SetGlobalVectorArray(OilSkyZenithId, s_zenithBuf);
@@ -1312,67 +1391,64 @@ namespace CustomSRP
 
         void SyncSkyMaterial(Material mat, float period, bool force)
         {
-            // Stars live on the shared skybox material — only drive _Period from the clock.
-            if (!force && Mathf.Abs(period - _lastSyncedPeriod) < 1e-5f)
-            {
+            // Brush / Stars live on the shared skybox material — only drive _Period from the clock.
+            // Look anchors stay put across a same-palette slot blend; the shader lerps them by _Period.
+            bool periodMoved = force
+                || float.IsNaN(_lastSyncedPeriod)
+                || Mathf.Abs(period - _lastSyncedPeriod) >= 1e-5f;
+            // force refreshes _Period / sun dirs. Anchors upload only when the look or blend t changes,
+            // so a same-palette slot fade does not restamp stars and halos every frame.
+            bool lookMoved = LookAnchorsDirty();
+            if (!periodMoved && !lookMoved)
                 return;
+
+            if (periodMoved)
+            {
+                _lastSyncedPeriod = period;
+                mat.SetFloat(PeriodId, period);
+                Shader.SetGlobalFloat(OilSkyPeriodId, period);
+                Shader.SetGlobalFloat(OilSkySunriseId, CurrentSunriseWeight(s_clockHours));
+                ResolveCelestialDirections(period, out Vector3 sunDir, out Vector3 moonDir);
+                PushCelestialGlobals(sunDir, moonDir);
+                NotifyPlanarIfSkyChanged(period);
             }
 
-            _lastSyncedPeriod = period;
+            if (lookMoved)
+                PushLookGlobals(ActiveLookId);
 
-            mat.SetFloat(PeriodId, period);
-            Shader.SetGlobalFloat(OilSkyPeriodId, period);
-            PushLookGlobals(ActiveLookId);
-            // PushLookGlobals notifies from clock hours; re-check with the period
-            // actually written so a mid-lerp clock and material stay aligned.
-            NotifyPlanarIfSkyChanged(period);
-            EnsureFogCanvasWeave();
-            PushFogCanvasGlobal();
-
-            ResolveCelestialDirections(period, out Vector3 sunDir, out Vector3 moonDir);
-            PushCelestialGlobals(sunDir, moonDir);
+            if (lookMoved || !_fogCanvasPushed)
+            {
+                PushFogCanvasGlobal(mat);
+                _fogCanvasPushed = true;
+            }
         }
 
         /// <summary>
         /// Soft OilCanvas weave as the shared fog dry-brush (not OilBrush dabs).
-        /// Skybox material no longer carries brush slots — use fogCanvasWeave / shared asset.
+        /// Large tiles keep the haze scumbled instead of dense trypophobic holes.
         /// </summary>
-        const string FogCanvasAssetPath = "Assets/CustomSRP/Textures/OilCanvas.png";
-        static Texture s_fogCanvasTex;
-
-        void EnsureFogCanvasWeave()
+        static void PushFogCanvasGlobal(Material mat)
         {
-            if (fogCanvasWeave != null)
+            if (mat == null)
             {
-                s_fogCanvasTex = fogCanvasWeave;
                 return;
             }
 
-#if UNITY_EDITOR
-            fogCanvasWeave = AssetDatabase.LoadAssetAtPath<Texture>(FogCanvasAssetPath);
-            if (fogCanvasWeave != null)
-            {
-                s_fogCanvasTex = fogCanvasWeave;
-            }
-#endif
-        }
-
-        static void PushFogCanvasGlobal()
-        {
-            if (s_fogCanvasTex == null)
+            Texture canvas = mat.HasProperty("_OilCanvas") ? mat.GetTexture("_OilCanvas") : null;
+            if (canvas == null)
             {
                 Shader.SetGlobalFloat(OilFogCanvasEnableId, 0f);
                 return;
             }
 
-            Shader.SetGlobalTexture(OilFogCanvasId, s_fogCanvasTex);
+            Shader.SetGlobalTexture(OilFogCanvasId, canvas);
             Shader.SetGlobalFloat(OilFogCanvasEnableId, 1f);
             Shader.SetGlobalVector(OilFogCanvasStId, new Vector4(0.016f, 0.016f, 0f, 0f));
         }
 
         /// <summary>
         /// Editor/scene setup: drive clock _Period + look globals only.
-        /// Stars stay on the material asset — do not overwrite artist values.
+        /// Brush / Stars stay on the material asset — do not overwrite artist values.
         /// </summary>
         public static void SyncSkyMaterialStatic(Material mat, float period)
         {
@@ -1384,13 +1460,7 @@ namespace CustomSRP
             mat.SetFloat(PeriodId, period);
             Shader.SetGlobalFloat(OilSkyPeriodId, period);
             PushLookGlobals(s_activeLookId);
-#if UNITY_EDITOR
-            if (s_fogCanvasTex == null)
-            {
-                s_fogCanvasTex = AssetDatabase.LoadAssetAtPath<Texture>(FogCanvasAssetPath);
-            }
-#endif
-            PushFogCanvasGlobal();
+            PushFogCanvasGlobal(mat);
             Shader.SetGlobalVector(OilSkySunDirId, SunDirectionAt(period));
             Shader.SetGlobalVector(OilSkyMoonDirId, MoonDirectionAt(period));
         }

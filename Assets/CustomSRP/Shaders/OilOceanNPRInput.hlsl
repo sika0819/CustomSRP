@@ -11,7 +11,6 @@ CBUFFER_START(UnityPerMaterial)
     float4 _GlintColor;
     float4 _TintShallow;
     float4 _TintDeep;
-    float4 _TintHighlight;
     float _TintStrength;
     float _SunPathStrength;
     float _SunPathWidth;
@@ -39,7 +38,6 @@ CBUFFER_START(UnityPerMaterial)
     float _BumpTile;
     float4 _BumpTiling;
     float4 _BumpScroll;
-    float _BumpCross;
     float _ShadeSteps;
 CBUFFER_END
 

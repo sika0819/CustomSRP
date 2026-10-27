@@ -38,17 +38,15 @@ namespace Game
         [Tooltip("Duration (seconds) for smooth camera height transition when releasing preset or walking. 0 = instant.")]
         public float HeightTransitionDuration = 0.5f;
 
-        [Header("NavMesh clamp")]
-        [Tooltip("Clamp horizontal motion to baked IslandNavMesh (sea/cliff edges; rivers skipped). Off or missing data = no clamp.")]
-        public bool UseNavMeshClamp = true;
-        [Tooltip("Reject moves onto seabed (below ocean surface). Rivers stay walkable.")]
+        [Header("Water")]
+        [Tooltip("Reject moves onto seabed (below ocean surface) or into river channels.")]
         public bool BlockWaterWalking = true;
 
         // ─── Constants ─────────────────────────────────────────────────────────────
 
         /// <summary>Stick magnitude above this counts as walking for render-scale drop.</summary>
         const float WalkRenderScaleThreshold = 0.05f;
-        const float InputSmooth = 7f;
+        const float InputSmooth = 10f;
         const float GroundStickSpeed = 2f;
         /// <summary>Degrees per pixel at <see cref="RefLookWidth"/> (portrait design 1125).</summary>
         const float LookSensitivity = 0.11f;
@@ -58,20 +56,19 @@ namespace Game
         const float GroundNormalMinY = 0.45f;
         /// <summary>脚底低于海平面超过此值视为走进海里（允许湿沙滩浅滩）。</summary>
         const float OceanBelowSurfaceBan = 0.25f;
-        /// <summary>近河判定：跳过 NavMesh 钳位（旧烤盘河洞），允许沿河道行走。</summary>
-        const float RiverWalkRadiusXZ = 5f;
-        const float RiverWalkRadiusY = 4f;
+        /// <summary>河面水平距离 / 竖直容差（米）。</summary>
+        const float RiverBanRadiusXZ = 5f;
+        const float RiverBanRadiusY = 4f;
         const float RiverQueryRadius = 8f;
-        /// <summary>悬崖 / 大石顶允许落下的最大高度；超出仍钳回蓝面，避免掉进虚空。</summary>
-        const float MaxDropHeight = 80f;
-        /// <summary>落点须明显低于当前脚底，才算「往下跳」而非同平面蓝面修正。</summary>
-        const float DropMinDeltaY = 0.45f;
 
         static readonly RaycastHit[] GroundHits = new RaycastHit[24];
 
         // ─── State ─────────────────────────────────────────────────────────────────
 
         public static IslandJoystickCamera Current { get; private set; }
+
+        /// <summary>当前水平朝向（度）。存档与重贴日志读这个，不读 Transform（含 Pitch）。</summary>
+        public float YawDegrees => _yaw;
 
         CharacterController _cc;
         EnvMeshColliderLod _colliderLod;
@@ -107,6 +104,19 @@ namespace Game
         /// <summary>Preset iris transition owns pose; LateUpdate only keeps rotation.</summary>
         bool _transitionDriven;
 
+        /// <summary>
+        /// 进岛揭罩前锁死位姿：不吃重力、不吃视角输入。
+        /// 地形未就绪时的传送和流送改焦点都不能把镜头转走或掉下去。
+        /// </summary>
+        bool _spawnHold;
+        bool _hasHeldPosition;
+        Vector3 _heldPosition;
+
+        /// <summary>揭罩后胶囊还没贴地时，把眼睛钉在已摆好的高度，避免第一帧重力下坠。</summary>
+        bool _pinUntilGrounded;
+        float _pinUntilUnscaled;
+        Vector3 _pinnedEye;
+
         Vector3 _exitDollyFrom;
         Vector3 _exitDollyTo;
         float _exitDollyT;
@@ -131,10 +141,27 @@ namespace Game
             Current = this;
             if (_defaultEyeHeight < 0f)
                 _defaultEyeHeight = EyeHeight;
+            AdoptSceneLook();
             if (_colliderLod == null)
                 _colliderLod = FindAnyObjectByType<EnvMeshColliderLod>();
             EnsureBody();
             ApplyRenderScale(false);
+        }
+
+        /// <summary>
+        /// 场景里已经摆好的朝向要先收进 <see cref="_yaw"/>，
+        /// 否则第一帧 LateUpdate 会用 yaw=0 把镜头拧回正前方。
+        /// </summary>
+        void AdoptSceneLook()
+        {
+            Vector3 e = transform.eulerAngles;
+            float pitch = e.x > 180f ? e.x - 360f : e.x;
+            float yaw = e.y > 180f ? e.y - 360f : e.y;
+            if (Mathf.Abs(pitch) <= 0.01f && Mathf.Abs(yaw) <= 0.01f)
+                return;
+            _yaw = yaw;
+            if (pitch >= -85f && pitch <= 85f)
+                Pitch = pitch;
         }
 
         void OnDisable()
@@ -150,17 +177,41 @@ namespace Game
         public void ApplySpawnPose() =>
             Teleport(IslandSpawnPose.DefaultPos, IslandSpawnPose.DefaultYawDegrees);
 
-        /// <summary>Current horizontal look (degrees). Used by startup look warmup.</summary>
-        public float YawDegrees => _yaw;
-
-        /// <summary>
-        /// Look-only pose tweak (no ground resample / collider refresh). Used under the
-        /// loading cover to force a few frusta through CRP before first player turn.
-        /// </summary>
-        public void PeekYaw(float yawDegrees)
+        /// <summary>恢复存档俯仰。大于 180 的欧拉角折回负角，避免把 348° 当成抬头。</summary>
+        public void SetPitchDegrees(float pitchDegrees)
         {
-            _yaw = yawDegrees;
-            transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
+            if (pitchDegrees > 180f)
+                pitchDegrees -= 360f;
+            Pitch = Mathf.Clamp(pitchDegrees, -85f, 85f);
+        }
+
+        /// <summary>揭罩前锁住当前眼睛位置和朝向。</summary>
+        public void HoldSpawnPose()
+        {
+            _spawnHold = true;
+            _pinUntilGrounded = false;
+            _verticalSpeed = 0f;
+            _heightTransitioning = false;
+            _heldPosition = transform.position;
+            _hasHeldPosition = true;
+            if (_cc != null && _cc.enabled)
+                _cc.enabled = false;
+            LocomotionInput.ClearAll();
+        }
+
+        /// <summary>加载罩已撤。松锁，但在胶囊贴地前不允许重力把眼睛拽离落点。</summary>
+        public void ReleaseSpawnHold()
+        {
+            if (!_spawnHold && !_hasHeldPosition)
+                return;
+            _spawnHold = false;
+            _hasHeldPosition = false;
+            _verticalSpeed = 0f;
+            _pinUntilGrounded = true;
+            _pinUntilUnscaled = Time.unscaledTime + 1.25f;
+            _pinnedEye = transform.position;
+            LocomotionInput.ClearAll();
+            EnsureBody();
         }
 
         public void Teleport(Vector3 worldPos, float yawDegrees)
@@ -192,9 +243,6 @@ namespace Game
 
             SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
             RefreshNearbyColliders();
-            // Screen-UV planar mirror is pose-locked; Gmj throttle can swallow the
-            // snap then idle-reuse the old RT → water shows no reflection.
-            IslandLocomotionState.ForceMirrorRedraw = true;
         }
 
         /// <summary>Iris exit: plant dolly from current eye toward a closer point along look.</summary>
@@ -222,7 +270,7 @@ namespace Game
 
         /// <summary>
         /// Non-low-end exit: small forward walk baked into the dolly path.
-        /// Free cinematic motion — no CharacterController / NavMesh.
+        /// Free cinematic motion — no CharacterController.
         /// </summary>
         public void NudgeExitWalk(float dt)
         {
@@ -262,7 +310,6 @@ namespace Game
                 _enterDollyActive = false;
                 SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
                 RefreshNearbyColliders();
-                IslandLocomotionState.ForceMirrorRedraw = true;
                 return;
             }
 
@@ -278,7 +325,6 @@ namespace Game
 
             SetPose(farPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
             RefreshNearbyColliders();
-            IslandLocomotionState.ForceMirrorRedraw = true;
         }
 
         public void SampleEnterDolly(float t01)
@@ -304,8 +350,6 @@ namespace Game
             _holdPresetFraming = true;
             _verticalSpeed = 0f;
             EnsureBody();
-            // Final plant after iris enter-dolly — refresh planar RT before idle hold.
-            IslandLocomotionState.ForceMirrorRedraw = true;
         }
 
         /// <summary>
@@ -404,24 +448,27 @@ namespace Game
             if (dt <= 0f)
                 return;
 
+            if (_spawnHold)
+            {
+                IslandLocomotionState.IsWalking = false;
+                LocomotionInput.ClearAll();
+                Quaternion heldRot = Quaternion.Euler(Pitch, _yaw, 0f);
+                if (_hasHeldPosition)
+                    transform.SetPositionAndRotation(_heldPosition, heldRot);
+                else
+                    transform.rotation = heldRot;
+                if (_cc != null && _cc.enabled)
+                    _cc.enabled = false;
+                ApplyRenderScale(false);
+                return;
+            }
+
             if (_transitionDriven)
             {
                 // Form owns world position during iris exit / enter.
                 IslandLocomotionState.IsWalking = false;
                 transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
                 ApplyRenderScale(false);
-                return;
-            }
-
-            // 地形未就绪（含退登 World.Release 后、二次进岛加载中）：禁止重力下坠。
-            // InitAndArm 在 Services 就 Teleport，若此处仍积分垂直速度，会在揭罩前掉进地底。
-            if (!IsWorldGroundReady())
-            {
-                _verticalSpeed = 0f;
-                IslandLocomotionState.IsWalking = false;
-                LocomotionInput.ClearAll();
-                ApplyRenderScale(false);
-                transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
                 return;
             }
 
@@ -451,20 +498,43 @@ namespace Game
             TickHeightTransition(dt);
 
             Vector3 motion = ComputeMotion(dt);
-            if (!_heightTransitioning)
+            if (_pinUntilGrounded)
+                motion.y = -GroundStickSpeed * dt;
+            else if (!_heightTransitioning)
                 motion.y = IntegrateVertical(dt);
             MoveBody(motion);
+            PinEyeUntilGrounded();
 
             transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
         }
 
-        /// <summary>
-        /// Terrain+ocean 已挂到场景；退登 Release 或尚未 Load 完时为 false。
-        /// </summary>
-        static bool IsWorldGroundReady()
+        void PinEyeUntilGrounded()
         {
-            IslandWorldService world = IslandWorldService.Instance ?? GameEntry.World;
-            return world != null && world.IsTerrainReady;
+            if (!_pinUntilGrounded)
+                return;
+
+            bool grounded = _cc != null && _cc.enabled && _cc.isGrounded;
+            // 没贴地就一直钉在落点。超时后只有玩家已经在走，才交回重力，避免揭罩后自己往下掉。
+            bool allowFall = Time.unscaledTime >= _pinUntilUnscaled && IsWalking;
+            if (grounded || allowFall)
+            {
+                _pinUntilGrounded = false;
+                if (grounded && _verticalSpeed < 0f)
+                    _verticalSpeed = -GroundStickSpeed;
+                return;
+            }
+
+            _verticalSpeed = 0f;
+            Vector3 p = transform.position;
+            if (Mathf.Abs(p.y - _pinnedEye.y) <= 0.001f)
+                return;
+            p.y = _pinnedEye.y;
+            bool ccOn = _cc != null && _cc.enabled;
+            if (ccOn)
+                _cc.enabled = false;
+            transform.position = p;
+            if (ccOn)
+                _cc.enabled = true;
         }
 
         void ConsumeLookInput()
@@ -633,7 +703,6 @@ namespace Game
                 transform.position = p;
             }
 
-            ApplyNavMeshClampXZ(before);
             ApplyWaterWalkBan(before);
         }
 
@@ -659,14 +728,13 @@ namespace Game
                 pos.y = ground.y + EyeHeight;
             }
             transform.position = pos;
-            ApplyNavMeshClampXZ(before);
             ApplyWaterWalkBan(before);
         }
 
         // ─── Pose / sampling ───────────────────────────────────────────────────────
 
         /// <param name="unconstrained">
-        /// Preset / iris dolly: exact authored eye — skip NavMesh and water clamps.
+        /// Preset / iris dolly: exact authored eye — skip the water clamp.
         /// While <see cref="_transitionDriven"/>, CharacterController stays off so PhysX
         /// cannot shove the capsule mid-animation.
         /// </param>
@@ -674,16 +742,22 @@ namespace Game
         {
             _verticalSpeed = 0f;
             if (!unconstrained)
-            {
-                pos = ClampEyeToNavMesh(pos);
                 pos = ClampEyeOutOfWater(pos);
-            }
 
             // Disable CC so Move() / overlap resolve doesn't fight the placement.
             bool wasEnabled = _cc != null && _cc.enabled;
             if (wasEnabled)
                 _cc.enabled = false;
             transform.SetPositionAndRotation(pos, rot);
+            if (_spawnHold)
+            {
+                _heldPosition = transform.position;
+                _hasHeldPosition = true;
+                if (_cc != null && _cc.enabled)
+                    _cc.enabled = false;
+                return;
+            }
+
             if (_transitionDriven)
                 return;
             if (wasEnabled)
@@ -702,99 +776,7 @@ namespace Game
             EnsureBody();
         }
 
-        /// <summary>
-        /// 水平位移后把脚底 XZ 钳回 NavMesh；采样失败则整帧水平位移回滚到 <paramref name="beforeEye"/>。
-        /// 近河跳过（河道预期可走；旧烤盘可能仍挖了河洞）。Y 仍由 CC / SampleGround 负责。
-        /// 悬崖 / 大石顶：下方有可站立落点（非海）时允许走出蓝面下落；下落途中不再把 XZ 拽回崖边。
-        /// </summary>
-        void ApplyNavMeshClampXZ(Vector3 beforeEye)
-        {
-            if (!UseNavMeshClamp)
-                return;
-            IslandNavMeshService svc = IslandNavMeshService.Instance;
-            if (svc == null || !svc.IsReady)
-                return;
-
-            Vector3 eye = transform.position;
-            Vector3 foot = eye - Vector3.up * EyeHeight;
-            if (IsFootNearRiver(foot))
-                return;
-
-            // 已离地下落：禁止把 XZ 钳回高处蓝面（否则会贴回崖边落不下去）。
-            if (IsFalling())
-                return;
-
-            float maxDist = Mathf.Max(0.5f, BodyRadius * 2f);
-
-            if (IslandNavMeshService.TryClampFootXZ(foot, maxDist, out Vector3 clampedFoot))
-            {
-                float dx = clampedFoot.x - foot.x;
-                float dz = clampedFoot.z - foot.z;
-                if (dx * dx + dz * dz < 1e-8f)
-                    return;
-                // 会被拽回崖边：若脚下方有落点则放行，让重力接下落。
-                if (CanDropToGroundBelow(foot))
-                    return;
-                eye.x = clampedFoot.x;
-                eye.z = clampedFoot.z;
-                transform.position = eye;
-                return;
-            }
-
-            // 走出蓝面：有落点则允许往下跳；否则水平回到本帧起点。
-            if (CanDropToGroundBelow(foot))
-                return;
-
-            eye.x = beforeEye.x;
-            eye.z = beforeEye.z;
-            transform.position = eye;
-        }
-
-        bool IsFalling()
-        {
-            if (_verticalSpeed >= -GroundStickSpeed)
-                return false;
-            if (_cc != null && _cc.enabled)
-                return !_cc.isGrounded;
-            return true;
-        }
-
-        /// <summary>
-        /// 脚底下方 <see cref="MaxDropHeight"/> 内有更低的朝上可站立面（跳过当前石顶/崖面），且落点不是禁走海床。
-        /// </summary>
-        bool CanDropToGroundBelow(Vector3 foot)
-        {
-            Vector3 origin = foot + Vector3.up * 0.25f;
-            float dist = MaxDropHeight + 0.25f;
-            int count = Physics.RaycastNonAlloc(
-                origin, Vector3.down, GroundHits, dist, GroundMask,
-                QueryTriggerInteraction.Ignore);
-            // 取「明显低于脚底」的最高落点，避免把当前大石顶当成落点而误判不能跳。
-            float bestY = float.NegativeInfinity;
-            bool found = false;
-            for (int i = 0; i < count; i++)
-            {
-                if (GroundHits[i].normal.y < GroundNormalMinY)
-                    continue;
-                if (IsWaterSurfaceCollider(GroundHits[i].collider))
-                    continue;
-                float y = GroundHits[i].point.y;
-                if (foot.y - y < DropMinDeltaY)
-                    continue;
-                if (y <= bestY)
-                    continue;
-                bestY = y;
-                found = true;
-            }
-
-            if (!found)
-                return false;
-
-            Vector3 landing = new Vector3(foot.x, bestY, foot.z);
-            return !IsFootInForbiddenWater(landing);
-        }
-
-        /// <summary>海上（脚底落在海平面下的海底）：水平位移回滚。河不禁。</summary>
+        /// <summary>海上（脚底落在海平面下的海底）/ 河里：水平位移回滚。</summary>
         void ApplyWaterWalkBan(Vector3 beforeEye)
         {
             if (!BlockWaterWalking)
@@ -808,24 +790,6 @@ namespace Game
             transform.position = eye;
         }
 
-        Vector3 ClampEyeToNavMesh(Vector3 eye)
-        {
-            if (!UseNavMeshClamp)
-                return eye;
-            IslandNavMeshService svc = IslandNavMeshService.Instance;
-            if (svc == null || !svc.IsReady)
-                return eye;
-
-            Vector3 foot = eye - Vector3.up * EyeHeight;
-            if (IsFootNearRiver(foot))
-                return eye;
-            // 传送 / 预设允许更大搜索半径，避免出生点略偏蓝面外。
-            float maxDist = Mathf.Max(8f, BodyRadius * 8f);
-            if (!IslandNavMeshService.TryClampFootXZ(foot, maxDist, out Vector3 clampedFoot))
-                return eye;
-            return new Vector3(clampedFoot.x, eye.y, clampedFoot.z);
-        }
-
         Vector3 ClampEyeOutOfWater(Vector3 eye)
         {
             if (!BlockWaterWalking)
@@ -833,22 +797,10 @@ namespace Game
             Vector3 foot = eye - Vector3.up * EyeHeight;
             if (!IsFootInForbiddenWater(foot))
                 return eye;
-            // 传送落点在海里：抬出海平面。
+            // 传送落点在海里：抬到海平面以上。河面没有可站立碰撞时保持原位，走路时再由禁行回滚。
             if (TryGetOceanSurfaceY(out float oceanY) && foot.y < oceanY)
                 return new Vector3(eye.x, oceanY + EyeHeight + 0.5f, eye.z);
             return eye;
-        }
-
-        /// <summary>近河：旧烤盘河洞不再钳走；河床由 CC / 高度图贴地。</summary>
-        bool IsFootNearRiver(Vector3 foot)
-        {
-            if (!WaterSurfaceProbe.TryNearestRiver(
-                    foot, RiverQueryRadius, out Vector3 nearest, out _))
-                return false;
-            float dx = foot.x - nearest.x;
-            float dz = foot.z - nearest.z;
-            return dx * dx + dz * dz <= RiverWalkRadiusXZ * RiverWalkRadiusXZ
-                && Mathf.Abs(foot.y - nearest.y) <= RiverWalkRadiusY;
         }
 
         bool IsFootInForbiddenWater(Vector3 foot)
@@ -856,12 +808,29 @@ namespace Game
             // 站立面优先用物理朝上碰撞（码头/桥面）；高度图在桥下是海底，不能当站立面。
             bool hasStand = TryGetHighestStandY(foot, out float standY);
 
-            // 海：站立面（或无碰撞时的高度图）低于海平面 → 海底。河允许走。
+            // 海：站立面（或无碰撞时的高度图）低于海平面 → 海底。
             if (TryGetOceanSurfaceY(out float oceanY))
             {
                 float groundY = hasStand ? standY : SampleGround(foot).y;
                 if (groundY < oceanY - OceanBelowSurfaceBan)
                     return true;
+            }
+
+            // 河：水平近河道且竖直也在河面容差内；已站在桥/码头甲板（明显高于河面）则放行。
+            if (WaterSurfaceProbe.TryNearestRiver(
+                    foot, RiverQueryRadius, out Vector3 nearest, out _))
+            {
+                float dx = foot.x - nearest.x;
+                float dz = foot.z - nearest.z;
+                float xzSq = dx * dx + dz * dz;
+                if (xzSq <= RiverBanRadiusXZ * RiverBanRadiusXZ
+                    && Mathf.Abs(foot.y - nearest.y) <= RiverBanRadiusY)
+                {
+                    const float deckAboveRiver = 0.5f;
+                    if (hasStand && standY >= nearest.y + deckAboveRiver)
+                        return false;
+                    return true;
+                }
             }
 
             return false;
@@ -950,9 +919,6 @@ namespace Game
             {
                 // 树干/墙面法线接近水平；只取朝上的表面，避免落在树冠上。
                 if (GroundHits[i].normal.y < GroundNormalMinY)
-                    continue;
-                // 海/河碰撞体是床底，取最低点会把 Teleport 钉进地底。
-                if (IsWaterSurfaceCollider(GroundHits[i].collider))
                     continue;
                 if (GroundHits[i].point.y >= bestY)
                     continue;

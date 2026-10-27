@@ -94,18 +94,13 @@ Material:
     - _DstBlend: 0
     - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
-    - _Fresnel: 0.25
     - _InternalEdge: 0
     - _LayerDetailStrength: 0
     - _LightStrength: 0.22
     - _LightThreshold: 0.72
-    - _Metallic: 0
     - _NightContour: 1
     - _NormalStrength: 0.85
-    - _OilCrossBillboard: 0
     - _OilFoliage: 0
-    - _OilFoliageSkipDay: 0
-    - _OilYBillboard: 0
     - _Outline: 0
     - _OutlineBreak: 0.12
     - _OutlineBrushAxis: 1
@@ -139,8 +134,7 @@ Material:
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
     - _TriplanarTiling: 0.22
-    - _Wetness: 0
-    - _WorldTriplanar: 0
+    - _WorldTriplanar: 2
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}

@@ -74,9 +74,6 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
     half ndotV = saturate(dot(normalWS, viewDir));
     half paintRim = (1.0h - ndotV) * (half)_PaintThickness * thicknessMask;
-#if defined(OIL_MOBILE_PERF)
-    paintRim *= (half)_OilBrushMobileScale * 0.5h;
-#endif
 
     Surface surface;
     surface.position = input.positionWS;
@@ -94,15 +91,7 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
     surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
 
 #if defined(OIL_MOBILE_PERF)
-    half brushScale = (half)_OilBrushMobileScale;
     half brush = 0.5h;
-    if (brushScale > 0.001h)
-    {
-        brush = lerp(
-            0.5h,
-            SampleOilShadowBrushCheap(input.positionWS, input.uv, 0.25),
-            brushScale);
-    }
 #else
     half brush = SampleOilShadowBrushCheap(input.positionWS, input.uv, 0.25);
 #endif
@@ -117,26 +106,28 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
         0.0h,
         (half)_ShadeSteps,
         paintRim,
+        (half)_ShadowLift,
+        (half)_ShadeLift,
         brush,
+        (half)_ShadowWobble,
         0.2h,
         0.0h,
         fragment.screenUV);
 
-    // Soft day floor only — a fixed pigment max() was lifting night cast umbra to chalk.
-    half lightLumBm = 0.0h;
+    // Same daytime pigment floor. At night it sits above the moonlit ground and washes shadows pale.
+    half3 shadowFloor = albedo * half3(0.18h, 0.12h, 0.26h) + half3(0.015h, 0.01h, 0.03h);
     if (GetDirectionalLightCount() > 0)
     {
-        lightLumBm = OilVegMainLightLuma((half3)_DirectionalLightData[0].color.rgb);
+        half3 key = (half3)_DirectionalLightData[0].color.rgb;
+        half keyLum = dot(key, half3(0.2126h, 0.7152h, 0.0722h));
+        shadowFloor *= saturate(keyLum * 2.5h);
     }
-    half nightBm = OilVegetationNightAmount(lightLumBm);
-    half3 shadowFloor = albedo * half3(0.18h, 0.12h, 0.26h) + half3(0.015h, 0.01h, 0.03h);
-    color = max(color, shadowFloor * (1.0h - nightBm * 0.92h));
+    color = max(color, shadowFloor);
     color = min(color, albedo * 1.2h + half3(0.06h, 0.05h, 0.04h));
 #if !defined(OIL_MOBILE_PERF)
     color = OilWeaveTint(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);
 #else
-    color = OilWeaveTintMobile(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush);
 #endif
     return half4(saturate(color), 1.0h);

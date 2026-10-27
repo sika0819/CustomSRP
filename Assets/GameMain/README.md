@@ -44,7 +44,7 @@ Awake()                           // DefaultExecutionOrder=100
   NativeBridgeFacade.ResetSession()
   BankUpgradeBootstrap.ResetSession()
   BoluoApiEnvironment.ClearCached()
-  DeviceGraphicsPolicy.DetectAndApplyBoot()  // Low/Mid/High/Gmj；桌面 High 跳过移动 boot
+  ApplyDeviceGraphicsPolicy()     // 非 Editor:Quality 2, res 0.7×, OIL_MOBILE_PERF
 
 Start()
   InitBuiltinComponents()         // Base/Procedure/Event/Resource/UI/Scene/Entity/Setting
@@ -52,7 +52,7 @@ Start()
   Base.FrameRate = 60
   InitCustomComponents()          // Weather/Presets/AtmosphereProps/Music/World + EnsureEntityGroups
   EnsureUiGroups()                // Loading/Main/Panel/Dialog
-  // 不做 Screen.SetResolution（用 DPI×renderScale 控像素）
+  if (!Editor) Screen.SetResolution(1280, 720, FullScreenWindow)
 
 OnDestroy()
   → ClearCustomComponents → ClearBuiltinComponents
@@ -73,7 +73,7 @@ OnDestroy()
 - 事件 `*EventArgs : GameEventArgs`,`ReferencePool.Acquire` 后 `Fire`/`FireNow`,handler 返回后 `Release`;调用方不要 `Release`。
 - Entity Group 当前只有 `Environment` / `FX`;新增 Group 在 `GameEntry.EnsureEntityGroups` 加。
 - UI Group 当前 `Loading`/`Main`/`Panel`/`Dialog`,深度 0-3;新增在 `EnsureUiGroups` 加。
-- 画质档：`DeviceGraphicsPolicy`（`Low`/`Mid`/`High`/`Gmj`）。全链路见 [Docs/12-device-graphics-tiers.md](Docs/12-device-graphics-tiers.md)。Android/iOS 档名统一、Detect 分表；Profile 共用。手机 Low/Mid/Gmj 开 `OIL_MOBILE_PERF`，手机 High 关；桌面 High 不套移动 boot。不做 `Screen.SetResolution`。
+- 移动端 quality 等级 = 2(`Medium`),`OIL_MOBILE_PERF` keyword 必须开;非 Editor `Screen.SetResolution(1280,720)`。
 - Unity 6 对象 ID 用 `GetEntityId()` / `EntityId`,**禁止** `GetInstanceID()`(详见 `.cursor/rules/unity6-entity-id.mdc`)。
 
 ## 5. Procedure 链
@@ -85,7 +85,7 @@ ProcedureLaunch            (Launch.unity 已加载,准备 YooAsset 会话)
               └─→ ProcedureIsland   (进岛; IslandWorldReady → Notify IslandReady)
 ```
 
-Editor 联调:菜单 `GameMain/Boluo/编辑器登录`（UITK，仅 Editor；游客 / 手机）+ `环境·渠道·版本`。真机不含。
+Editor 联调:`GameMain/Boluo/环境·渠道·版本`;换票需开启 `Editor Guest Login/Try Remote TouristLogin`。
 
 新增 Procedure:派生 `ProcedureBase`,在父 `OnUpdate` / 异步回调里 `ChangeState<T>(procedureOwner)`。
 

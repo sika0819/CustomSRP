@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Game
@@ -39,13 +38,11 @@ namespace Game
         public static float TreeBillboardKeepRadius = 380f;
 
         /// <summary>
-        /// 大树完整 Prefab 距离上限。实际换广告牌用
-        /// <see cref="GetTreeFullMeshDistance"/>：按该树 LOD 片树切入，夹在 48 米和此上限之间。
+        /// 大树完整 Prefab 最远距离；超出后改用 Billboard 代理（Native 合批）。
+        /// 须 ≥ 树 LOD 片树切入距离（prefab screenRelativeHeight≈0.12 × lodBias=1 → ~70–90m），
+        /// 只在 LOD 已进片树后再换成合批代理，避免比 LOD 更早贴脸。
         /// </summary>
         public static float TreeFullMeshMaxDist = 160f;
-
-        /// <summary>完整网格换广告牌的最近距离。再近会在片树 LOD 之前拆掉树冠。</summary>
-        public const float TreeFullMeshHandoffFloor = 48f;
 
         /// <summary>Full↔Billboard 切换迟滞（米），避免边界来回换档。</summary>
         public static float TreeFullMeshHysteresis = 12f;
@@ -104,49 +101,18 @@ namespace Game
         public static int SpawnPerFrameBudget = 24;
         public static int DespawnPerFrameBudget = 16;
 
-        /// <summary>
-        /// 揭罩后 / 远场 Prefill 压低 spawn/finalize（不改环半径）。
-        /// Hold 到 <see cref="ClearPostUncoverQuiet"/>（IsLoaded）；定时器仅兜底。
-        /// </summary>
-        static float _postUncoverQuietUntil = -1f;
-        static bool _quietHoldUntilClear;
-        const float PostUncoverQuietSeconds = 12f;
-        // 二次进岛远场 Prefill / StreamLoop：再压一档，避免揭罩后仍 ~8FPS。
-        const float PostUncoverSpawnScale = 0.2f;
-        const float PostUncoverFinalizeScale = 0.35f;
+        /// <summary>揭罩后短暂停流送，避免和二次 Prefill 抢主线程把淡出拖长。</summary>
+        static float _postUncoverQuietUntil;
 
-        /// <summary>
-        /// 全真机档（含 Editor Play）：压低分帧铺装直至 <see cref="ClearPostUncoverQuiet"/>。
-        /// </summary>
-        public static void BeginPostUncoverQuiet()
+        public static void BeginPostUncoverQuiet(float seconds = 1.2f)
         {
-            _quietHoldUntilClear = true;
-            _postUncoverQuietUntil = Time.unscaledTime + PostUncoverQuietSeconds;
+            float until = Time.realtimeSinceStartup + Mathf.Max(0f, seconds);
+            if (until > _postUncoverQuietUntil)
+                _postUncoverQuietUntil = until;
         }
 
-        public static void ClearPostUncoverQuiet()
-        {
-            _quietHoldUntilClear = false;
-            _postUncoverQuietUntil = -1f;
-        }
-
-        static bool InPostUncoverQuiet =>
-            _quietHoldUntilClear
-            || (_postUncoverQuietUntil > 0f && Time.unscaledTime < _postUncoverQuietUntil);
-
-        /// <summary>揭罩后 Quiet Hold（含远场 Prefill）：Streamer 可强制每实例让帧。</summary>
-        public static bool IsPostUncoverQuiet => InPostUncoverQuiet;
-
-        public static int EffectiveSpawnPerFrameBudget =>
-            // 揭罩后每帧只铺 1 个。Mid 上两个完整树 Instantiate 就能把帧时间打到 ~250ms，摇杆完全跟不上。
-            InPostUncoverQuiet
-                ? 1
-                : SpawnPerFrameBudget;
-
-        public static float EffectiveFinalizePerFrameBudgetMs =>
-            InPostUncoverQuiet
-                ? Mathf.Max(0.5f, FinalizePerFrameBudgetMs * PostUncoverFinalizeScale)
-                : FinalizePerFrameBudgetMs;
+        public static bool IsPostUncoverQuiet =>
+            Time.realtimeSinceStartup < _postUncoverQuietUntil;
         /// <summary>
         /// 近距启用 MeshCollider。须明显大于走路半秒路程，否则高速接近大石时
         /// 碰撞体尚未打开就会穿进 mesh，再打开也难把 CharacterController 顶出来。
@@ -158,7 +124,7 @@ namespace Game
 
         /// <summary>
         /// 非 Cliff/Cave/Ramp/Spike/Large 的石头：世界空间最长边 ≥ 此值才补 MeshCollider。
-        /// 放过脚边过小的石块，只给能挡住角色的大块补碰撞。
+        /// ≈2.5m 可挡住海滩放大的 Rock_Small_01（scale≈7→~2.6m），放过脚边小石。
         /// </summary>
         public static float RockColliderMinWorldExtent = 2.5f;
 
@@ -167,17 +133,6 @@ namespace Game
         /// 配合隔株，避免首装空林又不过密。
         /// </summary>
         public static float PrefillTreeBoostRadius = 180f;
-
-        /// <summary>
-        /// 揭罩前阻塞铺装的水平半径。0 表示沿用 Ring0，并抬到 MeshCollider 环（闺蜜机 / 桌面）。
-        /// 手机 Low/Mid 设成脚下一块：其余近场改到揭罩后 Quiet 铺，避免「正在铺装环境」卡死进岛。
-        /// </summary>
-        public static float PrefillUncoverRadius = 0f;
-
-        /// <summary>
-        /// 揭罩前近场铺装的墙钟上限（毫秒）。0 表示不限。到点即 <c>onNearReady</c>，未铺完的继续后台铺。
-        /// </summary>
-        public static float PrefillUncoverBudgetMs = 0f;
 
         /// <summary>
         /// 可投射物体超过此距离关闭 ShadowCasting。与 CRP / Quality shadowDistance 对齐。
@@ -381,131 +336,32 @@ namespace Game
         public static bool IsBigTreeCategory(string category) =>
             IsTreeCategory(category) && !IsSmallTreeCategory(category);
 
-        struct BillboardLodMetric
-        {
-            public float Size;
-            public float Threshold;
-        }
-
-        static readonly Dictionary<string, BillboardLodMetric> BillboardLodMetrics =
-            new Dictionary<string, BillboardLodMetric>(64);
-
-        /// <summary>
-        /// 记下这棵树的 LOD 尺寸和片树阈值，换档时再用当前相机算距离。
-        /// </summary>
-        public static void RememberTreeBillboardDistance(GameObject prefab, string prefabName)
-        {
-            if (prefab == null || !TryMeasureBillboardLod(prefab, out BillboardLodMetric metric))
-                return;
-            StoreBillboardLod(prefab.name, metric);
-            StoreBillboardLod(prefabName, metric);
-        }
-
-        /// <summary>
-        /// 这棵大树换成广告牌代理的距离。无 LOD 数据时用 <see cref="TreeFullMeshMaxDist"/>。
-        /// </summary>
-        public static float GetTreeFullMeshDistance(string prefabName, Vector3 instanceScale, GameObject lodSource)
-        {
-            float cap = TreeFullMeshMaxDist;
-            BillboardLodMetric metric = default;
-            bool found = !string.IsNullOrEmpty(prefabName)
-                && BillboardLodMetrics.TryGetValue(prefabName, out metric);
-            if (!found && lodSource != null && TryMeasureBillboardLod(lodSource, out metric))
-            {
-                found = true;
-                StoreBillboardLod(prefabName, metric);
-            }
-
-            if (!found)
-                return cap;
-
-            float unit = BillboardEnterDistanceAtUnitScale(metric);
-            if (unit <= 0f)
-                return cap;
-
-            float s = Mathf.Max(
-                Mathf.Abs(instanceScale.x),
-                Mathf.Abs(instanceScale.y),
-                Mathf.Abs(instanceScale.z));
-            if (s < 1e-3f)
-                s = 1f;
-            return Mathf.Clamp(unit * s, TreeFullMeshHandoffFloor, cap);
-        }
-
-        static void StoreBillboardLod(string key, BillboardLodMetric metric)
-        {
-            if (string.IsNullOrEmpty(key) || metric.Threshold < 1e-4f)
-                return;
-            BillboardLodMetrics[key] = metric;
-        }
-
-        static bool TryMeasureBillboardLod(GameObject source, out BillboardLodMetric metric)
-        {
-            metric = default;
-            if (source == null)
-                return false;
-            LODGroup lod = source.GetComponentInChildren<LODGroup>(true);
-            if (lod == null)
-                return false;
-            LOD[] lods = lod.GetLODs();
-            if (lods == null || lods.Length < 2)
-                return false;
-            float threshold = lods[lods.Length - 2].screenRelativeTransitionHeight;
-            if (threshold < 1e-4f || lod.size < 1e-3f)
-                return false;
-            metric.Size = lod.size;
-            metric.Threshold = threshold;
-            return true;
-        }
-
-        /// <summary>
-        /// scale=1 时，相对高度落到片树上一级阈值的距离。
-        /// Unity：relativeHeight = size * 0.5 / (distance * tan(fov/2))，比较前再乘 lodBias。
-        /// lodBias 为 1 时与 (size * 0.5) / (threshold * tan(fov/2)) 相同。
-        /// </summary>
-        static float BillboardEnterDistanceAtUnitScale(BillboardLodMetric metric)
-        {
-            float fov = 60f;
-            Camera cam = Camera.main;
-            if (cam != null && cam.fieldOfView > 1f)
-                fov = cam.fieldOfView;
-            float bias = Mathf.Max(QualitySettings.lodBias, 0.01f);
-            float tanHalf = Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
-            if (tanHalf < 1e-4f)
-                return 0f;
-            return (metric.Size * 0.5f * bias) / (metric.Threshold * tanHalf);
-        }
-
-        /// <summary>距焦点超过该树换档距离 → 应驻留 Billboard 代理（不含迟滞）。</summary>
-        public static bool ShouldSpawnAsTreeBillboard(
-            string category, float distSq, string prefabName, Vector3 scale, GameObject lodSource)
+        /// <summary>距焦点超过 Full 半径 → 应驻留 Billboard 代理（不含迟滞）。</summary>
+        public static bool ShouldSpawnAsTreeBillboard(string category, float distSq)
         {
             if (!IsBigTreeCategory(category))
                 return false;
-            float max = GetTreeFullMeshDistance(prefabName, scale, lodSource);
+            float max = TreeFullMeshMaxDist;
             return distSq > max * max;
         }
 
         /// <summary>
-        /// Visible Full 走出换档距离+hysteresis → 降为 Billboard。
-        /// Visible Billboard 进入换档距离−hysteresis → 升为 Full。
+        /// Visible Full 走出 Full+hysteresis → 降为 Billboard。
+        /// Visible Billboard 进入 Full−hysteresis → 升为 Full。
         /// </summary>
-        public static bool ShouldDowngradeTreeToBillboard(
-            string category, float distSq, string prefabName, Vector3 scale, GameObject lodSource)
+        public static bool ShouldDowngradeTreeToBillboard(string category, float distSq)
         {
             if (!IsBigTreeCategory(category))
                 return false;
-            float lim = GetTreeFullMeshDistance(prefabName, scale, lodSource) + TreeFullMeshHysteresis;
+            float lim = TreeFullMeshMaxDist + TreeFullMeshHysteresis;
             return distSq > lim * lim;
         }
 
-        public static bool ShouldUpgradeTreeToFull(
-            string category, float distSq, string prefabName, Vector3 scale, GameObject lodSource)
+        public static bool ShouldUpgradeTreeToFull(string category, float distSq)
         {
             if (!IsBigTreeCategory(category))
                 return false;
-            float handoff = GetTreeFullMeshDistance(prefabName, scale, lodSource);
-            float lim = Mathf.Max(1f, handoff - TreeFullMeshHysteresis);
+            float lim = Mathf.Max(1f, TreeFullMeshMaxDist - TreeFullMeshHysteresis);
             return distSq <= lim * lim;
         }
 
@@ -599,23 +455,6 @@ namespace Game
             return runtimeShowDistance;
         }
 
-        /// <summary>
-        /// Prefill 近场段，供 IsNearReady 揭罩（远场仍走 <see cref="GetPrefillShowDistance"/>）。
-        /// 手机档用 <see cref="PrefillUncoverRadius"/> 收成脚下一块；闺蜜机 / 桌面仍抬到 MeshCollider 环。
-        /// </summary>
-        public static float GetPrefillNearShowDistance(string category, float runtimeShowDistance)
-        {
-            float full = GetPrefillShowDistance(category, runtimeShowDistance);
-            float ring = IsTreeCategory(category) && !IsSmallTreeCategory(category)
-                ? TreeRing0EnterRadius
-                : Ring0EnterRadius;
-            if (PrefillUncoverRadius > 1f)
-                ring = Mathf.Min(ring, PrefillUncoverRadius);
-            else
-                ring = Mathf.Max(ring, MeshColliderEnableRadius);
-            return Mathf.Min(full, ring);
-        }
-
         public static float GetHideDistance(string category, string prefabName, out float showDistance)
         {
             // 帐篷：须在 NeverUnload(JianZhu) 之前，否则吃 MaxValue；半径见 TentLod*。
@@ -693,195 +532,63 @@ namespace Game
         }
 
         /// <summary>
-        /// 按 <see cref="DeviceGraphicsPolicy"/> 套流式半径。桌面 High 不改（保持 Base 默认）。
+        /// 真机套 Boluo 标准版（Non4K FillBound）树环：R0=70/90，R1=117/143，keep=180，隔株 stride=6。
+        /// 非树物件仍略收半径保帧。
         /// </summary>
         public static void ApplyMobileTierDefaults()
         {
-            ApplyGraphicsTierDefaults();
-        }
-
-        /// <summary>
-        /// Low≈原真机收紧；Mid 树环放宽；手机 High / Gmj 近 Editor Base；桌面 High 跳过。
-        /// </summary>
-        public static void ApplyGraphicsTierDefaults()
-        {
-            ClearPostUncoverQuiet();
-            // 先回到「不收揭罩半径」，避免 Mid 数值残留到随后切到的 Gmj/High。
-            PrefillUncoverRadius = 0f;
-            PrefillUncoverBudgetMs = 0f;
-            DeviceGraphicsProfile profile = DeviceGraphicsPolicy.Profile;
-            if (!profile.ApplyStreamingTune)
-                return;
-
-            switch (DeviceGraphicsPolicy.Current)
-            {
-                case DeviceGraphicsClass.Mid:
-                    ApplyStreamingMid();
-                    break;
-                case DeviceGraphicsClass.High:
-                    ApplyStreamingNearBase();
-                    break;
-                case DeviceGraphicsClass.Gmj:
-                    ApplyStreamingNearBase();
-                    ApplyStreamingGmjDensity();
-                    break;
-                default:
-                    ApplyStreamingLow();
-                    break;
-            }
-
-            Ring1EnterRadius = Mathf.Max(Ring1EnterRadius, TreeRing1EnterRadius);
-            Ring1ExitRadius = Mathf.Max(Ring1ExitRadius, TreeRing1ExitRadius);
-            NativeInstancingEnabled = true;
-            NativeInstancingMaxDist = Mathf.Max(180f, TreeBillboardKeepRadius);
-        }
-
-        /// <summary>原真机 Boluo 标准版 Non4K FillBound 收紧。</summary>
-        static void ApplyStreamingLow()
-        {
+#if !UNITY_EDITOR
+            // 非树环：略收（Lite 无格子驻留，需比 Boluo 通用环紧一点控 fill）。
             Ring0EnterRadius = 60f;
             Ring0ExitRadius = 78f;
             Ring1EnterRadius = 130f;
             Ring1ExitRadius = 160f;
 
+            // 树：≤160 完整 Prefab+LODGroup；160–180 片树 Native 合批；120 外 stride6 隔株；keep 180。
             TreeRing0EnterRadius = 70f;
             TreeRing0ExitRadius = 90f;
-            TreeRing1EnterRadius = 180f * 0.65f;
-            TreeRing1ExitRadius = 220f * 0.65f;
+            TreeRing1EnterRadius = 180f * 0.65f; // ~117
+            TreeRing1ExitRadius = 220f * 0.65f;  // ~143
             TreeBillboardKeepRadius = 180f;
-            // 上限。实际换档见 GetTreeFullMeshDistance，不早于该树片树 LOD。
             TreeFullMeshMaxDist = 160f;
             TreeFullMeshHysteresis = 12f;
             FillBoundFarTreeSilhouetteMinDistance = 120f;
             FillBoundFarTreeSilhouetteStride = 6;
             PrefillTreeBoostRadius = 180f;
 
+            // Boluo FillBoundGuanmu*（标准版不收灌木）
             GuanmuHideDistance = 90f;
             GuanmuShowDistance = 75f;
+
+            // 小物件仍紧收
             SmallRockHideDistance = 75f;
             SmallRockShowDistance = 62f;
             SmallVegHideDistance = 30f;
             SmallVegShowDistance = 24f;
             ClutterHideDistance = 40f;
             ClutterShowDistance = 32f;
+            // 栏杆/稻草人：真机勿跟普通 clutter 32m；盖住农场簇与中距观景点。
             StructuralClutterHideDistance = 120f;
             StructuralClutterShowDistance = 100f;
             BuildingLodHideDistance = 110f;
             BuildingLodShowDistance = 95f;
+            // 帐篷：真机仍须远于 House；配合 prefab LOD 阈值放宽，避免 40–80m 闪没。
             TentLodHideDistance = 200f;
             TentLodShowDistance = 160f;
+            // 真机略收，但仍须大于 MoveSpeed 数帧路程，避免穿进未开碰撞的大石。
             MeshColliderEnableRadius = 72f;
             MeshColliderDisableRadius = 96f;
-            PrefillUncoverRadius = 32f;
-            PrefillUncoverBudgetMs = 6000f;
 
+            // 格子驻留须盖住树环（Boluo：Ring1 >= TreeRing1）
+            Ring1EnterRadius = Mathf.Max(Ring1EnterRadius, TreeRing1EnterRadius);
+            Ring1ExitRadius = Mathf.Max(Ring1ExitRadius, TreeRing1ExitRadius);
+
+            NativeInstancingEnabled = true;
+            NativeInstancingMaxDist = Mathf.Max(180f, TreeBillboardKeepRadius);
             SpawnPerFrameBudget = 8;
             DespawnPerFrameBudget = 8;
             FinalizePerFrameBudgetMs = 2.5f;
-        }
-
-        /// <summary>相对 Low 放宽树环（keep ~220）。隔株 stride 6，完整网格上限 160。</summary>
-        static void ApplyStreamingMid()
-        {
-            Ring0EnterRadius = 70f;
-            Ring0ExitRadius = 90f;
-            Ring1EnterRadius = 150f;
-            Ring1ExitRadius = 180f;
-
-            TreeRing0EnterRadius = 70f;
-            TreeRing0ExitRadius = 90f;
-            TreeRing1EnterRadius = 150f;
-            TreeRing1ExitRadius = 180f;
-            TreeBillboardKeepRadius = 220f;
-            TreeFullMeshMaxDist = 160f;
-            TreeFullMeshHysteresis = 12f;
-            FillBoundFarTreeSilhouetteMinDistance = 140f;
-            FillBoundFarTreeSilhouetteStride = 6;
-            PrefillTreeBoostRadius = 220f;
-
-            GuanmuHideDistance = 90f;
-            GuanmuShowDistance = 75f;
-            SmallRockHideDistance = 75f;
-            SmallRockShowDistance = 62f;
-            SmallVegHideDistance = 30f;
-            SmallVegShowDistance = 24f;
-            ClutterHideDistance = 40f;
-            ClutterShowDistance = 32f;
-            StructuralClutterHideDistance = 120f;
-            StructuralClutterShowDistance = 100f;
-            BuildingLodHideDistance = 110f;
-            BuildingLodShowDistance = 95f;
-            TentLodHideDistance = 210f;
-            TentLodShowDistance = 170f;
-            MeshColliderEnableRadius = 80f;
-            MeshColliderDisableRadius = 108f;
-            PrefillUncoverRadius = 36f;
-            PrefillUncoverBudgetMs = 6000f;
-
-            SpawnPerFrameBudget = 12;
-            DespawnPerFrameBudget = 10;
-            FinalizePerFrameBudgetMs = 2.8f;
-        }
-
-        /// <summary>手机 High / Gmj：树 keep 仍 280。完整网格上限 160，隔株 stride 6。Gmj 再收投射距离。</summary>
-        static void ApplyStreamingNearBase()
-        {
-            Ring0EnterRadius = 90f;
-            Ring0ExitRadius = 110f;
-            Ring1EnterRadius = 170f;
-            Ring1ExitRadius = 200f;
-
-            TreeRing0EnterRadius = 70f;
-            TreeRing0ExitRadius = 90f;
-            TreeRing1EnterRadius = 180f;
-            TreeRing1ExitRadius = 220f;
-            TreeBillboardKeepRadius = 280f;
-            TreeFullMeshMaxDist = 160f;
-            TreeFullMeshHysteresis = 12f;
-            FillBoundFarTreeSilhouetteMinDistance = 120f;
-            FillBoundFarTreeSilhouetteStride = 6;
-            PrefillTreeBoostRadius = 220f;
-
-            GuanmuHideDistance = 90f;
-            GuanmuShowDistance = 75f;
-            SmallRockHideDistance = 75f;
-            SmallRockShowDistance = 62f;
-            SmallVegHideDistance = 30f;
-            SmallVegShowDistance = 24f;
-            ClutterHideDistance = 40f;
-            ClutterShowDistance = 32f;
-            StructuralClutterHideDistance = 120f;
-            StructuralClutterShowDistance = 100f;
-            BuildingLodHideDistance = 110f;
-            BuildingLodShowDistance = 95f;
-            TentLodHideDistance = 220f;
-            TentLodShowDistance = 180f;
-            MeshColliderEnableRadius = 90f;
-            MeshColliderDisableRadius = 120f;
-            // 手机 High 与 Gmj 共用本函数；Gmj 在 ApplyStreamingGmjDensity 里把揭罩半径/时限清回 0。
-            PrefillUncoverRadius = 42f;
-            PrefillUncoverBudgetMs = 7000f;
-
-            SpawnPerFrameBudget = 16;
-            DespawnPerFrameBudget = 12;
-            FinalizePerFrameBudgetMs = 3f;
-        }
-
-        /// <summary>
-        /// Gmj：保留 NearBase 环半径，只收紧隔株 / 阴影投射距 / spawn 预算（不改 renderScale、LOD）。
-        /// </summary>
-        static void ApplyStreamingGmjDensity()
-        {
-            // 闺蜜机维持原揭罩环（Ring0 抬到 MeshCollider），不走手机的脚下半径和 6 秒封顶。
-            PrefillUncoverRadius = 0f;
-            PrefillUncoverBudgetMs = 0f;
-            FillBoundFarTreeSilhouetteStride = 6;
-            FillBoundFarTreeSilhouetteMinDistance = 140f;
-            ShadowCastMaxDist = 18f;
-            ShadowCastRestoreDist = 14f;
-            SpawnPerFrameBudget = 10;
-            DespawnPerFrameBudget = 8;
-            FinalizePerFrameBudgetMs = 2.2f;
+#endif
         }
     }
 }

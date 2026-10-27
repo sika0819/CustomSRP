@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 6697053546620471914}
   - component: {fileID: 7737022680294639055}
   - component: {fileID: 5529182753826451717}
-  - component: {fileID: 2394735530258782346}
+  - component: {fileID: 7906489020279492113}
   m_Layer: 0
   m_Name: River_01
   m_TagString: Untagged
@@ -67,7 +67,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 446f2ff901c664d2f99cc383d045aba3, type: 2}
+  - {fileID: 2100000, guid: 57e816bdab6f7a84db7bb2db00303f07, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -91,7 +91,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!64 &2394735530258782346
+--- !u!64 &7906489020279492113
 MeshCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

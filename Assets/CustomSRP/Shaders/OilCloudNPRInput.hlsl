@@ -7,9 +7,6 @@ TEXTURE2D(_NoiseMap);
 SAMPLER(sampler_NoiseMap);
 TEXTURE2D(_CloudBrush);
 SAMPLER(sampler_CloudBrush);
-// Same canvas ridges as the oil skybox — strokes lie along the horizon.
-TEXTURE2D(_OilCanvas);
-SAMPLER(sampler_OilCanvas);
 
 // Per camera. Set from the cloud pass, not the material.
 float3 _OilCloudSunDir;
@@ -29,7 +26,6 @@ float _OilCloudRingBias;
 
 CBUFFER_START(UnityPerMaterial)
     float4 _NoiseMap_ST;
-    float4 _OilCanvas_ST;
     float _UVDisturbance;
     float _SdfSoftness;
     float _SdfMin;
@@ -37,10 +33,6 @@ CBUFFER_START(UnityPerMaterial)
     float _TopShadow;
     float _TopHighlight;
     float _EdgeIntensity;
-    float _BrushScale;
-    float _BrushStrength;
-    float _BrushContrast;
-    float _BrushRelief;
 CBUFFER_END
 
 #endif

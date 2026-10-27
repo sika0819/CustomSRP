@@ -18,9 +18,9 @@ namespace CustomSRP.Editor
 
         static readonly HashSet<string> BillboardHiddenProps = new HashSet<string>
         {
-            // Shadow-brush mask still exists on OilNPR; hide on leaf cards (no umbra brush).
-            "_OutlineBrushMap",
-            "_ShadowBrushScale"
+            "_InternalEdge",
+            "_EdgeStrength",
+            "_EdgeColor"
         };
 
         MaterialEditor editor;
@@ -35,9 +35,11 @@ namespace CustomSRP.Editor
             this.properties = properties;
 
             EditorGUI.BeginChangeCheck();
-            // Billboard leaf cards: hide shadow-brush slots (no umbra brush on cards).
+            // Billboard mats don't use internal crease ink; hide those OilNPR props in Inspector.
+            // (Removing them from .mat YAML is not enough — Shader Properties still draw.)
             if (AllTargetsAreBillboard())
             {
+                EnsureBillboardEdgeOff();
                 materialEditor.PropertiesDefaultGUI(FilterProperties(properties, BillboardHiddenProps));
             }
             else
@@ -88,6 +90,18 @@ namespace CustomSRP.Editor
             }
 
             return true;
+        }
+
+        void EnsureBillboardEdgeOff()
+        {
+            foreach (Material m in materials)
+            {
+                if (m == null)
+                    continue;
+                m.DisableKeyword("_INTERNAL_EDGE_ON");
+                if (m.HasProperty("_InternalEdge"))
+                    m.SetFloat("_InternalEdge", 0f);
+            }
         }
 
         bool HasProperty(string name) =>

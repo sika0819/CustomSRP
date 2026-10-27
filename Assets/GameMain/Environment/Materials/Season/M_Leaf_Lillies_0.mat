@@ -16,8 +16,10 @@ Material:
   - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
   m_InvalidKeywords:
+  - _CANVAS_ON
   - _OILFOLIAGESKIPDAY_ON
   - _OILFOLIAGE_ON
+  - _OUTLINE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0

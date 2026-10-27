@@ -9,7 +9,7 @@ namespace CustomSRP.Editor
 {
     /// <summary>
     /// 针垫长边、Circuitry 细纹、斜切硬边，左右分屏对比 allowFXAA。
-    /// PostFXSettingsFxaa 开 FXAA + Neutral Tone Mapping（Bloom 关）；相机 allowFXAA 分屏门控。
+    /// Post FX 只开 Neutral Tone Mapping（Bloom 关闭），因为 FXAA 走 Post FX。
     /// </summary>
     public static class CreateFxaaScene
     {
@@ -128,15 +128,6 @@ namespace CustomSRP.Editor
             adjustments.FindPropertyRelative("saturation").floatValue = 0f;
 
             so.FindProperty("toneMapping").FindPropertyRelative("mode").enumValueIndex = 2; // Neutral
-
-            // Demo asset: FXAA on here; left/right cameras still gate via allowFXAA.
-            SerializedProperty fxaa = so.FindProperty("fxaa");
-            fxaa.FindPropertyRelative("enabled").boolValue = true;
-            fxaa.FindPropertyRelative("fixedThreshold").floatValue = 0.0833f;
-            fxaa.FindPropertyRelative("relativeThreshold").floatValue = 0.166f;
-            fxaa.FindPropertyRelative("subpixelBlending").floatValue = 0.75f;
-            fxaa.FindPropertyRelative("quality").enumValueIndex = 2; // High
-
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(settings);
             return settings;

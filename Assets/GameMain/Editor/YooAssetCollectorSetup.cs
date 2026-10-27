@@ -175,7 +175,6 @@ namespace Game.Editor
 
             // Prefabs only — .uxml/.uss ride as deps. CollectAll + SupportExtensionless
             // dual-mapped LoadingForm.prefab/.uxml → "Location have existed" warnings.
-            // NormalIgnoreRule 已忽略 /Editor/：注销联调弹窗在 Editor/UI，不会进包。
             AddGroup(package, "GameUI", "Assets/GameMain/UI", "AddressByFolderAndFileNameAndExt", nameof(PackSeparately), nameof(CollectPrefab));
             AddGroup(package, "GameEntity", "Assets/GameMain/Entity", nameof(AddressByFolderAndFileName), nameof(PackDirectory), nameof(CollectAll));
             AddGroup(package, "IslandPresets", "Assets/GameMain/Environment/IslandPresets", nameof(AddressByFileName), nameof(PackDirectory), nameof(CollectAll));
@@ -208,14 +207,6 @@ namespace Game.Editor
                 package,
                 "IslandUnityFire",
                 "Assets/GameMain/Environment/FX/UnityFire",
-                nameof(AddressByFileName),
-                nameof(PackDirectory),
-                nameof(CollectAll));
-            // 河岸/海边石头湿材质（运行时按水位 Y 换到 ShiTou_Shore）
-            AddGroup(
-                package,
-                "ShiTouShoreMat",
-                "Assets/GameMain/Environment/Materials/ShiTou_Shore.mat",
                 nameof(AddressByFileName),
                 nameof(PackDirectory),
                 nameof(CollectAll));

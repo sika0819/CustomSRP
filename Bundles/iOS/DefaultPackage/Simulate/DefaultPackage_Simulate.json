@@ -61,14 +61,6 @@
             "DependBundleIDs": []
         },
         {
-            "Address": "IslandNavMesh",
-            "AssetPath": "Assets/AssetRaw/Island/IslandNavMesh.asset",
-            "AssetGUID": "",
-            "AssetTags": [],
-            "BundleID": 1,
-            "DependBundleIDs": []
-        },
-        {
             "Address": "IslandTerrain",
             "AssetPath": "Assets/AssetRaw/Island/IslandTerrain.prefab",
             "AssetGUID": "",

@@ -16,10 +16,6 @@ namespace Game
         public const string IslandInlandWaterLocation = "IslandInlandWater";
         public const string IslandInlandWaterPrefabPath = "Assets/AssetRaw/Island/IslandInlandWater.prefab";
 
-        /// <summary>Baked walkable NavMesh (AddressByFileName under AssetRaw/Island).</summary>
-        public const string IslandNavMeshLocation = "IslandNavMesh";
-        public const string IslandNavMeshAssetPath = "Assets/AssetRaw/Island/IslandNavMesh.asset";
-
         /// <summary>YooAsset location (AddressByFileName under AssetRaw/Configs).</summary>
         public const string AllMapItemLocation = "AllMapItem";
         public const string AllMapItemAssetPath = "Assets/AssetRaw/Configs/AllMapItem.bytes";
@@ -51,11 +47,6 @@ namespace Game
         public const string CampfireNoiseFireLocation = "Campfire_NoiseFire";
         public const string CampfireNoiseFireMatPath =
             "Assets/GameMain/Environment/FX/UnityFire/Materials/Campfire_NoiseFire.mat";
-
-        /// <summary>河岸/海边石头独立材质（调 _Wetness；AddressByFileName）。</summary>
-        public const string ShiTouShoreLocation = "ShiTou_Shore";
-        public const string ShiTouShoreMatPath =
-            "Assets/GameMain/Environment/Materials/ShiTou_Shore.mat";
 
         /// <summary>
         /// Yoo address：与 Collector <c>AddressByFolderAndFileName</c> 对齐

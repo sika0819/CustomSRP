@@ -126,6 +126,7 @@ namespace CustomSRP.Editor
             buffer.FindPropertyRelative("copyColor").boolValue = false;
             buffer.FindPropertyRelative("copyDepth").boolValue = false;
             buffer.FindPropertyRelative("renderScale").floatValue = 0.75f;
+            buffer.FindPropertyRelative("fxaa").FindPropertyRelative("enabled").boolValue = false;
 
             SerializedProperty shadows = settings.FindPropertyRelative("shadows");
             shadows.FindPropertyRelative("filterQuality").enumValueIndex =

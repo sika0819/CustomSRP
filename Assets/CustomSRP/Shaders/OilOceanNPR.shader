@@ -9,7 +9,6 @@ Shader "CustomSRP/OilOceanNPR"
         _GlintColor ("Ochre Sun Dash", Color) = (0.92, 0.78, 0.42, 1)
         _TintShallow ("Tint Shallow", Color) = (0.78, 0.68, 0.48, 1)
         _TintDeep ("Tint Deep", Color) = (0.28, 0.24, 0.42, 1)
-        _TintHighlight ("Tint Highlight", Color) = (1.0, 0.62, 0.22, 1)
         _TintStrength ("Tint Strength", Range(0, 1)) = 0.4
 
         // 与河 _GlintMap 相同：单列竖带光痕，勿用横笔印章。
@@ -26,10 +25,9 @@ Shader "CustomSRP/OilOceanNPR"
         [NoScaleOffset] _BumpMap ("Wave Normal", 2D) = "bump" {}
         _BumpScale ("Bump Scale", Range(0, 2)) = 0.9
         _BumpTile ("Bump Tile (m)", Range(20, 200)) = 80
-        // xy = 单层 tiling。zw / _BumpCross 保留材质布局，着色器不再采第二层。
+        // 只采 xy 一层。zw 留在向量里给旧材质，不再单独做交叉混合。
         _BumpTiling ("Bump Tiling (xy)", Vector) = (1, 2, 2, 1)
         _BumpScroll ("Bump Scroll (xy)", Vector) = (0.03, -0.02, -0.025, 0.018)
-        _BumpCross ("Bump Cross Blend", Range(0, 1)) = 0.85
 
         // 对齐河：Intersection Noise × Depth × Shore Clip 画岸沫（无 Foam 笔刷贴图）。
         _IntersectionNoise ("Intersection Noise", 2D) = "white" {}

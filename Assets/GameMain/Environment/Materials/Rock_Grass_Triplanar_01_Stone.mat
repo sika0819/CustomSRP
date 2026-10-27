@@ -25,7 +25,9 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - _CANVAS_ON
   - _CLIPPING
+  - _INTERNAL_EDGE_ON
   - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
   m_InvalidKeywords: []
@@ -206,7 +208,6 @@ Material:
     - _Side_Smoothness: 0
     - _Smoothness: 0.2
     - _SmoothnessTextureChannel: 0
-    - _Wetness: 0.35
     - _Snow_Angle_Threshold: 0.42
     - _Snow_Level: 0
     - _Snow_Metallic: 0

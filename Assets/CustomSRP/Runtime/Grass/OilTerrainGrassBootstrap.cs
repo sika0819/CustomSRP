@@ -1,4 +1,3 @@
-using Game;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 
@@ -87,11 +86,7 @@ namespace CustomSRP
 
 #if UNITY_ANDROID || UNITY_IOS
             // B3：缩短绘制距离并减可见上限；远 band 在 CullAndDraw 里移动端跳过。
-            // Gmj 4K@scale1：再砍可见数与距离（非 LOD）。
-            if (DeviceGraphicsPolicy.Current == DeviceGraphicsClass.Gmj)
-                binder.ApplyBudget(10000, 50f, bladeSegments: 2);
-            else
-                binder.ApplyBudget(16000, 70f, bladeSegments: 2);
+            binder.ApplyBudget(16000, 70f, bladeSegments: 2);
 #else
             binder.ApplyBudget(48000, 180f, bladeSegments: 4);
 #endif

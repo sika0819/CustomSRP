@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using Game.BoluoApi;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 using WanosAudio;
@@ -142,14 +141,6 @@ namespace Game
 
         /// <summary>因 bank 未就绪而被拒绝的 bank 名（收到 OnBankLoaded 时清掉并重 Evaluate）。</summary>
         static readonly HashSet<string> _pendingRetryBanks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>本地没有这个 bank：停 Load，等下载灌入后再 Evaluate。</summary>
-        static readonly HashSet<string> _bankLoadPaused = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>这次走进区域已经排过下载，避免每轮 Evaluate 再发起。</summary>
-        static readonly HashSet<string> _downloadPrompted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        static readonly List<string> _pausedScratch = new List<string>(4);
 
         /// <summary>标记 inland water 已就绪（收到 OnInlandWaterReady 时设为 true，无需重复设）。</summary>
         static bool _inlandWaterReady;
@@ -350,8 +341,6 @@ namespace Game
             Sources.Clear();
             VoiceToSource.Clear();
             _pendingRetryBanks.Clear();
-            _bankLoadPaused.Clear();
-            _downloadPrompted.Clear();
             _catalogBuilt = false;
             _contentAudioPaused = false;
             _presetTransitionHeld = false;
@@ -360,9 +349,6 @@ namespace Game
             _inlandWaterReady = false;
             _hasLastListener = false;
             WaterSurfaceProbe.Clear();
-            // host Destroy 会带走子节点；必须清池，否则下次 Acquire 对已销毁 GO SetActive 会炸。
-            _emitterPool = null;
-            _emitterInUse = null;
             if (_host != null)
             {
                 UnityEngine.Object.Destroy(_host);
@@ -405,7 +391,6 @@ namespace Game
                 return;
             if (string.IsNullOrEmpty(bankName))
                 return;
-            _bankLoadPaused.Remove(bankName);
             if (!_pendingRetryBanks.Remove(bankName))
                 return;
             Log.Info($"[AmbienceZone] bank ready={bankName} — retry Evaluate");
@@ -492,7 +477,6 @@ namespace Game
 
                 EnsureHost();
                 BuildStaticSources();
-                EnsureEmitterPool();
                 _catalogBuilt = true;
                 Log.Info($"[AmbienceZone] static sources={Sources.Count}");
                 if (_pendingEvaluate)
@@ -555,7 +539,7 @@ namespace Game
 
         /// <summary>
         /// Pre-allocate one inactive GameObject per source under the host root.
-        /// Called after <see cref="BuildStaticSources"/> / <see cref="BuildMapItemSources"/>.
+        /// Called once after <see cref="BuildStaticSources"/> + <see cref="BuildMapItemSources"/>.
         /// Subsequent enter/exit cycles reuse these instead of allocating/destroying.
         /// </summary>
         static void EnsureEmitterPool()
@@ -564,35 +548,23 @@ namespace Game
             EnsureHost();
             if (_emitterPool == null || _emitterPool.Length != Sources.Count)
             {
-                // 旧池 GO 若仍活着且挂在 host 下，随尺寸变化重建槽位时先摘掉引用（host 仍在则留给新槽重造）。
                 _emitterPool = new GameObject[Sources.Count];
                 _emitterInUse = new bool[Sources.Count];
             }
-
             for (int i = 0; i < Sources.Count; i++)
             {
-                if (EmitterAlive(_emitterPool[i]))
-                    continue;
-                _emitterPool[i] = CreatePooledEmitter(i);
-                _emitterInUse[i] = false;
+                if (_emitterPool[i] != null) continue;
+                var go = new GameObject($"Amb_{i}");
+                go.transform.SetParent(_root, false);
+                go.SetActive(false);
+                _emitterPool[i] = go;
             }
         }
-
-        static GameObject CreatePooledEmitter(int index)
-        {
-            var go = new GameObject($"Amb_{index}");
-            go.transform.SetParent(_root, false);
-            go.SetActive(false);
-            return go;
-        }
-
-        /// <summary>Unity 已 Destroy 的 Object 用 == null 为 true，但裸调用仍会 MissingReferenceException。</summary>
-        static bool EmitterAlive(GameObject go) => go != null;
 
         /// <summary>Mark the slot holding `go` as free and deactivate the GameObject.</summary>
         static void ReturnEmitter(GameObject go)
         {
-            if (!EmitterAlive(go) || _emitterPool == null) return;
+            if (go == null || _emitterPool == null) return;
             for (int i = 0; i < _emitterPool.Length; i++)
             {
                 if (_emitterPool[i] == go)
@@ -607,22 +579,17 @@ namespace Game
         /// <summary>Find an unused pool slot for `src`. Returns the GameObject or null if full.</summary>
         static GameObject AcquireEmitterForSource(RuntimeSource src)
         {
-            EnsureEmitterPool();
             if (_emitterPool == null) return null;
             int srcIdx = Sources.IndexOf(src);
-            if (srcIdx < 0 || srcIdx >= _emitterPool.Length) return null;
-
-            var go = _emitterPool[srcIdx];
-            if (!EmitterAlive(go))
+            if (srcIdx < 0) return null;
+            if (_emitterInUse[srcIdx])
             {
-                go = CreatePooledEmitter(srcIdx);
-                _emitterPool[srcIdx] = go;
-                _emitterInUse[srcIdx] = false;
+                // Already acquired — reuse.
+                return _emitterPool[srcIdx];
             }
-
             _emitterInUse[srcIdx] = true;
-            if (!go.activeSelf)
-                go.SetActive(true);
+            var go = _emitterPool[srcIdx];
+            go.SetActive(true);
             return go;
         }
 
@@ -744,7 +711,6 @@ namespace Game
             CollapseExclusiveSharedPlayWants(n);
             ApplyLakeWaterfallExclusion(n);
             TransferExclusiveSharedPlays(n);
-            ReleasePausedBanksOutside(n);
 
             for (int i = 0; i < n; i++)
             {
@@ -753,7 +719,7 @@ namespace Game
                 {
                     if (src.SoftStopping)
                         CancelSoftStop(src);
-                    if (!src.Playing && !_bankLoadPaused.Contains(src.Spec.Bank))
+                    if (!src.Playing)
                         Log.Info($"[AmbienceZone] want->keep id={src.Spec.Id} bank={src.Spec.Bank} event={src.Spec.PlayEvent}");
                     KeepSourcePlaying(src, _posScratch[i], _distScratch[i]);
                 }
@@ -1402,24 +1368,14 @@ namespace Game
         static void StartSource(RuntimeSource src, Vector3 pos, float dist)
         {
             var spec = src.Spec;
-            if (!src.BankHeld && _bankLoadPaused.Contains(spec.Bank))
-                return;
-
             Log.Info($"[AmbienceZone] StartSource enter id={spec.Id} bank={spec.Bank}");
 
             if (!src.BankHeld)
             {
-                if (!WanosBankStore.CanResolve(spec.Bank))
-                {
-                    PauseMissingBank(spec);
-                    return;
-                }
-
                 if (!WanosBankStore.Retain(spec.Bank))
                 {
                     Log.Warning($"[AmbienceZone] StartSource Retain FAIL id={spec.Id} bank={spec.Bank} (added to retry)");
                     _pendingRetryBanks.Add(spec.Bank);
-                    _bankLoadPaused.Add(spec.Bank);
                     return;
                 }
 
@@ -1441,15 +1397,7 @@ namespace Game
             try
             {
                 EnsureHost();
-                if (!EmitterAlive(src.Emitter))
-                    src.Emitter = null;
                 src.Emitter = AcquireEmitterForSource(src) ?? CreateEmitter(pos);
-                if (!EmitterAlive(src.Emitter))
-                {
-                    Log.Warning($"[AmbienceZone] StartSource no emitter id={spec.Id}");
-                    return;
-                }
-
                 src.Emitter.transform.position = pos;
                 WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
                 src.NeedsRepost = true;
@@ -1475,90 +1423,14 @@ namespace Game
             }
         }
 
-        /// <summary>人已经离开该 bank 的全部区域：下次再走进来可以再提示一次，期间不 Load。</summary>
-        static void ReleasePausedBanksOutside(int n)
-        {
-            if (_bankLoadPaused.Count == 0)
-                return;
-
-            _pausedScratch.Clear();
-            foreach (string bank in _bankLoadPaused)
-                _pausedScratch.Add(bank);
-
-            for (int b = 0; b < _pausedScratch.Count; b++)
-            {
-                string bank = _pausedScratch[b];
-                bool stillWant = false;
-                for (int i = 0; i < n; i++)
-                {
-                    if (!_wantScratch[i])
-                        continue;
-                    if (!string.Equals(Sources[i].Spec.Bank, bank, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    stillWant = true;
-                    break;
-                }
-
-                if (stillWant)
-                    continue;
-
-                _bankLoadPaused.Remove(bank);
-                _downloadPrompted.Remove(bank);
-            }
-        }
-
-        static void PauseMissingBank(AmbienceEmitterSpec spec)
-        {
-            string bank = spec.Bank;
-            _bankLoadPaused.Add(bank);
-            _pendingRetryBanks.Add(bank);
-            Log.Info($"[AmbienceZone] bank missing id={spec.Id} bank={bank} — stop load, download");
-            EnqueueMissingBankNextFrame(bank).Forget();
-        }
-
-        /// <summary>
-        /// 本帧只停 Load。下载放到下一帧，避免走进区域的这一帧做校验或灌引擎。
-        /// 已经在队列里的不重复发起。
-        /// </summary>
-        static async UniTaskVoid EnqueueMissingBankNextFrame(string bank)
-        {
-            if (!_downloadPrompted.Add(bank))
-                return;
-
-            await UniTask.Yield(PlayerLoopTiming.Update);
-            if (!_started || !_bankLoadPaused.Contains(bank))
-                return;
-
-            if (BankDownloader.TryGetActiveItem(bank, out BankDownloadItem active)
-                && active != null
-                && (active.State == BankDownloadState.Pending
-                    || active.State == BankDownloadState.Downloading))
-            {
-                Log.Info("[AmbienceZone] bank already queued " + bank + " state=" + active.State);
-                return;
-            }
-
-            if (!PresetBankCatalog.TryGet(bank, out BankRemoteInfo remote) || remote == null)
-            {
-                Log.Warning("[AmbienceZone] download skipped, catalog miss bank=" + bank);
-                return;
-            }
-
-            BankDownloader.DownloadBank(remote, loadIntoEngine: true, prioritize: true).Forget();
-        }
-
         static void RepostSource(RuntimeSource src, Vector3 pos, float dist)
         {
             var spec = src.Spec;
-            if (!EmitterAlive(src.Emitter))
+            if (src.Emitter == null)
             {
                 EnsureHost();
                 src.Emitter = AcquireEmitterForSource(src) ?? CreateEmitter(pos);
             }
-
-            if (!EmitterAlive(src.Emitter))
-                return;
-
             src.Emitter.transform.position = pos;
             WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
 

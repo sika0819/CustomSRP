@@ -13,9 +13,11 @@ Material:
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
   - _CLIPPING
+  - _INTERNAL_EDGE_ON
   - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
   m_InvalidKeywords:
+  - _SHADOWS_ON
   - _WIND_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
@@ -29,10 +31,6 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 2800000, guid: 8fcfdd22426f74535bb2f0d2442ecdc0, type: 3}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - _BumpMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -41,7 +39,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _OutlineBrushMap:
-        m_Texture: {fileID: 2800000, guid: 67b8eeb60de4040da8e86103f5c566b2, type: 3}
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
@@ -53,17 +51,9 @@ Material:
     - _Cull: 2
     - _Cutoff: 0.5
     - _DstBlend: 0
-    - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
     - _EnableWind: 1
-    - _Fresnel: 0.25
     - _InternalEdge: 1
-    - _Metallic: 0
-    - _NormalStrength: 0.85
-    - _OilCrossBillboard: 0
-    - _OilFoliage: 0
-    - _OilFoliageSkipDay: 0
-    - _OilYBillboard: 0
     - _Outline: 0
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5
@@ -79,21 +69,17 @@ Material:
     - _ShadowLift: 0.95
     - _ShadowWobble: 0.45
     - _Shadows: 1
-    - _Smoothness: 0
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
-    - _TriplanarTiling: 0.25
     - _UseBaseMap: 0
     - _UseEmission: 0
-    - _Wetness: 0
     - _WindNoiseSize: 0.35
     - _WindSpeed: 0.35
     - _WindStrength: 0.08
-    - _WorldTriplanar: 0
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 0.54999995, g: 0.5, b: 0.43999997, a: 1}
-    - _BaseColor: {r: 0.6415094, g: 0.6415094, b: 0.6415094, a: 1}
+    - _BaseColor: {r: 0.41509432, g: 0.35730198, b: 0.2956568, a: 1}
     - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _EmissionLightPosWS: {r: 0, g: 0, b: 0, a: 0}
@@ -101,7 +87,6 @@ Material:
     - _OutlineColor: {r: 0.13999996, g: 0.09999997, b: 0.07999996, a: 1}
     - _ShadowTint: {r: 0.41999996, g: 0.47999996, b: 0.72, a: 1}
     - _ShadowWarm: {r: 0.62, g: 0.45, b: 0.31999996, a: 1}
-    - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
     - _SpecularColor: {r: 0.54999995, g: 0.47999996, b: 0.39999998, a: 1}
     - _WindDirection: {r: 1, g: 0, b: 1, a: 0}
   m_BuildTextureStacks: []

@@ -40,7 +40,7 @@ namespace Game
         /// <summary>进程内进岛次数（含二次退登重进）；供 Load/telemetry。</summary>
         static int _enterCount;
 
-        /// <summary>供 <see cref="IslandStartupWarmup"/> 检测揭罩是否已作废。</summary>
+        /// <summary>揭罩代际。Leave / 新一轮 Uncover 递增后，旧的淡出协程自行退出。</summary>
         public static int UncoverGeneration =>
             System.Threading.Interlocked.CompareExchange(ref _uncoverGeneration, 0, 0);
 
@@ -134,9 +134,6 @@ namespace Game
                 Log.Info("[ProcedureIsland] HostLeave → ProcedureGuestLogin");
                 // 作废揭罩：否则 UncoverAsync 延迟 Hide 会拆掉下面刚 Show 的加载罩。
                 System.Threading.Interlocked.Increment(ref _uncoverGeneration);
-                // 先于 Close Main：IdleImmersive.Dispose 会 OnExitImmersive；
-                // 若不 suppress，会 Resume 镜面并与后续 World.Release/二次 Prefill 抢帧。
-                IslandImmersiveSoftUnload.CancelForWorldTeardown();
                 // 先松预设/相机闩，再关 UI（OnClose 也会 Abort，此处防 Mid-Leave 丢帧）。
                 PendingDownloadIntent.Clear();
                 GameEntry.Presets?.AbortTransition();
@@ -175,6 +172,8 @@ namespace Game
             }
 
             // 杀进程 / 正常离岛落盘。退登路径已在 ExecuteLeave 清会话前 flush；此处会话仍在时再兜底一刀。
+            // 揭罩前离岛也要松出生锁，避免主相机停在进岛姿态上不再更新。
+            IslandJoystickCamera.Current?.ReleaseSpawnHold();
             if (BoluoGamePersistence.AllowsAccountProgressDisk)
                 IslandPlayerPosSave.TrySaveCurrentAndFlush();
 
@@ -317,6 +316,10 @@ namespace Game
             if (gen != _uncoverGeneration)
                 return;
 
+            // 罩还是不透明的：用已经加载的地形把眼睛贴到落点，再开始淡出。
+            if (IslandJoystickCamera.Current != null)
+                IslandPlayerPosSave.ReplantAfterTerrainReady(IslandJoystickCamera.Current);
+
             // 先揭罩 + 放行触摸，再做 Gmj 预热。
             // 二次进岛 Prefill 抢主线程时，揭罩前 warmup 会把「即将进入」拖成几十秒（有声无画面）。
             EnvStreamingConfig.BeginPostUncoverQuiet();
@@ -340,6 +343,7 @@ namespace Game
             }
 
             BootLoadingService.Hide();
+            IslandJoystickCamera.Current?.ReleaseSpawnHold();
             if (GameEntry.UI != null)
                 UiAssets.CloseGroup("Loading");
             // 加载罩已撤 → 立刻 Notify(2)，宿主抬 islandHudReady 放行触摸；
@@ -361,7 +365,6 @@ namespace Game
         {
             float wallStart = Time.realtimeSinceStartup;
             Log.Info("[Hitch] PostUncoverWarmup begin");
-            IslandStartupWarmup.RunAsync(gen).Forget();
             await UniTask.Delay(200, DelayType.UnscaledDeltaTime);
             if (gen != _uncoverGeneration)
                 return;

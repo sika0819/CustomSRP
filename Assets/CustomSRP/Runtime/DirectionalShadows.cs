@@ -202,10 +202,7 @@ namespace CustomSRP
 
             int cascadeCount = _settings.cascadeCount;
             Vector3 ratios = _settings.CascadeRatios;
-            // Keep casters across the fade band. Aggressive shrink (0.8−fade) punched a
-            // bright cascade disk on terrain: cascade-0 atlas missed ferns that cascade-1
-            // still drew, so soft blend lerped lit→dark along the culling sphere.
-            float cullingFactor = Mathf.Clamp01(1f - _settings.cascadeFade * 0.5f);
+            float cullingFactor = Mathf.Max(0f, 0.8f - _settings.cascadeFade);
             int splitOffset = light.visibleLightIndex * Shadows.MaxTilesPerLight;
             for (int i = 0; i < cascadeCount; i++)
             {

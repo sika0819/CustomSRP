@@ -51,8 +51,8 @@ namespace Game
 
         /// <summary>
         /// 进岛相机就绪后调用：按优先级设位，并启动周期保存。
-        /// 此时地形可能尚未 Instantiate；垂直运动由相机在 <c>IsTerrainReady</c> 前冻结，
-        /// 地形就绪后再调 <see cref="ReplantAfterTerrainReady"/> 用高度图重贴。
+        /// 此时地形可能尚未 Instantiate。设位后锁住眼睛，避免重力下坠或朝向被改掉；
+        /// 地形就绪后 <see cref="ReplantAfterTerrainReady"/> 在罩下重贴，揭罩后再松锁。
         /// </summary>
         public static void InitAndArm(IslandJoystickCamera cam)
         {
@@ -60,6 +60,7 @@ namespace Game
                 return;
 
             ApplySpawnPriority(cam);
+            cam.HoldSpawnPose();
             _armed = true;
             _nextSaveAt = Time.unscaledTime + SaveStartDelaySeconds;
             Log.Info(
@@ -202,6 +203,7 @@ namespace Game
                         var prop = JsonUtility.FromJson<IslandPlayerProp>(json);
                         if (prop != null)
                         {
+                            cam.SetPitchDegrees(prop.rotx);
                             cam.Teleport(
                                 new Vector3(prop.posx, prop.posy, prop.posz),
                                 prop.roty);

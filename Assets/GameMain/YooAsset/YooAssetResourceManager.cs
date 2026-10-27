@@ -226,11 +226,6 @@ namespace Game
             ResourcePackage package = YooResourceModule.DefaultPackage;
             if (!package.CheckLocationValid(assetName))
             {
-#if UNITY_EDITOR
-                // Editor/ 下联调资源（如注销弹窗）不进 Collector；AssetDatabase 直载。
-                if (TryLoadEditorOnlyAsset(assetName, assetType, loadAssetCallbacks, userData))
-                    return;
-#endif
                 Log.Error("[YooGF] Invalid location: " + assetName);
                 loadAssetCallbacks.LoadAssetFailureCallback?.Invoke(
                     assetName, LoadResourceStatus.NotExist,
@@ -241,39 +236,6 @@ namespace Game
             Log.Info("[YooGF] LoadAsset begin: " + assetName);
             StartCoroutine(LoadAssetRoutine(assetName, assetType, loadAssetCallbacks, userData));
         }
-
-#if UNITY_EDITOR
-        static bool TryLoadEditorOnlyAsset(
-            string assetName,
-            Type assetType,
-            LoadAssetCallbacks loadAssetCallbacks,
-            object userData)
-        {
-            if (string.IsNullOrEmpty(assetName)
-                || assetName.IndexOf("/Editor/", StringComparison.OrdinalIgnoreCase) < 0)
-                return false;
-
-            Type loadType = assetType
-                ?? (assetName.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)
-                    ? typeof(GameObject)
-                    : typeof(Object));
-            Object asset = UnityEditor.AssetDatabase.LoadAssetAtPath(assetName, loadType);
-            if (asset == null)
-                return false;
-
-            Log.Info("[YooGF] LoadAsset editor-only: " + assetName);
-            try
-            {
-                loadAssetCallbacks.LoadAssetSuccessCallback?.Invoke(assetName, asset, 0f, userData);
-            }
-            catch (Exception e)
-            {
-                Log.Error("[YooGF] Editor-only success callback threw: " + assetName + " — " + e);
-            }
-
-            return true;
-        }
-#endif
 
         IEnumerator LoadAssetRoutine(
             string assetName,

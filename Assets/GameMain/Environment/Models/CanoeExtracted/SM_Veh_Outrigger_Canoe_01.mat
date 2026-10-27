@@ -30,6 +30,9 @@ Material:
   m_InvalidKeywords:
   - _ALPHATEST_ON
   - _BASEMAP
+  - _CANVAS_ON
+  - _INTERNAL_EDGE_ON
+  - _OUTLINE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 1

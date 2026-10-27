@@ -107,7 +107,7 @@ namespace Game.Editor
             float bottom = any ? b.min.y : pos.y;
             // DaoYuPos.y 是石头面等人工抬高；地形采样只作下限兜底，不能把树压回土里。
             float targetBottom = pos.y;
-            Terrain[] terrains = Object.FindObjectsByType<Terrain>(FindObjectsSortMode.None);
+            Terrain[] terrains = Object.FindObjectsByType<Terrain>(FindObjectsInactive.Exclude);
             for (int i = 0; i < terrains.Length; i++)
             {
                 Terrain t = terrains[i];

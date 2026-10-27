@@ -31,17 +31,7 @@ namespace Game
         /// Copy a StreamingAssets file to a real filesystem path.
         /// Android: UnityWebRequest from jar; elsewhere: File.Copy.
         /// </summary>
-        public static UniTask<bool> CopyFileToAsync(string relativePath, string destAbsolutePath)
-        {
-#if UNITY_ANDROID && !UNITY_EDITOR
-            return CopyFileToAndroidAsync(relativePath, destAbsolutePath);
-#else
-            return UniTask.FromResult(CopyFileToSync(relativePath, destAbsolutePath));
-#endif
-        }
-
-#if UNITY_ANDROID && !UNITY_EDITOR
-        static async UniTask<bool> CopyFileToAndroidAsync(string relativePath, string destAbsolutePath)
+        public static async UniTask<bool> CopyFileToAsync(string relativePath, string destAbsolutePath)
         {
             if (string.IsNullOrEmpty(relativePath) || string.IsNullOrEmpty(destAbsolutePath))
                 return false;
@@ -53,6 +43,7 @@ namespace Game
                 if (!string.IsNullOrEmpty(destDir))
                     Directory.CreateDirectory(destDir);
 
+#if UNITY_ANDROID && !UNITY_EDITOR
                 using (UnityWebRequest req = UnityWebRequest.Get(full))
                 {
                     await req.SendWebRequest();
@@ -70,30 +61,12 @@ namespace Game
                     File.Move(tmp, destAbsolutePath);
                     return true;
                 }
-            }
-            catch (Exception e)
-            {
-                Log.Warning($"[StreamingAssets] CopyFileTo failed {relativePath}: {e.Message}");
-                return false;
-            }
-        }
 #else
-        static bool CopyFileToSync(string relativePath, string destAbsolutePath)
-        {
-            if (string.IsNullOrEmpty(relativePath) || string.IsNullOrEmpty(destAbsolutePath))
-                return false;
-
-            string full = Combine(relativePath);
-            try
-            {
-                string destDir = Path.GetDirectoryName(destAbsolutePath);
-                if (!string.IsNullOrEmpty(destDir))
-                    Directory.CreateDirectory(destDir);
-
                 if (!File.Exists(full))
                     return false;
                 File.Copy(full, destAbsolutePath, overwrite: true);
                 return true;
+#endif
             }
             catch (Exception e)
             {
@@ -101,7 +74,6 @@ namespace Game
                 return false;
             }
         }
-#endif
 
         public static bool TryReadTextSync(string relativePath, out string text)
         {
@@ -170,21 +142,10 @@ namespace Game
         }
 
         /// <summary>Async text read (Android jar-safe). Prefer over bare ReadTextCoroutine.</summary>
-        public static UniTask<(bool ok, string text)> ReadTextAsync(string relativePath)
-        {
-#if UNITY_ANDROID && !UNITY_EDITOR
-            return ReadTextAndroidAsync(relativePath);
-#else
-            if (TryReadTextSync(relativePath, out string text))
-                return UniTask.FromResult((true, text));
-            return UniTask.FromResult((false, "missing " + Combine(relativePath)));
-#endif
-        }
-
-#if UNITY_ANDROID && !UNITY_EDITOR
-        static async UniTask<(bool ok, string text)> ReadTextAndroidAsync(string relativePath)
+        public static async UniTask<(bool ok, string text)> ReadTextAsync(string relativePath)
         {
             string full = Combine(relativePath);
+#if UNITY_ANDROID && !UNITY_EDITOR
             try
             {
                 using (UnityWebRequest req = UnityWebRequest.Get(full))
@@ -199,8 +160,12 @@ namespace Game
             {
                 return (false, e.Message);
             }
-        }
+#else
+            if (TryReadTextSync(relativePath, out string text))
+                return (true, text);
+            return (false, "missing " + full);
 #endif
+        }
 
         public static BootManifest LoadBootManifestOrDefault()
         {

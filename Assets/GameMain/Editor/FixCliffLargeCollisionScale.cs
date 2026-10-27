@@ -7,7 +7,7 @@ namespace Game.Editor
     /// <summary>
     /// <c>SM_Env_Ground_Cliff_Large_01_Collision</c> 曾按 FBX 未缩放顶点烘焙（半边长约 2000m），
     /// 而 ModelImporter.globalScale=0.01 的渲染网格约 20m。差正好 100×。
-    /// NavMesh 用 PhysicsColliders，会把这块崖当成百倍大障碍。
+    /// 走路用这份碰撞，缩放不对会把悬崖当成百倍大障碍。
     /// </summary>
     public static class FixCliffLargeCollisionScale
     {
@@ -16,20 +16,11 @@ namespace Game.Editor
         const string CollisionPath =
             "Assets/GameMain/Environment/Models/Collision/SM_Env_Ground_Cliff_Large_01_Collision.asset";
 
-        [MenuItem("GameMain/Boluo/Fix Cliff Large Collision Scale + Rebake Nav")]
+        [MenuItem("GameMain/Boluo/Fix Cliff Large Collision Scale")]
         public static void MenuFix()
         {
-            EditorUtility.DisplayDialog("Fix Cliff Large Collision", FixAndRebakeNav(), "OK");
-        }
-
-        public static string FixAndRebakeNav()
-        {
-            if (!RebakeCollision(out string bakeMsg))
-                return bakeMsg;
-
-            IslandNavBakeSceneBuilder.BuildScene();
-            bool ok = IslandNavBakeSceneBuilder.BakeNavMesh(out string navMsg);
-            return bakeMsg + "\n" + (ok ? navMsg : "Nav bake failed: " + navMsg);
+            RebakeCollision(out string bakeMsg);
+            EditorUtility.DisplayDialog("Fix Cliff Large Collision", bakeMsg, "OK");
         }
 
         static bool RebakeCollision(out string message)

@@ -11,7 +11,15 @@ namespace CustomSRP
             copyColor = true,
             copyDepth = true,
             renderScale = 1f,
-            bicubicRescaling = CameraBufferSettings.BicubicRescalingMode.Off
+            bicubicRescaling = CameraBufferSettings.BicubicRescalingMode.Off,
+            fxaa = new CameraBufferSettings.FXAA
+            {
+                enabled = true,
+                fixedThreshold = 0.0833f,
+                relativeThreshold = 0.166f,
+                subpixelBlending = 0.75f,
+                quality = CameraBufferSettings.FXAA.Quality.High
+            }
         };
 
         public bool useSRPBatcher = true;

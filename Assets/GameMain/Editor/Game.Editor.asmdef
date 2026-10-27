@@ -7,8 +7,7 @@
         "YooAsset",
         "YooAsset.Editor",
         "UniTask",
-        "WanosAudio",
-        "Unity.AI.Navigation"
+        "WanosAudio"
     ],
     "includePlatforms": [
         "Editor"

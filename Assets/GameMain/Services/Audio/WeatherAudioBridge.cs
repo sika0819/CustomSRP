@@ -173,12 +173,25 @@ namespace Game
             if (weather != null && !PresetWeatherHold.IsHeld)
             {
                 // Boluo: RTPC = curWeatherState * 30 (关闭=0, 小=30, 中=60, 大=90).
-                // Visual* lerps during weather transitions so audio ramps with fog/rain/wind.
-                wind = weather.VisualWind01 * 90f;
-                rain = weather.VisualRain01 * 90f;
-                foggy = weather.VisualFoggy01 * 90f;
-                wantWind = wind > 0.5f;
-                wantRain = rain > 0.5f;
+                float intensity = weather.Level <= 0 ? 0f : Mathf.Clamp(weather.Level, 0, 3) * 30f;
+                switch (weather.Kind)
+                {
+                    case IslandWeatherKind.Wind:
+                        wantWind = intensity > 0f;
+                        wind = intensity;
+                        break;
+                    case IslandWeatherKind.Rain:
+                        wantRain = intensity > 0f;
+                        rain = intensity;
+                        break;
+                    case IslandWeatherKind.Foggy:
+                        foggy = intensity;
+                        break;
+                    case IslandWeatherKind.Cloud:
+                    case IslandWeatherKind.Clear:
+                    default:
+                        break;
+                }
             }
 
             // Always write all three so a prior kind does not leave a non-zero RTPC.

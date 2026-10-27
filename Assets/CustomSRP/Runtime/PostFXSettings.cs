@@ -79,28 +79,20 @@ namespace CustomSRP
                 // Require a minimum downscale of 4x so the pyramid is never too deep.
                 if (downscaleLimit < 4) downscaleLimit = 4;
             }
-
-            /// <summary>Gmj 4K 防御：资产若误开 bloom，最多 1 阶。</summary>
-            public void ClampForGmj()
-            {
-                ClampForMobile();
-                if (maxIterations > 1)
-                    maxIterations = 1;
-            }
         }
 
         [SerializeField]
         BloomSettings bloom = new BloomSettings
         {
-            enabled = true,
+            enabled = false,
             downscaleLimit = 2,
             maxIterations = 4,
             threshold = 1f,
             thresholdKnee = 0.5f,
-            intensity = 0.3f,
+            intensity = 0.2f,
             fadeFireflies = true,
             mode = BloomSettings.Mode.Scattering,
-            scatter = 0.85f
+            scatter = 0.7f
         };
 
         public BloomSettings Bloom => bloom;
@@ -128,11 +120,8 @@ namespace CustomSRP
         [SerializeField]
         ColorAdjustmentsSettings colorAdjustments = new ColorAdjustmentsSettings
         {
-            enabled = true,
-            postExposure = 0.05f,
-            contrast = 10f,
-            colorFilter = Color.white,
-            saturation = 8f
+            enabled = false,
+            colorFilter = Color.white
         };
 
         public ColorAdjustmentsSettings ColorAdjustments => colorAdjustments;
@@ -149,9 +138,7 @@ namespace CustomSRP
         [SerializeField]
         WhiteBalanceSettings whiteBalance = new WhiteBalanceSettings
         {
-            enabled = true,
-            temperature = 4f,
-            tint = 2f
+            enabled = false
         };
 
         public WhiteBalanceSettings WhiteBalance => whiteBalance;
@@ -169,13 +156,11 @@ namespace CustomSRP
         }
 
         [SerializeField]
-        // Off by default: strong split eats OilSkyLookTables day/night. Stored colors are mild if re-enabled.
         SplitToningSettings splitToning = new SplitToningSettings
         {
             enabled = false,
-            shadows = new Color(0.45f, 0.47f, 0.52f, 1f),
-            highlights = new Color(0.55f, 0.52f, 0.46f, 1f),
-            balance = 0f
+            shadows = Color.gray,
+            highlights = Color.gray
         };
 
         public SplitToningSettings SplitToning => splitToning;
@@ -212,15 +197,13 @@ namespace CustomSRP
         }
 
         [SerializeField]
-        // Off by default: navy/ochre multiply overrides sky look period. Near-white if re-enabled.
         ShadowsMidtonesHighlightsSettings shadowsMidtonesHighlights =
             new ShadowsMidtonesHighlightsSettings
             {
                 enabled = false,
-                shadows = new Color(0.96f, 0.97f, 1f, 1f),
-                midtones = new Color(1f, 0.99f, 0.97f, 1f),
-                highlights = new Color(1.02f, 1f, 0.96f, 1f),
-                shadowsStart = 0.05f,
+                shadows = Color.white,
+                midtones = Color.white,
+                highlights = Color.white,
                 shadowsEnd = 0.3f,
                 highlightsStart = 0.55f,
                 highLightsEnd = 1f
@@ -255,101 +238,19 @@ namespace CustomSRP
         public ToneMappingSettings ToneMapping => toneMapping;
 
         [Serializable]
-        public struct FXAASettings
-        {
-            [Tooltip("Apply FXAA in the final post pass. Also requires camera Allow FXAA.")]
-            public bool enabled;
-
-            [Range(0.0312f, 0.0833f)]
-            public float fixedThreshold;
-
-            [Range(0.063f, 0.333f)]
-            public float relativeThreshold;
-
-            [Range(0f, 1f)]
-            public float subpixelBlending;
-
-            public enum Quality
-            {
-                Low,
-                Medium,
-                High
-            }
-
-            public Quality quality;
-        }
-
-        [SerializeField]
-        FXAASettings fxaa = new FXAASettings
-        {
-            enabled = false,
-            fixedThreshold = 0.0833f,
-            relativeThreshold = 0.166f,
-            subpixelBlending = 0.75f,
-            quality = FXAASettings.Quality.High
-        };
-
-        public FXAASettings FXAA => fxaa;
-
-        [Serializable]
         public struct OilFilterSettings
         {
             [Tooltip("Edge wet-oil: fwidth edge + 4 diagonal taps (low cost).")]
             public bool enabled;
-
-            [Tooltip("Multiplies wet-oil amount after edge/interior gates.")]
-            [Range(0f, 1.5f)]
-            public float strength;
-
-            [Tooltip("Lite/HQ floor so flat areas keep a light stroke (0–0.25).")]
-            [Range(0f, 0.25f)]
-            public float interiorFloor;
-
-            [Tooltip("Multiplies auto buffer-based radius scale.")]
-            [Range(0.5f, 1.5f)]
-            public float radiusScale;
         }
 
         [SerializeField]
         OilFilterSettings oilFilter = new OilFilterSettings
         {
-            enabled = true,
-            strength = 1.15f,
-            interiorFloor = 0.12f,
-            radiusScale = 1.08f
+            enabled = false
         };
 
         public OilFilterSettings OilFilter => oilFilter;
-
-        [Serializable]
-        public struct OilWarpSettings
-        {
-            [Tooltip("Immersive full-screen oil UV warp (breath-driven). Off when strength is 0.")]
-            public bool enabled;
-
-            [Tooltip("Caps immersive breath×weight strength.")]
-            [Range(0f, 1f)]
-            public float maxStrength;
-
-            [Tooltip("Noise / flow spatial scale.")]
-            [Range(0.4f, 2.5f)]
-            public float scale;
-
-            [Tooltip("Max UV offset in texels at full strength.")]
-            [Range(3f, 14f)]
-            public float maxTexels;
-        }
-
-        [SerializeField]
-        OilWarpSettings oilWarp = new OilWarpSettings
-        {
-            enabled = true,
-            maxStrength = 0.55f,
-            scale = 1.05f,
-            maxTexels = 5f
-        };
-
-        public OilWarpSettings OilWarp => oilWarp;
 
         [Serializable]
         public struct CanvasSettings
@@ -357,20 +258,19 @@ namespace CustomSRP
             [Tooltip("Procedural canvas weave after tonemapping. Not film grain.")]
             public bool enabled;
 
-            [Range(0f, 0.12f)]
+            [Range(0f, 0.08f)]
             public float grain;
 
-            [Range(0f, 0.12f)]
+            [Range(0f, 0.08f)]
             public float weave;
         }
 
         [SerializeField]
         CanvasSettings canvas = new CanvasSettings
         {
-            enabled = true,
-            // Keep a light tooth — heavy weave reads like a screen mesh.
-            grain = 0.028f,
-            weave = 0.022f
+            enabled = false,
+            grain = 0.035f,
+            weave = 0.02f
         };
 
         public CanvasSettings Canvas => canvas;

@@ -21,6 +21,7 @@ namespace Game
             _ = typeof(LODGroup);
             _ = typeof(ReflectionProbe);
             _ = typeof(LightProbeGroup);
+            _ = typeof(LightProbeProxyVolume);
             _ = typeof(WindZone);
             _ = typeof(ParticleSystem);
             _ = typeof(Tree);

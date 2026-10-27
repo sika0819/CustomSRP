@@ -98,10 +98,7 @@ namespace CustomSRP
             // Mobile: reduce bloom mip chain depth to save ROP passes on tile GPUs.
             if (Application.isMobilePlatform)
             {
-                if (Game.DeviceGraphicsPolicy.Current == Game.DeviceGraphicsClass.Gmj)
-                    bloom.ClampForGmj();
-                else
-                    bloom.ClampForMobile();
+                bloom.ClampForMobile();
                 // B6: walking — single bloom iteration (standing keeps mobile clamp = 2).
                 if (Game.IslandLocomotionState.IsWalking && bloom.maxIterations > 1)
                     bloom.maxIterations = 1;

@@ -3,7 +3,6 @@
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ImageBasedLighting.hlsl"
-#include "OilBrdfCommon.hlsl"
 
 TEXTURE2D(unity_Lightmap);
 SAMPLER(samplerunity_Lightmap);
@@ -68,9 +67,7 @@ float3 SampleLightProbe(Surface surfaceWS)
 float3 SampleEnvironment(Surface surfaceWS, BRDF brdf)
 {
     float3 uvw = reflect(-surfaceWS.viewDirection, surfaceWS.normal);
-    uvw = OilBrdfWarpReflectDir(uvw, surfaceWS.position, brdf.perceptualRoughness);
     float mip = PerceptualRoughnessToMipmapLevel(brdf.perceptualRoughness);
-    mip += OilBrdfEnvMipBias(brdf.perceptualRoughness);
     float4 environment = SAMPLE_TEXTURECUBE_LOD(
         unity_SpecCube0, samplerunity_SpecCube0, uvw, mip);
     return DecodeHDREnvironment(environment, unity_SpecCube0_HDR);

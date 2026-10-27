@@ -50,7 +50,6 @@ struct TerrainOilSample
     half3 normalWS;
     half occlusion;
     half smoothness;
-    half metallic;
 };
 
 void AccumulateTerrainLayer(
@@ -58,14 +57,12 @@ void AccumulateTerrainLayer(
     inout half3 normalTS,
     inout half occlusion,
     inout half smoothness,
-    inout half metallic,
     float weight,
     float2 uv,
     half4 mask,
     float hasMask,
     float4 remapScale,
     float4 remapOffset,
-    float metallicConstant,
     float smoothnessConstant,
     float normalScale,
     TEXTURE2D_PARAM(splat, samp),
@@ -78,11 +75,8 @@ void AccumulateTerrainLayer(
 
     half w = (half)weight;
     albedo += (half3)SAMPLE_TEXTURE2D_BIAS(splat, samp, uv, TERRAIN_ALBEDO_BIAS).rgb * w;
-    // Mask R = metallic (or layer _MetallicN when no mask).
-    half met = hasMask > 0.5 ? mask.r : (half)metallicConstant;
     half ao = hasMask > 0.5 ? mask.g : (half)(remapScale.g + remapOffset.g);
     half sm = hasMask > 0.5 ? mask.a : (half)smoothnessConstant;
-    metallic += met * w;
     occlusion += ao * w;
     smoothness += sm * w;
     // Same mip as the paint. A sharper normal only aliases on this GPU and misses cache.
@@ -132,22 +126,21 @@ TerrainOilSample SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 
     half3 nTS = 0.0h;
     half occlusion = 0.0h;
     half smoothness = 0.0h;
-    half metallic = 0.0h;
     AccumulateTerrainLayer(
-        albedo, nTS, occlusion, smoothness, metallic, control.r, uv0, m0,
-        _LayerHasMask0, _MaskMapRemapScale0, _MaskMapRemapOffset0, _Metallic0, _Smoothness0, _NormalScale0,
+        albedo, nTS, occlusion, smoothness, control.r, uv0, m0,
+        _LayerHasMask0, _MaskMapRemapScale0, _MaskMapRemapOffset0, _Smoothness0, _NormalScale0,
         TEXTURE2D_ARGS(_Splat0, sampler_Splat0), TEXTURE2D_ARGS(_Normal0, sampler_Splat0));
     AccumulateTerrainLayer(
-        albedo, nTS, occlusion, smoothness, metallic, control.g, uv1, m1,
-        _LayerHasMask1, _MaskMapRemapScale1, _MaskMapRemapOffset1, _Metallic1, _Smoothness1, _NormalScale1,
+        albedo, nTS, occlusion, smoothness, control.g, uv1, m1,
+        _LayerHasMask1, _MaskMapRemapScale1, _MaskMapRemapOffset1, _Smoothness1, _NormalScale1,
         TEXTURE2D_ARGS(_Splat1, sampler_Splat0), TEXTURE2D_ARGS(_Normal1, sampler_Splat0));
     AccumulateTerrainLayer(
-        albedo, nTS, occlusion, smoothness, metallic, control.b, uv2, m2,
-        _LayerHasMask2, _MaskMapRemapScale2, _MaskMapRemapOffset2, _Metallic2, _Smoothness2, _NormalScale2,
+        albedo, nTS, occlusion, smoothness, control.b, uv2, m2,
+        _LayerHasMask2, _MaskMapRemapScale2, _MaskMapRemapOffset2, _Smoothness2, _NormalScale2,
         TEXTURE2D_ARGS(_Splat2, sampler_Splat0), TEXTURE2D_ARGS(_Normal2, sampler_Splat0));
     AccumulateTerrainLayer(
-        albedo, nTS, occlusion, smoothness, metallic, control.a, uv3, m3,
-        _LayerHasMask3, _MaskMapRemapScale3, _MaskMapRemapOffset3, _Metallic3, _Smoothness3, _NormalScale3,
+        albedo, nTS, occlusion, smoothness, control.a, uv3, m3,
+        _LayerHasMask3, _MaskMapRemapScale3, _MaskMapRemapOffset3, _Smoothness3, _NormalScale3,
         TEXTURE2D_ARGS(_Splat3, sampler_Splat0), TEXTURE2D_ARGS(_Normal3, sampler_Splat0));
 
     float3 geomN = normalize(geomNormalWS);
@@ -177,7 +170,6 @@ TerrainOilSample SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 
     nTS.z += 1e-4h;
     s.occlusion = occlusion;
     s.smoothness = smoothness;
-    s.metallic = metallic;
     s.normalWS = (half3)TerrainDetailToWorld(normalize(nTS), geomN);
     s.albedo = albedo * (half3)_BaseColor.rgb;
     return s;
@@ -193,20 +185,6 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
     half3 normalWS = normalize(terrain.normalWS);
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
 
-    // Optional single-plane wet strip from material (authored on terrain mat).
-    half shoreWet = 0.0h;
-    half wetStrength = saturate((half)_ShoreWetStrength);
-    if (wetStrength > 0.001h)
-    {
-        float band = max(_ShoreWetBand, 0.5);
-        float dy = abs(input.positionWS.y - _ShoreWetY);
-        shoreWet = (half)(1.0 - smoothstep(0.0, band, dy)) * wetStrength;
-    }
-    if (shoreWet > 0.001h)
-        albedo *= 1.0h - shoreWet * 0.22h;
-    half terrainSmooth = saturate(terrain.smoothness + shoreWet * 0.25h);
-    half3 wetSpec = (half3)_SpecularColor.rgb * (1.0h + shoreWet * 0.35h);
-
     Surface surface;
     surface.position = input.positionWS;
     surface.normal = (float3)normalWS;
@@ -215,23 +193,16 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
     surface.depth = -TransformWorldToView(input.positionWS).z;
     surface.color = (float3)albedo;
     surface.alpha = 1.0;
-    surface.metallic = (float)saturate(terrain.metallic);
+    surface.metallic = 0.0;
     surface.occlusion = (float)terrain.occlusion;
-    surface.smoothness = (float)terrainSmooth;
-    surface.fresnelStrength = saturate(terrainSmooth + terrain.metallic) * 0.35;
+    surface.smoothness = (float)terrain.smoothness;
+    surface.fresnelStrength = 0.0;
     surface.dither = InterleavedGradientNoise(input.positionCS_SS.xy, 0);
     surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
 
 #if defined(OIL_MOBILE_PERF)
-    half brushScale = (half)_OilBrushMobileScale;
+    // LightingEx ignores brush; SoftFogStroke(0.5) is identity — skip OutlineBrush tap.
     half brush = 0.5h;
-    if (brushScale > 0.001h)
-    {
-        brush = lerp(
-            0.5h,
-            SampleOilShadowBrushCheap(input.positionWS, input.controlUV, 0.25),
-            brushScale);
-    }
 #else
     half brush = SampleOilShadowBrushCheap(input.positionWS, input.controlUV, 0.25);
 #endif
@@ -241,22 +212,30 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
         albedo,
         half3(0.36h, 0.46h, 0.62h),
         half3(0.58h, 0.48h, 0.3h),
-        wetSpec,
+        (half3)_SpecularColor.rgb,
         0.0h,
         (half)_ShadeSteps,
         0.0h,
+        (half)_ShadowLift,
+        (half)_ShadeLift,
         brush,
+        (half)_ShadowWobble,
         (half)_OilDetail,
-        terrainSmooth,
+        terrain.smoothness,
         fragment.screenUV);
 
-    // Match basemap peak clamp — noon key × sand albedo otherwise saturates chalk-white.
-    color = min(color, albedo * 1.15h + half3(0.05h, 0.04h, 0.03h));
 #if !defined(OIL_MOBILE_PERF)
+    if (terrain.smoothness > 0.02h && GetDirectionalLightCount() > 0)
+    {
+        half3 L = (half3)_DirectionalLightData[0].directionAndMask.xyz;
+        half3 H = normalize(L + viewDir);
+        half spec = pow(saturate(dot(normalWS, H)), lerp(24.0h, 96.0h, terrain.smoothness));
+        color += spec * terrain.smoothness * (half3)_SpecularColor.rgb * 0.28h;
+    }
+
     color = OilWeaveTint(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);
 #else
-    color = OilWeaveTintMobile(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush);
 #endif
     return half4(saturate(color), 1.0h);

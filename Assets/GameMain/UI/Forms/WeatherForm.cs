@@ -187,7 +187,8 @@ namespace Game
             _applying = true;
             try
             {
-                weather.SetWeather(WeatherKinds[_editingIndex], _knobLevel, fireEvent: true, animate: true);
+                weather.SetWeather(WeatherKinds[_editingIndex], _knobLevel);
+                weather.BeginPanelTransitionLock();
             }
             finally
             {

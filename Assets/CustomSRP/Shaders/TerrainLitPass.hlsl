@@ -76,7 +76,7 @@ float4 TerrainLitPassFragment(Varyings input) : SV_TARGET
     GI gi = GetGI(GI_FRAGMENT_DATA(input), surface, brdf);
     float3 color = GetLighting(
         GetFragment(input.positionCS_SS), surface, brdf, gi);
-    color = ApplyOilFog(color, surface.depth, 0.5, input.positionWS);
+    color = ApplyFog(color, surface.depth);
     return float4(color, 1.0);
 }
 

@@ -67,7 +67,7 @@ namespace CustomSRP
 
         void OnEnable()
         {
-            if (_settings == null) _settings = OilRainSettings.Current ?? FindAnyObjectByType<OilRainSettings>();
+            if (_settings == null) _settings = OilRainSettings.Current ?? FindObjectOfType<OilRainSettings>();
             if (_targetCamera == null) _targetCamera = Camera.main;
             _followTarget = transform.position;
             EnsureResources();

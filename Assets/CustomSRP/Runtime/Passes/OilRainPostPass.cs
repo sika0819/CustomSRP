@@ -10,8 +10,7 @@ namespace CustomSRP
 {
     /// <summary>
     /// Screen-space water surface ripple post-process.
-    /// Recorded AFTER OilFilter, BEFORE ColourLUT (FXAA path),
-    /// or folded into RainFinal when !FXAA.
+    /// Recorded AFTER OilFilter, BEFORE ColourLUT.
     /// Cheap: ~2 multiply-adds per pixel + a depth sample.
     /// </summary>
     public class OilRainPostPass
@@ -22,19 +21,21 @@ namespace CustomSRP
         static readonly int
             TexelSizeId = Shader.PropertyToID("_OilFilterTexelSize"),
             DepthCopyId = Shader.PropertyToID("_CameraDepthTexture_ForRain"),
-            InverseVPId = Shader.PropertyToID("_InverseViewProjectionMatrix"),
-            VPId = Shader.PropertyToID("_ViewProjectionMatrix"),
+            InverseVPId  = Shader.PropertyToID("_InverseViewProjectionMatrix"),
+            VPId         = Shader.PropertyToID("_ViewProjectionMatrix"),
             RipplePositionsId = Shader.PropertyToID("_OilRainRipplePositions"),
             RippleWorldSizeId = Shader.PropertyToID("_OilRainRippleWorldSize"),
-            RippleExpandId = Shader.PropertyToID("_OilRainRippleExpandSpeed"),
-            RippleOpacityId = Shader.PropertyToID("_OilRainRippleOpacity"),
-            RippleCountId = Shader.PropertyToID("_OilRainRippleCount");
+            RippleExpandId    = Shader.PropertyToID("_OilRainRippleExpandSpeed"),
+            RippleOpacityId   = Shader.PropertyToID("_OilRainRippleOpacity"),
+            RippleCountId     = Shader.PropertyToID("_OilRainRippleCount");
 
         const int kMaxRipples = 8;
-        // Persistent across RG pass instances so rings can live ~3s.
-        static readonly Vector4[] s_ripplePositions = new Vector4[kMaxRipples];
-        static int s_rippleWriteIndex;
+        readonly Vector4[] _ripplePositions = new Vector4[kMaxRipples];
+        int _rippleWriteIndex;
 
+        // Pending ripples submitted from main thread (OilRainRenderHook) —
+        // we drain into _ripplePositions in Render() each pass. Static so
+        // producer lifetime is independent of pass instance lifetime.
         static readonly Queue<Vector3> s_pendingRipples = new Queue<Vector3>(64);
         static readonly object s_pendingLock = new object();
 
@@ -45,64 +46,54 @@ namespace CustomSRP
         OilRainSettings _rainSettings;
         Vector2Int _bufferSize;
 
-        public static bool IsActive(OilRainSettings rainSettings) =>
-            rainSettings != null && rainSettings.postRippleEnabled;
-
-        public static TextureHandle ResolveDepth(in CameraRendererTextures textures)
-        {
-            return textures.depthCopy.IsValid()
-                ? textures.depthCopy
-                : textures.depthAttachment;
-        }
-
-        public static void BindGlobals(
-            UnsafeCommandBuffer buffer,
-            Vector2Int bufferSize,
-            TextureHandle depth,
-            OilRainSettings rainSettings)
-        {
-            int w = Mathf.Max(1, bufferSize.x);
-            int h = Mathf.Max(1, bufferSize.y);
-            buffer.SetGlobalVector(TexelSizeId, new Vector4(1f / w, 1f / h, w, h));
-            if (depth.IsValid())
-                buffer.SetGlobalTexture(DepthCopyId, depth);
-
-            Camera cam = Camera.main;
-            Matrix4x4 vp = cam != null
-                ? GL.GetGPUProjectionMatrix(cam.projectionMatrix, cam.allowMSAA)
-                  * cam.worldToCameraMatrix
-                : Matrix4x4.identity;
-            buffer.SetGlobalMatrix(VPId, vp);
-            buffer.SetGlobalMatrix(InverseVPId, vp.inverse);
-
-            DrainPendingRipples();
-
-            float worldSize = rainSettings != null ? rainSettings.postRippleWorldSize : 3f;
-            float expandSpeed = rainSettings != null ? rainSettings.postRippleExpandSpeed : 2f;
-            float opacity = rainSettings != null ? rainSettings.postRippleOpacity : 0.4f;
-            const float lifetimeSec = 3f;
-
-            int count = 0;
-            float now = Time.time;
-            for (int i = 0; i < kMaxRipples; i++)
-            {
-                if (now - s_ripplePositions[i].w < lifetimeSec)
-                    count++;
-            }
-
-            buffer.SetGlobalFloat(RippleCountId, count);
-            buffer.SetGlobalFloat(RippleWorldSizeId, worldSize);
-            buffer.SetGlobalFloat(RippleExpandId, expandSpeed);
-            buffer.SetGlobalFloat(RippleOpacityId, opacity);
-            buffer.SetGlobalVectorArray(RipplePositionsId, s_ripplePositions);
-        }
+        /// <summary>Public count (visible to the shader pass) of active ripples.</summary>
+        int _activeRippleCount;
 
         void Render(UnsafeGraphContext context)
         {
             using (MarkerRender.Auto())
             {
                 UnsafeCommandBuffer buffer = context.cmd;
-                BindGlobals(buffer, _bufferSize, _depth, _rainSettings);
+
+                // --- shared globals ---
+                int w = Mathf.Max(1, _bufferSize.x);
+                int h = Mathf.Max(1, _bufferSize.y);
+                buffer.SetGlobalVector(TexelSizeId, new Vector4(1f / w, 1f / h, w, h));
+                buffer.SetGlobalTexture(DepthCopyId, _depth);
+
+                // --- rain globals ---
+                // Cache Camera.main once per pass; do not call Camera.main twice.
+                Camera cam = Camera.main;
+                Matrix4x4 vp = (cam != null)
+                    ? GL.GetGPUProjectionMatrix(cam.projectionMatrix, cam.allowMSAA) * cam.worldToCameraMatrix
+                    : Matrix4x4.identity;
+                buffer.SetGlobalMatrix(VPId, vp);
+                buffer.SetGlobalMatrix(InverseVPId, vp.inverse);
+
+                // Drain pending ripples from main-thread producers.
+                DrainPendingRipples();
+
+                // Read settings ONCE into locals (was: redundant dead-branch)
+                float worldSize   = _rainSettings != null ? _rainSettings.postRippleWorldSize   : 3f;
+                float expandSpeed = _rainSettings != null ? _rainSettings.postRippleExpandSpeed : 2f;
+                float opacity     = _rainSettings != null ? _rainSettings.postRippleOpacity     : 0.4f;
+                float lifetimeSec = 3f;
+
+                int count = 0;
+                float now = Time.time;
+                for (int i = 0; i < kMaxRipples; i++)
+                {
+                    if (now - _ripplePositions[i].w < lifetimeSec) count++;
+                }
+                _activeRippleCount = count;
+
+                buffer.SetGlobalFloat(RippleCountId, _activeRippleCount);
+                buffer.SetGlobalFloat(RippleWorldSizeId, worldSize);
+                buffer.SetGlobalFloat(RippleExpandId, expandSpeed);
+                buffer.SetGlobalFloat(RippleOpacityId, opacity);
+                buffer.SetGlobalVectorArray(RipplePositionsId, _ripplePositions);
+
+                // --- blit ---
                 _stack.Draw(buffer, _source, _result, Pass.OilRain);
             }
         }
@@ -114,7 +105,7 @@ namespace CustomSRP
             in CameraRendererTextures textures,
             OilRainSettings rainSettings)
         {
-            if (!IsActive(rainSettings))
+            if (rainSettings == null || !rainSettings.postRippleEnabled)
                 return colorSource;
 
             using IUnsafeRenderGraphBuilder builder = renderGraph.AddUnsafePass(
@@ -125,7 +116,10 @@ namespace CustomSRP
             pass._bufferSize = stack.BufferSize;
             builder.UseTexture(colorSource);
 
-            TextureHandle depth = ResolveDepth(textures);
+            // Need depth for water detection (sky pixels must skip)
+            TextureHandle depth = textures.depthCopy.IsValid()
+                ? textures.depthCopy
+                : textures.depthAttachment;
             if (depth.IsValid())
             {
                 pass._depth = depth;
@@ -147,11 +141,12 @@ namespace CustomSRP
             return pass._result;
         }
 
-        static void AddRipple(Vector3 worldPos)
+        /// <summary>Submit a new ripple at world position.</summary>
+        public void AddRipple(Vector3 worldPos)
         {
-            s_ripplePositions[s_rippleWriteIndex] = new Vector4(
+            _ripplePositions[_rippleWriteIndex] = new Vector4(
                 worldPos.x, worldPos.y, worldPos.z, Time.time);
-            s_rippleWriteIndex = (s_rippleWriteIndex + 1) % kMaxRipples;
+            _rippleWriteIndex = (_rippleWriteIndex + 1) % kMaxRipples;
         }
 
         /// <summary>
@@ -163,18 +158,22 @@ namespace CustomSRP
         {
             lock (s_pendingLock)
             {
+                // Cap to avoid runaway if the post pass is disabled.
                 if (s_pendingRipples.Count >= 64)
                     s_pendingRipples.Dequeue();
                 s_pendingRipples.Enqueue(worldPos);
             }
         }
 
-        static void DrainPendingRipples()
+        void DrainPendingRipples()
         {
             lock (s_pendingLock)
             {
                 while (s_pendingRipples.Count > 0)
-                    AddRipple(s_pendingRipples.Dequeue());
+                {
+                    Vector3 pos = s_pendingRipples.Dequeue();
+                    AddRipple(pos);
+                }
             }
         }
     }

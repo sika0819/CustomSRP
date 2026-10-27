@@ -54,11 +54,6 @@ Shader "CustomSRP/TerrainOilNPR"
         _SpecularColor ("Specular", Color) = (0.5, 0.45, 0.38, 1)
         _AmbientColor ("Ambient", Color) = (0.52, 0.5, 0.44, 1)
 
-        // Optional wet strip on terrain near one water Y (authored on the material).
-        _ShoreWetY ("Shore Wet Y (m)", Float) = 5.7
-        _ShoreWetBand ("Shore Wet Band (m)", Range(0.5, 20)) = 5
-        _ShoreWetStrength ("Shore Wet Strength", Range(0, 1)) = 0
-
         _OutlineBrushMap ("Shadow Brush Mask", 2D) = "white" {}
         _RidgeRockMap ("Ridge Rock", 2D) = "gray" {}
         _RidgeAmount ("Ridge Rock Amount", Range(0, 1)) = 0
@@ -94,7 +89,6 @@ Shader "CustomSRP/TerrainOilNPR"
             #pragma target 3.5
             #pragma multi_compile_instancing
             #pragma instancing_options assumeuniformscaling nomatrices nolightprobe nolightmap
-            #pragma multi_compile _ _SHADOW_FILTER_MEDIUM _SHADOW_FILTER_HIGH
             #pragma multi_compile _ OIL_MOBILE_PERF
             // Terrain runtime mats often drop local keywords — never gate receive on keyword.
             #define _RECEIVE_SHADOWS

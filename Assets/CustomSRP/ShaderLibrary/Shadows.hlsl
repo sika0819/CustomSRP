@@ -88,24 +88,9 @@ float SampleDirectionalShadowAtlas(float3 positionSTS)
         _DirectionalShadowAtlas, SHADOW_SAMPLER, positionSTS);
 }
 
-// 5-tap cross: breaks hard 1-tap texel streaks on large flat receivers.
-// No STS jitter — that made curved self-shadow read as concentric rings.
-float SampleDirectionalShadowTerrain(float3 positionSTS)
-{
-    float2 texel = _ShadowAtlasSize.yy;
-    float s = SampleDirectionalShadowAtlas(positionSTS);
-    s += SampleDirectionalShadowAtlas(positionSTS + float3( texel.x, 0.0, 0.0));
-    s += SampleDirectionalShadowAtlas(positionSTS + float3(-texel.x, 0.0, 0.0));
-    s += SampleDirectionalShadowAtlas(positionSTS + float3(0.0,  texel.y, 0.0));
-    s += SampleDirectionalShadowAtlas(positionSTS + float3(0.0, -texel.y, 0.0));
-    return s * 0.2;
-}
-
 float FilterDirectionalShadow(float3 positionSTS)
 {
 #if defined(OIL_NPR_HARD_DIRECTIONAL_SHADOW)
-    // Hard 1-tap (online / Gmj floor). 5-tap terrain filter is only for
-    // GetDirectionalShadowAttenuationTerrain — do not inflate all OilNPR receivers.
     return SampleDirectionalShadowAtlas(positionSTS);
 #elif defined(DIRECTIONAL_FILTER_SETUP)
     // Must match ShadowSamplingTent.hlsl (out real / real2); float[] breaks on mobile Metal/GLES.
@@ -134,9 +119,9 @@ float SampleOtherShadowAtlas(float3 positionSTS, float3 bounds)
 
 float FilterOtherShadow(float3 positionSTS, float3 bounds)
 {
-    // Oil NPR hard-dir is for cascade only — Other (point/spot) always PCF
-    // so campfire umbra matches Lit PointAndSpotShadows soft look.
-#if defined(OTHER_FILTER_SETUP)
+#if defined(OIL_NPR_HARD_DIRECTIONAL_SHADOW)
+    return SampleOtherShadowAtlas(positionSTS, bounds);
+#elif defined(OTHER_FILTER_SETUP)
     real weights[OTHER_FILTER_SAMPLES];
     real2 positions[OTHER_FILTER_SAMPLES];
     real4 size = _ShadowAtlasSize.wwzz;
@@ -201,6 +186,18 @@ ShadowData GetShadowData(Surface surfaceWS)
     return data;
 }
 
+float SampleDirectionalShadowTerrain(float3 positionSTS)
+{
+    // 2x2 box breaks texel acne stripes on large flat receivers (hard 1-tap streaks).
+    float2 texel = _ShadowAtlasSize.yy;
+    float s = SampleDirectionalShadowAtlas(positionSTS);
+    s += SampleDirectionalShadowAtlas(positionSTS + float3( texel.x, 0.0, 0.0));
+    s += SampleDirectionalShadowAtlas(positionSTS + float3(-texel.x, 0.0, 0.0));
+    s += SampleDirectionalShadowAtlas(positionSTS + float3(0.0,  texel.y, 0.0));
+    s += SampleDirectionalShadowAtlas(positionSTS + float3(0.0, -texel.y, 0.0));
+    return s * 0.2;
+}
+
 float GetDirectionalShadowAttenuation(
     DirectionalShadowData directional, ShadowData global, Surface surfaceWS)
 {
@@ -245,24 +242,17 @@ float GetDirectionalShadowAttenuation(
             _DirectionalShadowMatrices[directional.tileIndex + 1],
             float4(surfaceWS.position + normalBias, 1.0)
         ).xyz;
-        // Ease the square-distance fade so the last meters aren't a hard disk edge.
-        float blend = smoothstep(0.0, 1.0, global.cascadeBlend);
 #if defined(TERRAIN_SHADOW_RECEIVER)
 #if UNITY_REVERSED_Z
         positionSTS.z += texelSize1 * 0.2;
 #else
         positionSTS.z -= texelSize1 * 0.2;
 #endif
-        float shadowNext = SampleDirectionalShadowTerrain(positionSTS);
+        shadow = lerp(SampleDirectionalShadowTerrain(positionSTS), shadow, global.cascadeBlend);
 #else
-        float shadowNext = FilterDirectionalShadow(positionSTS);
+        shadow = lerp(
+            FilterDirectionalShadow(positionSTS), shadow, global.cascadeBlend);
 #endif
-        // Near cascade is higher-res → thinner fern umbra (reads brighter); far cascade
-        // fattened texels read darker. Pull mid-blend toward the darker sample so NPR
-        // posterize doesn't snap the density jump into a circular seam.
-        float shadowLerp = lerp(shadowNext, shadow, blend);
-        float mid = blend * (1.0 - blend) * 2.0;
-        shadow = lerp(shadowLerp, min(shadow, shadowNext), mid);
     }
     return lerp(1.0, shadow, directional.strength);
 }

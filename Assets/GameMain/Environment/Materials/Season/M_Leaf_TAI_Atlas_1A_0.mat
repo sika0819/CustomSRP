@@ -19,6 +19,8 @@ Material:
   - _NORMALMAP
   - _OILFOLIAGESKIPDAY_ON
   - _OILFOLIAGE_ON
+  - _OUTLINE
+  - _OUTLINE
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0

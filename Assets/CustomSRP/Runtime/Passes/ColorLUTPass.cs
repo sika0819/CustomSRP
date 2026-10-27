@@ -12,6 +12,7 @@ namespace CustomSRP
     {
         static readonly ProfilingSampler Sampler = new ProfilingSampler("Color LUT");
         static readonly ProfilerMarker MarkerRebuild = new ProfilerMarker("ColorLUT.Rebuild");
+        static readonly ProfilerMarker MarkerBindCached = new ProfilerMarker("ColorLUT.BindCached");
 
         static readonly int
             colorGradingLUTId = Shader.PropertyToID("_ColorGradingLUT"),
@@ -278,16 +279,14 @@ namespace CustomSRP
             }
         }
 
-        /// <summary>
-        /// Bind cached LUT globals for Final / ComposeFinal / RainFinal consumers.
-        /// Cache-hit Record no longer adds a dedicated bind UnsafePass.
-        /// </summary>
-        public static void BindGlobals(UnsafeCommandBuffer buffer)
+        void RenderBindCached(UnsafeGraphContext context)
         {
-            if (s_CachedLut == null || s_CachedLut.rt == null)
-                return;
-            buffer.SetGlobalVector(colorGradingLUTParametersId, s_CachedLutParameters);
-            buffer.SetGlobalTexture(colorGradingLUTId, s_CachedLut);
+            using (MarkerBindCached.Auto())
+            {
+                UnsafeCommandBuffer buffer = context.cmd;
+                buffer.SetGlobalVector(colorGradingLUTParametersId, _lutParameters);
+                buffer.SetGlobalTexture(colorGradingLUTId, _colorLUT);
+            }
         }
 
         public static TextureHandle Record(
@@ -319,9 +318,19 @@ namespace CustomSRP
             bool cacheHit = s_CacheValid && s_CachedHash == hash && s_CachedLut != null;
             TextureHandle lutHandle = renderGraph.ImportTexture(s_CachedLut);
 
-            // Cache hit: import only — Final / merged passes call BindGlobals.
             if (cacheHit)
+            {
+                using IUnsafeRenderGraphBuilder bindBuilder = renderGraph.AddUnsafePass(
+                    Sampler.name, out ColorLUTPass bindPass, Sampler);
+                bindPass._lutParameters = s_CachedLutParameters;
+                bindPass._colorLUT = lutHandle;
+                bindBuilder.UseTexture(lutHandle);
+                bindBuilder.AllowGlobalStateModification(true);
+                bindBuilder.AllowPassCulling(false);
+                bindBuilder.SetRenderFunc<ColorLUTPass>(
+                    static (pass, context) => pass.RenderBindCached(context));
                 return lutHandle;
+            }
 
             using (IComputeRenderGraphBuilder builder = renderGraph.AddComputePass(
                        Sampler.name, out ColorLUTPass pass, Sampler))

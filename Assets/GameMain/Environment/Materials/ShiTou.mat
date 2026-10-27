@@ -14,6 +14,9 @@ Material:
   m_ValidKeywords:
   - _RECEIVE_SHADOWS
   m_InvalidKeywords:
+  - _CANVAS_ON
+  - _INTERNAL_EDGE_ON
+  - _OUTLINE_ON
   - _SHADOWS_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
@@ -111,7 +114,6 @@ Material:
     - _EdgeStrength: 0.55
     - _EnableWind: 0
     - _EnvironmentReflections: 1
-    - _Fresnel: 0
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossinessSource: 0
@@ -142,7 +144,7 @@ Material:
     - _ShadowWobble: 0.45
     - _Shadows: 0
     - _Shininess: 0
-    - _Smoothness: 0.8
+    - _Smoothness: 0.5
     - _SmoothnessSource: 0
     - _SmoothnessTextureChannel: 0
     - _SpecSource: 0
@@ -154,7 +156,6 @@ Material:
     - _TriplanarTiling: 0.06
     - _UseBaseMap: 0
     - _UseEmission: 0
-    - _Wetness: 0
     - _WindNoiseSize: 0.2
     - _WindSpeed: 1
     - _WindStrength: 0

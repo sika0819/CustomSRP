@@ -6,7 +6,7 @@ namespace Game
     /// <summary>Panel/Dialog open → block joystick and idle immersive.</summary>
     public static class HudOverlayGate
     {
-        /// <summary>Unity Panel/Dialog only。相机 renderScale 另认 NativeOverlayGate.OverlayPresent（同档 0.25）。</summary>
+        /// <summary>Unity Panel/Dialog only。相机 renderScale 另认 NativeOverlayGate.OverlayPresent（同档 0.375）。</summary>
         public static bool HasPopup()
         {
             return GroupHasForms("Panel") || GroupHasForms("Dialog");

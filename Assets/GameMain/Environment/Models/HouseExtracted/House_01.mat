@@ -16,8 +16,9 @@ Material:
   - _SHADOWS_CLIP
   m_InvalidKeywords:
   - _BASEMAP
-  - _OILFOLIAGESKIPDAY_ON
-  - _OILFOLIAGE_ON
+  - _CANVAS_ON
+  - _INTERNAL_EDGE_ON
+  - _OUTLINE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 1
@@ -114,7 +115,6 @@ Material:
     - _EdgeStrength: 0.55
     - _EnableWind: 0
     - _EnvironmentReflections: 1
-    - _Fresnel: 0.25
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
@@ -122,10 +122,7 @@ Material:
     - _Metallic: 0.3
     - _NormalStrength: 0.85
     - _OcclusionStrength: 1
-    - _OilCrossBillboard: 0
-    - _OilFoliage: 1
-    - _OilFoliageSkipDay: 1
-    - _OilYBillboard: 0
+    - _OilFoliage: 0
     - _Outline: 1
     - _OutlineBreak: 0.12
     - _OutlineBrushScale: 2.5
@@ -150,15 +147,12 @@ Material:
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
     - _Surface: 0
-    - _TriplanarTiling: 0.25
     - _UseBaseMap: 1
     - _UseEmission: 0
-    - _Wetness: 0
     - _WindNoiseSize: 0.2
     - _WindSpeed: 1
     - _WindStrength: 0
     - _WorkflowMode: 1
-    - _WorldTriplanar: 0
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}

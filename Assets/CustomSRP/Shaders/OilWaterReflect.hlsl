@@ -1,8 +1,6 @@
 #ifndef CUSTOM_OIL_WATER_REFLECT_INCLUDED
 #define CUSTOM_OIL_WATER_REFLECT_INCLUDED
 
-#include "../ShaderLibrary/OilBrdfCommon.hlsl"
-
 // ReflectionRT — low-res oil glaze (planar cam matches main FOV/aspect).
 TEXTURE2D(_OilPlanarReflectTex);
 SAMPLER(sampler_OilPlanarReflectTex);
@@ -244,10 +242,13 @@ half3 OilWaterAnalyticSky(float3 rayDir, half stroke)
     return sky;
 }
 
-// Compat alias — shared OilPosterizeLuma lives in OilBrdfCommon.
+// Posterize luma into oil color blocks; keep hue. 5d813b3 放在 OilBrdfCommon，本分支没有那份头文件。
 half3 OilWaterPosterizeLuma(half3 c, half steps)
 {
-    return OilPosterizeLuma(c, steps);
+    steps = max(steps, 2.0h);
+    half L = max(c.r, max(c.g, c.b));
+    half Lq = floor(L * steps + 0.5h) / steps;
+    return c * (L > 1e-4h ? (Lq / L) : 1.0h);
 }
 
 half3 ApplyOilWaterReflection(

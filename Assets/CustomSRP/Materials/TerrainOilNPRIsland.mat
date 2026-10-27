@@ -11,13 +11,14 @@ Material:
   m_Shader: {fileID: 4800000, guid: 8612fc20379de4b7a9b03ab75f08209b, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
-  m_InvalidKeywords:
+  m_ValidKeywords:
   - _RECEIVE_SHADOWS
+  m_InvalidKeywords:
+  - _CANVAS_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
+  m_CustomRenderQueue: 1900
   stringTagMap: {}
   disabledShaderPasses: []
   m_LockedProperties: 
@@ -101,14 +102,12 @@ Material:
     - _Canvas: 1
     - _CanvasStrength: 0.08
     - _EdgeStrength: 0.4
-    - _Fresnel: 1
-    - _HeightTransition: 0.848
+    - _HeightTransition: 0
     - _InternalEdge: 0
     - _LayerHasMask0: 1
     - _LayerHasMask1: 1
     - _LayerHasMask2: 1
     - _LayerHasMask3: 1
-    - _Metallic: 0
     - _Metallic0: 0
     - _Metallic1: 0
     - _Metallic2: 0
@@ -125,14 +124,10 @@ Material:
     - _ReceiveShadows: 1
     - _RidgeAmount: 0
     - _ShadeLift: 0.42
-    - _ShadeSteps: 8
+    - _ShadeSteps: 4
     - _ShadowBrushScale: 1.35
     - _ShadowLift: 0.62
     - _ShadowWobble: 0.4
-    - _ShoreWetBand: 5
-    - _ShoreWetStrength: 0.4
-    - _ShoreWetY: 5.7
-    - _Smoothness: 0.25
     - _Smoothness0: 0.25
     - _Smoothness1: 0.25
     - _Smoothness2: 0.25

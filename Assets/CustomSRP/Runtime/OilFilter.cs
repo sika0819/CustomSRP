@@ -36,7 +36,6 @@ namespace CustomSRP
         public static bool IsEnabled(PostFXSettings settings)
         {
             // B6: walking on mobile skips the full-screen oil edge pass.
-            // Mobile / Gmj 站立走 UltraLite（半分辨率 QuadPick + 全分辨率合成）；走路仍关。
             if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)
                 return false;
 
