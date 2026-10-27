@@ -204,9 +204,9 @@ namespace Game.Editor
             Camera camera = Camera.main;
             if (camera != null)
             {
-                // Match early-cover root (near-black) so pre-UITK frames never flash white.
+                // Match .boot-early-cover__root rgb(12, 12, 14) so pre-UITK frames never flash white.
                 camera.clearFlags = CameraClearFlags.SolidColor;
-                camera.backgroundColor = new Color(0.047f, 0.047f, 0.055f, 1f);
+                camera.backgroundColor = new Color(12f / 255f, 12f / 255f, 14f / 255f, 1f);
                 camera.allowHDR = false;
                 camera.allowMSAA = false;
                 IslandCameraSrpSetup.EnsureCustomRenderPipelineCamera(camera.gameObject);

@@ -37,14 +37,32 @@ namespace Game
             if (_document != null)
                 _document.sortingOrder = SortingOrder;
 
+            // First rendered frame is this camera clear. Keep it the cover color
+            // so the gap before the UITK overlay is never white.
+            PaintCameraClear();
             ScreenLayout.Changed += OnScreenChanged;
             ScreenLayout.Apply(_document);
             Show("正在进入世界...", 0.02f);
         }
 
+        void Start()
+        {
+            // UIDocument builds its tree in OnEnable (default order). This component
+            // runs at -100, so Awake/OnEnable see a null root. Start is still before
+            // the first camera render.
+            if (_showing)
+                Show(_tipText, _progress);
+        }
+
+        void LateUpdate()
+        {
+            if (!_showing || _still != null)
+                return;
+            Show(_tipText, _progress);
+        }
+
         void OnEnable()
         {
-            // UITK root can lag one frame behind Awake; re-bind still/chrome.
             if (!_showing)
                 return;
             CacheElements();
@@ -137,6 +155,16 @@ namespace Game
             _tip = rootVe.Q<Label>("tip");
             if (_fill != null)
                 _fill.style.transformOrigin = new TransformOrigin(Length.Percent(0), Length.Percent(50));
+        }
+
+        static void PaintCameraClear()
+        {
+            Camera cam = Camera.main;
+            if (cam == null)
+                return;
+            // rgb(12, 12, 14) — same as .boot-early-cover__root.
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(12f / 255f, 12f / 255f, 14f / 255f, 1f);
         }
 
         void ApplyStillForOrientation()
