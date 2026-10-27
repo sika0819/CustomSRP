@@ -145,6 +145,30 @@ namespace Game
             StartCoroutine(StreamLoop());
         }
 
+        static int _prefillWarnDepth;
+        static StackTraceLogType _prefillWarnStack = StackTraceLogType.ScriptOnly;
+
+        /// <summary>
+        /// 缺脚本 / NavMeshLink 的 Instantiate 会给每条 Warning 打完整托管栈。
+        /// 华为 logcat 上这比生成本身还贵，近场铺装会被拖到一分多钟。铺装期间只留一行 Warning。
+        /// </summary>
+        static void SuppressPrefillWarningStacks()
+        {
+            if (_prefillWarnDepth++ != 0)
+                return;
+            _prefillWarnStack = Application.GetStackTraceLogType(LogType.Warning);
+            Application.SetStackTraceLogType(LogType.Warning, StackTraceLogType.None);
+        }
+
+        static void RestorePrefillWarningStacks()
+        {
+            if (_prefillWarnDepth <= 0)
+                return;
+            _prefillWarnDepth--;
+            if (_prefillWarnDepth == 0)
+                Application.SetStackTraceLogType(LogType.Warning, _prefillWarnStack);
+        }
+
         /// <param name="onNearReady">
         /// 近场段结束后回调（世界首装揭罩门闩）；null 时不做 Quiet Hold（CatchUp）。
         /// </param>
@@ -159,6 +183,18 @@ namespace Game
                 onNearReady?.Invoke();
                 yield break;
             }
+
+            SuppressPrefillWarningStacks();
+            yield return PrefillAroundFocusBody(progressMin, progressMax, report, onNearReady);
+            RestorePrefillWarningStacks();
+        }
+
+        IEnumerator PrefillAroundFocusBody(
+            float progressMin,
+            float progressMax,
+            System.Action<float, string> report,
+            System.Action onNearReady)
+        {
 
             Vector3 p = _focus.position;
             var candidates = new List<int>(512);
@@ -198,8 +234,12 @@ namespace Game
             int done = 0;
             float progressMid = Mathf.Lerp(progressMin, progressMax, 0.55f);
             var sw = System.Diagnostics.Stopwatch.StartNew();
+            var nearClock = System.Diagnostics.Stopwatch.StartNew();
+            float uncoverBudgetMs = EnvStreamingConfig.PrefillUncoverBudgetMs;
+            bool uncoverCapped = false;
 
-            // --- Near：Ring0 / TreeRing0（≥ MeshCollider）→ IsNearReady ---
+            // --- Near：脚下揭罩半径（手机）或 Ring0/MeshCollider 环（闺蜜机）→ IsNearReady ---
+            // 墙钟到点就揭罩，剩下的交给下面的 Quiet 远场，避免华为把「正在铺装环境」钉死。
             for (int k = 0; k < candidates.Count; k++)
             {
                 int idx = candidates[k];
@@ -209,12 +249,22 @@ namespace Game
                 if (distSq > nearShow * nearShow)
                     continue;
 
+                if (onNearReady != null
+                    && uncoverBudgetMs > 1f
+                    && done > 0
+                    && nearClock.ElapsedMilliseconds >= uncoverBudgetMs)
+                {
+                    uncoverCapped = true;
+                    break;
+                }
+
                 yield return PrefillSpawnOne(idx, p, sw);
                 done++;
                 float tNear = total > 0 ? (float)done / total : 1f;
                 report?.Invoke(Mathf.Lerp(progressMin, progressMid, tNear), "正在铺装环境...");
             }
 
+            long nearMs = nearClock.ElapsedMilliseconds;
             onNearReady?.Invoke();
             if (onNearReady != null)
                 EnvStreamingConfig.BeginPostUncoverQuiet();
@@ -224,7 +274,12 @@ namespace Game
             if (reportFar)
                 report?.Invoke(progressMid, "近场就绪，继续铺装...");
             Log.Info(
-                $"[EnvItemStreamerLite] prefill near-ready spawned={_spawnedCount}/{_items.Count} candidates={total}");
+                "[EnvItemStreamerLite] prefill near-ready spawned=" + _spawnedCount + "/" + _items.Count
+                + " candidates=" + total
+                + " nearDone=" + done
+                + " nearMs=" + nearMs
+                + " capped=" + uncoverCapped
+                + " uncoverR=" + EnvStreamingConfig.PrefillUncoverRadius.ToString("0"));
 
             // --- Far：其余 PrefillShow 半径，Quiet 预算 ---
             for (int k = 0; k < candidates.Count; k++)
@@ -876,6 +931,7 @@ namespace Game
             _released = true;
             _running = false;
             StopAllCoroutines();
+            RestorePrefillWarningStacks();
 #if UNITY_ANDROID && !UNITY_EDITOR
             // 先清原生合批再 Destroy：否则 LateUpdate 仍扫幽灵实例，二次进岛 Prefill 卡死。
             EnvNativeInstancing.ClearAll();

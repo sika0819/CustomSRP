@@ -165,6 +165,17 @@ namespace Game
         public static float PrefillTreeBoostRadius = 180f;
 
         /// <summary>
+        /// 揭罩前阻塞铺装的水平半径。0 表示沿用 Ring0，并抬到 MeshCollider 环（闺蜜机 / 桌面）。
+        /// 手机 Low/Mid 设成脚下一块：其余近场改到揭罩后 Quiet 铺，避免「正在铺装环境」卡死进岛。
+        /// </summary>
+        public static float PrefillUncoverRadius = 0f;
+
+        /// <summary>
+        /// 揭罩前近场铺装的墙钟上限（毫秒）。0 表示不限。到点即 <c>onNearReady</c>，未铺完的继续后台铺。
+        /// </summary>
+        public static float PrefillUncoverBudgetMs = 0f;
+
+        /// <summary>
         /// 可投射物体超过此距离关闭 ShadowCasting。与 CRP / Quality shadowDistance 对齐。
         /// 必须在流送轮询里走近后再打开，不能只在生成时关一次。
         /// </summary>
@@ -486,8 +497,8 @@ namespace Game
         }
 
         /// <summary>
-        /// Prefill 近场段：cap 在 Ring0 / TreeRing0，且 ≥ <see cref="MeshColliderEnableRadius"/>，
-        /// 供 IsNearReady 揭罩（远场仍走 <see cref="GetPrefillShowDistance"/>）。
+        /// Prefill 近场段，供 IsNearReady 揭罩（远场仍走 <see cref="GetPrefillShowDistance"/>）。
+        /// 手机档用 <see cref="PrefillUncoverRadius"/> 收成脚下一块；闺蜜机 / 桌面仍抬到 MeshCollider 环。
         /// </summary>
         public static float GetPrefillNearShowDistance(string category, float runtimeShowDistance)
         {
@@ -495,7 +506,10 @@ namespace Game
             float ring = IsTreeCategory(category) && !IsSmallTreeCategory(category)
                 ? TreeRing0EnterRadius
                 : Ring0EnterRadius;
-            ring = Mathf.Max(ring, MeshColliderEnableRadius);
+            if (PrefillUncoverRadius > 1f)
+                ring = Mathf.Min(ring, PrefillUncoverRadius);
+            else
+                ring = Mathf.Max(ring, MeshColliderEnableRadius);
             return Mathf.Min(full, ring);
         }
 
@@ -589,6 +603,9 @@ namespace Game
         public static void ApplyGraphicsTierDefaults()
         {
             ClearPostUncoverQuiet();
+            // 先回到「不收揭罩半径」，避免 Mid 数值残留到随后切到的 Gmj/High。
+            PrefillUncoverRadius = 0f;
+            PrefillUncoverBudgetMs = 0f;
             DeviceGraphicsProfile profile = DeviceGraphicsPolicy.Profile;
             if (!profile.ApplyStreamingTune)
                 return;
@@ -651,6 +668,8 @@ namespace Game
             TentLodShowDistance = 160f;
             MeshColliderEnableRadius = 72f;
             MeshColliderDisableRadius = 96f;
+            PrefillUncoverRadius = 32f;
+            PrefillUncoverBudgetMs = 6000f;
 
             SpawnPerFrameBudget = 8;
             DespawnPerFrameBudget = 8;
@@ -692,6 +711,8 @@ namespace Game
             TentLodShowDistance = 170f;
             MeshColliderEnableRadius = 80f;
             MeshColliderDisableRadius = 108f;
+            PrefillUncoverRadius = 36f;
+            PrefillUncoverBudgetMs = 6000f;
 
             SpawnPerFrameBudget = 12;
             DespawnPerFrameBudget = 10;
@@ -733,6 +754,9 @@ namespace Game
             TentLodShowDistance = 180f;
             MeshColliderEnableRadius = 90f;
             MeshColliderDisableRadius = 120f;
+            // 手机 High 与 Gmj 共用本函数；Gmj 在 ApplyStreamingGmjDensity 里把揭罩半径/时限清回 0。
+            PrefillUncoverRadius = 42f;
+            PrefillUncoverBudgetMs = 7000f;
 
             SpawnPerFrameBudget = 16;
             DespawnPerFrameBudget = 12;
@@ -744,6 +768,9 @@ namespace Game
         /// </summary>
         static void ApplyStreamingGmjDensity()
         {
+            // 闺蜜机维持原揭罩环（Ring0 抬到 MeshCollider），不走手机的脚下半径和 6 秒封顶。
+            PrefillUncoverRadius = 0f;
+            PrefillUncoverBudgetMs = 0f;
             FillBoundFarTreeSilhouetteStride = 6;
             FillBoundFarTreeSilhouetteMinDistance = 140f;
             ShadowCastMaxDist = 18f;
