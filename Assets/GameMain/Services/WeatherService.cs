@@ -3,7 +3,8 @@ using UnityEngine;
 namespace Game
 {
     /// <summary>
-    /// Owns island time-of-day and weather state. Visuals are pushed to <see cref="IAtmosphereVisualDriver"/>.
+    /// 岛屿时段和天气。挂在 Island 场景里，退登清盘在对象还在时由 BoluoLogout 调 ClearForAccountSwitch。
+    /// 视觉驱动在地形上，场景拆掉后静态缓存作废，避免下一趟进岛还推到旧驱动。
     /// </summary>
     public sealed class WeatherService : MonoBehaviour
     {
@@ -74,20 +75,29 @@ namespace Game
 
         public static WeatherService Ensure()
         {
-            WeatherService existing = FindAnyObjectByType<WeatherService>();
-            if (existing != null)
-                return existing;
-
-            var go = new GameObject("WeatherService");
-            DontDestroyOnLoad(go);
-            return go.AddComponent<WeatherService>();
+            WeatherService service = IslandServiceHost.Ensure(Instance, "WeatherService");
+            Instance = service;
+            return service;
         }
+
+        public static WeatherService Instance { get; private set; }
 
         void Awake()
         {
+            Instance = this;
+            GameEntry.Weather = this;
             // 进岛 Procedure 会 RestoreOrApplyLocalClock；此处仅在无快照时跟墙钟。
             ApplyLocalClockIfNeeded();
             PushAll();
+        }
+
+        void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
+            if (GameEntry.Weather == this)
+                GameEntry.Weather = null;
+            DriverCache.Clear();
         }
 
         void Update()
@@ -143,7 +153,7 @@ namespace Game
             _displayedFog = _weatherToFog;
             PushWeather();
             PushFogDensity();
-            WeatherAudioBridge.Refresh();
+            IslandAudioSession.Instance?.Weather.Refresh();
             PersistAtmosphereIfSettled();
         }
 
@@ -382,7 +392,7 @@ namespace Game
             foreach (IAtmosphereVisualDriver driver in FindDrivers())
                 driver.SetWeatherBlend(_weatherBlendId, Kind, Level, t);
             PushDisplayedFog();
-            WeatherAudioBridge.Refresh();
+            IslandAudioSession.Instance?.Weather.Refresh();
         }
 
         static float WindFactor(IslandWeatherKind kind, int level) =>
@@ -583,6 +593,8 @@ namespace Game
 
         Color? _lightColorOverride;
 
+        public Color? LightColorOverride => _lightColorOverride;
+
         public void SetLightColorOverride(Color? color)
         {
             _lightColorOverride = color;
@@ -596,39 +608,16 @@ namespace Game
         }
 
         static readonly System.Collections.Generic.List<IAtmosphereVisualDriver> DriverCache =
-            new System.Collections.Generic.List<IAtmosphereVisualDriver>(4);
-        static float _driverCacheTime = -1f;
+            new System.Collections.Generic.List<IAtmosphereVisualDriver>(1);
 
-        static IAtmosphereVisualDriver FindFirstDriver()
-        {
-            var drivers = FindDrivers();
-            return drivers.Count > 0 ? drivers[0] : null;
-        }
+        static IAtmosphereVisualDriver FindFirstDriver() => AtmosphereVisualRegistry.Driver;
 
         static System.Collections.Generic.List<IAtmosphereVisualDriver> FindDrivers()
         {
-            // Avoid FindObjectsByType every PushVisuals call (island HUD / weather).
-            if (DriverCache.Count > 0 && Time.unscaledTime - _driverCacheTime < 2f)
-            {
-                for (int i = DriverCache.Count - 1; i >= 0; i--)
-                {
-                    if (DriverCache[i] is Object uo && uo == null)
-                        DriverCache.RemoveAt(i);
-                }
-
-                if (DriverCache.Count > 0)
-                    return DriverCache;
-            }
-
             DriverCache.Clear();
-            MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include);
-            for (int i = 0; i < behaviours.Length; i++)
-            {
-                if (behaviours[i] is IAtmosphereVisualDriver driver)
-                    DriverCache.Add(driver);
-            }
-
-            _driverCacheTime = Time.unscaledTime;
+            IAtmosphereVisualDriver driver = AtmosphereVisualRegistry.Driver;
+            if (driver != null)
+                DriverCache.Add(driver);
             return DriverCache;
         }
     }

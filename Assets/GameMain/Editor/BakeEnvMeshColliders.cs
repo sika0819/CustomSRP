@@ -97,9 +97,8 @@ namespace Game.Editor
             try
             {
                 // ShiTou / large rocks may lack a MeshCollider on the prefab — add one
-                // before baking so runtime never cooks the non-readable render mesh.
-                // Includes size-gated rocks (e.g. SM_Env_Rock_01) that EnvRockColliders
-                // would otherwise AddComponent at runtime on device.
+                // before baking. Runtime trusts this bake and does not add or recook colliders.
+                // Includes smaller rocks (e.g. SM_Env_Rock_01) so every ShiTou prefab ships one.
                 if (IsRockPrefabNeedingBake(prefabPath))
                     dirty |= EnsureLargeRockMeshColliders(root);
 
@@ -177,7 +176,7 @@ namespace Game.Editor
 
         /// <summary>
         /// Prefab paths that must ship a baked readable *_Collision mesh.
-        /// All ShiTou + named large rocks — matches runtime <see cref="EnvStreamingConfig.ShouldHaveRockCollider"/>.
+        /// All ShiTou plus named large rocks. Runtime instantiates these as-is.
         /// </summary>
         static bool IsRockPrefabNeedingBake(string prefabPath)
         {

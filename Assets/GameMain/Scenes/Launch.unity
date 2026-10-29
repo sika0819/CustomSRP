@@ -234,7 +234,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 116470, guid: adb3eb1c35fcff14f89fba7b05c9d71c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8811223344556677002}
   m_SourcePrefab: {fileID: 100100000, guid: adb3eb1c35fcff14f89fba7b05c9d71c, type: 3}
 --- !u!1 &1565030447
 GameObject:
@@ -478,6 +481,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: Game::Game.BootEarlyCover
   _portraitStill: {fileID: 2800000, guid: 042ea3bd6e2540268546e19eeab11349, type: 3}
   _landscapeStill: {fileID: 2800000, guid: 11663a7993554f38be9c2e1fe678b2bc, type: 3}
+--- !u!1 &8811223344556677001 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 116470, guid: adb3eb1c35fcff14f89fba7b05c9d71c, type: 3}
+  m_PrefabInstance: {fileID: 551169707}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &8811223344556677002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 551169707}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8811223344556677001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0f6b4e27a5c4d98e1f3a4b5c6d7e8f9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Game::Game.IslandSceneComponent
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

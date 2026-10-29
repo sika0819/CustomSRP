@@ -22,9 +22,6 @@ namespace Game.Native
         public static void HudIcon(int iconId)
         {
             NativeBridgeTransport.Notify(MsgType.UiHudIcon, iconId);
-#if UNITY_EDITOR
-            NativeEditorHud.HandleHudIcon(iconId);
-#endif
         }
 
         public static void HudProfile() => HudIcon(MsgType.HudIconProfile);
@@ -36,7 +33,22 @@ namespace Game.Native
         {
             if (Interlocked.Exchange(ref _islandReadySent, 1) != 0)
                 return;
+            IslandEntryLog.Ok("islandReady", "notify");
             NativeBridgeTransport.Notify(MsgType.EngineIslandReady);
+        }
+
+        /// <summary>
+        /// 流程已在 GuestLogin。冷启动也会进这里。
+        /// <paramref name="armed"/>：0 门口在等 106，1 已经接到本轮 106。
+        /// </summary>
+        public static void ReturnedToGuestLogin(int armed)
+        {
+            if (Game.ProcedureIsland.EnterCount > 0)
+                IslandEntryLog.Ok(
+                    "guestLogin",
+                    "returned",
+                    "islandEnter=" + Game.ProcedureIsland.EnterCount + " armed=" + armed);
+            NativeBridgeTransport.Notify(MsgType.ReturnedToGuestLogin, armed);
         }
 
         /// <summary>同步告诉宿主锁屏 / 负一屏当前曲目。Notify 没有字符串，所以走 Query。inBlob=`song\talbum[\tposMs\tdurMs]`。</summary>

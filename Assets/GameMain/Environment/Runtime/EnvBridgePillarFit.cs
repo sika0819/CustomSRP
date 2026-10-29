@@ -249,12 +249,9 @@ namespace Game
             if (terrain != null && terrain.terrainData != null)
                 return terrain;
 
-            var all = Object.FindObjectsByType<Terrain>(FindObjectsInactive.Exclude);
-            for (int i = 0; i < all.Length; i++)
-            {
-                if (all[i] != null && all[i].terrainData != null)
-                    return all[i];
-            }
+            terrain = IslandSceneComponent.Active?.Terrain;
+            if (terrain != null && terrain.terrainData != null)
+                return terrain;
 
             return null;
         }

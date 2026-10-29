@@ -167,12 +167,12 @@ namespace Game
             void ApplyDefault() =>
                 cam.Teleport(IslandSpawnPose.DefaultPos, IslandSpawnPose.DefaultYawDegrees);
 
-            // 游客不读写进度盘：始终默认出生，避免迁到正式账号坐标或残留 guest 桶。
-            if (GuestSession.IsGuest)
+            // saveLocal 关闭时不读写进度盘：始终默认出生。
+            if (!BoluoGamePersistence.AllowsAccountProgressDisk)
             {
                 UseDefaultPlayerPosNextLoad = false;
                 ApplyDefault();
-                Log.Info("[IslandPlayerPosSave] default spawn (guest — no progress disk)");
+                Log.Info("[IslandPlayerPosSave] default spawn (saveLocal off — no progress disk)");
                 return;
             }
 

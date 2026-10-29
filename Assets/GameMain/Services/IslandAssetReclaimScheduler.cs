@@ -10,7 +10,9 @@ namespace Game
 {
     /// <summary>
     /// 闲置沉浸与切预设揭幕之后，每帧大约 1 毫秒释放已经没人引用的资源。
-    /// 虹膜推镜 / 黑场 / 开镜，以及流送还在生成时，直接让开。
+    /// 虹膜推镜 / 黑场 / 开镜，以及流送还在生成时，直接让开。流送自己的卸载预算不动。
+    /// 本帧已经慢于目标帧时间，就整帧不做。
+    /// 先丢掉空的合批原型，再在这一毫秒里放掉多个预制体句柄，然后只启动一轮按 2 毫秒切片的 Yoo 卸载。
     /// 不调用 <c>Resources.UnloadUnusedAssets</c>，也不 <c>GC.Collect</c>。
     /// </summary>
     public sealed class IslandAssetReclaimScheduler : MonoBehaviour
@@ -112,7 +114,8 @@ namespace Game
             if (!_wantRun)
                 return;
 
-            if (IslandLeaveAssetReclaim.IsBusy)
+            IslandLeaveAssetReclaim leave = IslandLeaveAssetReclaim.Ensure();
+            if (leave != null && leave.IsBusy)
             {
                 Cancel();
                 return;
@@ -139,25 +142,30 @@ namespace Game
             }
 
             Work.Restart();
-            if (streamer != null && streamer.ReleaseOneUnusedPrefab())
-            {
-                _prefabReleases++;
-                _yooPending = true;
-                return;
-            }
-
-            if (Work.ElapsedMilliseconds >= WorkBudgetMs)
-                return;
-
-            if (EnvNativeInstancing.TryDropOneEmptyPrototype())
+            bool freed = false;
+            // 原型还握着 Mesh/Material 时，先放句柄也卸不掉。丢掉原型算进这 1 毫秒。
+            while (Work.ElapsedMilliseconds < WorkBudgetMs
+                   && EnvNativeInstancing.TryDropOneEmptyPrototype())
             {
                 _prototypeDrops++;
+                freed = true;
+            }
+
+            if (streamer != null)
+            {
+                while (Work.ElapsedMilliseconds < WorkBudgetMs
+                       && streamer.ReleaseOneUnusedPrefab())
+                {
+                    _prefabReleases++;
+                    freed = true;
+                }
+            }
+
+            if (freed)
+            {
                 _yooPending = true;
                 return;
             }
-
-            if (Work.ElapsedMilliseconds >= WorkBudgetMs)
-                return;
 
             if (TryUnloadOneBank())
             {
@@ -206,6 +214,19 @@ namespace Game
             _sliceLowered = false;
             long restore = _savedSlice < 1 ? 30 : _savedSlice;
             YooAssets.SetOperationSystemMaxTimeSliceExact(restore);
+        }
+
+        /// <summary>
+        /// 离岛用。闲置回收在退登时被取消，延迟卸载也没人再驱动。
+        /// 音乐 bank 留下，其余引用已经归零的卸掉。
+        /// </summary>
+        public static int UnloadLooseBanks()
+        {
+            WanosBankStore.FlushPendingUnloads();
+            int unloaded = 0;
+            while (TryUnloadOneBank())
+                unloaded++;
+            return unloaded;
         }
 
         static bool TryUnloadOneBank()

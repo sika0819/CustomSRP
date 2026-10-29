@@ -10,8 +10,14 @@ namespace Game
     /// <summary>
     /// While raining, post <c>Play_Rain_Water</c> when the listener is near river/lake/ocean anchors.
     /// </summary>
-    public static class RainWaterProximityService
+    public sealed class RainWaterProximityService
     {
+        public RainWaterProximityService(IslandAudioSession session)
+        {
+            // 由会话构造并持有；参数标明归属，状态本身不引用会话。
+            _ = session;
+        }
+
         const float EvalIntervalSeconds = 0.25f;
         const float EnableMeters = 28f;
         const float DisableMeters = 32f;
@@ -20,15 +26,15 @@ namespace Game
         public const string PlayEvent = "Play_Rain_Water";
         public const string StopEvent = "Stop_Rain_Water";
 
-        static bool _started;
-        static bool _playing;
-        static bool _bankHeld;
-        static bool _bankMissing;
-        static bool _contentAudioPaused;
-        static bool _pendingEvaluate;
-        static readonly List<Vector3> WaterPoints = new List<Vector3>(64);
+        bool _started;
+        bool _playing;
+        bool _bankHeld;
+        bool _bankMissing;
+        bool _contentAudioPaused;
+        bool _pendingEvaluate;
+        readonly List<Vector3> WaterPoints = new List<Vector3>(64);
 
-        public static void Start()
+        public void Start()
         {
             if (_started)
                 return;
@@ -40,14 +46,14 @@ namespace Game
         }
 
         /// <summary>内河加载完 → 重新取真实水面点（河 / 瀑）。</summary>
-        static void OnInlandWaterReady(bool hasWater)
+        void OnInlandWaterReady(bool hasWater)
         {
             if (!_started)
                 return;
             RebuildWaterPoints();
         }
 
-        static void OnBankLoaded(string bankName)
+        void OnBankLoaded(string bankName)
         {
             if (!_started || string.IsNullOrEmpty(bankName))
                 return;
@@ -58,7 +64,7 @@ namespace Game
             EvaluateNow();
         }
 
-        public static void Shutdown()
+        public void Shutdown()
         {
             _started = false;
             IslandWorldService.OnInlandWaterReady -= OnInlandWaterReady;
@@ -71,7 +77,7 @@ namespace Game
             WaterPoints.Clear();
         }
 
-        public static void SetContentAudioPaused(bool paused)
+        public void SetContentAudioPaused(bool paused)
         {
             if (_contentAudioPaused == paused)
                 return;
@@ -86,7 +92,7 @@ namespace Game
         }
 
         /// <summary>Hard-stop Rain_Water without changing the BGM content-pause latch.</summary>
-        public static void ClearPlaying()
+        public void ClearPlaying()
         {
             StopPlaying();
         }
@@ -95,7 +101,7 @@ namespace Game
         /// 回前台 / 打断恢复：雨水的 voice 可能已被引擎掐掉，但本地态还认为在播
         /// → 清本地态后按听者位置重新评估（近水才重起）。
         /// </summary>
-        public static void RestorePlaying()
+        public void RestorePlaying()
         {
             if (!_started)
                 return;
@@ -106,7 +112,7 @@ namespace Game
             EvaluateNow();
         }
 
-        public static void EvaluateNow()
+        public void EvaluateNow()
         {
             if (_started)
             {
@@ -118,7 +124,7 @@ namespace Game
             _pendingEvaluate = true;
         }
 
-        static async UniTaskVoid RunLoop()
+        async UniTaskVoid RunLoop()
         {
             try
             {
@@ -150,7 +156,7 @@ namespace Game
             }
         }
 
-        static void Evaluate()
+        void Evaluate()
         {
             if (!_started || !WanosInteraction.IsReady)
                 return;
@@ -178,25 +184,25 @@ namespace Game
                 StopPlaying();
         }
 
-        static bool WantRainWeather()
+        bool WantRainWeather()
         {
             WeatherService weather = GameEntry.Weather;
             return weather != null && weather.Kind == IslandWeatherKind.Rain && weather.Level > 0;
         }
 
-        static void RebuildWaterPoints()
+        void RebuildWaterPoints()
         {
             WaterPoints.Clear();
 
             // 真实水面采样点（河 / 瀑）：运行期直接从场景网格取，跟场景一致。
-            WaterSurfaceProbe.GetAllPoints(WaterPoints);
+            GameEntry.World?.WaterProbe.GetAllPoints(WaterPoints);
 
-            // 岸线 / 湖面锚点。
+            // 湖面锚点。海岸不走单点：整段岸线用量到外海水线的距离（见 TryNearestWater）。
             var statics = AmbienceZoneCatalog.StaticEmitters;
             for (int i = 0; i < statics.Length; i++)
             {
                 var s = statics[i];
-                if (s.Kind == AmbienceEmitterKind.Ocean || s.Kind == AmbienceEmitterKind.Lake)
+                if (s.Kind == AmbienceEmitterKind.Lake)
                     WaterPoints.Add(s.Position);
             }
 
@@ -225,7 +231,7 @@ namespace Game
             }
         }
 
-        static bool TryNearestWater(Vector3 listener, float maxDistance, out Vector3 closest)
+        bool TryNearestWater(Vector3 listener, float maxDistance, out Vector3 closest)
         {
             closest = default;
             float best = maxDistance + 1f;
@@ -238,10 +244,17 @@ namespace Game
                 closest = WaterPoints[i];
             }
 
+            if (AmbienceZoneCatalog.TryNearestOceanShore(listener, out Vector3 shore, out float shell)
+                && shell < best)
+            {
+                best = shell;
+                closest = shore;
+            }
+
             return best <= maxDistance;
         }
 
-        static void StartPlaying()
+        void StartPlaying()
         {
             if (_contentAudioPaused)
             {
@@ -268,7 +281,7 @@ namespace Game
             Log.Info("[RainWater] play near water");
         }
 
-        static void StopPlaying()
+        void StopPlaying()
         {
             if (!_playing)
                 return;
@@ -277,7 +290,7 @@ namespace Game
             Log.Info("[RainWater] stop");
         }
 
-        static void ReleaseBank()
+        void ReleaseBank()
         {
             if (!_bankHeld)
                 return;

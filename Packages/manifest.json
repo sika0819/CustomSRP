@@ -1,11 +1,17 @@
 {
   "dependencies": {
     "com.coplaydev.unity-mcp": "file:MCPForUnity",
+    "com.cysharp.unitask": "file:UniTask",
     "com.jiangyin.gameframework": "file:com.jiangyin.gameframework",
+    "com.tuyoogame.yooasset": "file:YooAsset",
     "com.unity.burst": "2.0.0",
     "com.unity.mathematics": "1.4.0",
+    "com.unity.memoryprofiler": "1.2.0",
     "com.unity.multiplayer.center": "2.0.1",
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
     "com.unity.render-pipelines.core": "17.6.0",
+    "com.unity.test-framework": "1.5.1",
+    "com.unity.ugui": "2.0.0",
     "com.unity.modules.accessibility": "1.0.0",
     "com.unity.modules.adaptiveperformance": "1.0.0",
     "com.unity.modules.ai": "1.0.0",
@@ -35,10 +41,6 @@
     "com.unity.modules.unitywebrequesttexture": "1.0.0",
     "com.unity.modules.unitywebrequestwww": "1.0.0",
     "com.unity.modules.video": "1.0.0",
-    "com.unity.modules.wind": "1.0.0",
-    "com.tuyoogame.yooasset": "file:YooAsset",
-    "com.cysharp.unitask": "file:UniTask",
-    "com.unity.nuget.newtonsoft-json": "3.2.1",
-    "com.unity.ugui": "2.0.0"
+    "com.unity.modules.wind": "1.0.0"
   }
 }

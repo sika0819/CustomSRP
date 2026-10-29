@@ -55,12 +55,21 @@ namespace Game
         static Material _runtimeMat;
         static Mesh _quadMesh;
 
+        /// <summary>退登丢掉编辑器应急材质。内置 Quad 网格不能销毁。</summary>
+        public static void ReleaseRuntimeMaterial()
+        {
+            if (_runtimeMat == null)
+                return;
+            Material mat = _runtimeMat;
+            _runtimeMat = null;
+            Object.DestroyImmediate(mat);
+        }
+
         EntityId ControllerId => GetEntityId();
 
         void Awake()
         {
             EnsureMpb();
-            DisableFakeGlowPlanes();
             MuteLegacyFireEmitter();
             StripLegacyOilFlames();
             EnsureNoiseFire();
@@ -88,7 +97,7 @@ namespace Game
         void OnDisable()
         {
             Unsubscribe();
-            CampfireWeatherGate.SetVisualIgnited(ControllerId, false);
+            AtmospherePropService.Instance?.SetVisualIgnited(ControllerId, false);
             _transitionActive = false;
         }
 
@@ -152,7 +161,7 @@ namespace Game
 
         public void Ignite()
         {
-            if (CampfireWeatherGate.SuppressIgnite)
+            if (AtmospherePropService.Instance == null || AtmospherePropService.Instance.SuppressIgnite)
                 return;
             StartTransition(true, Mathf.Max(0.0001f, igniteDuration));
         }
@@ -164,7 +173,7 @@ namespace Game
         {
             _transitionActive = false;
             _isIgnited = ignite;
-            CampfireWeatherGate.SetVisualIgnited(ControllerId, ignite);
+            AtmospherePropService.Instance?.SetVisualIgnited(ControllerId, ignite);
             ApplyFactor(ignite ? 1f : 0f);
             SetFlameVisible(ignite);
         }
@@ -172,7 +181,6 @@ namespace Game
         public void EnsureRuntimeBindings()
         {
             EnsureMpb();
-            DisableFakeGlowPlanes();
             MuteLegacyFireEmitter();
             StripLegacyOilFlames();
             EnsureNoiseFire();
@@ -190,24 +198,7 @@ namespace Game
         }
 
         void SyncIgniteToGate() =>
-            SetInstant(!CampfireWeatherGate.SuppressIgnite);
-
-        void DisableFakeGlowPlanes()
-        {
-            Transform[] all = GetComponentsInChildren<Transform>(true);
-            for (int i = 0; i < all.Length; i++)
-            {
-                string n = all[i].name;
-                bool fake = n.IndexOf("CoreGlow", System.StringComparison.OrdinalIgnoreCase) >= 0
-                            || n.IndexOf("GroundGlow", System.StringComparison.OrdinalIgnoreCase) >= 0;
-                if (!fake)
-                    continue;
-                all[i].gameObject.SetActive(false);
-                var r = all[i].GetComponent<Renderer>();
-                if (r != null)
-                    r.enabled = false;
-            }
-        }
+            SetInstant(AtmospherePropService.Instance != null && !AtmospherePropService.Instance.SuppressIgnite);
 
         void MuteLegacyFireEmitter()
         {
@@ -226,16 +217,6 @@ namespace Game
             var renderer = fire.GetComponent<ParticleSystemRenderer>();
             if (renderer != null)
                 renderer.enabled = false;
-
-            var mrs = fire.GetComponentsInChildren<MeshRenderer>(true);
-            for (int i = 0; i < mrs.Length; i++)
-            {
-                if (mrs[i] == null)
-                    continue;
-                string n = mrs[i].name;
-                if (n.IndexOf("Glow", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                    mrs[i].enabled = false;
-            }
         }
 
         void StripLegacyOilFlames()
@@ -375,7 +356,7 @@ namespace Game
             _fireLight.color = lightColor;
             _fireLight.intensity = 0f;
             _fireLight.range = Mathf.Max(minRangeOnIgnite, lightRange);
-            _fireLight.shadows = LightShadows.Soft;
+            _fireLight.shadows = LightShadows.None;
             _fireLight.renderMode = LightRenderMode.Auto;
             _fireLight.enabled = false;
             lightMaxIntensity = Mathf.Max(lightMaxIntensity, 4f);
@@ -418,6 +399,20 @@ namespace Game
 #endif
         }
 
+        public static void ReleaseSharedFlameMaterial()
+        {
+#if UNITY_EDITOR
+            if (_runtimeMat == null)
+                return;
+            Material mat = _runtimeMat;
+            _runtimeMat = null;
+            if (Application.isPlaying)
+                Object.Destroy(mat);
+            else
+                Object.DestroyImmediate(mat);
+#endif
+        }
+
         static bool IsValidNoiseFireMaterial(Material mat) =>
             mat != null && mat.shader != null && mat.shader.name == "CustomSRP/NoiseFire";
 
@@ -434,7 +429,7 @@ namespace Game
         void StartTransition(bool toIgnite, float duration)
         {
             _isIgnited = toIgnite;
-            CampfireWeatherGate.SetVisualIgnited(ControllerId, toIgnite);
+            AtmospherePropService.Instance?.SetVisualIgnited(ControllerId, toIgnite);
             if (toIgnite)
                 SetFlameVisible(true);
 
@@ -509,6 +504,7 @@ namespace Game
             if (_factor > 0f)
                 _fireLight.range = Mathf.Max(minRangeOnIgnite, lightRange);
             _fireLight.intensity = target;
+            _fireLight.shadows = LightShadows.None;
         }
     }
 }

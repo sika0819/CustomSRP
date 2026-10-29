@@ -9,7 +9,11 @@ using UnityGameFramework.Runtime;
 namespace Game
 {
     /// <summary>
-    /// 距离流式 Lite：按相机/焦点位置驻留 MapItem，分帧生成与回收；可选 Native 合批。
+    /// 地图物件流送，挂在 Island 场景的 MapItem 上，由 <see cref="EnvMapItemSpawner"/> 启动。
+    /// 进岛先 <see cref="Initialize"/> 登记全部点，<see cref="PrefillAroundFocus"/> 铺焦点附近，再按距离生成和回收。
+    /// 场景卸载走 <see cref="OnDestroy"/>：停协程、摘合批，句柄留到卸场景成功再 Release。不立刻销毁实例。
+    /// 单面公告板网格由 <see cref="EnvTreeBillboardService"/> 跟着场景销毁。
+    /// 进程拆世界走 <see cref="Release()"/>，才把实例从父节点摘掉并立刻销毁。
     /// </summary>
     public sealed class EnvItemStreamerLite : MonoBehaviour
     {
@@ -52,6 +56,7 @@ namespace Game
         readonly Dictionary<string, AssetHandle> _prefabHandles = new Dictionary<string, AssetHandle>(192);
         readonly Dictionary<string, int> _locationUsers = new Dictionary<string, int>(192);
         readonly HashSet<string> _loadingLocations = new HashSet<string>();
+        readonly List<AssetHandle> _inflightHandles = new List<AssetHandle>(4);
         readonly List<int> _spawnQueue = new List<int>(256);
         readonly List<int> _despawnQueue = new List<int>(256);
         readonly HashSet<int> _spawnQueued = new HashSet<int>();
@@ -63,6 +68,9 @@ namespace Game
         int _sliceFrame = -1;
         bool _running;
         bool _spawnBacklog;
+        bool _prefillActive;
+        readonly PrefillFrameGate _prefillGate = new PrefillFrameGate();
+        bool _released;
         int _evalCursor;
         int _spawnedCount;
 
@@ -84,7 +92,7 @@ namespace Game
         {
             _focus = focus;
             EnvStreamingConfig.ApplyMobileTierDefaults();
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (EnvStreamingConfig.NativeInstancingEnabled)
             {
                 _native = EnvNativeInstancing.Ensure();
@@ -107,6 +115,9 @@ namespace Game
             {
                 MapItemData d = data[i];
                 string category = d.Parent ?? "null";
+                // 区域门由 SceneBankGateSpawner 生成，不加载缺失的 BanksChecker 预制体。
+                if (category == SceneBankGateCatalog.Category)
+                    continue;
                 string prefabName = d.PrefabName;
                 float hide = EnvStreamingConfig.GetHideDistance(category, prefabName, out float show);
                 Transform parent = mapItemRoot;
@@ -115,7 +126,9 @@ namespace Game
                     parent = cat;
 
                 Vector3 pos = d.Pos;
-                EnvGroundFit.TrySnapMapItemY(ref pos, category, prefabName);
+                EnvGroundFit ground = GameEntry.GroundFit;
+                if (ground != null)
+                    ground.TrySnapMapItemY(ref pos, category, prefabName);
 
                 _items.Add(new Item
                 {
@@ -143,43 +156,77 @@ namespace Game
             }
 
             _running = true;
-            _prefillActive = false;
+            // StartCoroutine 会立刻跑到第一次 yield。先闩住，避免这一拍发出 LoadAssetAsync，
+            // 再和紧接着的铺装 LoadAssetSync 叠在同一个包上。离岛后再进时，下一帧读
+            // Handle.IsDone 不再返回，宿主就等不到 Notify(2)。PrefillAroundFocus 结束时松闩。
+            _prefillActive = true;
             StartCoroutine(StreamLoop());
             Log.Info(
                 $"[EnvItemStreamerLite] init items={_items.Count} streaming=on " +
-                $"native={(_native != null)}");
+                $"native={(_native != null)} leakProbe={IslandLeakProbe.Enabled}");
         }
 
-        bool _prefillActive;
         /// <summary>铺装时跳过世界几何。摄像机仍画加载界面，避免 Game 视图报没有摄像机。</summary>
         public static bool PrefillSuppressRender { get; private set; }
 
-        /// <summary>进岛加载被放弃时松开铺装闩，避免流送协程一直让在 Prefill。</summary>
+        /// <summary>退登、场景还在时立刻拆掉 (YBillboard)，贴图引用才能在卸包前归零。</summary>
+        public static void ReleaseBillboardsImmediate()
+        {
+            if (Current == null || Current._released)
+                return;
+            Current.DestroyBillboardsNow();
+        }
+
         public static void ReleasePrefillHold()
         {
             PrefillSuppressRender = false;
             if (Current != null)
+            {
                 Current._prefillActive = false;
+                Current._prefillGate.End();
+            }
         }
 
         public IEnumerator PrefillAroundFocus(float progressMin, float progressMax, System.Action<float, string> report)
         {
             if (_focus == null)
+            {
+                _prefillActive = false;
                 yield break;
+            }
 
-            // 铺装期间关掉流送。两条协程同时 LoadAssetAsync，离岛后再进会叠在未完成的
-            // LoadFromFile 上，主线程卡死在「正在铺装环境」。
+            // 铺装期间关掉流送。Initialize 已经闩上；这里再写一次，避免中途被松开。
+            // 两条协程同时 LoadAsset，离岛后再进会叠在未完成的 LoadFromFile 上，
+            // 主线程卡死，加载罩不撤。
             _prefillActive = true;
             // 摄像机保持开启：关掉它时 Game 视图会写 “Display 1 No cameras rendering”，
             // 加载条也画不出来。世界几何由 CameraRenderer 在此标志下跳过。
             PrefillSuppressRender = true;
-            PrefillFrameGate.Begin();
+            _prefillGate.Begin();
+            try
+            {
+                PrefillBody(progressMin, progressMax, report);
+            }
+            finally
+            {
+                _prefillActive = false;
+                PrefillSuppressRender = false;
+                _prefillGate.End();
+            }
 
+            Log.Info("[EnvItemStreamerLite] prefill tail end");
+            yield break;
+        }
+
+        void PrefillBody(float progressMin, float progressMax, System.Action<float, string> report)
+        {
             Vector3 p = _focus.position;
             var near = new List<int>(512);
             for (int i = 0; i < _items.Count; i++)
             {
                 Item item = _items[i];
+                if (!IslandLeakProbe.AllowCategory(item.Category))
+                    continue;
                 float dx = item.Pos.x - p.x;
                 float dz = item.Pos.z - p.z;
                 float distSq = dx * dx + dz * dz;
@@ -222,11 +269,9 @@ namespace Game
                     continue;
                 }
 
-                PrefillFrameGate.Phase = 2;
-                PrefillFrameGate.Done = done;
+                _prefillGate.Mark(2, done);
                 GameObject prefab = LoadPrefabNow(item.Location, item.EditorPath, "prefill");
-                PrefillFrameGate.Phase = 3;
-                PrefillFrameGate.Done = done;
+                _prefillGate.Mark(3, done);
                 if (prefab == null)
                 {
                     Log.Warning(
@@ -248,7 +293,7 @@ namespace Game
 
                 FinalizeSpawned(idx, spawned.Go, prefab, spawned.Tier);
                 done++;
-                PrefillFrameGate.Done = done;
+                _prefillGate.Mark(3, done);
                 if (instMs >= 8 || (done % 20) == 0)
                 {
                     Log.Info(
@@ -261,10 +306,67 @@ namespace Game
             Log.Info(
                 $"[EnvItemStreamerLite] prefill spawned={_spawnedCount}/{_items.Count} " +
                 $"near={total} skipVisible={skippedVisible}");
-            _prefillActive = false;
-            PrefillSuppressRender = false;
-            PrefillFrameGate.End();
-            yield break;
+            // 二次 Instantiate 会把新节点插进一条还指着旧兄弟的链表。
+            // 本帧一旦 yield，下一帧 UnitySendMessage 的 FindActiveTransformWithPath 顺着环走不出去，
+            // 主线程不再回来，宿主就等不到 IslandReady。先摘再挂，必须在 yield 之前做完。
+            Log.Info("[EnvItemStreamerLite] prefill tail begin");
+            _prefillGate.Mark(4, done);
+            RelinkSpawned();
+            SealSpawnedNames();
+        }
+
+        /// <summary>
+        /// 本实例拆世界时用：先摘掉父节点再立刻销毁。场景卸载走 OnDestroy，不进这里。
+        /// </summary>
+        void DestroyUnlinked(GameObject go)
+        {
+            if (go == null)
+                return;
+            go.hideFlags = HideFlags.None;
+            Transform t = go.transform;
+            if (t != null && t.parent != null)
+                t.SetParent(null, false);
+            DestroyImmediate(go);
+        }
+
+        /// <summary>
+        /// 把已生成实例的名字再写一遍。托管字符串会拷成以 0 结尾的原生缓冲，
+        /// 避免下一帧 UnitySendMessage 的 FindActiveTransformWithPath 在未终止名字上 strlen 不返回。
+        /// </summary>
+        void SealSpawnedNames()
+        {
+            int sealedCount = 0;
+            for (int i = 0; i < _items.Count; i++)
+            {
+                GameObject go = _items[i].Go;
+                if (go == null)
+                    continue;
+                // 不读旧名字。旧缓冲若没结尾，getter 里的 strlen 不会返回。
+                go.name = "env" + i;
+                sealedCount++;
+            }
+
+            Log.Info($"[EnvItemStreamerLite] prefill seal names={sealedCount}");
+        }
+
+        void RelinkSpawned()
+        {
+            Log.Info("[EnvItemStreamerLite] prefill relink begin n=" + _items.Count);
+            int relinked = 0;
+            for (int i = 0; i < _items.Count; i++)
+            {
+                GameObject go = _items[i].Go;
+                if (go == null)
+                    continue;
+                Transform t = go.transform;
+                Transform parent = _items[i].Parent;
+                t.SetParent(null, false);
+                if (parent != null)
+                    t.SetParent(parent, false);
+                relinked++;
+            }
+
+            Log.Info($"[EnvItemStreamerLite] prefill relink={relinked}");
         }
 
         IEnumerator StreamLoop()
@@ -367,8 +469,15 @@ namespace Game
                 return false;
 
             Item item = _items[index];
-            if (item.State == StateVisible && item.Go != null)
+            if (!IslandLeakProbe.AllowCategory(item.Category))
                 return false;
+            if (item.State == StateVisible && item.Go != null)
+            {
+                // Full↔Billboard seamless swap: allow spawn while the old GO is still up.
+                if (item.PendingTier == item.LodTier
+                    || (item.PendingTier != TierFull && item.PendingTier != TierBillboard))
+                    return false;
+            }
 
             float distSq = DistSqToFocus(item.Pos);
             bool neverUnload = item.HideDist >= 1e20f;
@@ -392,6 +501,8 @@ namespace Game
                 return false;
 
             Item item = _items[index];
+            if (!IslandLeakProbe.AllowCategory(item.Category))
+                return item.Go != null || item.State == StateVisible;
             if (item.Go == null)
                 return item.State == StateVisible;
 
@@ -401,27 +512,11 @@ namespace Game
             if (!neverUnload && (thinFar || distSq > item.HideDist * item.HideDist))
                 return true;
 
-            if (item.LodTier == TierFull
-                && EnvStreamingConfig.ShouldDowngradeTreeToBillboard(item.Category, distSq))
-            {
-                item.PendingTier = TierBillboard;
-                _items[index] = item;
-                return true;
-            }
-
-            if (item.LodTier == TierBillboard
-                && EnvStreamingConfig.ShouldUpgradeTreeToFull(item.Category, distSq))
-            {
-                item.PendingTier = TierFull;
-                _items[index] = item;
-                return true;
-            }
-
-            if (item.PendingTier != item.LodTier)
-            {
-                item.PendingTier = item.LodTier;
-                _items[index] = item;
-            }
+            // Tier swap is spawn-before-despawn (see TryQueueTreeTierSwap) — never
+            // treat a pending Full↔Billboard handoff as a plain unload.
+            if (item.PendingTier != item.LodTier
+                && (item.PendingTier == TierFull || item.PendingTier == TierBillboard))
+                return false;
 
             return false;
         }
@@ -437,6 +532,13 @@ namespace Game
                     _evalCursor = 0;
                 int i = _evalCursor++;
                 Item item = _items[i];
+                if (!IslandLeakProbe.AllowCategory(item.Category))
+                {
+                    if (item.State != StateHidden && _despawnQueued.Add(i))
+                        _despawnQueue.Add(i);
+                    continue;
+                }
+
                 float dx = item.Pos.x - p.x;
                 float dz = item.Pos.z - p.z;
                 float distSq = dx * dx + dz * dz;
@@ -447,8 +549,7 @@ namespace Game
                 {
                     if (!thinFar && (neverUnload || distSq <= item.ShowDist * item.ShowDist))
                     {
-                        // After Full↔Billboard swap: LodTier (pre-despawn) != PendingTier
-                        // → keep PendingTier. Otherwise re-resolve from distance.
+                        // Keep a pending swap target if set; otherwise resolve from distance.
                         if (item.LodTier == item.PendingTier)
                             item.PendingTier = ResolveSpawnTier(item, distSq);
                         _items[i] = item;
@@ -513,13 +614,35 @@ namespace Game
             if (index < 0 || index >= _items.Count)
                 yield break;
             Item item = _items[index];
-            if (item.State == StateVisible && item.Go != null)
+            bool tierSwap = item.State == StateVisible
+                && item.Go != null
+                && item.PendingTier != item.LodTier
+                && (item.PendingTier == TierFull || item.PendingTier == TierBillboard);
+            if (item.State == StateVisible && item.Go != null && !tierSwap)
                 yield break;
 
             GameObject prefab = null;
             yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go, "stream");
             if (prefab == null)
                 yield break;
+
+            // Focus / thin may have changed while the prefab loaded — drop a stale swap.
+            item = _items[index];
+            if (tierSwap)
+            {
+                if (item.Go == null || item.State != StateVisible
+                    || item.PendingTier == item.LodTier
+                    || (item.PendingTier != TierFull && item.PendingTier != TierBillboard))
+                    yield break;
+                float distSqNow = DistSqToFocus(item.Pos);
+                if (EnvStreamingConfig.ShouldThinFarTree(item.Category, distSqNow, index)
+                    || (item.HideDist < 1e20f && distSqNow > item.HideDist * item.HideDist))
+                {
+                    item.PendingTier = item.LodTier;
+                    _items[index] = item;
+                    yield break;
+                }
+            }
 
             RestartSliceIfNewFrame();
             byte tier = item.PendingTier;
@@ -541,8 +664,9 @@ namespace Game
         }
 
         /// <summary>
-        /// Full↔Billboard swap: despawn now; spawn is re-queued next eval once Hidden
-        /// (avoids same-frame Visible spawn skip). PendingTier selects the next form.
+        /// Full↔Billboard swap: queue spawn of the next tier while the current GO stays
+        /// visible. SpawnItem destroys the old GO only after the new one is ready, so
+        /// the handoff has no blank frame (old path: despawn → Hidden → later spawn).
         /// </summary>
         bool TryQueueTreeTierSwap(ref Item item, float distSq, int index)
         {
@@ -553,8 +677,8 @@ namespace Game
                 && EnvStreamingConfig.ShouldDowngradeTreeToBillboard(item.Category, distSq))
             {
                 item.PendingTier = TierBillboard;
-                if (_despawnQueued.Add(index))
-                    _despawnQueue.Add(index);
+                if (_spawnQueued.Add(index))
+                    _spawnQueue.Add(index);
                 return true;
             }
 
@@ -562,8 +686,8 @@ namespace Game
                 && EnvStreamingConfig.ShouldUpgradeTreeToFull(item.Category, distSq))
             {
                 item.PendingTier = TierFull;
-                if (_despawnQueued.Add(index))
-                    _despawnQueue.Add(index);
+                if (_spawnQueued.Add(index))
+                    _spawnQueue.Add(index);
                 return true;
             }
 
@@ -588,9 +712,11 @@ namespace Game
                 && EnvStreamingConfig.IsBigTreeCategory(item.Category))
             {
                 Vector3 pos = item.Pos;
-                EnvGroundFit.TrySnapMapItemY(ref pos, item.Category, item.PrefabName);
+                EnvGroundFit ground = GameEntry.GroundFit;
+                if (ground != null)
+                    ground.TrySnapMapItemY(ref pos, item.Category, item.PrefabName);
                 LogStepBegin("billboard-proxy", item.PrefabName);
-                GameObject proxy = EnvTreeBillboardUtil.BuildBillboardProxy(
+                GameObject proxy = GameEntry.Billboards?.BuildBillboardProxy(
                     prefab,
                     item.Parent,
                     (prefab != null ? prefab.name : item.PrefabName) + "#bb",
@@ -619,11 +745,21 @@ namespace Game
                 return;
 
             Item item = _items[index];
-            if (item.State == StateVisible && item.Go != null)
+            bool tierSwap = item.State == StateVisible
+                && item.Go != null
+                && item.PendingTier != item.LodTier
+                && (item.PendingTier == TierFull || item.PendingTier == TierBillboard)
+                && (tier == item.PendingTier);
+            if (item.State == StateVisible && item.Go != null && !tierSwap)
             {
                 Destroy(instance);
                 return;
             }
+
+            // New GO is ready — tear down the previous tier in the same frame so
+            // Full↔Billboard never shows a blank hole.
+            if (tierSwap)
+                DestroyCurrentGo(ref item, destroyImmediate: false);
 
             bool isBillboard = tier == TierBillboard
                 && EnvStreamingConfig.IsBigTreeCategory(item.Category);
@@ -635,7 +771,8 @@ namespace Game
 
             Vector3 pos = item.Pos;
             LogStepBegin("ground", item.PrefabName);
-            if (EnvGroundFit.TrySnapMapItemY(ref pos, item.Category, item.PrefabName))
+            EnvGroundFit ground = GameEntry.GroundFit;
+            if (ground != null && ground.TrySnapMapItemY(ref pos, item.Category, item.PrefabName))
                 item.Pos = pos;
             LogStepEnd("ground", item.PrefabName);
 
@@ -659,12 +796,6 @@ namespace Game
 
             if (!isBillboard)
             {
-                if (EnvStreamingConfig.IsRockCategory(item.Category))
-                {
-                    LogStepBegin("rock-collider", item.PrefabName);
-                    EnvRockColliders.Ensure(instance, item.PrefabName);
-                    LogStepEnd("rock-collider", item.PrefabName);
-                }
                 if (EnvStreamingConfig.IsBridgeCategory(item.Category))
                 {
                     LogStepBegin("bridge", item.PrefabName);
@@ -676,18 +807,11 @@ namespace Game
                 {
                     EnvStreamerReflectionSkip.Apply(instance);
                 }
-                // Near full trees: LOD_Billboard must also Y-face when LOD switches.
-                if (EnvStreamingConfig.IsBigTreeCategory(item.Category))
-                {
-                    LogStepBegin("y-billboard", item.PrefabName);
-                    EnvTreeBillboardUtil.ApplyYBillboardToLodBillboardChildren(instance);
-                    LogStepEnd("y-billboard", item.PrefabName);
-                }
             }
 
             int proto = -1;
             bool inNative = false;
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (_native != null)
             {
                 if (isBillboard)
@@ -739,6 +863,33 @@ namespace Game
             AddLocationUser(item.Location);
         }
 
+        /// <summary>
+        /// Drop the live GO (native batch + runtime mats) without touching PendingTier.
+        /// Seamless tier swap calls this once the next GO exists; unload then marks Hidden.
+        /// </summary>
+        void DestroyCurrentGo(ref Item item, bool destroyImmediate)
+        {
+            if (item.Go == null)
+                return;
+
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
+            if (item.InNative && _native != null)
+                _native.RemoveInstance(item.Go, item.ProtoIndex);
+#endif
+            DestroyYBillboardMaterials(item.Go, destroyImmediate);
+            RemoveLocationUser(item.Location);
+            if (destroyImmediate)
+                DestroyImmediate(item.Go);
+            else
+                Destroy(item.Go);
+            item.Go = null;
+            item.InNative = false;
+            item.ProtoIndex = -1;
+            item.ShadowCasters = null;
+            item.CastingShadows = false;
+            _spawnedCount = Mathf.Max(0, _spawnedCount - 1);
+        }
+
         void DespawnItem(int index)
         {
             if (index < 0 || index >= _items.Count)
@@ -751,22 +902,10 @@ namespace Game
                 return;
             }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
-            if (item.InNative && _native != null)
-                _native.RemoveInstance(item.Go, item.ProtoIndex);
-#endif
-            DestroyYBillboardMaterials(item.Go);
-            RemoveLocationUser(item.Location);
-            Destroy(item.Go);
-            item.Go = null;
+            DestroyCurrentGo(ref item, destroyImmediate: false);
             item.State = StateHidden;
-            item.InNative = false;
-            item.ProtoIndex = -1;
-            item.ShadowCasters = null;
-            item.CastingShadows = false;
-            // Keep PendingTier so a tier-swap re-spawn uses the desired tier.
+            // Keep PendingTier so a rare Hidden→spawn path can still honor a swap target.
             _items[index] = item;
-            _spawnedCount = Mathf.Max(0, _spawnedCount - 1);
         }
 
         static bool NeverCastsShadows(Item item)
@@ -880,6 +1019,8 @@ namespace Game
                 if (locationValid)
                 {
                     AssetHandle handle = YooResourceModule.DefaultPackage.LoadAssetSync<GameObject>(location);
+                    if (handle != null)
+                        GameEntry.TrackLeaveHandle(handle);
                     if (handle != null && handle.Status == EOperationStatus.Succeed)
                     {
                         prefab = handle.AssetObject as GameObject;
@@ -891,7 +1032,7 @@ namespace Game
                             "[EnvItemStreamerLite] load sync fail loc=" + location +
                             " status=" + (handle != null ? handle.Status.ToString() : "null") +
                             " err=" + handle?.LastError);
-                        handle?.Release();
+                        GameEntry.ReleaseLeaveHandle(handle);
                     }
                 }
             }
@@ -934,22 +1075,47 @@ namespace Game
                 && !string.IsNullOrEmpty(location)
                 && YooResourceModule.DefaultPackage.CheckLocationValid(location);
             Log.Info($"[EnvItemStreamerLite] load valid phase={phase} loc={location} valid={locationValid}");
-            try
+
+            // 句柄立刻登记。退登 StopCoroutine 后字段会清掉，卸场景成功再 Release。
+            AssetHandle handle = null;
+            if (locationValid)
             {
-                if (locationValid)
+                handle = YooResourceModule.DefaultPackage.LoadAssetAsync<GameObject>(location);
+                if (handle != null)
                 {
-                    yield return YooResourceModule.LoadAssetCoroutine<GameObject>(location, (asset, handle) =>
-                    {
-                        prefab = asset;
-                        if (handle != null && !string.IsNullOrEmpty(location))
-                            _prefabHandles[location] = handle;
-                    });
+                    GameEntry.TrackLeaveHandle(handle);
+                    _inflightHandles.Add(handle);
                 }
+                yield return YooResourceModule.WaitUntilDone(
+                    () => _released || handle == null || handle.IsDone,
+                    "EnvItemStreamerLite " + location);
             }
-            finally
+
+            if (trackLoad)
+                _loadingLocations.Remove(location);
+
+            if (_released)
+                yield break;
+
+            if (handle != null)
             {
-                if (trackLoad)
-                    _loadingLocations.Remove(location);
+                _inflightHandles.Remove(handle);
+                if (handle.Status == EOperationStatus.Succeed)
+                {
+                    prefab = handle.AssetObject as GameObject;
+                    if (!string.IsNullOrEmpty(location))
+                        _prefabHandles[location] = handle;
+                    else
+                        GameEntry.ReleaseLeaveHandle(handle);
+                }
+                else
+                {
+                    Log.Warning(
+                        "[EnvItemStreamerLite] load fail loc=" + location +
+                        " status=" + handle.Status +
+                        " err=" + handle.LastError);
+                    GameEntry.ReleaseLeaveHandle(handle);
+                }
             }
 
             Log.Info(
@@ -966,36 +1132,49 @@ namespace Game
             onDone?.Invoke(prefab);
         }
 
-        bool _released;
+        public void Release() => Release(destroyObjects: true);
 
-        public void Release()
+        void Release(bool destroyObjects)
         {
             if (_released)
                 return;
             _released = true;
             _prefillActive = false;
             PrefillSuppressRender = false;
-            PrefillFrameGate.End();
+            _prefillGate.End();
             _running = false;
             StopAllCoroutines();
+            int destroyed = 0;
             for (int i = 0; i < _items.Count; i++)
             {
                 Item item = _items[i];
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
                 if (item.InNative && _native != null && item.Go != null)
                     _native.RemoveInstance(item.Go, item.ProtoIndex);
 #endif
                 if (item.Go != null)
                 {
-                    DestroyYBillboardMaterials(item.Go);
-                    Destroy(item.Go);
+                    DestroyYBillboardMaterials(item.Go, destroyObjects);
+                    if (destroyObjects)
+                    {
+                        DestroyUnlinked(item.Go);
+                        destroyed++;
+                    }
                 }
             }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             // 句柄稍后才 Release；先丢掉合批对 Mesh/Material 的握持，UnloadUnused 才能回收。
-            _native?.Clear();
+            // 场景卸载时物体跟着场景走，不再 DestroyImmediate 合批宿主。
+            if (destroyObjects)
+                EnvNativeInstancing.DestroySingleton();
+            _native = null;
 #endif
+            int inflight = _inflightHandles.Count;
+            int handles = _prefabHandles.Count;
+            Log.Info(
+                $"[EnvItemStreamerLite] release gos={destroyed} handles={handles} inflight={inflight} " +
+                "releaseNow=" + destroyObjects);
             _items.Clear();
             _spawnedCount = 0;
             _spawnBacklog = false;
@@ -1004,10 +1183,23 @@ namespace Game
             if (Current == this)
                 Current = null;
 
-            foreach (var kv in _prefabHandles)
-                kv.Value?.Release();
+            // 场景卸载不 Release。句柄已在加载时登记，等卸场景成功再放。
+            if (destroyObjects)
+            {
+                for (int i = 0; i < _inflightHandles.Count; i++)
+                    GameEntry.ReleaseLeaveHandle(_inflightHandles[i]);
+                foreach (var kv in _prefabHandles)
+                    GameEntry.ReleaseLeaveHandle(kv.Value);
+            }
+
+            _inflightHandles.Clear();
             _prefabHandles.Clear();
             _prefabCache.Clear();
+        }
+
+        void OnDestroy()
+        {
+            Release(destroyObjects: false);
         }
 
         /// <summary>
@@ -1037,7 +1229,7 @@ namespace Game
             AssetHandle handle = _prefabHandles[location];
             _prefabHandles.Remove(location);
             _prefabCache.Remove(location);
-            handle?.Release();
+            GameEntry.ReleaseLeaveHandle(handle);
             return true;
         }
 
@@ -1062,15 +1254,20 @@ namespace Game
                 _locationUsers[location] = count;
         }
 
-        void OnDestroy()
+        void DestroyBillboardsNow()
         {
-            Release();
+            for (int i = 0; i < _items.Count; i++)
+            {
+                GameObject go = _items[i].Go;
+                if (go != null)
+                    DestroyYBillboardMaterials(go, true);
+            }
         }
 
         /// <summary>
         /// (YBillboard) 是运行时克隆，Destroy(GO) 不会带走它，贴图引用会挡住卸包。
         /// </summary>
-        static void DestroyYBillboardMaterials(GameObject go)
+        void DestroyYBillboardMaterials(GameObject go, bool immediate)
         {
             Renderer[] renderers = go.GetComponentsInChildren<Renderer>(true);
             for (int r = 0; r < renderers.Length; r++)
@@ -1084,7 +1281,11 @@ namespace Game
                 for (int m = 0; m < mats.Length; m++)
                 {
                     Material mat = mats[m];
-                    if (mat != null && mat.name.EndsWith("(YBillboard)"))
+                    if (mat == null || !mat.name.EndsWith("(YBillboard)"))
+                        continue;
+                    if (immediate)
+                        DestroyImmediate(mat);
+                    else
                         Destroy(mat);
                 }
             }

@@ -142,7 +142,8 @@ namespace CustomSRP
             // OilRain screen-space water ripples run AFTER OilFilter (which likes our
             // strong colour edges), BEFORE the colour grading pass (which would shift hue).
             // Only runs when rain settings present AND post ripples enabled.
-            if (rainSettings != null && rainSettings.postRippleEnabled)
+            if (rainSettings != null && rainSettings.postRippleEnabled
+                && Game.IslandLeakProbe.Allow(Game.IslandLeakProbe.Module.Rain))
             {
                 colorSource = OilRainPostPass.Record(
                     renderGraph, stack, colorSource, textures, rainSettings);

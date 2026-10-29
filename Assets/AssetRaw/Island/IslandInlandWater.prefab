@@ -9,6 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2274474729831111408}
+  - component: {fileID: 8123456789012345680}
   m_Layer: 4
   m_Name: IslandInlandWater
   m_TagString: Untagged
@@ -37,6 +38,18 @@ Transform:
   - {fileID: 8678788044267026283}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8123456789012345680
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8753138716738858688}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9e5a3d16f4b4c87d0e2f3a4b5c6d7e8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CustomSRP.OilWaterBody
 --- !u!1001 &2670806024932989576
 PrefabInstance:
   m_ObjectHideFlags: 0

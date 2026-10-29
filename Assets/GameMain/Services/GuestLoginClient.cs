@@ -146,7 +146,8 @@ namespace Game
                     yield break;
                 }
 
-                GuestSession.ApplyUserSession(resp.data.token, resp.data.userId, isGuest: true);
+                GuestSession.ApplyUserSession(
+                    resp.data.token, resp.data.userId, isGuest: true, saveLocal: false);
                 Log.Info($"[GuestLogin] touristLogin ok userId={GuestSession.UserId}");
                 done?.Invoke(true);
             }

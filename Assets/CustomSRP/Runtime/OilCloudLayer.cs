@@ -1,12 +1,15 @@
+using System.Runtime.InteropServices;
 using Game;
+using Unity.Collections;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace CustomSRP
 {
     /// <summary>
-    /// Camera-following cloud ring (XZ). Low-ring belly anchors to sea level;
-    /// the cloud pass draws a low ring and an optional smaller high ring.
-    /// Pigment follows the oil sky.
+    /// Camera-following cloud ring (XZ). Low-ring belly anchors to sea level.
+    /// The optional high ring is baked into the same mesh (low triangles first,
+    /// SDF bias on UV1) so the cloud pass draws once. Pigment follows the oil sky.
     /// </summary>
     [DisallowMultipleComponent]
     public class OilCloudLayer : MonoBehaviour
@@ -25,6 +28,7 @@ namespace CustomSRP
         const float HighScaleMul = 0.68f;
         const float HighYawDegrees = 70f;
         const float HighSdfBias = 0.08f;
+        static readonly Quaternion HighYaw = Quaternion.Euler(0f, HighYawDegrees, 0f);
         const float WindBlendSeconds = 0.85f;
         const float CalmYawRad = 0f;
         const float StormYawRad = 16f * Mathf.Deg2Rad;
@@ -71,7 +75,50 @@ namespace CustomSRP
 
         public static Mesh SharedRing => _ring ??= BuildRing();
 
+        /// <summary>退登丢掉运行时云环。静态网格会一直占着，下一趟登录不会自己换掉。
+        /// 必须 DestroyImmediate：延迟 Destroy 在卸岛帧里会被丢掉，网格 GPU 副本留在 GfxDevice。</summary>
+        public static void ReleaseSharedMeshes()
+        {
+            if (_ring != null)
+            {
+                Object.DestroyImmediate(_ring);
+                _ring = null;
+            }
+
+            if (_combined != null)
+            {
+                Object.DestroyImmediate(_combined);
+                _combined = null;
+            }
+
+            _combinedScale = float.NaN;
+        }
+
         static Mesh _ring;
+        static Mesh _combined;
+        static float _combinedScale = float.NaN;
+
+        // Position, atlas UV, one-float SDF bias. No normals: the cloud shader never reads them.
+        static readonly VertexAttributeDescriptor[] CloudRingLayout =
+        {
+            new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 1)
+        };
+
+        const MeshUpdateFlags CloudRingUploadFlags =
+            MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices;
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct CloudRingVertex
+        {
+            public float PositionX;
+            public float PositionY;
+            public float PositionZ;
+            public float UvX;
+            public float UvY;
+            public float Bias;
+        }
         static readonly int UvDisturbanceId = Shader.PropertyToID("_UVDisturbance");
         static readonly int SdfSoftnessId = Shader.PropertyToID("_SdfSoftness");
         static readonly int SdfMinId = Shader.PropertyToID("_SdfMin");
@@ -93,7 +140,6 @@ namespace CustomSRP
         static readonly int WindId = Shader.PropertyToID("_OilCloudWind");
         static readonly int DawnId = Shader.PropertyToID("_OilCloudDawn");
         static readonly int NightId = Shader.PropertyToID("_OilCloudNight");
-        static readonly int RingBiasId = Shader.PropertyToID("_OilCloudRingBias");
 
         EntityId _appliedMaterialId;
         float _appliedDisturbance;
@@ -108,14 +154,12 @@ namespace CustomSRP
         float _windIntensity;
         float _yaw;
         int _windFrame = -1;
-        OilOceanSurface _ocean;
 
         public struct Frame
         {
             public Matrix4x4 low;
-            public Matrix4x4 high;
+            public Mesh mesh;
             public bool drawHigh;
-            public float highSdfBias;
             public Vector3 sunDir;
             public Vector3 moonDir;
             public Color body;
@@ -245,12 +289,8 @@ namespace CustomSRP
             return new Frame
             {
                 low = Matrix4x4.TRS(origin, yaw, Vector3.one * scale),
-                high = Matrix4x4.TRS(
-                    origin + Vector3.up * HighLocalY,
-                    yaw * Quaternion.Euler(0f, HighYawDegrees, 0f),
-                    Vector3.one * (scale * HighScaleMul)),
+                mesh = highRing ? CombinedRing(scale) : SharedRing,
                 drawHigh = highRing,
-                highSdfBias = HighSdfBias,
                 sunDir = sunDir,
                 moonDir = moonDir,
                 body = body,
@@ -286,12 +326,6 @@ namespace CustomSRP
             cmd.SetGlobalVector(WindId, frame.windVector);
             cmd.SetGlobalFloat(DawnId, frame.dawn);
             cmd.SetGlobalFloat(NightId, frame.night);
-            cmd.SetGlobalFloat(RingBiasId, 0f);
-        }
-
-        public static void SetRingBias(UnityEngine.Rendering.UnsafeCommandBuffer cmd, float bias)
-        {
-            cmd.SetGlobalFloat(RingBiasId, bias);
         }
 
         void TickWind()
@@ -316,7 +350,9 @@ namespace CustomSRP
         /// </summary>
         float GetWeatherWindIntensity()
         {
-            var weather = WeatherService.Ensure();
+            WeatherService weather = GameEntry.Weather;
+            if (weather == null)
+                return 0f;
             // VisualWind01 already eases across a weather change (0 when not wind).
             return weather.VisualWind01;
         }
@@ -325,15 +361,9 @@ namespace CustomSRP
         {
             if (followSeaLevel)
             {
-                if (_ocean == null)
-                {
-                    _ocean = Object.FindAnyObjectByType<OilOceanSurface>();
-                }
-
-                if (_ocean != null)
-                {
-                    return _ocean.transform.position.y;
-                }
+                ISeaLevel sea = IslandSceneComponent.Active?.Sea;
+                if (sea != null)
+                    return sea.Level;
             }
 
             return seaLevel;
@@ -434,19 +464,98 @@ namespace CustomSRP
 
         static Mesh BuildRing()
         {
+            var mesh = new Mesh
+            {
+                name = "OilCloudRing",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            FillRingMesh(mesh, false, 1f);
+            return mesh;
+        }
+
+        // High ring baked into low-ring object space. Rebuilt when ringScale changes:
+        // the +80 m lift is world-space, so the local offset is 80 / scale.
+        static Mesh CombinedRing(float scale)
+        {
+            scale = Mathf.Max(0.2f, scale);
+            if (_combined != null && Mathf.Approximately(_combinedScale, scale))
+            {
+                return _combined;
+            }
+
+            _combined ??= new Mesh
+            {
+                name = "OilCloudRingBoth",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            FillRingMesh(_combined, true, scale);
+            _combinedScale = scale;
+            return _combined;
+        }
+
+        static void FillRingMesh(Mesh mesh, bool includeHigh, float scale)
+        {
+            const int cards = 8;
+            const int segU = 8;
+            const int segV = 5;
+            int vertsPerRing = cards * (segU + 1) * (segV + 1);
+            int indicesPerRing = cards * segU * segV * 6;
+            int rings = includeHigh ? 2 : 1;
+            int vertexCount = vertsPerRing * rings;
+            int indexCount = indicesPerRing * rings;
+
+            mesh.indexFormat = IndexFormat.UInt16;
+            Mesh.MeshDataArray dataArray = Mesh.AllocateWritableMeshData(1);
+            Mesh.MeshData data = dataArray[0];
+            data.SetVertexBufferParams(vertexCount, CloudRingLayout);
+            data.SetIndexBufferParams(indexCount, IndexFormat.UInt16);
+            NativeArray<CloudRingVertex> vertices = data.GetVertexData<CloudRingVertex>();
+            NativeArray<ushort> indices = data.GetIndexData<ushort>();
+
+            Vector3 boundsMin = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+            Vector3 boundsMax = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+            WriteRing(vertices, indices, 0, 0, 0f, false, scale, ref boundsMin, ref boundsMax);
+            if (includeHigh)
+            {
+                WriteRing(
+                    vertices, indices, vertsPerRing, indicesPerRing,
+                    HighSdfBias, true, scale, ref boundsMin, ref boundsMax);
+            }
+
+            var bounds = new Bounds((boundsMin + boundsMax) * 0.5f, boundsMax - boundsMin);
+            data.subMeshCount = 1;
+            data.SetSubMesh(
+                0,
+                new SubMeshDescriptor(0, indexCount, MeshTopology.Triangles)
+                {
+                    bounds = bounds,
+                    vertexCount = vertexCount
+                },
+                CloudRingUploadFlags);
+            Mesh.ApplyAndDisposeWritableMeshData(dataArray, mesh, CloudRingUploadFlags);
+            mesh.bounds = bounds;
+        }
+
+        static void WriteRing(
+            NativeArray<CloudRingVertex> vertices,
+            NativeArray<ushort> indices,
+            int vertexBase,
+            int indexBase,
+            float bias,
+            bool bakeHigh,
+            float scale,
+            ref Vector3 boundsMin,
+            ref Vector3 boundsMax)
+        {
             const int cards = 8;
             const int segU = 8;
             const int segV = 5;
             const float arc = 48f * Mathf.Deg2Rad;
             // Belly at MeshY0; top at MeshY1. Evaluate() pins MeshY0 to sea level.
+            float highLift = HighLocalY / Mathf.Max(0.2f, scale);
+            int v = vertexBase;
+            int t = indexBase;
 
-            int vertsPerCard = (segU + 1) * (segV + 1);
-            var vertices = new Vector3[cards * vertsPerCard];
-            var uvs = new Vector2[vertices.Length];
-            var indices = new int[cards * segU * segV * 6];
-
-            int v = 0;
-            int t = 0;
             for (int card = 0; card < cards; card++)
             {
                 int col = card % 2;
@@ -464,17 +573,30 @@ namespace CustomSRP
                     {
                         float u01 = x / (float)segU;
                         float ang = center + (u01 - 0.5f) * arc;
-                        vertices[v] = new Vector3(
+                        var position = new Vector3(
                             Mathf.Sin(ang) * radius,
                             height,
                             Mathf.Cos(ang) * radius);
+                        if (bakeHigh)
+                        {
+                            position = HighYaw * (position * HighScaleMul);
+                            position.y += highLift;
+                        }
+
+                        boundsMin = Vector3.Min(boundsMin, position);
+                        boundsMax = Vector3.Max(boundsMax, position);
                         // Stay inside the atlas cell. V is flipped: the painted belly hangs down.
                         float uInset = Mathf.Lerp(0.01f, 0.99f, u01);
                         float vInset = Mathf.Lerp(0.98f, 0.02f, v01);
-                        uvs[v] = new Vector2(
-                            (col + uInset) / 2f,
-                            (row + vInset) / 4f);
-                        v++;
+                        vertices[v++] = new CloudRingVertex
+                        {
+                            PositionX = position.x,
+                            PositionY = position.y,
+                            PositionZ = position.z,
+                            UvX = (col + uInset) / 2f,
+                            UvY = (row + vInset) / 4f,
+                            Bias = bias
+                        };
                     }
                 }
 
@@ -488,27 +610,15 @@ namespace CustomSRP
                         int i01 = i00 + stride;
                         int i11 = i01 + 1;
                         // Front face points inward. The camera sits inside the ring.
-                        indices[t++] = i00;
-                        indices[t++] = i11;
-                        indices[t++] = i10;
-                        indices[t++] = i00;
-                        indices[t++] = i01;
-                        indices[t++] = i11;
+                        indices[t++] = (ushort)i00;
+                        indices[t++] = (ushort)i11;
+                        indices[t++] = (ushort)i10;
+                        indices[t++] = (ushort)i00;
+                        indices[t++] = (ushort)i01;
+                        indices[t++] = (ushort)i11;
                     }
                 }
             }
-
-            var mesh = new Mesh
-            {
-                name = "OilCloudRing",
-                hideFlags = HideFlags.HideAndDontSave
-            };
-            mesh.SetVertices(vertices);
-            mesh.SetUVs(0, uvs);
-            mesh.SetIndices(indices, MeshTopology.Triangles, 0);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            return mesh;
         }
     }
 }

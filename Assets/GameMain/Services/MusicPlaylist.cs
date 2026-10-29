@@ -615,7 +615,7 @@ namespace Game
             }
             // 定时到点 / 用户暂停：音乐与音效一起停（AmbienceZone / Weather / 雨水 ticker）。
             IsPlaying = false;
-            AudioInteractionBootstrap.SetContentAudioPaused(true);
+            IslandAudioSession.Instance?.SetContentAudioPaused(true);
             // 同步原生 userPaused，否则定时到点后焦点回归/后台续播会把歌又拉起来。
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.MarkUserPausedFromUnity(true);
@@ -645,7 +645,7 @@ namespace Game
             }
             IsPlaying = CurrentAlbumIndex >= 0 && CurrentTrackIndex >= 0 && !_stoppedByUser;
             WanosEngine.Unmute("music-resume");
-            AudioInteractionBootstrap.SetContentAudioPaused(false);
+            IslandAudioSession.Instance?.SetContentAudioPaused(false);
 #if UNITY_ANDROID && !UNITY_EDITOR
             // 定时取消依赖此路径出声：原生 pauseForTimerEnd 已 mute，须补抢焦点 + unmute。
             BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
@@ -666,7 +666,7 @@ namespace Game
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
 #endif
-            AudioInteractionBootstrap.SetContentAudioPaused(false);
+            IslandAudioSession.Instance?.SetContentAudioPaused(false);
 
             if (!HasRestorableTrack)
             {
@@ -727,7 +727,7 @@ namespace Game
             IsPlaying = true;
             NowPlayingService.NoteUserPaused(false);
             WanosEngine.Unmute("music-restore");
-            AudioInteractionBootstrap.SetContentAudioPaused(false);
+            IslandAudioSession.Instance?.SetContentAudioPaused(false);
             PushVolumesToEngine();
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
@@ -803,7 +803,7 @@ namespace Game
         public void PushVolumesToEngine()
         {
             // Preset iris ducks Music_Volume to 0 before Stop_Music/Play_* so retarget is silent.
-            float music = MusicVolume * ContentAudioDuck.Level01;
+            float music = MusicVolume * IslandAudioSession.DuckLevel01;
             WanosEngine.SetVolumeParameter(WanosEngine.MusicVolumeParam, music);
             WanosEngine.SetVolumeParameter(WanosEngine.FxVolumeParam, EffectVolume);
         }

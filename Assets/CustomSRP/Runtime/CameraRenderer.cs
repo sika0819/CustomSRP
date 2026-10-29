@@ -65,7 +65,7 @@ namespace CustomSRP
 
             // 铺装时不画世界：全场景每帧更重，Present 会把主线程停死。
             // 仍清屏并画 UI，Game 视图才认这台摄像机在渲染，加载条才能往前走。
-            if (EnvItemStreamerLite.PrefillSuppressRender)
+            if (EnvItemStreamerLite.PrefillSuppressRender || IslandGpuReclaim.CoverOnly)
             {
                 if (camera.cameraType == CameraType.Game)
                     RenderCoverOnly(context, camera);
@@ -75,7 +75,27 @@ namespace CustomSRP
             // Push rain globals once per frame BEFORE any draw, so NPR shaders
             // can read _OilRainWetStrength / _OilRainIntensity without per-material
             // property overrides. Falls back to OilRainManager.LateUpdate if active.
-            if (settings.rainSettings != null)
+            if (camera.cameraType == CameraType.Game)
+            {
+                if (!IslandLeakProbe.Allow(IslandLeakProbe.Module.Rain))
+                {
+                    Shader.SetGlobalFloat("_OilRainWetStrength", 0f);
+                    Shader.SetGlobalFloat("_OilRainWetSmoothnessBoost", 0f);
+                    Shader.SetGlobalFloat("_OilRainWetDarkening", 0f);
+                    Shader.SetGlobalFloat("_OilRainIntensity", 0f);
+                }
+                else if (settings.rainSettings != null)
+                {
+                    float rainI = settings.rainSettings.intensity;
+                    Shader.SetGlobalFloat("_OilRainWetStrength", settings.rainSettings.wetStrength * rainI);
+                    Shader.SetGlobalFloat("_OilRainWetSmoothnessBoost", settings.rainSettings.wetSmoothnessBoost * rainI);
+                    Shader.SetGlobalFloat("_OilRainWetDarkening", settings.rainSettings.wetDarkening * rainI);
+                    Shader.SetGlobalFloat("_OilRainIntensity", rainI);
+                    Shader.SetGlobalColor("_OilRainAmbientColor",
+                        new Color(0.3f, 0.6f, 0.8f, 1f));
+                }
+            }
+            else if (IslandLeakProbe.Allow(IslandLeakProbe.Module.Rain) && settings.rainSettings != null)
             {
                 float rainI = settings.rainSettings.intensity;
                 Shader.SetGlobalFloat("_OilRainWetStrength", settings.rainSettings.wetStrength * rainI);
@@ -132,6 +152,7 @@ namespace CustomSRP
             }
 
             bool hasActivePostFX =
+                IslandLeakProbe.Allow(IslandLeakProbe.Module.PostFx) &&
                 !isReflection &&
                 postFXSettings != null &&
                 postFXSettings.Material != null &&
@@ -184,6 +205,7 @@ namespace CustomSRP
             }
 
             cullingParameters.shadowDistance = isReflection
+                || !IslandLeakProbe.Allow(IslandLeakProbe.Module.Shadow)
                 ? 0f
                 : Mathf.Min(shadowSettings.maxDistance, camera.farClipPlane);
             CullingResults cullingResults = context.Cull(ref cullingParameters);
@@ -280,9 +302,12 @@ namespace CustomSRP
                         textures,
                         lightResources);
 
-                    SkyboxPass.Record(renderGraph, camera, textures);
+                    // Mirror RT is scenery only. Water already has analytic sky, so the
+                    // reflection camera must not draw the skybox again.
+                    if (!isReflection && IslandLeakProbe.Allow(IslandLeakProbe.Module.Sky))
+                        SkyboxPass.Record(renderGraph, camera, textures);
 
-                    if (!isReflection)
+                    if (!isReflection && IslandLeakProbe.Allow(IslandLeakProbe.Module.Cloud))
                     {
                         CloudPass.Record(renderGraph, camera, bufferSize, textures);
                     }

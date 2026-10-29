@@ -159,7 +159,11 @@ namespace Game.Editor
 
             BaseComponent baseComponent = framework.GetComponentInChildren<BaseComponent>(true);
             if (baseComponent != null)
+            {
                 baseComponent.EditorResourceMode = true;
+                if (baseComponent.GetComponent<IslandSceneComponent>() == null)
+                    baseComponent.gameObject.AddComponent<IslandSceneComponent>();
+            }
 
             ProcedureComponent procedure = framework.GetComponentInChildren<ProcedureComponent>(true);
             if (procedure != null)

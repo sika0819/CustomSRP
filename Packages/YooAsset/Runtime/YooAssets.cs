@@ -51,7 +51,6 @@ namespace YooAsset
                 _isInitialize = true;
                 _driver = new UnityEngine.GameObject($"[{nameof(YooAssets)}]");
                 _driver.AddComponent<YooAssetsDriver>();
-                UnityEngine.Object.DontDestroyOnLoad(_driver);
                 YooLogger.Log($"{nameof(YooAssets)} initialize !");
 
 #if DEBUG

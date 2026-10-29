@@ -10,7 +10,7 @@ namespace CustomSRP
         static readonly int AtmosphereFogAmountId = Shader.PropertyToID("_OilAtmosphereFogAmount");
 
         Material _material;
-        Mesh _mesh;
+        OilCloudLayer.Frame _frame;
         Camera _camera;
         TextureHandle _colorAttachment;
         TextureHandle _depthAttachment;
@@ -19,14 +19,12 @@ namespace CustomSRP
         void Render(UnsafeGraphContext context)
         {
             UnsafeCommandBuffer cmd = context.cmd;
-            OilCloudLayer layer = OilCloudLayer.Current;
-            if (layer == null || _mesh == null)
+            if (OilCloudLayer.Current == null || _frame.mesh == null)
             {
                 return;
             }
 
-            OilCloudLayer.Frame frame = layer.Evaluate(_camera);
-            OilCloudLayer.ApplyFrame(cmd, frame);
+            OilCloudLayer.ApplyFrame(cmd, _frame);
             // Restore the camera matrices, then bind the intermediate targets again.
             // SetupCameraProperties also switches to the camera target.
             cmd.SetupCameraProperties(_camera);
@@ -40,13 +38,9 @@ namespace CustomSRP
             cmd.SetViewport(new Rect(0f, 0f, _bufferSize.x, _bufferSize.y));
             // Fog dye amount after camera props — clouds share TOD fog with the skybox.
             cmd.SetGlobalFloat(AtmosphereFogAmountId, 1f);
-            cmd.DrawMesh(_mesh, frame.low, _material, 0, 0);
-            if (frame.drawHigh)
-            {
-                OilCloudLayer.SetRingBias(cmd, frame.highSdfBias);
-                cmd.DrawMesh(_mesh, frame.high, _material, 0, 0);
-                OilCloudLayer.SetRingBias(cmd, 0f);
-            }
+            // Low triangles first, high ring after. Overlap is painter's order:
+            // both layers sit at sky depth with ZWrite off.
+            cmd.DrawMesh(_frame.mesh, _frame.low, _material, 0, 0);
         }
 
         static Material _fallback;
@@ -83,7 +77,8 @@ namespace CustomSRP
             Vector2Int bufferSize,
             in CameraRendererTextures textures)
         {
-            if (OilCloudLayer.Current == null)
+            OilCloudLayer layer = OilCloudLayer.Current;
+            if (layer == null)
             {
                 return;
             }
@@ -99,8 +94,9 @@ namespace CustomSRP
                 return;
             }
 
-            Mesh mesh = OilCloudLayer.SharedRing;
-            if (mesh == null)
+            // Bake the ring mesh here, while the graph is recorded, not inside execute.
+            OilCloudLayer.Frame frame = layer.Evaluate(camera);
+            if (frame.mesh == null)
             {
                 return;
             }
@@ -108,7 +104,7 @@ namespace CustomSRP
             using IUnsafeRenderGraphBuilder builder = renderGraph.AddUnsafePass(
                 Sampler.name, out CloudPass pass, Sampler);
             pass._material = material;
-            pass._mesh = mesh;
+            pass._frame = frame;
             pass._camera = camera;
             pass._bufferSize = bufferSize;
             pass._colorAttachment = textures.colorAttachment;

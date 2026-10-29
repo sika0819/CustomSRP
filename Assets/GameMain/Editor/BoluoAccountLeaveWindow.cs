@@ -21,6 +21,7 @@ namespace Game.Editor
         Label _confirmBody;
         Button _confirmOk;
         int _pendingLeaveReason = -1;
+        bool _blockConfirmClick;
 
         [InitializeOnLoadMethod]
         static void HookNativeProfile()
@@ -83,18 +84,16 @@ namespace Game.Editor
             sessionBox.Add(_sessionUserId);
 
             var refresh = new Button(RefreshSession) { text = "刷新会话" };
+            refresh.focusable = false;
             refresh.style.marginTop = 6;
             refresh.style.height = 24;
             sessionBox.Add(refresh);
 
-            var logout = new Button(() => ShowConfirm(
-                MsgType.HostLeaveReasonLogout,
-                "确定退出登录？",
-                "清会话与运行时态，保留按 userId 分桶的本地进度。等同原生 HostLeaveIsland a=0。",
-                "退出登录"))
+            var logout = new Button(() => LeaveNow(MsgType.HostLeaveReasonLogout))
             {
                 text = "退出登录",
             };
+            logout.focusable = false;
             logout.style.height = 36;
             logout.style.marginBottom = 8;
             root.Add(logout);
@@ -107,6 +106,7 @@ namespace Game.Editor
             {
                 text = "注销账号",
             };
+            deleteAccount.focusable = false;
             deleteAccount.style.height = 36;
             deleteAccount.style.marginBottom = 8;
             deleteAccount.style.backgroundColor = new Color(0.55f, 0.18f, 0.16f, 0.85f);
@@ -121,6 +121,7 @@ namespace Game.Editor
             {
                 text = "关闭 Play 内遮罩",
             };
+            closeHud.focusable = false;
             closeHud.style.height = 28;
             closeHud.style.marginBottom = 10;
             root.Add(closeHud);
@@ -143,6 +144,7 @@ namespace Game.Editor
             _confirmOverlay.style.top = 0;
             _confirmOverlay.style.bottom = 0;
             _confirmOverlay.style.backgroundColor = new Color(0f, 0f, 0f, 0.55f);
+            _confirmOverlay.pickingMode = PickingMode.Ignore;
             _confirmOverlay.style.display = DisplayStyle.None;
             _confirmOverlay.style.justifyContent = Justify.Center;
             _confirmOverlay.style.alignItems = Align.Center;
@@ -178,21 +180,26 @@ namespace Game.Editor
             card.Add(row);
 
             var cancel = new Button(HideConfirm) { text = "取消" };
+            cancel.focusable = false;
             cancel.style.width = 88;
             cancel.style.height = 28;
             cancel.style.marginRight = 8;
             row.Add(cancel);
 
             _confirmOk = new Button(ConfirmLeave) { text = "确定" };
+            _confirmOk.focusable = false;
             _confirmOk.style.width = 110;
             _confirmOk.style.height = 28;
             row.Add(_confirmOk);
         }
 
-        void OnInspectorUpdate()
+        /// <summary>
+        /// 只有 UITK 的 EditorWindow，第一次点击会被用来聚焦，按钮要点第二次才触发。
+        /// 空 OnGUI 让这次 MouseDown 既聚焦又把点击交给按钮。不要在 OnInspectorUpdate 里 Repaint，
+        /// 重绘会把正在进行的点击打断。
+        /// </summary>
+        void OnGUI()
         {
-            if (Application.isPlaying)
-                Repaint();
         }
 
         void OnFocus() => RefreshSession();
@@ -223,36 +230,54 @@ namespace Game.Editor
             }
 
             _pendingLeaveReason = leaveReason;
+            // 这次点击若穿透到刚显示的「确定」，不要当成确认。当前事件结束后再接受点击。
+            _blockConfirmClick = true;
+            EditorApplication.delayCall += () => _blockConfirmClick = false;
             _confirmTitle.text = title;
             _confirmBody.text = body;
             _confirmOk.text = okLabel;
+            _confirmOverlay.pickingMode = PickingMode.Position;
             _confirmOverlay.style.display = DisplayStyle.Flex;
         }
 
         void HideConfirm()
         {
             _pendingLeaveReason = -1;
-            if (_confirmOverlay != null)
-                _confirmOverlay.style.display = DisplayStyle.None;
+            _blockConfirmClick = false;
+            if (_confirmOverlay == null)
+                return;
+            _confirmOverlay.pickingMode = PickingMode.Ignore;
+            _confirmOverlay.style.display = DisplayStyle.None;
         }
 
         void ConfirmLeave()
         {
-            int reason = _pendingLeaveReason;
-            HideConfirm();
+            if (_blockConfirmClick)
+                return;
+            LeaveNow(_pendingLeaveReason);
+        }
+
+        void LeaveNow(int reason)
+        {
             if (reason < 0)
                 return;
             if (!Application.isPlaying)
             {
-                _status.text = "已退出 Play，操作取消";
+                _status.text = "请先进入 Play Mode";
+                HideConfirm();
                 return;
             }
 
+            HideConfirm();
             string beforeUid = GuestSession.UserId ?? "";
             // 与真机一致：走 Push → HostIslandEntryGate.Leave（清会话 / 可选清桶 + 退回 GuestLogin）。
+            // 点击在本帧 Update 之后。先拆游客补闩再 Drain，否则清票瞬间登录窗会 BeginGuestLogin，
+            // 第一次退登被新票拉回岛。
+            BoluoPhoneLoginWindow.DisarmGuestProceed();
             NativePushReceiver.SimulatePush(MsgType.HostLeaveIsland, reason, 0, 0);
             EditorLoginGate.ResetSessionFlags();
             NativeEditorHud.Close();
+            NativePushReceiver.Drain();
 
             string label = reason == MsgType.HostLeaveReasonAccountDeleted
                 ? $"已模拟注销 a=1（清桶 userId={beforeUid}）→ GuestLogin"

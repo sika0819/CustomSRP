@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 5279282574105509466}
   - component: {fileID: 4309950762309393503}
   - component: {fileID: 5604905087700843958}
+  - component: {fileID: 8123456789012345679}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -99,6 +100,18 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
+--- !u!114 &8123456789012345679
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2968827903464464250}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8d4f2c05e3a4b76c9d1e2f3a4b5c6d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Game::Game.SceneLightSource
 --- !u!114 &4309950762309393503
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -280,6 +293,7 @@ GameObject:
   m_Component:
   - component: {fileID: 5463119154472833466}
   - component: {fileID: 7428821556995194939}
+  - component: {fileID: 8123456789012345678}
   m_Layer: 0
   m_Name: Terrain
   m_TagString: Untagged
@@ -343,6 +357,18 @@ Terrain:
   m_EnableTreesAndDetailsRayTracing: 0
   m_EnableHeightmapLODFrustumCulling: 1
   m_TreeMotionVectorModeOverride: 3
+--- !u!114 &8123456789012345678
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6747982286676756552}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c3e1b94d2f4a65b8c0d1e2f3a4b5c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Game::Game.TerrainSource
 --- !u!1 &8193677792331053398
 GameObject:
   m_ObjectHideFlags: 0

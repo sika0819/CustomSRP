@@ -323,6 +323,37 @@ namespace WanosAudio
             return LoadFromPath(stem, path);
         }
 
+        public static bool HasPendingUnloads
+        {
+            get
+            {
+                lock (Gate)
+                    return PendingUnloads.Count > 0;
+            }
+        }
+
+        /// <summary>
+        /// 立刻卸掉延迟队列。离岛后环境音服务已经停，没人再调 <see cref="Update"/>。
+        /// </summary>
+        public static void FlushPendingUnloads()
+        {
+            string[] names;
+            lock (Gate)
+            {
+                if (PendingUnloads.Count == 0)
+                    return;
+                names = new string[PendingUnloads.Count];
+                PendingUnloads.Keys.CopyTo(names, 0);
+                PendingUnloads.Clear();
+            }
+
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (!string.IsNullOrEmpty(names[i]))
+                    ImmediateUnload(names[i]);
+            }
+        }
+
         public static bool Unload(string bankName)
         {
             string stem = Strip(bankName);
@@ -342,6 +373,7 @@ namespace WanosAudio
             {
                 Loaded.Remove(stem);
                 Refs.Remove(stem);
+                PendingUnloads.Remove(stem);
             }
             return true;
         }

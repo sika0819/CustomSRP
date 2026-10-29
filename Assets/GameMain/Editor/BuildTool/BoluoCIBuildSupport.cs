@@ -644,6 +644,9 @@ namespace Game.Editor.BuildTool
                 PlayerSettings.Android.keyaliasPass = config.AndroidKeyPass;
 
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
+            // 调试符号包（libil2cpp 未裁剪符号 + libunity.sym.so）。不打开 Development Build，
+            // 运行时内存布局与正式包一致，只多一份符号化用的符号。
+            EditorUserBuildSettings.androidCreateSymbols = AndroidCreateSymbols.Debugging;
 
             bool yishu = string.Equals(config.AndroidFlavor, "yishu", StringComparison.Ordinal);
             if (!string.IsNullOrEmpty(config.AndroidAbi))

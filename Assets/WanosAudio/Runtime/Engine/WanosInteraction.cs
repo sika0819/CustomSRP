@@ -90,7 +90,6 @@ namespace WanosAudio
                 return;
 
             _listenerFollowHost = new GameObject(ListenerFollowHostName);
-            UnityEngine.Object.DontDestroyOnLoad(_listenerFollowHost);
             _listenerFollowHost.AddComponent<ListenerFollowDriver>();
         }
 

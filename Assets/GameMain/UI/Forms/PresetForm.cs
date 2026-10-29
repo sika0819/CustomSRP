@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Cysharp.Threading.Tasks;
 using Game.BoluoApi;
 using UnityEngine;
@@ -738,38 +737,30 @@ namespace Game
                 return;
             }
 
-            if (Application.internetReachability == NetworkReachability.NotReachable)
+            ItemBinding captured = item;
+            if (!DownloadNetworkGate.TryPassDownloadGates(
+                    banks,
+                    onAllowAfterMobile: () => StartPresetDownload(captured),
+                    onWifiOnly: () =>
+                    {
+                        if (PendingDownloadIntent.IsPresetMatch(captured.PresetId))
+                            PendingDownloadIntent.Clear();
+                        ApplyItemState(captured.Index, force: true);
+                    },
+                    onBlockedRetreat: null))
+                return;
+
+            StartPresetDownload(item);
+        }
+
+        void StartPresetDownload(in ItemBinding item)
+        {
+            string[] banks = item.BankNames;
+            if (banks == null || banks.Length == 0)
             {
-                ShowToast("需要网络连接");
+                ApplyReadyPreset(item);
                 return;
             }
-
-            long requiredKb = 0;
-            for (int i = 0; i < banks.Length; i++)
-            {
-                string bn = banks[i];
-                if (string.IsNullOrEmpty(bn) || BankDownloader.IsLocalReady(bn))
-                    continue;
-                if (PresetBankCatalog.TryGet(bn, out var remote)
-                    && remote != null
-                    && !string.IsNullOrEmpty(remote.size)
-                    && long.TryParse(remote.size, out long kb))
-                {
-                    requiredKb += kb;
-                }
-            }
-
-            if (requiredKb > 0)
-            {
-                long requiredBytes = requiredKb * 1024L;
-                if (GetAvailableStorageBytes() < requiredBytes * 2)
-                {
-                    ShowToast("存储空间不足");
-                    return;
-                }
-            }
-
-            // Gate 3 (mobile data consent) — same TODO as MusicForm; allow for now.
 
             _userTriggered.Add(item.PresetId);
             PendingDownloadIntent.SetPreset(item.PresetId);
@@ -785,7 +776,6 @@ namespace Game
 
             int presetId = item.PresetId;
             IslandPlayerPosSave.PushSaveSuppress();
-            // Fire-and-forget: UniTask continues on main thread via BankDownloader.
             DownloadBanksAsync(presetId, remotes).Forget();
         }
 
@@ -1161,21 +1151,5 @@ namespace Game
             DownloadedUnplayedManager.MarkPlayed(DownloadedUnplayedManager.PresetKey(displayName));
         }
 
-        static long GetAvailableStorageBytes()
-        {
-            try
-            {
-                string path = Application.persistentDataPath;
-                var drive = new DriveInfo(Path.GetPathRoot(path) ?? path);
-                if (drive.IsReady)
-                    return drive.AvailableFreeSpace;
-            }
-            catch
-            {
-                // ignore
-            }
-
-            return long.MaxValue;
-        }
     }
 }

@@ -130,6 +130,7 @@ namespace CustomSRP
                 _maxLightsPerTile, visibleLights.Length);
             _tileDataSize = requiredMaxLightsPerTile + 1;
             _dirLightCount = _otherLightCount = 0;
+            bool leakShadows = Game.IslandLeakProbe.Allow(Game.IslandLeakProbe.Module.Shadow);
             for (int i = 0; i < visibleLights.Length; i++)
             {
                 VisibleLight visibleLight = visibleLights[i];
@@ -150,7 +151,7 @@ namespace CustomSRP
                                 // Planar mirror: shadow caster cull / atlas setup skipped
                                 // (CameraRenderer sets cullingParameters.shadowDistance = 0
                                 //  for reflection, so ReserveShadows here only wastes CPU).
-                                if (!_isReflection)
+                                if (!_isReflection && leakShadows)
                                 {
                                     shadowData = shadows.directionalShadows.ReserveShadows(
                                         light, i, _cullingResults);
@@ -167,8 +168,11 @@ namespace CustomSRP
                             // goes through, so the reflection reads lit rather than black.
                             if (!_isReflection && _otherLightCount < MaxOtherLightCount)
                             {
-                                shadowData = shadows.otherShadows.ReserveShadows(
-                                    light, i, _cullingResults);
+                                if (leakShadows)
+                                {
+                                    shadowData = shadows.otherShadows.ReserveShadows(
+                                        light, i, _cullingResults);
+                                }
                                 SetupForwardPlus(_otherLightCount, ref visibleLight);
                                 OtherLightDataArray[_otherLightCount++] =
                                     OtherLightData.CreatePointLight(
@@ -178,8 +182,11 @@ namespace CustomSRP
                         case LightType.Spot:
                             if (!_isReflection && _otherLightCount < MaxOtherLightCount)
                             {
-                                shadowData = shadows.otherShadows.ReserveShadows(
-                                    light, i, _cullingResults);
+                                if (leakShadows)
+                                {
+                                    shadowData = shadows.otherShadows.ReserveShadows(
+                                        light, i, _cullingResults);
+                                }
                                 SetupForwardPlus(_otherLightCount, ref visibleLight);
                                 OtherLightDataArray[_otherLightCount++] =
                                     OtherLightData.CreateSpotLight(
@@ -189,7 +196,7 @@ namespace CustomSRP
                     }
                 }
 
-                // [SRP][Shadow.Light] 每 60 帧把每个光源过一次,看 ReserveShadows 给的是什么
+                // [SRP][Shadow.Light] 毝 60 帧把毝个光溝过一次,看 ReserveShadows 给的是什么
 #if UNITY_INCLUDE_INSTRUMENTATION
                 if ((Time.frameCount & 63) == 0)
                 {

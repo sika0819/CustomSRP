@@ -28,15 +28,21 @@ namespace Game
         UIDocument[] _docs;
         float[] _docOpacities;
 
+        public static DevicePresetShotHelper Instance { get; private set; }
+
         public static DevicePresetShotHelper Ensure()
         {
-            DevicePresetShotHelper existing = FindAnyObjectByType<DevicePresetShotHelper>();
-            if (existing != null)
-                return existing;
+            DevicePresetShotHelper helper = IslandServiceHost.Ensure(Instance, "DevicePresetShotHelper");
+            Instance = helper;
+            return helper;
+        }
 
-            var go = new GameObject("DevicePresetShotHelper");
-            DontDestroyOnLoad(go);
-            return go.AddComponent<DevicePresetShotHelper>();
+        void Awake() => Instance = this;
+
+        void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
         }
 
         void Update()
@@ -147,18 +153,44 @@ namespace Game
             _busy = false;
         }
 
+        static void CollectDocuments(System.Collections.Generic.List<UIDocument> docs)
+        {
+            if (GameEntry.UI != null)
+            {
+                UIForm[] forms = GameEntry.UI.GetAllLoadedUIForms();
+                for (int i = 0; i < forms.Length; i++)
+                {
+                    UIDocument document = forms[i] != null
+                        ? forms[i].GetComponent<UIDocument>()
+                        : null;
+                    if (document != null)
+                        docs.Add(document);
+                }
+            }
+
+            BootEarlyCover cover = BootEarlyCover.Instance;
+            if (cover == null)
+                return;
+
+            UIDocument coverDocument = cover.GetComponent<UIDocument>();
+            if (coverDocument != null && !docs.Contains(coverDocument))
+                docs.Add(coverDocument);
+        }
+
         void HideUi()
         {
             if (!_uiHidden)
             {
-                _debugger = FindAnyObjectByType<DebuggerComponent>();
+                _debugger = UnityGameFramework.Runtime.GameEntry.GetComponent<DebuggerComponent>();
                 if (_debugger != null)
                 {
                     _debuggerWasActive = _debugger.ActiveWindow;
                     _debugger.ActiveWindow = false;
                 }
 
-                _docs = FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude);
+                var docs = new System.Collections.Generic.List<UIDocument>(8);
+                CollectDocuments(docs);
+                _docs = docs.ToArray();
                 _docOpacities = new float[_docs.Length];
                 for (int i = 0; i < _docs.Length; i++)
                 {

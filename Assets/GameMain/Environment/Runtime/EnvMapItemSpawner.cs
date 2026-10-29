@@ -8,7 +8,9 @@ using UnityGameFramework.Runtime;
 namespace Game
 {
     /// <summary>
-    /// MapItem 根节点铺装：读 AllMapItem、建分类层级、启动流式或全量路径。
+    /// Island 场景里的 MapItem 铺装。读 AllMapItem，建分类，再交给
+    /// <see cref="EnvItemStreamerLite"/> 流送；流送关掉时才全量实例化。
+    /// 场景卸载走 <see cref="OnDestroy"/>，句柄留到卸场景成功。进程拆世界走 <see cref="Release"/>，才销毁子节点并 Release。
     /// </summary>
     public sealed class EnvMapItemSpawner : MonoBehaviour
     {
@@ -22,6 +24,7 @@ namespace Game
         readonly Dictionary<string, Transform> _categoryParents = new Dictionary<string, Transform>(32);
         readonly List<MapItemData> _allMapItems = new List<MapItemData>(2560);
         readonly List<AssetHandle> _ownedHandles = new List<AssetHandle>(8);
+        readonly Dictionary<string, GameObject> _fullPrefabCache = new Dictionary<string, GameObject>(192);
 
         EnvItemStreamerLite _streamer;
         Transform _focus;
@@ -56,6 +59,8 @@ namespace Game
             if (_allMapItems.Count == 0)
                 Log.Error("[MapItem] AllMapItem empty or failed to load");
 
+            yield return SceneBankGateSpawner.Build(_categoryParents, _allMapItems);
+
             const float fillMin = 0.81f;
             const float fillMax = BootLoadingService.TerrainPrepareMax;
             if (_allMapItems.Count > 0)
@@ -69,14 +74,17 @@ namespace Game
                 }
                 else
                 {
-                    yield return FullSpawnBudgeted(fillMin, fillMax, reportProgress);
+                    yield return FullInstantiateAll(fillMin, fillMax, reportProgress);
                 }
             }
 
             reportProgress?.Invoke(fillMax, "正在铺装氛围特效...");
             _extrasSpawnedCount = 0;
-            yield return EnvMapItemExtras.Spawn(
-                transform, _categoryParents, _ownedHandles, n => _extrasSpawnedCount = n);
+            if (GameEntry.MapItemExtras != null)
+            {
+                yield return GameEntry.MapItemExtras.Spawn(
+                    transform, _categoryParents, _ownedHandles, n => _extrasSpawnedCount = n);
+            }
 
             IsReady = true;
             Log.Info(
@@ -101,15 +109,44 @@ namespace Game
                 {
                     Transform cat = transform.GetChild(i);
                     for (int c = cat.childCount - 1; c >= 0; c--)
-                        Destroy(cat.GetChild(c).gameObject);
+                        DestroyUnlinked(cat.GetChild(c).gameObject);
                 }
             }
 
-            for (int i = 0; i < _ownedHandles.Count; i++)
-                _ownedHandles[i]?.Release();
+            DropCatalog(releaseHandles: true);
+        }
+
+        /// <summary>全量铺装这条路径拆世界时用。场景卸载走 OnDestroy，不进这里。</summary>
+        void DestroyUnlinked(GameObject go)
+        {
+            if (go == null)
+                return;
+            go.hideFlags = HideFlags.None;
+            Transform t = go.transform;
+            if (t != null && t.parent != null)
+                t.SetParent(null, false);
+            DestroyImmediate(go);
+        }
+
+        void OnDestroy()
+        {
+            if (_released)
+                return;
+            _released = true;
+            // 流送组件在同一个物体上，自己的 OnDestroy 会交还句柄。这里再调 Release() 会立刻拆子节点。
+            DropCatalog(releaseHandles: false);
+        }
+
+        void DropCatalog(bool releaseHandles)
+        {
+            if (releaseHandles)
+            {
+                for (int i = 0; i < _ownedHandles.Count; i++)
+                    GameEntry.ReleaseLeaveHandle(_ownedHandles[i]);
+            }
+
             _ownedHandles.Clear();
             _allMapItems.Clear();
-            EnvMapItemExtras.ClearLoaded();
             _fullPrefabCache.Clear();
             _fullSpawnedCount = 0;
             _extrasSpawnedCount = 0;
@@ -152,7 +189,8 @@ namespace Game
                     {
                         text = asset;
                         handle = h;
-                    });
+                    },
+                    trackLeave: true);
                 if (handle != null)
                     _ownedHandles.Add(handle);
             }
@@ -208,11 +246,6 @@ namespace Game
                 _allMapItems.Clear();
         }
 
-        IEnumerator FullSpawnBudgeted(float progressMin, float progressMax, System.Action<float, string> report)
-        {
-            yield return FullInstantiateAll(progressMin, progressMax, report);
-        }
-
         IEnumerator FullInstantiateAll(float progressMin, float progressMax, System.Action<float, string> report)
         {
             if (_streamer != null)
@@ -229,6 +262,12 @@ namespace Game
             {
                 MapItemData d = _allMapItems[i];
                 string category = d.Parent ?? "null";
+                // 区域门由 SceneBankGateSpawner 生成，不加载缺失的 BanksChecker 预制体。
+                if (category == SceneBankGateCatalog.Category)
+                    continue;
+                if (!IslandLeakProbe.AllowCategory(category))
+                    continue;
+
                 string location = SceneAssets.DaoYu1Location(category, d.PrefabName);
                 string editorPath = SceneAssets.DaoYu1EditorPath(category, d.PrefabName);
                 GameObject prefab = null;
@@ -243,7 +282,9 @@ namespace Game
                 GameObject instance = Instantiate(prefab, parent, false);
                 instance.name = i + " " + prefab.name;
                 Vector3 pos = d.Pos;
-                EnvGroundFit.TrySnapMapItemY(ref pos, category, d.PrefabName);
+                EnvGroundFit ground = GameEntry.GroundFit;
+                if (ground != null)
+                    ground.TrySnapMapItemY(ref pos, category, d.PrefabName);
                 if (EnvGroundFit.IsFlatGroundCard(d.PrefabName))
                     EnvGroundFit.DisableCastShadows(instance);
 
@@ -251,8 +292,6 @@ namespace Game
                 instance.transform.localEulerAngles = d.Rotation;
                 instance.transform.localScale = d.Scale;
                 instance.SetActive(d.IsActive);
-                if (EnvStreamingConfig.IsRockCategory(category))
-                    EnvRockColliders.Ensure(instance, d.PrefabName);
                 if (EnvStreamingConfig.IsBridgeCategory(category))
                     EnvBridgePillarFit.Ensure(instance);
                 _fullSpawnedCount++;
@@ -268,8 +307,6 @@ namespace Game
 
             report?.Invoke(progressMax, "正在铺装环境...");
         }
-
-        readonly Dictionary<string, GameObject> _fullPrefabCache = new Dictionary<string, GameObject>(192);
 
         IEnumerator LoadPrefabOnce(string location, string editorPath, System.Action<GameObject> onDone)
         {
@@ -290,7 +327,7 @@ namespace Game
                     prefab = asset;
                     if (handle != null)
                         _ownedHandles.Add(handle);
-                });
+                }, trackLeave: true);
             }
 
 #if UNITY_EDITOR
@@ -302,19 +339,15 @@ namespace Game
             onDone?.Invoke(prefab);
         }
 
-        static Transform ResolveFocus()
+        Transform ResolveFocus()
         {
             Camera cam = Camera.main;
             if (cam != null)
                 return cam.transform;
             var go = new GameObject("MapItemFocus");
+            go.transform.SetParent(transform, false);
             go.transform.position = IslandSpawnPose.DefaultPos;
             return go.transform;
-        }
-
-        void OnDestroy()
-        {
-            Release();
         }
     }
 }

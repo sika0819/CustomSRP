@@ -1,8 +1,11 @@
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using Game;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.SceneManagement;
 using UnityGameFramework.Runtime;
 
 namespace CustomSRP
@@ -18,6 +21,12 @@ namespace CustomSRP
         const float FarGrassFullDensityMeters = 32f;
         const int FarBladeSegments = 2;
         const int ArgsStride = sizeof(uint) * 5;
+        const int ShrinkKindPos = 0;
+        const int ShrinkKindUpload = 1;
+        const int ShrinkKindVisible = 2;
+        const int ShrinkKindVisibleFar = 3;
+        const int ShrinkKindCount = 4;
+        const long GrassShrinkBudgetMs = 1;
 
         static readonly int WindDirId = Shader.PropertyToID("_OilGrassWindDir");
         static readonly int WindStrengthId = Shader.PropertyToID("_OilGrassWindStrength");
@@ -63,6 +72,12 @@ namespace CustomSRP
         static readonly ProfilerMarker MarkerLateUpdate = new ProfilerMarker("OilTerrainGrass.LateUpdate");
         static readonly ProfilerMarker MarkerCullAndDraw = new ProfilerMarker("OilTerrainGrass.CullAndDraw");
 
+        // ComputeShader 是 Resources / 工程资源，退登不会卸。SetBuffer 会握住大 buffer，
+        // 不先换成 4 字节占位就 Release，位置缓冲会留在显存里。
+        static ComputeBuffer _structuredStub;
+        static ComputeBuffer _rawStub;
+        static ComputeBuffer _appendStub;
+
         ComputeBuffer[] _allPosV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
         ComputeBuffer[] _visibleIdV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
         ComputeBuffer[] _visibleIdFarV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
@@ -95,12 +110,19 @@ namespace CustomSRP
         float[] _cellDistSq = System.Array.Empty<float>();
         List<Vector4>[] _windowPackLists;
         Vector4[][] _windowPackUpload;
+        readonly Stopwatch _grassWork = new Stopwatch();
+        bool _windowRebuiltThisFrame;
+        bool _shrinkQueued;
+        int _shrinkCursor;
         int[] _pendingPackedV = new int[OilTerrainGrassBladeMesh.TopologyCount];
         int[][] _packOffsetsV;
         int[][] _packCountsV;
         int[] _packCellIds = System.Array.Empty<int>();
         bool _ownsBladeMesh;
         bool _ownsMaterial;
+        bool[] _variantMeshOwned;
+        bool[] _farMeshOwned;
+        bool _gpuReleased;
         Camera _bindDrawCamera;
         bool _hasLastGrassSubmit;
         bool _hasGrassView;
@@ -121,15 +143,35 @@ namespace CustomSRP
         public static OilTerrainGrassBinder Ensure()
         {
             if (Active != null)
+            {
+                MoveToIslandScene(Active.gameObject);
                 return Active;
-            var existing = FindAnyObjectByType<OilTerrainGrassBinder>();
+            }
+#if UNITY_EDITOR
+            OilTerrainGrassBinder existing = FindAnyObjectByType<OilTerrainGrassBinder>();
             if (existing != null)
+            {
+                MoveToIslandScene(existing.gameObject);
                 return existing;
+            }
+#endif
+            // 进岛时 Island 已是激活场景，对象落在这张场景里，退登跟着卸。
             var go = new GameObject("[OilTerrainGrass]");
-            // DontDestroyOnLoad is play-mode only; editor menu must not call it.
-            if (Application.isPlaying)
-                DontDestroyOnLoad(go);
-            return go.AddComponent<OilTerrainGrassBinder>();
+            OilTerrainGrassBinder created = go.AddComponent<OilTerrainGrassBinder>();
+            MoveToIslandScene(go);
+            return created;
+        }
+
+        /// <summary>激活场景若不是 Island，new GameObject 会落到 Launch，卸岛清不掉显存。</summary>
+        static void MoveToIslandScene(GameObject go)
+        {
+            if (!Application.isPlaying || go == null)
+                return;
+            string sceneName = Path.GetFileNameWithoutExtension(SceneAssets.Island);
+            Scene island = SceneManager.GetSceneByName(sceneName);
+            if (!island.IsValid() || !island.isLoaded || go.scene == island)
+                return;
+            SceneManager.MoveGameObjectToScene(go, island);
         }
 
         void OnEnable() => Active = this;
@@ -312,7 +354,7 @@ namespace CustomSRP
 
         public void DrawForCamera(Camera cam)
         {
-            if (cam == null || !DebugDrawEnabled || !_bakeLoaded)
+            if (_gpuReleased || cam == null || !DebugDrawEnabled || !_bakeLoaded)
                 return;
             EnsureGpu();
             if (!_gpuReady || _packedCount <= 0)
@@ -332,64 +374,121 @@ namespace CustomSRP
         {
             using (MarkerLateUpdate.Auto())
             {
-                if (!DebugDrawEnabled || !_bakeLoaded)
-                {
-                    LastVisibleCount = 0;
-                    return;
-                }
-
-                var cam = Camera.main;
-                if (cam == null)
-                {
-                    LastVisibleCount = 0;
-                    return;
-                }
-
-                MaybeRebuildBakeWindow(ResolveGrassFocus());
-                LastVisibleCount = 0;
-                EnsureGpu();
-                PushWindGlobals();
-                if (!_gpuReady || _packedCount <= 0)
-                    return;
-
-                var camTf = cam.transform;
-                bool settled = _hasGrassView
-                    && (camTf.position - _lastGrassCamPos).sqrMagnitude <= 0.04f
-                    && Quaternion.Angle(camTf.rotation, _lastGrassCamRot) <= 0.75f;
-                // DrawMeshInstancedIndirect only scopes the submit when its camera
-                // argument is set; leaving it null makes the planar mirror probe
-                // re-draw the whole grass window into the reflection RT. Bind the
-                // main camera for both the fresh and the replay path.
-                _bindDrawCamera = cam;
+                _windowRebuiltThisFrame = false;
+                _grassWork.Restart();
                 try
                 {
-                    if (_hasLastGrassSubmit && settled)
-                        ReplayLastGrassDraw();
-                    else
-                        CullAndDraw(cam);
+                    TickGrass();
                 }
                 finally
                 {
-                    _bindDrawCamera = null;
+                    TryShrinkOneGrassPiece();
                 }
+            }
+        }
+
+        void TickGrass()
+        {
+            if (_gpuReleased || !DebugDrawEnabled || !_bakeLoaded)
+            {
+                LastVisibleCount = 0;
+                return;
+            }
+
+            var cam = Camera.main;
+            if (cam == null)
+            {
+                LastVisibleCount = 0;
+                return;
+            }
+
+            MaybeRebuildBakeWindow(ResolveGrassFocus());
+            LastVisibleCount = 0;
+            EnsureGpu();
+            PushWindGlobals();
+            if (!_gpuReady || _packedCount <= 0)
+                return;
+
+            var camTf = cam.transform;
+            bool settled = _hasGrassView
+                && (camTf.position - _lastGrassCamPos).sqrMagnitude <= 0.04f
+                && Quaternion.Angle(camTf.rotation, _lastGrassCamRot) <= 0.75f;
+            // DrawMeshInstancedIndirect only scopes the submit when its camera
+            // argument is set; leaving it null makes the planar mirror probe
+            // re-draw the whole grass window into the reflection RT. Bind the
+            // main camera for both the fresh and the replay path.
+            _bindDrawCamera = cam;
+            try
+            {
+                if (_hasLastGrassSubmit && settled)
+                    ReplayLastGrassDraw();
+                else
+                    CullAndDraw(cam);
+            }
+            finally
+            {
+                _bindDrawCamera = null;
             }
         }
 
         void OnDestroy()
         {
-            ReleaseBuffers();
-            if (_ownsBladeMesh)
+            // 卸岛走这里。必须在本帧还 GPU：延迟 Destroy 在场景卸载里会被丢掉。
+            ReleaseGpu();
+            if (Active == this)
+                Active = null;
+        }
+
+        /// <summary>
+        /// 退登 / 卸岛：解开 ComputeShader 上的大 buffer，立刻销毁运行时 Mesh / Material，再 Release。
+        /// 贴图引用一并丢掉，随后的 Resources.UnloadUnusedAssets 才能把图集显存收回。
+        /// </summary>
+        public void ReleaseGpu()
+        {
+            if (_gpuReleased)
+                return;
+            _gpuReleased = true;
+
+            long bytes = SumGpuBytes();
+            if (_grassMpb != null)
             {
-                DestroyOwnedMeshes(_variantMeshes);
-                DestroyOwnedMeshes(_farVariantMeshes);
+                _grassMpb.Clear();
+                _grassMpb = null;
             }
 
+            UnbindComputeToStub();
+            DestroyVariantMaterialsImmediate();
+            if (_ownsMaterial && _material != null)
+                DestroyImmediate(_material);
+            _material = null;
+            _ownsMaterial = false;
+
+            DestroyOwnedMeshes(_variantMeshes, _variantMeshOwned, immediate: true);
+            DestroyOwnedMeshes(_farVariantMeshes, _farMeshOwned, immediate: true);
             _variantMeshes = null;
             _farVariantMeshes = null;
-            DestroyVariantMaterials();
-            if (_ownsMaterial && _material != null)
-                Destroy(_material);
-            _material = null;
+            _variantMeshOwned = null;
+            _farMeshOwned = null;
+            _ownsBladeMesh = false;
+
+            ReleaseBuffers();
+
+            atlasTexture = null;
+            flowerAtlasTexture = null;
+            wheatTexture = null;
+            lavenderTexture = null;
+            variantTextures = null;
+            _variantTex = null;
+            materialOverride = null;
+            cullCompute = null;
+            bakeAsset = null;
+            _bakeData = null;
+            _bakeLoaded = false;
+            _windowPackLists = null;
+            _windowPackUpload = null;
+            _packedCount = 0;
+            _hasLastGrassSubmit = false;
+            Log.Info($"[OilTerrainGrass] gpu released buffers={bytes}");
         }
 
         Vector3 ResolveGrassFocus()
@@ -458,6 +557,7 @@ namespace CustomSRP
 
         void RebuildBakeWindow(Vector3 focus)
         {
+            _windowRebuiltThisFrame = true;
             int cellN = _cellCountX * _cellCountZ;
             if (cellN <= 0 || !_bakeLoaded || _bakeData?.Cells == null)
             {
@@ -533,6 +633,8 @@ namespace CustomSRP
             CommitPackedWindow(focus, take);
             UploadPackedVariantBuffers();
             _windowDirty = false;
+            // 重包这一帧只记下过大的块，缩小留到后面有余量的帧。
+            _shrinkQueued = AnyGrassPieceOversized();
         }
 
         void EnsureWindowPackLists()
@@ -1069,6 +1171,8 @@ namespace CustomSRP
 
         void EnsureGpu()
         {
+            if (_gpuReleased)
+                return;
             if (_gpuReady && _variantMats != null && _variantMeshes != null)
                 return;
 
@@ -1147,26 +1251,48 @@ namespace CustomSRP
 
         void RebuildTopologyMeshes()
         {
-            DestroyOwnedMeshes(_variantMeshes);
-            DestroyOwnedMeshes(_farVariantMeshes);
+            DestroyOwnedMeshes(_variantMeshes, _variantMeshOwned, immediate: false);
+            DestroyOwnedMeshes(_farVariantMeshes, _farMeshOwned, immediate: false);
             _variantMeshes = OilTerrainGrassBladeMesh.BuildAll(_bladeSegments);
             _farVariantMeshes = OilTerrainGrassBladeMesh.BuildAll(FarBladeSegments);
+            _variantMeshOwned = MarkRuntimeMeshes(_variantMeshes);
+            _farMeshOwned = MarkRuntimeMeshes(_farVariantMeshes);
             _ownsBladeMesh = true;
         }
 
-        void DestroyOwnedMeshes(Mesh[] meshes)
+        static bool[] MarkRuntimeMeshes(Mesh[] meshes)
+        {
+            if (meshes == null)
+                return null;
+            var owned = new bool[meshes.Length];
+            for (int i = 0; i < meshes.Length; i++)
+            {
+                Mesh mesh = meshes[i];
+                // 进岛时记一次。退登再问 IsImportedMesh 会 Resources.Load，把网格重新钉在显存里。
+                owned[i] = mesh != null && !OilTerrainGrassBladeMesh.IsImportedMesh(mesh);
+            }
+
+            return owned;
+        }
+
+        void DestroyOwnedMeshes(Mesh[] meshes, bool[] owned, bool immediate)
         {
             if (meshes == null)
                 return;
             for (int i = 0; i < meshes.Length; i++)
             {
-                Mesh m = meshes[i];
-                if (m == null)
+                Mesh mesh = meshes[i];
+                if (mesh == null)
                     continue;
-                // OBJ/FBX 共享 Mesh 不能 Destroy。
-                if (OilTerrainGrassBladeMesh.IsImportedMesh(m))
+                bool isOwned = owned != null && (uint)i < (uint)owned.Length
+                    ? owned[i]
+                    : !OilTerrainGrassBladeMesh.IsImportedMesh(mesh);
+                if (!isOwned)
                     continue;
-                Destroy(m);
+                if (immediate)
+                    DestroyImmediate(mesh);
+                else
+                    Destroy(mesh);
             }
         }
 
@@ -1178,6 +1304,23 @@ namespace CustomSRP
             {
                 if (_variantMats[i] != null)
                     Destroy(_variantMats[i]);
+            }
+
+            _variantMats = null;
+        }
+
+        void DestroyVariantMaterialsImmediate()
+        {
+            if (_variantMats == null)
+                return;
+            for (int i = 0; i < _variantMats.Length; i++)
+            {
+                Material mat = _variantMats[i];
+                if (mat == null)
+                    continue;
+                if (mat.HasProperty("_GrassTexture"))
+                    mat.SetTexture("_GrassTexture", null);
+                DestroyImmediate(mat);
             }
 
             _variantMats = null;
@@ -1263,12 +1406,228 @@ namespace CustomSRP
                 BindGrassGlobals(_variantMats[i], i);
         }
 
-        static void EnsureBuffer(ref ComputeBuffer buffer, int count, int stride, ComputeBufferType type)
+        /// <summary>
+        /// 计算着色器和材质还握着旧 buffer 时直接 Release，驱动不会把显存还回来。
+        /// </summary>
+        void ReleaseReplacing(ref ComputeBuffer buffer)
+        {
+            if (buffer == null)
+                return;
+            UnbindComputeToStub();
+            ComputeBuffer stub = StructuredStub();
+            if (_variantMats != null)
+            {
+                for (int i = 0; i < _variantMats.Length; i++)
+                {
+                    Material mat = _variantMats[i];
+                    if (mat == null)
+                        continue;
+                    mat.SetBuffer("_AllInstancesPosWSBuffer", stub);
+                    mat.SetBuffer("_VisibleInstanceOnlyTransformIDBuffer", stub);
+                }
+            }
+
+            if (_grassMpb != null)
+            {
+                _grassMpb.SetBuffer("_AllInstancesPosWSBuffer", stub);
+                _grassMpb.SetBuffer("_VisibleInstanceOnlyTransformIDBuffer", stub);
+            }
+
+            if (buffer.IsValid())
+                buffer.Release();
+            buffer = null;
+        }
+
+        void TryShrinkOneGrassPiece()
+        {
+            if (_gpuReleased || !_shrinkQueued || _windowRebuiltThisFrame)
+                return;
+            if (_grassWork.ElapsedMilliseconds >= GrassShrinkBudgetMs)
+                return;
+            if (!GrassFrameHasHeadroom())
+                return;
+            if (!ShrinkNextOversizedPiece())
+                _shrinkQueued = false;
+        }
+
+        static bool GrassFrameHasHeadroom()
+        {
+            int fps = Application.targetFrameRate;
+            if (fps < 1)
+                fps = IslandCameraSrpSetup.DefaultFrameRate;
+            return Time.unscaledDeltaTime <= 1.5f / fps;
+        }
+
+        bool AnyGrassPieceOversized()
+        {
+            const int vc = OilTerrainGrassBladeMesh.TopologyCount;
+            for (int v = 0; v < vc; v++)
+            {
+                for (int kind = 0; kind < ShrinkKindCount; kind++)
+                {
+                    if (GrassPieceOversized(v, kind))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        bool ShrinkNextOversizedPiece()
+        {
+            const int vc = OilTerrainGrassBladeMesh.TopologyCount;
+            int total = vc * ShrinkKindCount;
+            for (int step = 0; step < total; step++)
+            {
+                int index = (_shrinkCursor + step) % total;
+                int variant = index / ShrinkKindCount;
+                int kind = index % ShrinkKindCount;
+                if (!GrassPieceOversized(variant, kind))
+                    continue;
+                ShrinkGrassPiece(variant, kind);
+                _shrinkCursor = (index + 1) % total;
+                return true;
+            }
+
+            return false;
+        }
+
+        bool GrassPieceOversized(int variant, int kind)
+        {
+            int used = PackedVariantCount(variant);
+            switch (kind)
+            {
+                case ShrinkKindPos:
+                    return BufferOversized(_allPosV, variant, used);
+                case ShrinkKindUpload:
+                    return UploadOversized(variant, used);
+                case ShrinkKindVisible:
+                    return BufferOversized(_visibleIdV, variant, used);
+                case ShrinkKindVisibleFar:
+                    return BufferOversized(_visibleIdFarV, variant, used);
+                default:
+                    return false;
+            }
+        }
+
+        int PackedVariantCount(int variant)
+        {
+            if (_packedV == null || (uint)variant >= (uint)_packedV.Length)
+                return 0;
+            return _packedV[variant];
+        }
+
+        static bool BufferOversized(ComputeBuffer[] buffers, int variant, int used)
+        {
+            if (buffers == null || (uint)variant >= (uint)buffers.Length)
+                return false;
+            ComputeBuffer buffer = buffers[variant];
+            if (buffer == null || !buffer.IsValid())
+                return false;
+            return CapacityOversized(buffer.count, used);
+        }
+
+        bool UploadOversized(int variant, int used)
+        {
+            if (_windowPackUpload == null || (uint)variant >= (uint)_windowPackUpload.Length)
+                return false;
+            Vector4[] upload = _windowPackUpload[variant];
+            return upload != null && CapacityOversized(upload.Length, used);
+        }
+
+        /// <summary>新数量不到容量一半才缩。容量为 1 的占位不再动。</summary>
+        static bool CapacityOversized(int capacity, int used)
+        {
+            if (capacity <= 1)
+                return false;
+            if (used <= 0)
+                return true;
+            return (long)used * 2 < capacity;
+        }
+
+        void ShrinkGrassPiece(int variant, int kind)
+        {
+            int used = PackedVariantCount(variant);
+            switch (kind)
+            {
+                case ShrinkKindPos:
+                    ShrinkPosBuffer(variant, used);
+                    RebindAllVariantBuffers();
+                    break;
+                case ShrinkKindUpload:
+                    ShrinkUpload(variant, used);
+                    break;
+                case ShrinkKindVisible:
+                    ShrinkVisible(ref _visibleIdV[variant], used);
+                    _hasLastGrassSubmit = false;
+                    RebindAllVariantBuffers();
+                    break;
+                case ShrinkKindVisibleFar:
+                    ShrinkVisible(ref _visibleIdFarV[variant], used);
+                    _hasLastGrassSubmit = false;
+                    RebindAllVariantBuffers();
+                    break;
+            }
+        }
+
+        void ShrinkPosBuffer(int variant, int used)
+        {
+            ReleaseReplacing(ref _allPosV[variant]);
+            int count = Mathf.Max(used, 1);
+            _allPosV[variant] = new ComputeBuffer(count, sizeof(float) * 4, ComputeBufferType.Structured);
+            if (used > 0
+                && _windowPackUpload != null
+                && (uint)variant < (uint)_windowPackUpload.Length
+                && _windowPackUpload[variant] != null
+                && _windowPackUpload[variant].Length >= used)
+                _allPosV[variant].SetData(_windowPackUpload[variant], 0, 0, used);
+        }
+
+        void ShrinkUpload(int variant, int used)
+        {
+            if (_windowPackUpload != null && (uint)variant < (uint)_windowPackUpload.Length)
+            {
+                Vector4[] current = _windowPackUpload[variant];
+                if (current != null && CapacityOversized(current.Length, used))
+                {
+                    if (used <= 0)
+                        _windowPackUpload[variant] = System.Array.Empty<Vector4>();
+                    else
+                    {
+                        var next = new Vector4[Mathf.NextPowerOfTwo(used)];
+                        System.Array.Copy(current, next, used);
+                        _windowPackUpload[variant] = next;
+                    }
+                }
+            }
+        }
+
+        void ShrinkVisible(ref ComputeBuffer buffer, int used)
+        {
+            int count = Mathf.Max(used, 1);
+            ComputeBufferType type = _useAdd
+                ? ComputeBufferType.Structured
+                : ComputeBufferType.Append;
+            ReleaseReplacing(ref buffer);
+            buffer = new ComputeBuffer(count, sizeof(uint), type);
+            if (!_useAdd)
+                buffer.SetCounterValue(0);
+        }
+
+        void RebindAllVariantBuffers()
+        {
+            if (_variantMats == null)
+                return;
+            for (int i = 0; i < _variantMats.Length; i++)
+                BindGrassGlobals(_variantMats[i], i);
+        }
+
+        void EnsureBuffer(ref ComputeBuffer buffer, int count, int stride, ComputeBufferType type)
         {
             count = Mathf.Max(1, count);
             if (buffer != null && buffer.count >= count && buffer.stride == stride)
                 return;
-            buffer?.Release();
+            ReleaseReplacing(ref buffer);
             buffer = new ComputeBuffer(count, stride, type);
         }
 
@@ -1280,7 +1639,7 @@ namespace CustomSRP
                 : ComputeBufferType.Append;
             if (buffer != null && buffer.count >= count)
                 return;
-            buffer?.Release();
+            ReleaseReplacing(ref buffer);
             buffer = new ComputeBuffer(count, sizeof(uint), type);
             if (!_useAdd)
                 buffer.SetCounterValue(0);
@@ -1349,6 +1708,105 @@ namespace CustomSRP
             _windGlobalsValid = false;
         }
 
+        long SumGpuBytes()
+        {
+            long bytes = BufferBytes(_keepOutGrid);
+            bytes += SumBufferBytes(_allPosV);
+            bytes += SumBufferBytes(_visibleIdV);
+            bytes += SumBufferBytes(_visibleIdFarV);
+            bytes += SumBufferBytes(_argsV);
+            bytes += SumBufferBytes(_argsFarV);
+            return bytes;
+        }
+
+        static long SumBufferBytes(ComputeBuffer[] buffers)
+        {
+            if (buffers == null)
+                return 0;
+            long bytes = 0;
+            for (int i = 0; i < buffers.Length; i++)
+                bytes += BufferBytes(buffers[i]);
+            return bytes;
+        }
+
+        static long BufferBytes(ComputeBuffer buffer)
+        {
+            if (buffer == null || !buffer.IsValid())
+                return 0;
+            return (long)buffer.count * buffer.stride;
+        }
+
+        void UnbindComputeToStub()
+        {
+            if (cullCompute == null)
+                return;
+            if (_kernel < 0)
+                _kernel = cullCompute.FindKernel("CSMain");
+            if (_kernelAdd < 0)
+                _kernelAdd = cullCompute.FindKernel("CSMainAdd");
+            SyncGrassIndirectMode();
+
+            ComputeBuffer structured = StructuredStub();
+            if (_kernel >= 0)
+            {
+                cullCompute.SetBuffer(_kernel, "_AllInstancesPosWSBuffer", structured);
+                cullCompute.SetBuffer(_kernel, "_KeepOutGrid", structured);
+                if (!_useAdd)
+                    cullCompute.SetBuffer(_kernel, "_VisibleInstancesOnlyPosWSIDBuffer", AppendStub());
+            }
+
+            if (_kernelAdd < 0)
+                return;
+            cullCompute.SetBuffer(_kernelAdd, "_AllInstancesPosWSBuffer", structured);
+            cullCompute.SetBuffer(_kernelAdd, "_KeepOutGrid", structured);
+            if (_useAdd)
+            {
+                cullCompute.SetBuffer(_kernelAdd, "_VisibleIdsAdd", structured);
+                cullCompute.SetBuffer(_kernelAdd, "_VisibleArgs", ArgsStub());
+            }
+        }
+
+        /// <summary>退登后拆掉占位 buffer。卸岛时为了解绑会把它们建出来，不放就留在静态字段上。</summary>
+        public static void ReleaseStubs()
+        {
+            ReleaseStub(ref _structuredStub);
+            ReleaseStub(ref _rawStub);
+            ReleaseStub(ref _appendStub);
+        }
+
+        static void ReleaseStub(ref ComputeBuffer buffer)
+        {
+            if (buffer == null)
+                return;
+            if (buffer.IsValid())
+                buffer.Release();
+            buffer = null;
+        }
+
+        static ComputeBuffer StructuredStub() =>
+            ValidStub(ref _structuredStub, ComputeBufferType.Structured);
+
+        static ComputeBuffer ArgsStub()
+        {
+            if (_rawStub != null && !_rawStub.IsValid())
+                _rawStub = null;
+            if (_rawStub == null)
+                _rawStub = new ComputeBuffer(1, sizeof(uint) * 5, ComputeBufferType.IndirectArguments);
+            return _rawStub;
+        }
+
+        static ComputeBuffer AppendStub() =>
+            ValidStub(ref _appendStub, ComputeBufferType.Append);
+
+        static ComputeBuffer ValidStub(ref ComputeBuffer stub, ComputeBufferType type)
+        {
+            if (stub != null && !stub.IsValid())
+                stub = null;
+            if (stub == null)
+                stub = new ComputeBuffer(1, sizeof(uint), type);
+            return stub;
+        }
+
         /// <summary>
         /// Metal/Vulkan 要求 kernel 声明的 StructuredBuffer 必须绑定；
         /// KeepOut 关闭时也要挂一个占位 buffer。
@@ -1391,7 +1849,14 @@ namespace CustomSRP
             for (int i = 0; i < len; i++)
                 upload[i] = data.Mask[i];
 
-            _keepOutGrid?.Release();
+            if (_keepOutGrid != null)
+            {
+                UnbindComputeToStub();
+                if (_keepOutGrid.IsValid())
+                    _keepOutGrid.Release();
+                _keepOutGrid = null;
+            }
+
             _keepOutGrid = new ComputeBuffer(len, sizeof(uint));
             _keepOutGrid.SetData(upload);
             _keepOutRes = data.Res;

@@ -5,7 +5,7 @@ namespace Game
 {
     /// <summary>
     /// 主存档内存模型：进岛加载、变更即 Persist。
-    /// 落盘门控见 <see cref="BoluoGamePersistence.AllowsAccountProgressDisk"/>（正式账号按 userId 分桶；游客不落盘）。
+    /// 落盘门控见 <see cref="BoluoGamePersistence.AllowsAccountProgressDisk"/>（saveLocal 且有 userId 才按桶读写）。
     /// </summary>
     public static class BoluoGameSave
     {

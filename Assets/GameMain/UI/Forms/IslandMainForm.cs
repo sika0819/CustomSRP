@@ -77,6 +77,11 @@ namespace Game
         VisualElement _presetIcon;
         VisualElement _healthIcon;
         VisualElement _profileBadge;
+        int _bottomHideCount;
+        bool _nativeBottomHideHeld;
+
+        /// <summary>当前打开的主 HUD。关闭时置空，面板不再经静态回调把界面留住。</summary>
+        public static IslandMainForm Current { get; private set; }
         Label _presetLabel;
         IVisualElementScheduledItem _presetLabelHide;
         float _presetLabelAlpha;
@@ -118,7 +123,8 @@ namespace Game
                 OnClick("defaultState2", () => NativeBridgeFacade.HudHealth());
             else
                 ApplyHealthIconVisible(false);
-            HudBottomIcons.Bind(ApplyBottomIconsVisible);
+            Current = this;
+            BindBottomIcons();
             OnClick("timeBackground2", CycleTimePeriod);
 
             _timeHand = Root.Q("timeHand");
@@ -216,8 +222,9 @@ namespace Game
             _joystick?.Dispose();
             _joystick = null;
 
-            HudBottomIcons.Reset();
-            HudBottomIcons.Unbind(ApplyBottomIconsVisible);
+            ResetBottomIcons();
+            if (Current == this)
+                Current = null;
             _presetIcon = null;
             _healthIcon = null;
             _profileBadge = null;
@@ -232,6 +239,43 @@ namespace Game
         /// </summary>
         static bool HideHealthHudIcon =>
             Application.platform == RuntimePlatform.Android;
+
+        void BindBottomIcons()
+        {
+            ApplyBottomIconsVisible(_bottomHideCount == 0);
+        }
+
+        public void PushBottomHide()
+        {
+            _bottomHideCount++;
+            if (_bottomHideCount == 1)
+                ApplyBottomIconsVisible(false);
+        }
+
+        public void PopBottomShow()
+        {
+            _bottomHideCount = Mathf.Max(0, _bottomHideCount - 1);
+            if (_bottomHideCount == 0)
+                ApplyBottomIconsVisible(true);
+        }
+
+        public void SyncNativeHidden(bool hidden)
+        {
+            if (hidden == _nativeBottomHideHeld)
+                return;
+            _nativeBottomHideHeld = hidden;
+            if (hidden)
+                PushBottomHide();
+            else
+                PopBottomShow();
+        }
+
+        void ResetBottomIcons()
+        {
+            _bottomHideCount = 0;
+            _nativeBottomHideHeld = false;
+            ApplyBottomIconsVisible(true);
+        }
 
         /// <summary>
         /// Boluo ShowHideIcon：仅底部预设 + 健康；Android 健康入口始终隐藏。
@@ -614,12 +658,12 @@ namespace Game
             SetHudVisible(false);
             ShowInputBlocker(true);
 
-            PresetWeatherHold.Begin();
+            PresetService.Instance?.BeginWeatherHold();
             PresetIrisOverlay.Clear();
             // Do not ClearContent3D here — screen is still fully audible for ~0.5–2s.
             // PresetService.Apply (iris Peak / black) clears under veil; Release retriggers.
 
-            IslandJoystickCamera.Current?.BeginExitDolly();
+            IslandJoystickCamera.Current?.BeginPush();
             _irisPhase = IrisPhase.Exiting;
         }
 
@@ -663,7 +707,7 @@ namespace Game
             // 二次进岛相机/音频可能半销毁：任一步抛错都不得打断 OnOpen（否则无摇杆）。
             try { PresetIrisOverlay.Clear(); }
             catch (Exception e) { Debug.LogWarning("[IslandMainForm] iris Clear: " + e.Message); }
-            try { PresetWeatherHold.Abort(); }
+            try { PresetService.Instance?.AbortWeatherHold(); }
             catch (Exception e) { Debug.LogWarning("[IslandMainForm] weather Abort: " + e.Message); }
             try { IslandJoystickCamera.Current?.ForceUnlockLocomotion(); }
             catch (Exception e) { Debug.LogWarning("[IslandMainForm] camera unlock: " + e.Message); }
@@ -691,9 +735,9 @@ namespace Game
             if (_irisPhase == IrisPhase.Exiting)
             {
                 float t = Mathf.Clamp01(_phaseElapsed / OutlensSeconds);
-                cam?.SampleExitDolly(t);
+                cam?.SamplePush(t);
                 if (!IslandGraphicsTier.IsLowEnd)
-                    cam?.NudgeExitWalk(elapseSeconds);
+                    cam?.NudgePush(elapseSeconds);
                 ApplyExitIris(_phaseElapsed);
 
                 if (_phaseElapsed < OutlensSeconds)
@@ -717,7 +761,7 @@ namespace Game
                 _irisPhase = IrisPhase.Entering;
                 _phaseElapsed = 0f;
                 // Unduck while iris opens — Peak already Cleared/Retargeted under silence.
-                ContentAudioDuck.BeginFull();
+                IslandAudioSession.Instance?.Duck.BeginFull();
                 SchedulePresetLabelAfterReveal();
                 return;
             }
@@ -728,7 +772,6 @@ namespace Game
                 float softness = t;
                 float alpha = 1f - t;
                 PresetIrisOverlay.Set(softness, alpha);
-                cam?.SampleEnterDolly(t);
 
                 if (_phaseElapsed < InlensSeconds)
                     return;
@@ -767,8 +810,8 @@ namespace Game
             _queuedPresetId = 0;
 
             PresetIrisOverlay.Clear();
-            IslandJoystickCamera.Current?.EndTransitionDrive();
-            PresetWeatherHold.Release();
+            IslandJoystickCamera.Current?.EndPush();
+            PresetService.Instance?.ReleaseWeatherHold();
             ShowInputBlocker(false);
             SetHudVisible(true);
             _locomotion.ForceEnd();

@@ -106,51 +106,6 @@ namespace CustomSRP
             SetRecursive(go.transform, ReflectionSkipLayerIndex);
         }
 
-        /// <summary>Put ocean / river renderers on the Water layer so the mirror
-        /// camera culls them via <see cref="PlanarReflectionCullingMask"/>.</summary>
-        public static void BindWaters()
-        {
-            int water = LayerIndex;
-            if (water < 0)
-            {
-                return;
-            }
-
-            Renderer[] renderers = Object.FindObjectsByType<Renderer>(
-                FindObjectsInactive.Exclude);
-            for (int i = 0; i < renderers.Length; i++)
-            {
-                Renderer renderer = renderers[i];
-                if (renderer == null || !UsesOilWater(renderer))
-                {
-                    continue;
-                }
-
-                ApplyTo(renderer);
-            }
-        }
-
-        static bool UsesOilWater(Renderer renderer)
-        {
-            Material[] materials = renderer.sharedMaterials;
-            for (int i = 0; i < materials.Length; i++)
-            {
-                Material material = materials[i];
-                if (material == null || material.shader == null)
-                {
-                    continue;
-                }
-
-                string name = material.shader.name;
-                if (name == "CustomSRP/OilOceanNPR" || name == "CustomSRP/OilRiverNPR")
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         static void SetRecursive(Transform root, int layer)
         {
             root.gameObject.layer = layer;

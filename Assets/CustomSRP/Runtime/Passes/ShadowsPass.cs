@@ -61,27 +61,39 @@ namespace CustomSRP
                     Allocator.Temp, NativeArrayOptions.UninitializedMemory)
             };
 
-            var handles = new Handles(
-                DirectionalShadowsPass.Record(
-                    renderGraph, cullingResults, cullingInfos, shadows),
-                OtherShadowsPass.Record(
-                    renderGraph, cullingResults, cullingInfos, shadows));
-
-            if (!isReflection &&
-                (shadows.directionalShadows.HasLights
-                || shadows.otherShadows.HasLights))
+            try
             {
-                context.CullShadowCasters(cullingResults, cullingInfos);
+                var handles = new Handles(
+                    DirectionalShadowsPass.Record(
+                        renderGraph, cullingResults, cullingInfos, shadows),
+                    OtherShadowsPass.Record(
+                        renderGraph, cullingResults, cullingInfos, shadows));
+
+                if (!isReflection &&
+                    (shadows.directionalShadows.HasLights
+                    || shadows.otherShadows.HasLights))
+                {
+                    context.CullShadowCasters(cullingResults, cullingInfos);
+                }
+
+                using IUnsafeRenderGraphBuilder builder = renderGraph.AddUnsafePass(
+                    Sampler.name, out ShadowsPass pass, Sampler);
+                pass._shadows = shadows;
+                builder.AllowPassCulling(false);
+                builder.SetRenderFunc<ShadowsPass>(
+                    static (pass, context) => pass.Render(context));
+
+                return handles;
             }
-
-            using IUnsafeRenderGraphBuilder builder = renderGraph.AddUnsafePass(
-                Sampler.name, out ShadowsPass pass, Sampler);
-            pass._shadows = shadows;
-            builder.AllowPassCulling(false);
-            builder.SetRenderFunc<ShadowsPass>(
-                static (pass, context) => pass.Render(context));
-
-            return handles;
+            finally
+            {
+                // CullShadowCasters copies what it needs before returning.
+                // Leaving these undisposed keeps a safety record every frame.
+                if (cullingInfos.perLightInfos.IsCreated)
+                    cullingInfos.perLightInfos.Dispose();
+                if (cullingInfos.splitBuffer.IsCreated)
+                    cullingInfos.splitBuffer.Dispose();
+            }
         }
     }
 }

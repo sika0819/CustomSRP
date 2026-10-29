@@ -299,7 +299,7 @@ namespace CustomSRP
                     // Cooler dawn haze; chalk #A49D94 + MorningFog Soften whitened the zenith band.
                     Light(Hex(0xF0, 0xC0, 0x58), 0.38f, Hex(0x6A, 0x72, 0x8A), 1.35f),
                     // Day haze stays blue-gray (#6C99DB); chalk #B8C2D1 + Soften → MorningFog milked noon.
-                    Light(Hex(0xFF, 0xFA, 0xD2), 1.5f, Hex(0x6C, 0x99, 0xDB), 0.50f),
+                    Light(Hex(0xFF, 0xFA, 0xD2), 1.0f, Hex(0x6C, 0x99, 0xDB), 0.50f),
                     // Warm dusk haze — pale #B3A7AE + TwilightFog Soften washed the skybox white.
                     Light(Hex(0xFF, 0xC8, 0x6A), 0.57f, Hex(0x8E, 0x6A, 0x5C), 1.25f),
                     Light(Hex(0x3A, 0x4E, 0x66), 0.16f, Hex(0x2A, 0x32, 0x3A), 1.05f),
@@ -350,7 +350,7 @@ namespace CustomSRP
                 light = new[]
                 {
                     Light(Hex(0x8E, 0x52, 0x44), 0.38f, Hex(0x3A, 0x62, 0x74), 1.08f),
-                    Light(Hex(0xFF, 0xFA, 0xBD), 1.35f, Hex(0x6C, 0xBB, 0xEC), 0.99f),
+                    Light(Hex(0xFF, 0xFA, 0xBD), 1.0f, Hex(0x6C, 0xBB, 0xEC), 0.99f),
                     Light(Hex(0xFF, 0x79, 0x58), 0.48f, Hex(0x11, 0x1C, 0x40), 0.88f),
                     Light(Hex(0x4A, 0x62, 0x78), 0.18f, Hex(0x0A, 0x19, 0x24), 0.92f),
                 },
@@ -400,7 +400,7 @@ namespace CustomSRP
                 light = new[]
                 {
                     Light(Hex(0xDE, 0x8D, 0x20), 0.47f, Hex(0x8D, 0x67, 0x5A), 1.37f),
-                    Light(Hex(0xFF, 0xFF, 0xCE), 1.45f, Hex(0x6C, 0x99, 0xDB), 0.51f),
+                    Light(Hex(0xFF, 0xFF, 0xCE), 1.0f, Hex(0x6C, 0x99, 0xDB), 0.51f),
                     // Gold haze at 17:00 (Atmosphere 3 fogColor5 sample), not 18:00 slate.
                     Light(Hex(0xFF, 0xFF, 0xA3), 0.72f, Hex(0xC4, 0xB1, 0x66), 1.13f),
                     Light(Hex(0x3A, 0x4E, 0x66), 0.16f, Hex(0x2A, 0x32, 0x3A), 0.50f),
@@ -452,7 +452,7 @@ namespace CustomSRP
                 {
                     // Soften pulls orange-wall #85482A / cyan #40A0FE toward MorningFog.
                     Light(Hex(0xFA, 0xF5, 0xC8), 0.55f, Hex(0x40, 0xA0, 0xFE), 1.52f),
-                    Light(Hex(0xFF, 0xFF, 0xCE), 1.5f, Hex(0x6C, 0x99, 0xDB), 1.13f),
+                    Light(Hex(0xFF, 0xFF, 0xCE), 1.0f, Hex(0x6C, 0x99, 0xDB), 1.13f),
                     Light(Hex(0xF7, 0x91, 0x45), 0.57f, Hex(0x41, 0x38, 0x4A), 1.31f),
                     Light(Hex(0x3A, 0x4E, 0x66), 0.16f, Hex(0x2A, 0x32, 0x3A), 1.05f),
                 },
@@ -504,7 +504,7 @@ namespace CustomSRP
                 light = new[]
                 {
                     Light(Hex(0xDE, 0x8D, 0x20), 0.47f, Hex(0x85, 0x48, 0x2A), 1.52f),
-                    Light(Hex(0xFF, 0xEF, 0xCD), 1.55f, Hex(0x6C, 0x99, 0xDB), 1.13f),
+                    Light(Hex(0xFF, 0xEF, 0xCD), 1.0f, Hex(0x6C, 0x99, 0xDB), 1.13f),
                     Light(Hex(0xF7, 0x91, 0x45), 0.57f, Hex(0x41, 0x38, 0x4A), 1.31f),
                     Light(Hex(0x3A, 0x4E, 0x66), 0.16f, Hex(0x2A, 0x32, 0x3A), 1.05f),
                 },

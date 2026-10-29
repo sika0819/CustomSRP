@@ -1,3 +1,4 @@
+using System;
 using UnityGameFramework.Runtime;
 
 namespace Game
@@ -8,6 +9,12 @@ namespace Game
     /// </summary>
     public static class BoluoLogout
     {
+        /// <summary>
+        /// OilPlanarReflection 登记。退登清全局 _OilPlanarReflectTex。
+        /// Game 不能直接引用 Assembly-CSharp。
+        /// </summary>
+        public static Action ReleasePlanarReflectTex;
+
         /// <summary>兼容旧调用：等同普通退登（保留分桶进度）。</summary>
         public static void Execute() => ExecuteLeave();
 
@@ -37,16 +44,18 @@ namespace Game
             // 退登后 bank 回调仍可能命中旧 Pending → RequestTransition，二次进岛 iris 钉死行走。
             PendingDownloadIntent.Clear();
             GameEntry.Presets?.AbortTransition();
-            PresetWeatherHold.Abort();
+            PresetService.Instance?.AbortWeatherHold();
             IslandJoystickCamera.Current?.ForceUnlockLocomotion();
             NowPlayingService.CleanupAfterLeaveIsland();
             AudioAppLifecycle.ResetSession();
             WanosAudio.WanosEngine.DisarmPlaybackSession("BoluoLogout." + reason);
             Game.BoluoApi.BankDownloader.PauseForLeave();
+            Game.BoluoApi.DownloadCellularGate.ResetForNewSession();
             IslandPlayerPosSave.ResetSession();
             BoluoGameSave.ResetSession();
             DownloadedUnplayedManager.ResetSession();
             GameEntry.Weather?.ClearForAccountSwitch();
+            ReleasePlanarReflectTex?.Invoke();
             Log.Info($"[BoluoLogout] runtime cleared ({reason})");
         }
 

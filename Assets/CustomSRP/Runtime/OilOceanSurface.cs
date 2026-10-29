@@ -20,7 +20,7 @@ namespace CustomSRP
     /// </summary>
     [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
-    public class OilOceanSurface : MonoBehaviour
+    public class OilOceanSurface : MonoBehaviour, ISeaLevel
     {
         [Header("Grid (Boluo WaterGrid)")]
         [Tooltip("Tile length in meters. Boluo DaoYu WaterGrid scale = 2500.")]
@@ -56,6 +56,9 @@ namespace CustomSRP
         float _lastWaveHeight = float.NaN;
         static int enableDepth;
 
+        public float Level => transform.position.y;
+        public float GridScale => gridScale;
+
         void OnEnable()
         {
             if (enableDepth > 0)
@@ -78,6 +81,11 @@ namespace CustomSRP
                 }
 
                 ApplyWaveHeight();
+                if (Application.isPlaying)
+                {
+                    IslandSceneComponent.Active?.RegisterSea(this);
+                    OilWaterLayers.ApplyTo(gameObject);
+                }
             }
             finally
             {
@@ -89,32 +97,37 @@ namespace CustomSRP
         {
             if (Application.isPlaying)
             {
+                IslandSceneComponent.Active?.UnregisterSea(this);
                 DisposeMeshCpu();
             }
         }
 
-        void OnDestroy()
+        void OnDestroy() => ReleaseGpuMesh();
+
+        /// <summary>立刻拆掉运行时海面网格。延迟 Destroy 在卸场景时可能被丢掉。</summary>
+        public void ReleaseGpuMesh()
         {
             DisposeMeshCpu();
-            if (mesh == null)
-            {
-                return;
-            }
+            if (meshFilter == null)
+                meshFilter = GetComponent<MeshFilter>();
 
-            if (Application.isPlaying)
-            {
-                Destroy(mesh);
-            }
-            else
-            {
-                DestroyImmediate(mesh);
-            }
-
+            Mesh current = mesh;
+            if (current == null && meshFilter != null)
+                current = meshFilter.sharedMesh;
             mesh = null;
+            if (meshFilter != null && meshFilter.sharedMesh == current)
+                meshFilter.sharedMesh = null;
+
+            if (current == null || current.name != MeshName)
+                return;
+            DestroyImmediate(current);
         }
 
         void LateUpdate()
         {
+            if (IslandGpuReclaim.CoverOnly)
+                return;
+
             if (Application.isPlaying)
             {
                 FollowCamera();

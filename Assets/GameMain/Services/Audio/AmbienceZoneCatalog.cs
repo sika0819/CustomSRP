@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Game
@@ -40,6 +41,8 @@ namespace Game
     public static class AmbienceZoneCatalog
     {
         public const float OceanMaxPlayerY = 18f;
+        /// <summary>海面高度。岸线发射器贴在这层，不跟胖盒中心的 Y。</summary>
+        public const float OceanSurfaceY = 5.7f;
         public const float LakeMinPlayerY = 20f;
         public const float LakeMaxPlayerY = 50f;
 
@@ -98,12 +101,11 @@ namespace Game
 
         /// <summary>
         /// 静态 biome 锚点。Forest / Grassland / Plateau 对齐 Boluo <c>WanosAudio.prefab</c>；
-        /// 海岸（Ocean）与河流仍用原工程点位，不随 Boluo Audio 节点改。
+        /// 河流仍用原工程点位。海岸可听带是地形外海水线（见 <see cref="RebuildLiveShoreline"/>）。
         /// </summary>
         public static readonly AmbienceEmitterSpec[] StaticEmitters =
         {
-            Ocean("ocean_shore_1", 610.0767f, 5.7f, 706.1781f),
-            Ocean("ocean_shore_8", 603.174f, 5.7f, 650.0313f),
+            Ocean("ocean_shore", 610.0767f, OceanSurfaceY, 706.1781f),
             ForestBed("Forest_Audio", 561.7f, 46.78f, 517.84f),
             Lake("Lake_Audio", 461.1f, 32.77f, 461.12f),
             // 湖在岛 preset 7 那一侧（出生点 504.67 / 463.85），补一个锚点，
@@ -228,6 +230,150 @@ namespace Game
         {
             string parent = item?.Parent;
             return parent == "Lvshu" || parent == "Yeshu" || parent == "Songshu" || parent == "Guanmu";
+        }
+
+        /// <summary>地形外海水线上的采样点。0 表示地形还没采样，海岸距离不可用。</summary>
+        public static int LiveShoreCount => _liveShoreCount;
+
+        public static Vector3 LiveShorePoint(int index) => _liveShore[index];
+
+        public static void ClearLiveShoreline()
+        {
+            _liveShoreCount = 0;
+        }
+
+        /// <summary>
+        /// 用地形高度把与地图外海连通的水线采样下来。
+        /// 内陆封闭水面不进这圈，避免湖面被当成海。
+        /// </summary>
+        public static int RebuildLiveShoreline(Terrain terrain)
+        {
+            _liveShoreCount = 0;
+            if (terrain == null || terrain.terrainData == null)
+                return 0;
+
+            Vector3 size = terrain.terrainData.size;
+            Vector3 origin = terrain.transform.position;
+            const float step = 8f;
+            int nx = Mathf.Clamp(Mathf.CeilToInt(size.x / step), 2, 256);
+            int nz = Mathf.Clamp(Mathf.CeilToInt(size.z / step), 2, 256);
+            float cellX = size.x / nx;
+            float cellZ = size.z / nz;
+            int cellCount = nx * nz;
+            var land = new bool[cellCount];
+            float landY = OceanSurfaceY + 0.4f;
+            for (int ix = 0; ix < nx; ix++)
+            {
+                float x = origin.x + (ix + 0.5f) * cellX;
+                for (int iz = 0; iz < nz; iz++)
+                {
+                    float z = origin.z + (iz + 0.5f) * cellZ;
+                    float h = terrain.SampleHeight(new Vector3(x, 0f, z));
+                    land[ix * nz + iz] = h > landY;
+                }
+            }
+
+            var sea = new bool[cellCount];
+            var queue = new int[cellCount];
+            int qt = 0;
+            for (int ix = 0; ix < nx; ix++)
+            {
+                for (int iz = 0; iz < nz; iz++)
+                {
+                    if (ix != 0 && iz != 0 && ix != nx - 1 && iz != nz - 1)
+                        continue;
+                    int id = ix * nz + iz;
+                    if (land[id] || sea[id])
+                        continue;
+                    sea[id] = true;
+                    queue[qt++] = id;
+                }
+            }
+
+            int qh = 0;
+            while (qh < qt)
+            {
+                int id = queue[qh++];
+                int ix = id / nz;
+                int iz = id - ix * nz;
+                EnqueueSea(ix - 1, iz, nx, nz, land, sea, queue, ref qt);
+                EnqueueSea(ix + 1, iz, nx, nz, land, sea, queue, ref qt);
+                EnqueueSea(ix, iz - 1, nx, nz, land, sea, queue, ref qt);
+                EnqueueSea(ix, iz + 1, nx, nz, land, sea, queue, ref qt);
+            }
+
+            var pts = new List<Vector3>(512);
+            for (int ix = 0; ix < nx; ix++)
+            {
+                for (int iz = 0; iz < nz; iz++)
+                {
+                    int id = ix * nz + iz;
+                    if (!sea[id])
+                        continue;
+                    bool edge = (ix > 0 && land[(ix - 1) * nz + iz])
+                        || (ix + 1 < nx && land[(ix + 1) * nz + iz])
+                        || (iz > 0 && land[ix * nz + iz - 1])
+                        || (iz + 1 < nz && land[ix * nz + iz + 1]);
+                    if (!edge)
+                        continue;
+                    pts.Add(new Vector3(
+                        origin.x + (ix + 0.5f) * cellX,
+                        OceanSurfaceY,
+                        origin.z + (iz + 0.5f) * cellZ));
+                }
+            }
+
+            _liveShore = pts.ToArray();
+            _liveShoreCount = _liveShore.Length;
+            return _liveShoreCount;
+        }
+
+        static Vector3[] _liveShore = System.Array.Empty<Vector3>();
+        static int _liveShoreCount;
+
+        static void EnqueueSea(
+            int ix, int iz, int nx, int nz, bool[] land, bool[] sea, int[] queue, ref int qt)
+        {
+            if ((uint)ix >= (uint)nx || (uint)iz >= (uint)nz)
+                return;
+            int id = ix * nz + iz;
+            if (land[id] || sea[id])
+                return;
+            sea[id] = true;
+            queue[qt++] = id;
+        }
+
+        /// <summary>
+        /// 听者到最近外海水线的水平距离，以及水线上的落点（Y 贴海面）。
+        /// 地形还没采样时返回 false，海浪先不开。
+        /// </summary>
+        public static bool TryNearestOceanShore(Vector3 worldPos, out Vector3 shorePoint, out float shellDist)
+        {
+            shorePoint = worldPos;
+            shellDist = float.PositiveInfinity;
+            if (_liveShoreCount <= 0)
+                return false;
+
+            float bestSq = float.PositiveInfinity;
+            int best = -1;
+            for (int i = 0; i < _liveShoreCount; i++)
+            {
+                Vector3 p = _liveShore[i];
+                float dx = worldPos.x - p.x;
+                float dz = worldPos.z - p.z;
+                float sq = dx * dx + dz * dz;
+                if (sq >= bestSq)
+                    continue;
+                bestSq = sq;
+                best = i;
+            }
+
+            if (best < 0)
+                return false;
+            shellDist = Mathf.Sqrt(bestSq);
+            shorePoint = _liveShore[best];
+            shorePoint.y = OceanSurfaceY;
+            return true;
         }
 
         static AmbienceEmitterSpec Ocean(string id, float x, float y, float z)

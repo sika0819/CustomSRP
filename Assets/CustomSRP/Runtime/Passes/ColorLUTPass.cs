@@ -207,6 +207,21 @@ namespace CustomSRP
             }
         }
 
+        /// <summary>退登释放进程级 3D LUT。下次进岛按调色设置重建。</summary>
+        public static void ReleasePersistent()
+        {
+            if (s_CachedLut != null)
+            {
+                RTHandles.Release(s_CachedLut);
+                s_CachedLut = null;
+            }
+
+            s_CacheValid = false;
+            s_CachedHash = 0;
+            s_CachedResolution = 0;
+            Shader.SetGlobalTexture(colorGradingLUTId, null);
+        }
+
         static void EnsurePersistentLut(int resolution, GraphicsFormat format)
         {
             if (s_CachedLut != null
@@ -294,6 +309,9 @@ namespace CustomSRP
             PostFXStack stack,
             int colorLUTResolution)
         {
+            if (!Game.IslandLeakProbe.Allow(Game.IslandLeakProbe.Module.Lut))
+                return TextureHandle.nullHandle;
+
             ComputeShader compute = stack.Settings.ColorLUTComputeShader;
             if (compute == null)
             {

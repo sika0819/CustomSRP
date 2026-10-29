@@ -1173,7 +1173,12 @@ namespace UnityGameFramework.Runtime
                 return;
             }
 
-#if UNITY_5_5_OR_NEWER
+#if UNITY_EDITOR
+            // Unity 6：SceneManager.LoadSceneAsync 只认 Build Profile / Shared Scene List。
+            // Island 故意不进 Build Settings，否则打不进 AssetBundle。编辑器 Play 用这条。
+            AsyncOperation asyncOperation = UnityEditor.SceneManagement.EditorSceneManager.LoadSceneAsyncInPlayMode(
+                sceneAssetName, new LoadSceneParameters(LoadSceneMode.Additive));
+#elif UNITY_5_5_OR_NEWER
             AsyncOperation asyncOperation = SceneManager.LoadSceneAsync(sceneAssetName, LoadSceneMode.Additive);
 #else
             AsyncOperation asyncOperation = SceneManager.LoadSceneAsync(SceneComponent.GetSceneName(sceneAssetName), LoadSceneMode.Additive);

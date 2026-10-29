@@ -802,6 +802,18 @@ namespace UnityGameFramework.Runtime
         }
 
         /// <summary>
+        /// 强制释放已排队，或 <c>Resources.UnloadUnusedAssets</c> 还没结束。
+        /// 预约释放不在这里：它要等到最小间隔，离岛不能干等。
+        /// </summary>
+        public bool UnloadUnusedAssetsBusy
+        {
+            get
+            {
+                return m_ForceUnloadUnusedAssets || m_AsyncOperation != null;
+            }
+        }
+
+        /// <summary>
         /// 使用单机模式并初始化资源。
         /// </summary>
         /// <param name="initResourcesCompleteCallback">使用单机模式并初始化资源完成时的回调函数。</param>

@@ -13,13 +13,19 @@ namespace CustomSRP
     /// </summary>
     public sealed class OilPlanarReflection : MonoBehaviour
     {
+        /// <summary>
+        /// 泄漏对照关着倒影时不建镜像相机、不分配反射 RT。
+        /// 打开 <see cref="IslandLeakProbe.Module.Reflect"/> 后下一帧才会建。
+        /// </summary>
+        public static bool TemporarilyDisabled =>
+            !IslandLeakProbe.Allow(IslandLeakProbe.Module.Reflect);
+
         // Soft oil glaze: tiny RT + shader multi-tap blur (no mips — SRP blit
         // into autoGenerateMips RT leaves higher LODs empty / black).
         public const float Scale = 0.12f;
         public const float MobileScale = 0.1f;
         public const int MinSize = 48;
         public const int MaxSize = 192;
-        const float RescanSeconds = 1f;
         const float ClipPlaneOffset = 0.04f;
 
         // Throttle: a full mirror render (cull + opaque + skybox) is expensive.
@@ -46,15 +52,14 @@ namespace CustomSRP
         static OilPlanarReflection _instance;
         static bool _rendering;
         static int _updatedFrame = -1;
+        static bool _suppressed;
 
         Camera _mirrorCam;
         RenderTexture _reflectionRt;
         int _rtW;
         int _rtH;
-        float _nextBind;
         float _planeY;
         bool _hasPlane;
-        OilOceanSurface _ocean;
         Matrix4x4 _cachedView;
         Matrix4x4 _cachedProj;
         bool _hasCachedMatrices;
@@ -76,27 +81,63 @@ namespace CustomSRP
         {
             _pendingSkyDirty = false;
             _updatedFrame = -1;
+            // Game 不能引用本程序集，退登从这里收回 _OilPlanarReflectTex。
+            BoluoLogout.ReleasePlanarReflectTex = ReleaseForLeave;
+        }
+
+        /// <summary>
+        /// 宿主在 Launch 里，退登不拆。全局贴图和镜面相机都会按住 RT，不解开就留到下次进岛。
+        /// </summary>
+        public static void ReleaseForLeave()
+        {
+            _pendingSkyDirty = false;
+            _updatedFrame = -1;
+            _rendering = false;
+            if (_instance != null)
+            {
+                _instance._hasPrevFramePose = false;
+                _instance._hasCachedMatrices = false;
+                _instance._skyDirty = false;
+                _instance._hasPlane = false;
+                _instance.ReleaseMirrorCam();
+                _instance.ReleaseReflectionRt();
+            }
+
+            Shader.SetGlobalTexture(ReflectTexId, null);
+            Shader.SetGlobalFloat(ReflectOnId, 0f);
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        static void Boot() => Ensure();
+        static void Boot()
+        {
+            if (TemporarilyDisabled)
+            {
+                Suppress();
+                Debug.Log("[OilPlanarReflection] sea reflection temporarily disabled (leak hunt).");
+                return;
+            }
+
+            Ensure();
+        }
 
         public static void Ensure()
         {
+            if (TemporarilyDisabled)
+            {
+                Suppress();
+                return;
+            }
+
             if (_instance != null)
             {
                 return;
             }
 
+            // 启动时建在 Launch 里。Launch 不卸载，HideAndDontSave 也不会跟 Island 一起被拆。
             var go = new GameObject("OilPlanarReflection")
             {
                 hideFlags = HideFlags.HideAndDontSave
             };
-            if (Application.isPlaying)
-            {
-                DontDestroyOnLoad(go);
-            }
-
             _instance = go.AddComponent<OilPlanarReflection>();
             if (_pendingSkyDirty)
             {
@@ -134,8 +175,43 @@ namespace CustomSRP
             CameraRenderer renderer,
             CustomRenderPipelineSettings settings)
         {
+            if (TemporarilyDisabled)
+            {
+                Suppress();
+                return;
+            }
+
             Ensure();
             _instance?.RenderMirror(context, camera, renderGraph, renderer, settings);
+        }
+
+        /// <summary>
+        /// Drop the mirror camera and reflection RT, and keep the water shader
+        /// off the planar sample. Called every frame while <see cref="TemporarilyDisabled"/>.
+        /// </summary>
+        static void Suppress()
+        {
+            if (_suppressed && _instance == null)
+            {
+                return;
+            }
+
+            if (_instance != null)
+            {
+                _instance._hasPrevFramePose = false;
+                _instance._hasCachedMatrices = false;
+                _instance._skyDirty = false;
+                _instance._hasPlane = false;
+                _instance.ReleaseMirrorCam();
+                _instance.ReleaseReflectionRt();
+            }
+
+            _pendingSkyDirty = false;
+            _rendering = false;
+            _updatedFrame = -1;
+            Shader.SetGlobalTexture(ReflectTexId, null);
+            Shader.SetGlobalFloat(ReflectOnId, 0f);
+            _suppressed = _instance == null;
         }
 
         /// <summary>
@@ -188,6 +264,14 @@ namespace CustomSRP
                 return;
             }
 
+            CachePlane();
+            if (!_hasPlane)
+            {
+                ReleaseReflectionRt();
+                Shader.SetGlobalFloat(ReflectOnId, 0f);
+                return;
+            }
+
             // Throttle: if the camera hasn't moved or rotated meaningfully since
             // the last successful mirror capture, reuse the existing RT. Water
             // shader still samples the same _OilPlanarReflectTex, so the user
@@ -208,26 +292,6 @@ namespace CustomSRP
                 _prevFramePos = source.transform.position;
                 _prevFrameRot = source.transform.rotation;
                 _hasPrevFramePose = true;
-                return;
-            }
-
-            if (Time.unscaledTime >= _nextBind)
-            {
-                _nextBind = Time.unscaledTime + RescanSeconds;
-                OilWaterLayers.BindWaters();
-                CachePlane();
-            }
-            else if (!_hasPlane)
-            {
-                CachePlane();
-            }
-            else if (_ocean != null)
-            {
-                _planeY = _ocean.transform.position.y;
-            }
-
-            if (!_hasPlane)
-            {
                 return;
             }
 
@@ -358,7 +422,7 @@ namespace CustomSRP
         {
             if (_mirrorCam != null)
             {
-                Destroy(_mirrorCam.gameObject);
+                CoreUtils.Destroy(_mirrorCam.gameObject);
                 _mirrorCam = null;
             }
         }
@@ -377,8 +441,10 @@ namespace CustomSRP
             mirror.targetTexture = _reflectionRt;
             mirror.allowHDR = false;
             mirror.allowMSAA = false;
-            mirror.clearFlags = CameraClearFlags.Skybox;
-            mirror.backgroundColor = Color.black;
+            // Sky pixels stay alpha 0. Water keeps analytic sky there and only
+            // composites pixels the mirror actually drew (alpha > 0).
+            mirror.clearFlags = CameraClearFlags.SolidColor;
+            mirror.backgroundColor = Color.clear;
             // Mirror camera culling: inherit the source culling mask, but drop
             // Water (sea doesn't reflect inside itself) and ReflectionSkip
             // (grass / clutter / small rocks — mainCameraOnly via native
@@ -448,58 +514,15 @@ namespace CustomSRP
 
         void CachePlane()
         {
-            _ocean = null;
-            OilOceanSurface[] oceans = Object.FindObjectsByType<OilOceanSurface>(
-                FindObjectsInactive.Exclude);
-            float best = float.MaxValue;
-            for (int i = 0; i < oceans.Length; i++)
+            ISeaLevel sea = IslandSceneComponent.Active?.Sea;
+            if (sea == null)
             {
-                OilOceanSurface ocean = oceans[i];
-                if (ocean == null)
-                {
-                    continue;
-                }
-
-                float score = ocean.gridScale > 0f ? -ocean.gridScale : i;
-                if (score < best)
-                {
-                    best = score;
-                    _ocean = ocean;
-                }
-            }
-
-            if (_ocean != null)
-            {
-                _planeY = _ocean.transform.position.y;
-                _hasPlane = true;
+                _hasPlane = false;
                 return;
             }
 
-            Renderer[] renderers = Object.FindObjectsByType<Renderer>(
-                FindObjectsInactive.Exclude);
-            float lowest = float.MaxValue;
-            bool found = false;
-            for (int i = 0; i < renderers.Length; i++)
-            {
-                Renderer renderer = renderers[i];
-                if (renderer == null || !IsOilRiver(renderer))
-                {
-                    continue;
-                }
-
-                float y = renderer.bounds.center.y;
-                if (y < lowest)
-                {
-                    lowest = y;
-                    found = true;
-                }
-            }
-
-            _hasPlane = found;
-            if (found)
-            {
-                _planeY = lowest;
-            }
+            _planeY = sea.Level;
+            _hasPlane = true;
         }
 
         /// <summary>Mirror RT size for a source resolution. Mirrors
@@ -579,13 +602,23 @@ namespace CustomSRP
 
         void ReleaseReflectionRt()
         {
-            if (_reflectionRt != null)
+            if (_reflectionRt == null)
             {
-                _reflectionRt.Release();
-                Destroy(_reflectionRt);
-                _reflectionRt = null;
+                _rtW = 0;
+                _rtH = 0;
+                return;
             }
 
+            // 全局属性和 targetTexture 都持有引用，只 Destroy 字段卸不掉 GPU 内存。
+            if (_mirrorCam != null)
+                _mirrorCam.targetTexture = null;
+            Shader.SetGlobalTexture(ReflectTexId, null);
+            Shader.SetGlobalFloat(ReflectOnId, 0f);
+
+            _reflectionRt.Release();
+            // Scene view renders this in edit mode; Object.Destroy is illegal there.
+            CoreUtils.Destroy(_reflectionRt);
+            _reflectionRt = null;
             _rtW = 0;
             _rtH = 0;
         }
@@ -631,23 +664,6 @@ namespace CustomSRP
             Vector3 cPos = m.MultiplyPoint(offsetPos);
             Vector3 cNormal = m.MultiplyVector(normal).normalized * sideSign;
             return new Vector4(cNormal.x, cNormal.y, cNormal.z, -Vector3.Dot(cPos, cNormal));
-        }
-
-        static bool IsOilRiver(Renderer renderer)
-        {
-            Material[] materials = renderer.sharedMaterials;
-            for (int i = 0; i < materials.Length; i++)
-            {
-                Material material = materials[i];
-                if (material != null &&
-                    material.shader != null &&
-                    material.shader.name == "CustomSRP/OilRiverNPR")
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
     }
 }

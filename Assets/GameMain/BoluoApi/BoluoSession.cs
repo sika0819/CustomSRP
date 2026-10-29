@@ -23,6 +23,7 @@ namespace Game.BoluoApi
         const string UserTokenKey = "Boluo.UserToken";
         const string UserIdKey = "Boluo.UserId";
         const string IsGuestKey = "Boluo.IsGuest";
+        const string SaveLocalKey = "Boluo.SaveLocal";
 
         public static string DeviceToken { get; private set; } = "";
         public static uint DeviceTokenExpireTime { get; private set; }
@@ -30,6 +31,8 @@ namespace Game.BoluoApi
         public static string UserToken { get; private set; } = "";
         public static string UserId { get; private set; } = "";
         public static bool IsGuest { get; private set; }
+        /// <summary>这场会话要不要把岛内进度写入 PlayerPrefs。与是否游客无关。</summary>
+        public static bool SaveLocal { get; private set; }
 
         public static void LoadFromPrefs()
         {
@@ -40,6 +43,7 @@ namespace Game.BoluoApi
             UserToken = PlayerPrefs.GetString(UserTokenKey, "") ?? "";
             UserId = PlayerPrefs.GetString(UserIdKey, "") ?? "";
             IsGuest = PlayerPrefs.GetInt(IsGuestKey, 0) == 1;
+            SaveLocal = PlayerPrefs.GetInt(SaveLocalKey, 0) == 1;
         }
 
         public static bool IsDeviceTokenValid()
@@ -75,16 +79,18 @@ namespace Game.BoluoApi
         /// <summary>
         /// 登录/游客进岛后写入 userToken（对齐 BoluoProject ApplyUserSession）。
         /// </summary>
-        public static void ApplyUserSession(UserSession session, bool isGuest)
+        public static void ApplyUserSession(UserSession session, bool isGuest, bool saveLocal)
         {
             if (session == null)
                 return;
             UserToken = session.token ?? "";
             UserId = session.userId ?? "";
             IsGuest = isGuest;
+            SaveLocal = saveLocal;
             PlayerPrefs.SetString(UserTokenKey, UserToken);
             PlayerPrefs.SetString(UserIdKey, UserId);
             PlayerPrefs.SetInt(IsGuestKey, isGuest ? 1 : 0);
+            PlayerPrefs.SetInt(SaveLocalKey, saveLocal ? 1 : 0);
             PlayerPrefs.Save();
         }
 
@@ -93,9 +99,11 @@ namespace Game.BoluoApi
             UserToken = "";
             UserId = "";
             IsGuest = false;
+            SaveLocal = false;
             PlayerPrefs.DeleteKey(UserTokenKey);
             PlayerPrefs.DeleteKey(UserIdKey);
             PlayerPrefs.DeleteKey(IsGuestKey);
+            PlayerPrefs.DeleteKey(SaveLocalKey);
             // 必须立即落盘，防止杀进程后仍以旧 token 自动登录
             PlayerPrefs.Save();
         }

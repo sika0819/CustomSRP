@@ -4,6 +4,9 @@ namespace Game
     {
         public const string Launch = "Assets/GameMain/Scenes/Launch.unity";
 
+        /// <summary>附加岛屿场景。GameFramework 要求 Assets/ 开头、.unity 结尾。</summary>
+        public const string Island = "Assets/GameMain/Scenes/Island.unity";
+
         /// <summary>YooAsset location (AddressByFileName under AssetRaw/Island).</summary>
         public const string IslandTerrainLocation = "IslandTerrain";
         public const string IslandTerrainPrefabPath = "Assets/AssetRaw/Island/IslandTerrain.prefab";
@@ -24,6 +27,11 @@ namespace Game
         public const string IslandSpawnPoseLocation = "IslandSpawnPose";
         public const string IslandSpawnPoseAssetPath =
             "Assets/AssetRaw/Configs/IslandSpawnPose.asset";
+
+        /// <summary>区域 bank 门（AddressByFileName under AssetRaw/Configs）。</summary>
+        public const string SceneBankGateCatalogLocation = "SceneBankGateCatalog";
+        public const string SceneBankGateCatalogAssetPath =
+            "Assets/AssetRaw/Configs/SceneBankGateCatalog.asset";
 
         /// <summary>GPU 草地种点 sidecar（SGB1，与 AllMapItem 同 Configs 采集）。</summary>
         public const string IslandGrassBakeLocation = "Island_GrassBake";

@@ -6,8 +6,11 @@
 
 float4 _OilFilterTexelSize;
 float _OilFilterHasDepth;
-// Authored for ~1080 short-side buffers; C# scales down on large (TV) buffers so wet-oil stays sharp.
+// Authored for ~1080 short-side buffers. C# scales down on large TVs and on phone half-res
+// so standstill wet-oil does not paint ~2× the reference screen fraction.
 float _OilFilterRadiusScale;
+// 1 = authored blend. Phone half-res is below 1 so the dab stays lighter while standing still.
+float _OilFilterStrength;
 
 #define OIL_FILTER_NEAR_M 1.0
 #define OIL_FILTER_FAR_M 18.0
@@ -40,14 +43,17 @@ float OilFilterEdgeWeight(half sharpL, float eye)
         depthEdge = saturate((jump - thresh) / (thresh * 2.0 + 0.3));
     }
 
-    float nearW = 1.0 - smoothstep(2.5, 26.0, eye);
-    return saturate(max((float)lumaEdge, depthEdge * lerp(1.25, 1.0, nearW)) * lerp(1.12, 1.0, nearW));
+    // Near stays sharper; far silhouettes pick up more wet-oil.
+    float farEdgeW = smoothstep(2.5, 26.0, eye);
+    return saturate(max((float)lumaEdge, depthEdge * lerp(1.0, 1.2, farEdgeW))
+        * lerp(0.90, 1.10, farEdgeW));
 }
 
 half3 OilFilterQuadPick(float2 uv, float2 texel, float eye, float sil, out half oilL)
 {
     float farW = smoothstep(OIL_FILTER_NEAR_M, OIL_FILTER_FAR_M, eye);
-    float r = lerp(7.5, 5.5, farW);
+    // Near: light dab; far: heavier smear (inverted from earlier near-heavy curve).
+    float r = lerp(5.0, 7.5, farW);
     r = lerp(r, r * 1.15, sil);
     // Larger buffer → smaller texel radius (same UV smear looks mushier on big screens).
     // Unset/0 → treat as 1 so a missed SetGlobal does not kill the pass.
@@ -136,9 +142,11 @@ float4 OilFilterPassFragment(Varyings input) : SV_TARGET
     half3 col = OilFilterQuadPick(uv, _OilFilterTexelSize.xy, min(eye, OIL_FILTER_FAR_M), edge, oilL);
 
     half farW = (half)smoothstep(OIL_FILTER_NEAR_M, OIL_FILTER_FAR_M, min(eye, OIL_FILTER_FAR_M));
-    half nearW = 1.0h - smoothstep(2.5h, 26.0h, (half)eye);
-    half oilAmt = (half)saturate(pow(edge, 0.55h))
-        * lerp(lerp(0.92h, 0.98h, nearW), lerp(0.78h, 0.90h, farW), 0.5h);
+    // Near light (~0.55), far heavy (~0.96) over 1→18 m eye depth.
+    half oilAmt = (half)saturate(pow(edge, 0.55h)) * lerp(0.55h, 0.96h, farW);
+    // Unset/0 → 1 so a missed SetGlobal does not wipe the pass.
+    half strength = (half)(_OilFilterStrength > 1e-4 ? saturate(_OilFilterStrength) : 1.0);
+    oilAmt *= strength;
 
     half sunCore = saturate((sharpL - 0.40h) * 5.0h);
     oilAmt *= 1.0h - sunCore * 0.50h;
@@ -153,11 +161,12 @@ float4 OilFilterPassFragment(Varyings input) : SV_TARGET
     // Keep source lighting volume; only smear chrominance on edges.
     half3 oilChr = col / max(oilL, 1e-3h);
     half3 sharpChr = sharp / max(sharpL, 1e-3h);
-    half3 chr = lerp(sharpChr, oilChr, lerp(0.88h, 0.72h, farW));
-    half keepL = lerp(0.75h, 0.45h, farW);
-    // Narrow buffers: chroma-only smear is lost in the upscale. Shift value too. Same taps.
+    half3 chr = lerp(sharpChr, oilChr, lerp(0.55h, 0.90h, farW));
+    half keepL = lerp(0.88h, 0.38h, farW);
+    // Narrow buffers: chroma-only smear is lost in the upscale. Shift value a little. Same taps.
+    // 0.82 (was 0.55) so portrait half-res does not flatten lighting into a thick dab.
     half lowRes = (half)saturate((800.0 - _OilFilterTexelSize.z) / 350.0);
-    keepL = lerp(keepL, keepL * 0.55h, lowRes);
+    keepL = lerp(keepL, keepL * 0.82h, lowRes);
     half lumaOut = lerp(oilL, sharpL, keepL);
     col = chr * lumaOut;
     col = lerp(sharp, col, oilAmt);

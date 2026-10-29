@@ -546,14 +546,13 @@ public class WIAEngineJNI {
                 session.setActive(true);
 
                 sendNowPlayingBroadcast(ctx, trackName, coverUrl, isPlaying);
-                // 仅正在播放时拉/刷 FGS。暂停态 startForegroundService 会在登出切 Login
-                // 主线程拥堵时触发 ForegroundServiceDidNotStartInTimeException。
-                if (isPlaying) {
-                    try {
-                        WanosMediaPlaybackForegroundService.notifyNowPlayingChanged(ctx);
-                    } catch (Throwable t) {
-                        Log.d(TAG, "notifyNowPlayingChanged skipped: " + t.getMessage());
-                    }
+                // 暂停也要刷已在跑的通知，否则 PlaybackState 已是 PAUSED，
+                // 负一屏按钮仍停在暂停图标。未在跑且已暂停时，notify 自己会跳过
+                // startForegroundService，避免登出切 Login 超时杀进程。
+                try {
+                    WanosMediaPlaybackForegroundService.notifyNowPlayingChanged(ctx);
+                } catch (Throwable t) {
+                    Log.d(TAG, "notifyNowPlayingChanged skipped: " + t.getMessage());
                 }
             } catch (Exception e) {
                 Log.e(TAG, "updateNowPlayingInfo failed", e);

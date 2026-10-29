@@ -1,5 +1,7 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UIElements;
 using UnityGameFramework.Runtime;
 using Object = UnityEngine.Object;
 using UGF = UnityGameFramework.Runtime.GameEntry;
@@ -12,6 +14,11 @@ namespace Game
     /// </summary>
     public static class BootLoadingService
     {
+        /// <summary>
+        /// GuestLogin 会话起点。退登重进用 <see cref="Show"/> 写回这里，不沿用岛内 0.70。
+        /// </summary>
+        public const float LoginStart = 0.28f;
+
         public const float VisualPrepareMin = 0.70f;
         public const float TerrainPrepareMax = 0.86f;
         public const float CameraPrepareMax = 0.93f;
@@ -25,10 +32,29 @@ namespace Game
         static Coroutine _smooth;
         static Coroutine _fade;
         static Coroutine _poolRelease;
+        static Coroutine _extinguish;
+        static LoadingCoverLatch _latch;
+
+        public static bool Suppressed { get; private set; }
         static LoadingForm _form;
 
         public static bool IsVisible =>
             _visible && !_hiding && (AliveForm() != null || BootEarlyCover.IsShowing);
+
+        /// <summary>当前加载罩文案。退登卸岛时是「登录中」。</summary>
+        public static string Tip => _tip;
+
+        /// <summary>
+        /// <see cref="FadeHide"/> 协程还没跑完。揭罩只等这个。
+        /// 淡出结束后 <see cref="HasForm"/> 仍为 true：界面先留着，关掉 Document 会把篝火静帧冻在屏幕上。
+        /// </summary>
+        public static bool IsHiding => _hiding;
+
+        /// <summary>
+        /// 揭罩 <see cref="Hide"/> 之后后台铺装仍会让已经发出的 OpenUIForm 晚到。
+        /// 晚到的 OnOpen 不得再把加载罩铺满。
+        /// </summary>
+        public static bool AcceptOpen => _visible && !_hiding;
 
         public static bool HasForm =>
             GameEntry.UI != null && GameEntry.UI.HasUIForm(UiAssets.LoadingForm);
@@ -49,13 +75,24 @@ namespace Game
             _smooth = null;
             _fade = null;
             _poolRelease = null;
+            _extinguish = null;
             _form = null;
+            Suppressed = false;
         }
 
         public static void Bind(LoadingForm form)
         {
             if (form == null)
                 return;
+            // 近场就绪就会揭罩，草地/氛围还在后台 ReportProgress → EnsureForm → Open。
+            // 这个 Open 的回调若在 Hide 之后才到，再把 _visible 打回 true，罩就撤不掉。
+            if (!AcceptOpen)
+            {
+                Log.Warning("[BootLoadingService] Bind rejected — cover already dismissed");
+                form.ForceVeilOff();
+                return;
+            }
+
             _form = form;
             _hiding = false;
             _visible = true;
@@ -70,8 +107,11 @@ namespace Game
             // 退登重登：上一轮 FadeHideRoutine 若只把 _fade 置空而不 Stop，会继续跑到 Hide()，
             // 把 GuestLogin / 二次进岛刚 Show 的罩拆掉 → 真机「卡在加载界面」。
             StopRoutines();
+            StopExtinguish();
+            Suppressed = false;
             _hiding = false;
-            if (AliveForm() == null)
+            // 关掉的 Document 不算活罩。先丢掉引用，再按 UIManager 里仍打开的实例恢复。
+            if (!IsCoverLive(_form))
                 _form = null;
 
             _tip = string.IsNullOrEmpty(tip) ? _tip : tip;
@@ -80,8 +120,14 @@ namespace Game
             _shownProgress = p;
             _targetProgress = p;
             EnsureForm();
-            AliveForm()?.RestoreCover();
-            if (AliveForm() == null)
+            LoadingForm form = _form != null ? _form : null;
+            if (form != null)
+            {
+                // 有 Form 就恢复这一棵树并藏早期罩，避免退登重进叠两层。
+                form.RestoreCover();
+                BootEarlyCover.HideIfAny();
+            }
+            else
                 BootEarlyCover.Instance?.Show(_tip, _shownProgress);
             ApplyImmediate(_shownProgress, _tip);
             EnsureSmoothRunner();
@@ -128,7 +174,9 @@ namespace Game
                 return;
             }
 
-            EnsureForm();
+            // 不要在这里 Open 新的 LoadingForm。刚关掉再打开会用默认不透明度整页闪出来。
+            // 早期罩若还开着，LoadingForm 淡出后会从底下露出来，看起来像加载页又闪了一下。
+            BootEarlyCover.HideIfAny();
             MonoBehaviour host = GameEntry.Base;
             LoadingForm form = AliveForm();
             if (host == null || form == null)
@@ -138,6 +186,7 @@ namespace Game
                 return;
             }
 
+            form.BeginDismiss();
             _tip = "即将进入...";
             _targetProgress = 1f;
             _hiding = true;
@@ -150,34 +199,11 @@ namespace Game
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             StopRoutines();
-            // 绝不依赖 AliveForm：退登重登后 _form 常假死，HasUIForm 仍为 true，跳过 Close 会黑屏卡「正在铺装草地」。
-            if (GameEntry.UI != null)
-            {
-                LoadingForm form = AliveForm();
-                if (form != null)
-                {
-                    form.SetCoverAlpha(0f);
-                    form.ForceVeilOff();
-                }
-
-                if (GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
-                {
-                    var uiForm = GameEntry.UI.GetUIForm(UiAssets.LoadingForm);
-                    if (uiForm != null)
-                        GameEntry.UI.CloseUIForm(uiForm.SerialId);
-                }
-
-                // 兜底：Loading 组里任何残留（含 Logic 已毁、GetUIForm 对不上的）
-                UiAssets.CloseGroup("Loading");
-            }
-
-            // 禁止 Destroy 仍归 UIManager 实例池 / RecycleQueue 管的 LoadingForm：
-            // Close 后实例会进池，硬删 → 下次 OpenUIForm 同步 Spawn 出已毁 GO →
-            // YooUIFormHelper.CreateUIForm → "UI form instance is invalid."
-            // 视觉靠 OnClose/ForceVeilOff；真正卸实例走对象池 Release。
-            DestroyOrphanLoadingForms();
-            ScheduleReleaseUnusedUiInstances();
-            BootEarlyCover.HideIfAny();
+            // 先把篝火树透明度打成 0，Document 先留着。同一帧 Close / enabled=false
+            // 会让面板停在上一帧，真机揭罩后仍满屏「正在铺装草地」。
+            ExtinguishOnce();
+            Suppressed = true;
+            EnsureLatch();
 
             _form = null;
             _visible = false;
@@ -210,6 +236,12 @@ namespace Game
             if (n > 0)
                 Log.Warning("[BootLoadingService] DestroyOrphanLoadingForms count=" + n);
         }
+
+        /// <summary>
+        /// Drop unused UI instance-pool entries. The loading cover stays spawned, so it is not released.
+        /// Must run after UIManager has recycled Close → Unspawn; same-frame is too early.
+        /// </summary>
+        public static void ReleaseUnusedUiPool() => ScheduleReleaseUnusedUiInstances();
 
         /// <summary>
         /// Drop unused UI instance-pool entries (incl. Targets already destroyed by older Hide).
@@ -322,7 +354,16 @@ namespace Game
         static LoadingForm AliveForm()
         {
             // Unity fake-null: destroyed LoadingForm still looks non-null to C#.
-            return _form != null ? _form : null;
+            // Document 被 ForceVeilOff 关掉时不算活罩，调用方会再 Show 而不是只 ReportProgress。
+            return IsCoverLive(_form) ? _form : null;
+        }
+
+        static bool IsCoverLive(LoadingForm form)
+        {
+            if (form == null || !form.isActiveAndEnabled)
+                return false;
+            UIDocument document = form.GetComponent<UIDocument>();
+            return document == null || document.enabled;
         }
 
         static void EnsureSmoothRunner()
@@ -367,6 +408,133 @@ namespace Game
             BootEarlyCover.Instance?.SetProgress(progress, tip);
         }
 
+        public static void HoldCoverHidden() => ExtinguishOnce();
+
+        static void EnsureLatch()
+        {
+            if (_latch != null)
+                return;
+            MonoBehaviour host = GameEntry.Base;
+            if (host == null)
+                return;
+            _latch = host.GetComponent<LoadingCoverLatch>();
+            if (_latch == null)
+                _latch = host.gameObject.AddComponent<LoadingCoverLatch>();
+        }
+
+        static void ScheduleExtinguish()
+        {
+            ExtinguishOnce();
+            MonoBehaviour host = GameEntry.Base;
+            if (host == null || !host.isActiveAndEnabled)
+                return;
+
+            if (_extinguish != null)
+                host.StopCoroutine(_extinguish);
+            _extinguish = host.StartCoroutine(ExtinguishRoutine());
+        }
+
+        static void StopExtinguish()
+        {
+            MonoBehaviour host = GameEntry.Base;
+            if (host != null && _extinguish != null)
+                host.StopCoroutine(_extinguish);
+            _extinguish = null;
+        }
+
+        static IEnumerator ExtinguishRoutine()
+        {
+            // Update 里藏树之后，要等本帧 DrawUIOverlay 把透明结果画出去，再关 Document。
+            yield return new WaitForEndOfFrame();
+            for (int i = 0; i < 6; i++)
+            {
+                if (_visible && !_hiding)
+                {
+                    _extinguish = null;
+                    yield break;
+                }
+
+                ExtinguishOnce();
+                yield return new WaitForEndOfFrame();
+            }
+
+            if (!_visible || _hiding)
+                Log.Info("[BootLoadingService] cover stayed transparent, skip disarm");
+            _extinguish = null;
+        }
+
+        static void DisarmCoverDocuments()
+        {
+            BootEarlyCover.Instance?.Disarm();
+            LoadingForm[] forms = Object.FindObjectsByType<LoadingForm>(FindObjectsInactive.Include);
+            for (int i = 0; i < forms.Length; i++)
+            {
+                if (forms[i] != null)
+                    forms[i].DisarmDocument();
+            }
+
+            if (GameEntry.UI != null)
+            {
+                if (GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
+                {
+                    var uiForm = GameEntry.UI.GetUIForm(UiAssets.LoadingForm);
+                    if (uiForm != null)
+                        GameEntry.UI.CloseUIForm(uiForm.SerialId);
+                }
+
+                UiAssets.CloseGroup("Loading");
+            }
+
+            DestroyOrphanLoadingForms();
+            ScheduleReleaseUnusedUiInstances();
+            Log.Info("[BootLoadingService] disarm after paint");
+        }
+
+        /// <summary>
+        /// 共享 PanelSettings 上，改 sortingOrder / 禁用 Document 的顺序不对时，
+        /// campfire 树会脱离 UIDocument 仍留在面板里。按名字从面板摘掉。
+        /// </summary>
+        static void ExtinguishOnce()
+        {
+            // 先记住面板再关 Document，否则 root 被清掉就找不到残留的篝火树。
+            UIDocument[] docs = Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Include);
+            var panels = new List<IPanel>(4);
+            for (int i = 0; i < docs.Length; i++)
+            {
+                VisualElement root = docs[i] != null ? docs[i].rootVisualElement : null;
+                IPanel panel = root != null ? root.panel : null;
+                if (panel == null || panels.Contains(panel))
+                    continue;
+                panels.Add(panel);
+            }
+
+            BootEarlyCover.HideIfAny();
+            LoadingForm[] forms = Object.FindObjectsByType<LoadingForm>(FindObjectsInactive.Include);
+            for (int i = 0; i < forms.Length; i++)
+            {
+                if (forms[i] != null)
+                    forms[i].ForceVeilOff();
+            }
+
+            for (int p = 0; p < panels.Count; p++)
+            {
+                IPanel panel = panels[p];
+                if (panel?.visualTree == null)
+                    continue;
+                var stills = new List<VisualElement>(4);
+                panel.visualTree.Query("campfireStill").ForEach(stills.Add);
+                for (int s = 0; s < stills.Count; s++)
+                {
+                    VisualElement top = stills[s];
+                    while (top.parent != null && top.parent != panel.visualTree)
+                        top = top.parent;
+                    top.style.display = DisplayStyle.None;
+                    top.style.opacity = 0f;
+                    top.pickingMode = PickingMode.Ignore;
+                }
+            }
+        }
+
         static void StopRoutines()
         {
             MonoBehaviour host = GameEntry.Base;
@@ -391,6 +559,36 @@ namespace Game
 
             // Do not stop _poolRelease here — Show() calls StopRoutines and must not
             // cancel a Hide()-scheduled pool purge that clears poisoned instances.
+        }
+    }
+
+    /// <summary>
+    /// 揭罩后每帧把篝火树压成透明。关掉 UIDocument 会把上一帧冻在屏幕上。
+    /// </summary>
+    [DefaultExecutionOrder(10000)]
+    public sealed class LoadingCoverLatch : MonoBehaviour
+    {
+        bool _holding;
+        float _holdUntil;
+
+        void LateUpdate()
+        {
+            if (!BootLoadingService.Suppressed)
+            {
+                _holding = false;
+                return;
+            }
+
+            if (!_holding)
+            {
+                _holding = true;
+                _holdUntil = Time.unscaledTime + 5f;
+            }
+
+            if (Time.unscaledTime > _holdUntil)
+                return;
+
+            BootLoadingService.HoldCoverHidden();
         }
     }
 }

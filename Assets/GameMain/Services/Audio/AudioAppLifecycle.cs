@@ -29,7 +29,6 @@ namespace Game
             if (_instance != null)
                 return;
             var go = new GameObject(nameof(AudioAppLifecycle));
-            DontDestroyOnLoad(go);
             _instance = go.AddComponent<AudioAppLifecycle>();
         }
 
@@ -62,7 +61,6 @@ namespace Game
             }
 
             _instance = this;
-            DontDestroyOnLoad(gameObject);
         }
 
         void OnApplicationPause(bool paused)
@@ -166,7 +164,7 @@ namespace Game
             (GameEntry.Music ?? MusicPlaylist.Instance)?.EnsureMusicRestored(reason);
 
             // 5. 业务层：环境声 / 天气 / 雨水强制重起。
-            AudioInteractionBootstrap.RestoreContentAudio(reason);
+            IslandAudioSession.Instance?.RestoreContentAudio(reason);
 
             // 6. 负一屏状态刷新：暂停也算「被打断」，恢复后不再是手动暂停态。
             NowPlayingService.NoteUserPaused(false);

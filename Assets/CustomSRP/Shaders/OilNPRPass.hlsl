@@ -104,13 +104,14 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         input.normalOS);
 
     // Billboard atlas: bias before clip so mip-averaged alpha doesn't punch holes
-    // and crown RGB doesn't wash to grey (Boluo SAMPLE_TEXTURE2D_BIAS -0.65).
+    // and crown RGB doesn't wash to grey (Boluo SAMPLE_TEXTURE2D_BIAS).
     // Far Y-billboard proxies need the same bias — without it, 120m+ trees clip away entirely.
+    // Stronger than -0.65: full-rect Y cards rely on clip; soft mips still sparkle while walking.
     float crossBbEarly = _OilCrossBillboard;
     float yBbEarly = _OilYBillboard;
     half4 base;
     if (crossBbEarly > 0.5 || yBbEarly > 0.5)
-        base = (half4)SAMPLE_TEXTURE2D_BIAS(_BaseMap, sampler_BaseMap, config.baseUV, -0.65)
+        base = (half4)SAMPLE_TEXTURE2D_BIAS(_BaseMap, sampler_BaseMap, config.baseUV, -1.0)
             * (half4)_BaseColor;
     else
         base = (half4)GetBase(config);
@@ -118,7 +119,19 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     half alpha = base.a;
 
 #if defined(_CLIPPING)
-    clip(alpha - (half)GetCutoff(config));
+    half cutoff = (half)GetCutoff(config);
+    if (crossBbEarly > 0.5 || yBbEarly > 0.5)
+    {
+        // Full-rect impostors must clip transparent texels. Hard clip(alpha-cutoff)
+        // sparkles as mips / subpixel coverage change while walking. Widen the
+        // keep band by screen-space alpha derivative so edges stay temporally stable.
+        half aa = max(fwidth(alpha), (half)1e-4);
+        clip(alpha - cutoff + aa * 0.75h);
+    }
+    else
+    {
+        clip(alpha - cutoff);
+    }
 #endif
 
     half3 geometricNormal = normalize((half3)input.normalWS);

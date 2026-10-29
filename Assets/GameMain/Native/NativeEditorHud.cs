@@ -137,8 +137,8 @@ namespace Game.Native
         {
             GUILayout.Label("个人中心（Editor 模拟原生页）");
             GUILayout.Space(8);
-            GUILayout.Label("真机走 Android / iOS NativeHudOverlay + GET /api/commonUser/getUserinfo。");
-            GUILayout.Label("Editor 无宿主 token，Query(20) 返回 -2 属预期。");
+            GUILayout.Label("真机走 Android / iOS NativeHudOverlay。");
+            GUILayout.Label("Editor 宿主用 Query(20) 交票，时序与真机相同：先写票，下一帧 Push 106。");
             GUILayout.Space(8);
             GUILayout.Label("退登 / 注销请用已打开的 UITK「个人中心·退登注销」窗口（对齐 HostLeaveIsland）。");
             GUILayout.Space(8);

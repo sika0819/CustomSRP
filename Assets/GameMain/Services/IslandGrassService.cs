@@ -8,8 +8,8 @@ using YooAsset;
 namespace Game
 {
     /// <summary>
-    /// 岛屿 GPU 草地生命周期（GameFramework Service）。
-    /// 渲染实现在 CustomSRP.OilTerrainGrassBinder；本服务只负责 bake 加载 / 预算 / 释放。
+    /// 岛屿 GPU 草地。服务和 OilTerrainGrassBinder 都在 Island 场景里，随场景销毁。
+    /// 烘焙句柄在卸场景成功后放开。进程拆世界走 <see cref="Release"/>，场景还在时先拆绘制器。
     /// </summary>
     public sealed class IslandGrassService : MonoBehaviour
     {
@@ -19,43 +19,42 @@ namespace Game
         AssetHandle _bakeHandle;
         object _binder;
         bool _loaded;
+        bool _loading;
 
         public bool IsLoaded => _loaded;
         public static IslandGrassService Active { get; private set; }
 
         public static IslandGrassService Ensure()
         {
-            if (Active != null)
-                return Active;
-
-            IslandGrassService existing = FindAnyObjectByType<IslandGrassService>();
-            if (existing != null)
-            {
-                Active = existing;
-                return existing;
-            }
-
-            var go = new GameObject("IslandGrassService");
-            if (Application.isPlaying)
-                DontDestroyOnLoad(go);
-            Active = go.AddComponent<IslandGrassService>();
-            return Active;
+            IslandGrassService service = IslandServiceHost.Ensure(Active, "IslandGrassService");
+            Active = service;
+            GameEntry.Grass = service;
+            return service;
         }
 
-        void OnEnable() => Active = this;
+        void OnEnable()
+        {
+            Active = this;
+            GameEntry.Grass = this;
+        }
 
         void OnDisable()
         {
             if (Active == this)
                 Active = null;
+            if (GameEntry.Grass == this)
+                GameEntry.Grass = null;
         }
 
         /// <summary>进岛后由 IslandWorldService 调用。</summary>
         public IEnumerator Load()
         {
-            if (_loaded)
+            if (_loaded || _loading)
                 yield break;
 
+            _loading = true;
+            try
+            {
             byte[] bakeBytes = null;
             yield return LoadBakeBytes(bytes => bakeBytes = bytes);
 
@@ -77,22 +76,26 @@ namespace Game
             ApplyMobileBudget(_binder);
             _loaded = true;
             Log.Info($"[IslandGrass] ready bakeBytes={bakeBytes.Length}");
+            }
+            finally
+            {
+                _loading = false;
+            }
         }
 
         public void Release()
         {
             _loaded = false;
             DestroyBinder();
-            if (_bakeHandle != null)
-            {
-                _bakeHandle.Release();
-                _bakeHandle = null;
-            }
+            GameEntry.ReleaseLeaveHandle(_bakeHandle);
+            _bakeHandle = null;
         }
 
         void OnDestroy()
         {
-            Release();
+            // 场景卸载：句柄留在本轮 IslandLeaveHandles。进程拆世界已在 Release() 里 ReleaseNow。
+            _loaded = false;
+            _bakeHandle = null;
             if (Active == this)
                 Active = null;
         }
@@ -110,7 +113,8 @@ namespace Game
                     {
                         text = asset;
                         _bakeHandle = handle;
-                    });
+                    },
+                    trackLeave: true);
             }
 
 #if UNITY_EDITOR
@@ -206,7 +210,11 @@ namespace Game
                 return;
 
 #if UNITY_ANDROID || UNITY_IOS
-            apply.Invoke(binder, new object[] { 24000, 90f, 3 });
+            // 低档少镂空叶片。中高档与闺蜜机（GpuTier 已压回中档）同一预算，不加满屏草。
+            if (IslandGraphicsTier.GpuTier == IslandGraphicsTier.Tier.Low)
+                apply.Invoke(binder, new object[] { 8000, 48f, 2 });
+            else
+                apply.Invoke(binder, new object[] { 24000, 90f, 3 });
 #else
             apply.Invoke(binder, new object[] { 48000, 180f, 4 });
 #endif
@@ -221,13 +229,18 @@ namespace Game
 
             PropertyInfo prop = binderType.GetProperty("Active", StaticPublic);
             object active = prop?.GetValue(null);
-            if (active is Behaviour behaviour && behaviour != null)
-            {
-                if (Application.isPlaying)
-                    Object.Destroy(behaviour.gameObject);
-                else
-                    Object.DestroyImmediate(behaviour.gameObject);
-            }
+            if (active is not Behaviour behaviour || behaviour == null)
+                return;
+
+            // 先还 GPU，再 Destroy。卸岛时 OnDestroy 里的延迟 Destroy 留不住 Mesh / ComputeBuffer。
+            MethodInfo releaseGpu = binderType.GetMethod(
+                "ReleaseGpu", BindingFlags.Public | BindingFlags.Instance);
+            releaseGpu?.Invoke(active, null);
+
+            if (Application.isPlaying)
+                Object.Destroy(behaviour.gameObject);
+            else
+                Object.DestroyImmediate(behaviour.gameObject);
         }
     }
 }

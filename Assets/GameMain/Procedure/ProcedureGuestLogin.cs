@@ -12,7 +12,7 @@ namespace Game
     /// <summary>
     /// Native 初始化 → device/user 换票 → 后台 bank 下载 → 进岛。
     /// 冷启动与退登后再登录：无网弹窗，确认后退出。
-    /// Editor：复用已落盘正式/游客会话，否则等登录窗。
+    /// Editor：复用已落盘正式/游客会话，否则等登录窗把票交给宿主；进岛仍等 106 再 Query。
     /// 真机 Hybrid 换票失败停在加载罩，不回落本地游客。
     /// </summary>
     public class ProcedureGuestLogin : ProcedureBase
@@ -30,9 +30,14 @@ namespace Game
         bool _baseNullLogged;
         float _hostWaitSince;
         Coroutine _routine;
+        Coroutine _returnNotify;
+
+        /// <summary>当前流程是 GuestLogin。退登时若已在这里，不必等卸岛再通知宿主 GONE。</summary>
+        public static bool IsCurrent { get; private set; }
 
         protected override void OnEnter(ProcedureOwner procedureOwner)
         {
+            IsCurrent = true;
             base.OnEnter(procedureOwner);
             _started = false;
             _finished = false;
@@ -49,12 +54,28 @@ namespace Game
 #if UNITY_EDITOR
             EditorLoginGate.ResetSessionFlags();
 #endif
-            BootLoadingService.ReportProgress(0.28f, "登录中");
+            // 冷启动从 Yoo 的进度收到登录档；退登重进从岛内 0.70/1 回到登录档。
+            BootLoadingService.Show("登录中", BootLoadingService.LoginStart);
+            IslandEntryLog.Ok(
+                "guestLogin",
+                "enter",
+                "armed=" + (HostIslandEntryGate.IsArmed ? 1 : 0)
+                + " gen=" + HostIslandEntryGate.Generation
+                + " islandEnter=" + ProcedureIsland.EnterCount);
+            // 冷启动没有上一轮岛的 GPU 资源，立刻通知宿主即可。
+            // 退登重进：宿主收到这条会把 Surface GONE。若赶在 FlushGpuPool 提交之前，
+            // Adreno 会丢掉还没执行的 vkDestroy，下一趟进岛再分配整屏目标就 OOM。
+            if (ProcedureIsland.EnterCount > 0)
+                ScheduleReturnNotifyAfterGpuFlush();
+            else
+                NotifyReturnedToGuestLogin();
         }
 
         protected override void OnUpdate(ProcedureOwner procedureOwner, float elapseSeconds, float realElapseSeconds)
         {
             base.OnUpdate(procedureOwner, elapseSeconds, realElapseSeconds);
+            // 单场景重载会拆掉 BeforeSceneLoad 建的桥。没人 Tick 就不会有 106。
+            BoluoNativeBridge.EnsureExists();
 
             if (_offlineBlocked)
                 return;
@@ -74,8 +95,15 @@ namespace Game
                     Log.Warning(
                         "[GuestLogin] NotReachable — show NoNetwork and quit on confirm " +
                         $"(islandEnter={ProcedureIsland.EnterCount})");
-                    UiDialogService.ShowNoNetwork(() =>
-                        UnityGameFramework.Runtime.GameEntry.Shutdown(ShutdownType.Quit));
+                    IslandEntryLog.Block(
+                        "guestLogin",
+                        "offline",
+                        "islandEnter=" + ProcedureIsland.EnterCount);
+                    UiDialogService.ShowNoNetwork(
+                        () => UnityGameFramework.Runtime.GameEntry.Shutdown(ShutdownType.Quit),
+                        title: "无网络连接",
+                        body: "请检查网络设置，确保设备已连接到互联网。",
+                        primaryLabel: "确定");
                 }
 
                 return;
@@ -89,7 +117,7 @@ namespace Game
                 if (HostIslandEntryGate.ShouldWaitForHost() && !HostIslandEntryGate.IsArmed)
                 {
                     // 上一轮 Uncover Hide 可能已 _visible=false；ReportProgress 会空转。
-                    NoteHostArmWait("before login");
+                    NoteHostArmWait("beforeLogin");
                     EnsureLoadingCoverWhileWaitingHost();
                     return;
                 }
@@ -102,6 +130,7 @@ namespace Game
                     {
                         _baseNullLogged = true;
                         Log.Error("[GuestLogin] GameEntry.Base null — cannot start login");
+                        IslandEntryLog.Fail("guestLogin", "baseNull", "where=beforeLogin");
                     }
 
                     return;
@@ -118,8 +147,8 @@ namespace Game
             // 否则 Leave 已清 Unity 票，再 Arm 会带着空/游客缓存进岛，加载罩出不来。
             if (HostIslandEntryGate.ShouldWaitForHost() && !HostIslandEntryGate.IsArmed)
             {
-                NoteHostArmWait("after login");
-                AbandonLogin("arm dropped before island");
+                NoteHostArmWait("afterLogin");
+                AbandonLogin("armDropped");
                 return;
             }
 
@@ -127,17 +156,23 @@ namespace Game
 
             if (!_postLoginDone)
             {
-#if !UNITY_EDITOR
                 // 空票不能锁成编辑器游客，否则下一次 106 不再向宿主要票。
                 if (!_success || !GuestSession.IsLoggedIn)
                 {
                     Log.Warning("[GuestLogin] ticket not ready — stay on cover and retry");
+                    IslandEntryLog.Wait(
+                        "guestLogin",
+                        "ticket",
+                        "success=" + (_success ? 1 : 0)
+                        + " loggedIn=" + (GuestSession.IsLoggedIn ? 1 : 0)
+                        + " armed=" + (HostIslandEntryGate.IsArmed ? 1 : 0));
                     _started = false;
                     _finished = false;
                     _success = false;
+                    // 不会重进 OnEnter。Show 把进度写回登录档，否则 ReportProgress 被钳在 0.70。
+                    BootLoadingService.Show("登录中", BootLoadingService.LoginStart);
                     return;
                 }
-#endif
                 _postLoginDone = true;
 
                 WanosAudio.WanosBankStore.SetPaths(WanosBankPaths.Instance);
@@ -162,11 +197,16 @@ namespace Game
                 return;
 
             // 退登回收未完成时先等空窗，避免进岛 Prefill 与 Yoo Unload 抢主线程。
-            if (IslandLeaveAssetReclaim.IsBusy)
+            IslandLeaveAssetReclaim reclaim = IslandLeaveAssetReclaim.Ensure();
+            if (reclaim != null && reclaim.IsBusy)
             {
                 EnsureLoadingCoverWhileWaitingHost();
                 if (_routine == null && GameEntry.Base != null)
                 {
+                    IslandEntryLog.Wait(
+                        "guestLogin",
+                        "reclaim",
+                        "gen=" + HostIslandEntryGate.Generation);
                     _islandHandoffStarted = true;
                     _routine = GameEntry.Base.StartCoroutine(WaitReclaimThenIsland(procedureOwner));
                 }
@@ -174,6 +214,7 @@ namespace Game
                 {
                     Log.Error(
                         "[GuestLogin] GameEntry.Base null while reclaim is busy — enter island anyway");
+                    IslandEntryLog.Fail("guestLogin", "baseNull", "where=reclaim");
                     _islandHandoffStarted = true;
                     ChangeState<ProcedureIsland>(procedureOwner);
                 }
@@ -182,6 +223,11 @@ namespace Game
             }
 
             _islandHandoffStarted = true;
+            IslandEntryLog.Ok(
+                "guestLogin",
+                "handoff",
+                "via=direct armed=" + (HostIslandEntryGate.IsArmed ? 1 : 0)
+                + " gen=" + HostIslandEntryGate.Generation);
             ChangeState<ProcedureIsland>(procedureOwner);
         }
 
@@ -189,22 +235,26 @@ namespace Game
         {
             BootLoadingService.ReportProgress(
                 BootLoadingService.VisualPrepareMin, "正在整理资源...");
-            yield return IslandLeaveAssetReclaim.WaitIfBusy();
+            IslandLeaveAssetReclaim reclaim = IslandLeaveAssetReclaim.Ensure();
+            if (reclaim != null)
+                yield return reclaim.WaitIfBusy();
             _routine = null;
             if (procedureOwner == null)
             {
                 Log.Error(
                     "[GuestLogin] reclaim finished but procedure owner is null — island handoff aborted");
+                IslandEntryLog.Fail("guestLogin", "ownerNull", "where=reclaimDone");
                 _islandHandoffStarted = false;
                 yield break;
             }
             // Leave 可能在等待期间又拆掉 Arm。
             if (HostIslandEntryGate.ShouldWaitForHost() && !HostIslandEntryGate.IsArmed)
             {
-                AbandonLogin("arm dropped while reclaiming");
+                AbandonLogin("armDroppedReclaim");
                 yield break;
             }
 
+            IslandEntryLog.Ok("guestLogin", "handoff", "via=reclaim gen=" + HostIslandEntryGate.Generation);
             ChangeState<ProcedureIsland>(procedureOwner);
         }
 
@@ -224,8 +274,15 @@ namespace Game
             _routine = null;
             if (routine != null && GameEntry.Base != null)
                 GameEntry.Base.StopCoroutine(routine);
-            EnsureLoadingCoverWhileWaitingHost();
+            // 这一代作废，不会重进 OnEnter。进度回到登录档，不要沿用岛内 0.70。
+            BootLoadingService.Show("登录中", BootLoadingService.LoginStart);
             Log.Warning($"[GuestLogin] abandon login — {reason}");
+            IslandEntryLog.Block(
+                "guestLogin",
+                "abandon",
+                "why=" + reason.Replace(' ', '_')
+                + " gen=" + HostIslandEntryGate.Generation
+                + " armed=" + (HostIslandEntryGate.IsArmed ? 1 : 0));
         }
 
         bool LoginStillCurrent(int generation)
@@ -239,20 +296,105 @@ namespace Game
 
         static void EnsureLoadingCoverWhileWaitingHost()
         {
+#if UNITY_EDITOR
+            if (EditorLoginGate.CancelPendingLogin)
+            {
+                ShowHostWait(0.45f, "注销确认期 — 请在游戏内弹窗选择…");
+                return;
+            }
+
+            if (!EditorLoginGate.HasAnySession && !EditorNativeHost.HasShellUser)
+            {
+                ShowHostWait(0.45f, "请在「编辑器登录」窗口选择登录方式…");
+                return;
+            }
+#endif
+            // 等 Arm / 等回收：罩还在就不要把进度抬到 0.70。丢了才从登录档重新打开。
             if (!BootLoadingService.IsVisible)
-                BootLoadingService.Show("正在进入世界...", BootLoadingService.VisualPrepareMin);
+                BootLoadingService.Show("登录中", BootLoadingService.LoginStart);
+        }
+
+#if UNITY_EDITOR
+        static void ShowHostWait(float progress, string tip)
+        {
+            if (!BootLoadingService.IsVisible)
+                BootLoadingService.Show(tip, progress);
             else
-                BootLoadingService.ReportProgress(
-                    BootLoadingService.VisualPrepareMin, "正在进入世界...");
+                BootLoadingService.ReportProgress(progress, tip);
+        }
+#endif
+
+        void ScheduleReturnNotifyAfterGpuFlush()
+        {
+            MonoBehaviour host = GameEntry.Base;
+            if (host == null)
+            {
+                NotifyReturnedToGuestLogin();
+                return;
+            }
+
+            if (_returnNotify != null)
+                host.StopCoroutine(_returnNotify);
+            _returnNotify = host.StartCoroutine(ReturnNotifyAfterGpuFlush());
+        }
+
+        IEnumerator ReturnNotifyAfterGpuFlush()
+        {
+            // FlushGpuPool 在回收末尾，排在 Yoo 卸包和 Resources.UnloadUnused 之后。
+            // 8 秒到点就发 108 时，销毁命令还没提交，再进岛会在上一轮的 kgsl 上继续堆。
+            IslandLeaveAssetReclaim reclaim = IslandLeaveAssetReclaim.Ensure();
+            float waited = 0f;
+            while (reclaim != null && reclaim.IsBusy && IsCurrent)
+            {
+                if (waited == 0f || waited >= 15f)
+                {
+                    Log.Info("[GuestLogin] hold 108 until GPU reclaim finishes waited="
+                        + waited.ToString("F0") + "s");
+                    waited = 0.01f;
+                }
+
+                waited += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            if (!IsCurrent)
+                yield break;
+
+            // 回收协程里已经 Flush 并空等过帧。再留几帧给渲染线程提交销毁，然后才让宿主 GONE。
+            for (int i = 0; i < 3; i++)
+                yield return new WaitForEndOfFrame();
+
+            _returnNotify = null;
+            if (!IsCurrent)
+                yield break;
+
+            Log.Info("[GuestLogin] notify host returned after GPU flush");
+            // 连发两次：主线程 post 偶发丢一条时，第二次仍能把 Surface GONE。
+            // 每次按当下门闩填 a，避免第一拍还在等、第二拍已经 Arm 却报成同一个状态。
+            NotifyReturnedToGuestLogin();
+            yield return null;
+            NotifyReturnedToGuestLogin();
+        }
+
+        /// <summary>a=1 表示本轮 106 已经在门口，宿主不必再推。</summary>
+        void NotifyReturnedToGuestLogin()
+        {
+            NativeMessages.ReturnedToGuestLogin(HostIslandEntryGate.IsArmed ? 1 : 0);
         }
 
         protected override void OnLeave(ProcedureOwner procedureOwner, bool isShutdown)
         {
-            if (_routine != null && GameEntry.Base != null)
+            IsCurrent = false;
+            if (GameEntry.Base != null)
             {
-                GameEntry.Base.StopCoroutine(_routine);
-                _routine = null;
+                if (_routine != null)
+                    GameEntry.Base.StopCoroutine(_routine);
+                if (_returnNotify != null)
+                    GameEntry.Base.StopCoroutine(_returnNotify);
             }
+
+            _routine = null;
+            _returnNotify = null;
 
             base.OnLeave(procedureOwner, isShutdown);
         }
@@ -270,6 +412,7 @@ namespace Game
                 catch (System.Exception e)
                 {
                     Log.Error("[GuestLogin] login threw — " + e);
+                    IslandEntryLog.Fail("guestLogin", "threw", "type=" + e.GetType().Name);
                     _success = false;
                     _finished = true;
                     _routine = null;
@@ -289,7 +432,13 @@ namespace Game
         void NoteHostArmWait(string where)
         {
             if (_hostWaitSince <= 0f)
+            {
                 _hostWaitSince = Time.realtimeSinceStartup;
+                IslandEntryLog.Wait(
+                    "guestLogin",
+                    "hostArm",
+                    "where=" + where + " gen=" + HostIslandEntryGate.Generation);
+            }
             if (_hostWaitLogged || Time.realtimeSinceStartup - _hostWaitSince < 20f)
                 return;
 
@@ -297,6 +446,10 @@ namespace Game
             Log.Error(
                 "[GuestLogin] HostArmIslandEntry still missing after 20s (" + where
                 + "). Island entry stays on the loading cover until the host arms.");
+            IslandEntryLog.Fail(
+                "guestLogin",
+                "hostArm",
+                "where=" + where + " sec=20 gen=" + HostIslandEntryGate.Generation);
         }
 
         void ClearHostArmWait()
@@ -308,6 +461,10 @@ namespace Game
         IEnumerator RunLogin()
         {
             int generation = HostIslandEntryGate.Generation;
+            IslandEntryLog.Ok(
+                "guestLogin",
+                "login",
+                "gen=" + generation + " armed=" + (HostIslandEntryGate.IsArmed ? 1 : 0));
             BootLoadingService.ReportProgress(0.30f, "初始化原生桥");
             NativeBridgeFacade.Init();
 
@@ -321,26 +478,12 @@ namespace Game
 
             BootLoadingService.ReportProgress(0.40f, "换取 deviceToken");
             bool deviceOk = false;
-
-#if UNITY_EDITOR
-            yield return RunEditorLogin(deviceOkResult => deviceOk = deviceOkResult);
-            if (!LoginStillCurrent(generation))
-            {
-                AbandonLogin("editor login generation changed");
-                yield break;
-            }
-
-            // 正式复用 / 游客复用 / 本轮游客或手机登录成功后均应有 userToken。
-            _success = GuestSession.IsLoggedIn;
-            BootLoadingService.ReportProgress(BootLoadingService.VisualPrepareMin, "正在进入世界...");
-            _finished = true;
-#else
             bool userOk = false;
             yield return BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true)
                 .ToCoroutine(r => deviceOk = r);
             if (!LoginStillCurrent(generation))
             {
-                AbandonLogin("device token generation changed");
+                AbandonLogin("deviceGen");
                 yield break;
             }
 
@@ -351,7 +494,7 @@ namespace Game
                     .ToCoroutine(r => userOk = r);
                 if (!LoginStillCurrent(generation))
                 {
-                    AbandonLogin("user token generation changed");
+                    AbandonLogin("userGen");
                     yield break;
                 }
 
@@ -363,7 +506,7 @@ namespace Game
                     {
                         if (!LoginStillCurrent(generation))
                         {
-                            AbandonLogin("user token retry generation changed");
+                            AbandonLogin("userRetryGen");
                             yield break;
                         }
 
@@ -371,7 +514,7 @@ namespace Game
                         yield return new WaitForSecondsRealtime(0.2f);
                         if (!LoginStillCurrent(generation))
                         {
-                            AbandonLogin("user token retry generation changed");
+                            AbandonLogin("userRetryGen");
                             yield break;
                         }
 
@@ -381,7 +524,7 @@ namespace Game
 
                     if (!LoginStillCurrent(generation))
                     {
-                        AbandonLogin("user token retry generation changed");
+                        AbandonLogin("userRetryGen");
                         yield break;
                     }
                 }
@@ -389,7 +532,7 @@ namespace Game
 
             if (!LoginStillCurrent(generation))
             {
-                AbandonLogin("login generation changed");
+                AbandonLogin("loginGen");
                 yield break;
             }
 
@@ -400,182 +543,43 @@ namespace Game
                 Log.Info(
                     $"[GuestLogin] tokens deviceOk={deviceOk} userOk={userOk} " +
                     $"guest={GuestSession.IsGuest} userId={GuestSession.UserId}");
+                IslandEntryLog.Ok(
+                    "guestLogin",
+                    "ticket",
+                    "deviceOk=" + (deviceOk ? 1 : 0)
+                    + " userOk=" + (userOk ? 1 : 0)
+                    + " guest=" + (GuestSession.IsGuest ? 1 : 0)
+                    + " loggedIn=" + (GuestSession.IsLoggedIn ? 1 : 0)
+                    + " userId=" + GuestSession.UserId);
             }
             else if (NativeSession.IsHybridAvailable())
             {
                 Log.Error(
                     "[GuestLogin] hybrid userToken still missing after retry — stay on loading cover");
+                IslandEntryLog.Fail(
+                    "guestLogin",
+                    "userToken",
+                    "deviceOk=" + (deviceOk ? 1 : 0) + " retries=15");
                 _success = false;
                 _started = false;
                 _finished = false;
                 _postLoginDone = false;
                 _routine = null;
                 // 保持 Arm；下一帧 OnUpdate 因 !_started && IsArmed 会再跑 RunLogin。
-                EnsureLoadingCoverWhileWaitingHost();
+                // 这次换票作废，进度回到登录档，避免停在 0.70。
+                BootLoadingService.Show("登录中", BootLoadingService.LoginStart);
                 yield break;
             }
             else
             {
                 Log.Warning("[GuestLogin] remote login failed — local guest fallback");
+                IslandEntryLog.Block("guestLogin", "localGuest");
                 GuestSession.ApplyLocalEditorGuest();
                 _success = true;
             }
 
             BootLoadingService.ReportProgress(BootLoadingService.VisualPrepareMin, "正在进入世界...");
             _finished = true;
-#endif
         }
-
-#if UNITY_EDITOR
-        /// <summary>
-        /// Editor：复用已落盘正式/游客会话；否则等「编辑器登录」窗口放行后再换票。
-        /// 本地游客不挡在 boluoRsa/deviceLogin 上（否则点按钮后仍要干等网络超时）。
-        /// </summary>
-        IEnumerator RunEditorLogin(System.Action<bool> setDeviceOk)
-        {
-            // 已有正式会话：补 deviceToken（bank）后进岛。
-            if (EditorLoginGate.HasFormalSession)
-            {
-                GuestSession.SyncFromBoluo();
-                bool deviceOkReuse = false;
-                BootLoadingService.ReportProgress(0.40f, "换取 deviceToken");
-                yield return BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true)
-                    .ToCoroutine(r => deviceOkReuse = r);
-                setDeviceOk?.Invoke(deviceOkReuse);
-                Log.Info(
-                    $"[GuestLogin] editor reuse formal userId={GuestSession.UserId} " +
-                    $"deviceOk={deviceOkReuse}");
-                yield break;
-            }
-
-            // 已有游客会话：复用 token，除非主动「清空用户会话」/退登。
-            if (EditorLoginGate.HasGuestSession)
-            {
-                yield return FinishEditorGuestReuse(setDeviceOk);
-                yield break;
-            }
-
-            BootLoadingService.ReportProgress(
-                0.45f, "请在「编辑器登录」窗口选择登录方式…");
-            Log.Info(
-                "[GuestLogin] editor waiting login — menu GameMain/Boluo/编辑器登录");
-
-            // 正式会话已落盘但仍可能处于注销确认期（CancelPendingLogin）：等弹窗 resolve。
-            while (!EditorLoginGate.HasFormalSession || EditorLoginGate.CancelPendingLogin)
-            {
-                if (EditorLoginGate.GuestProceedRequested
-                    && !EditorLoginGate.CancelPendingLogin)
-                {
-                    yield return FinishEditorGuestProceed(setDeviceOk);
-                    yield break;
-                }
-
-                if (EditorLoginGate.CancelPendingLogin)
-                    BootLoadingService.ReportProgress(
-                        0.45f, "注销确认期 — 请在游戏内弹窗选择…");
-
-                yield return null;
-            }
-
-            // 手机号登录已写入正式会话；deviceToken 多半已在 PhoneLoginClient 里换过。
-            GuestSession.SyncFromBoluo();
-            bool deviceOkPhone = BoluoSession.IsDeviceTokenValid();
-            if (!deviceOkPhone)
-            {
-                BootLoadingService.ReportProgress(0.48f, "换取 deviceToken");
-                yield return BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true)
-                    .ToCoroutine(r => deviceOkPhone = r);
-            }
-
-            setDeviceOk?.Invoke(deviceOkPhone);
-            Log.Info(
-                $"[GuestLogin] editor phone login ok userId={GuestSession.UserId} " +
-                $"deviceOk={deviceOkPhone}");
-        }
-
-        /// <summary>复用 Prefs 游客票进岛（与正式账号 reuse 对称）。</summary>
-        static IEnumerator FinishEditorGuestReuse(System.Action<bool> setDeviceOk)
-        {
-            GuestSession.SyncFromBoluo();
-            if (!GuestLoginClient.ShouldTryRemoteInEditor())
-            {
-                setDeviceOk?.Invoke(BoluoSession.IsDeviceTokenValid());
-                KickEditorDeviceTokenInBackground();
-                Log.Info(
-                    $"[GuestLogin] editor reuse guest userId={GuestSession.UserId}");
-                yield break;
-            }
-
-            BootLoadingService.ReportProgress(0.46f, "游客远端换票…");
-            bool deviceOk = false;
-            bool userOk = false;
-            yield return BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true)
-                .ToCoroutine(r => deviceOk = r);
-            setDeviceOk?.Invoke(deviceOk);
-            if (deviceOk)
-            {
-                // Prefs 已有 userToken 时 EnsureUserToken 会 short-circuit；失效才重新 touristLogin。
-                yield return BoluoDeviceLoginClient.EnsureUserTokenAsync(failFast: true)
-                    .ToCoroutine(r => userOk = r);
-            }
-
-            GuestSession.SyncFromBoluo();
-            if (!GuestSession.IsLoggedIn)
-                GuestSession.ApplyLocalEditorGuest();
-            Log.Info(
-                $"[GuestLogin] editor reuse guest remote deviceOk={deviceOk} userOk={userOk} " +
-                $"userId={GuestSession.UserId}");
-        }
-
-        /// <summary>游客放行：默认本地瞬间进岛；仅 Try Remote 时才等网络换票。</summary>
-        static IEnumerator FinishEditorGuestProceed(System.Action<bool> setDeviceOk)
-        {
-            if (!GuestLoginClient.ShouldTryRemoteInEditor())
-            {
-                GuestSession.ApplyLocalEditorGuest();
-                setDeviceOk?.Invoke(BoluoSession.IsDeviceTokenValid());
-                // bank 目录换票放到后台，不挡进岛。
-                KickEditorDeviceTokenInBackground();
-                Log.Info(
-                    $"[GuestLogin] editor guest local fast-path userId={GuestSession.UserId}");
-                yield break;
-            }
-
-            BootLoadingService.ReportProgress(0.46f, "游客远端换票…");
-            bool deviceOk = false;
-            bool userOk = false;
-            yield return BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true)
-                .ToCoroutine(r => deviceOk = r);
-            setDeviceOk?.Invoke(deviceOk);
-            if (deviceOk)
-            {
-                yield return BoluoDeviceLoginClient.EnsureUserTokenAsync(failFast: true)
-                    .ToCoroutine(r => userOk = r);
-            }
-
-            GuestSession.SyncFromBoluo();
-            if (!GuestSession.IsLoggedIn)
-                GuestSession.ApplyLocalEditorGuest();
-            Log.Info(
-                $"[GuestLogin] editor guest remote deviceOk={deviceOk} userOk={userOk} " +
-                $"userId={GuestSession.UserId}");
-        }
-
-        static void KickEditorDeviceTokenInBackground()
-        {
-            if (BoluoSession.IsDeviceTokenValid())
-                return;
-            KickEditorDeviceTokenAsync().Forget();
-        }
-
-        static async UniTaskVoid KickEditorDeviceTokenAsync()
-        {
-            bool ok = await BoluoDeviceLoginClient.EnsureDeviceTokenAsync(failFast: true);
-            if (ok)
-                Log.Info("[GuestLogin] editor background deviceToken ok");
-            else
-                Log.Warning("[GuestLogin] editor background deviceToken failed — bank 可能为空");
-        }
-#endif
     }
 }

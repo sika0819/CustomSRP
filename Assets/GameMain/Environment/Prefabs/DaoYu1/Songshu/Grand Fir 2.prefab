@@ -224,7 +224,7 @@ LODGroup:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8621239089293780426}
-  serializedVersion: 2
+  serializedVersion: 3
   m_LocalReferencePoint: {x: 0.072995186, y: 8.805189, z: -0.11241782}
   m_Size: 20.852692
   m_FadeMode: 0
@@ -244,6 +244,7 @@ LODGroup:
     renderers:
     - renderer: {fileID: 163955344562497408}
   m_Enabled: 1
+  m_GlobalIlluminationLOD: 0
 --- !u!33 &8196124282295430570
 MeshFilter:
   m_ObjectHideFlags: 0

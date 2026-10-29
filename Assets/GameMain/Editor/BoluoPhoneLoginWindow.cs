@@ -93,9 +93,20 @@ namespace Game.Editor
             RefreshBusyUi();
         }
 
+        /// <summary>
+        /// 退登 Drain 之前拆掉游客补闩。否则清票后的 OnInspectorUpdate 会再走 BeginGuestLogin，
+        /// 第一次退登被新游客票拉回岛，要点第二次才留下。
+        /// </summary>
+        public static void DisarmGuestProceed()
+        {
+            foreach (var win in Resources.FindObjectsOfTypeAll<BoluoPhoneLoginWindow>())
+                win._guestProceedLatched = false;
+        }
+
         [MenuItem("GameMain/Boluo/编辑器登录")]
         public static void Open()
         {
+            DisarmGuestProceed();
             var win = GetWindow<BoluoPhoneLoginWindow>(false, "编辑器登录", true);
             win.minSize = new Vector2(440, 520);
             // 退登再开窗：清掉上一轮游客 latch，避免 OnEnter Reset 后被自动补闩绕过登录。
@@ -368,9 +379,8 @@ namespace Game.Editor
                 if (EditorLoginGate.HasAnySession && !EditorLoginGate.CancelPendingLogin)
                     _guestProceedLatched = false;
                 else if (!EditorLoginGate.HasFormalSession
-                    && !EditorLoginGate.CancelPendingLogin
-                    && !EditorLoginGate.GuestProceedRequested)
-                    EditorLoginGate.RequestGuestProceed();
+                    && !EditorLoginGate.CancelPendingLogin)
+                    Game.Native.EditorNativeHost.BeginGuestLogin();
             }
 
             RefreshBusyUi();
@@ -454,8 +464,10 @@ namespace Game.Editor
             }
 
             _guestProceedLatched = true;
-            EditorLoginGate.RequestGuestProceed();
-            SetStatus("已请求游客登录 — GuestLogin 将放行");
+            Game.Native.EditorNativeHost.BeginGuestLogin();
+            SetStatus(EditorLoginGate.HasFormalSession
+                ? "已有正式会话，宿主写票后交权"
+                : "已请求游客登录 — 宿主写票后下一帧交权");
             Log.Info("[EditorLogin] guest proceed requested");
         }
 
@@ -557,7 +569,7 @@ namespace Game.Editor
             bool isCancel = r.IsCancel || forceCancel;
             if (!isCancel)
             {
-                SetStatus($"登录成功 userId={r.UserId}（正式账号）");
+                SetStatus($"登录成功 userId={r.UserId} — 宿主下一帧交权");
                 return;
             }
 
@@ -624,7 +636,7 @@ namespace Game.Editor
                 }
 
                 EditorLoginGate.SetCancelPendingLogin(false);
-                SetStatus($"已终止注销并登录 userId={r.UserId} → 进岛");
+                SetStatus($"已终止注销并登录 userId={r.UserId} — 宿主下一帧交权");
                 Log.Info($"[EditorLogin] loginAndStopCancel ok userId={r.UserId}");
                 RefreshSession();
                 BootLoadingService.Show("正在进入世界...", BootLoadingService.VisualPrepareMin);

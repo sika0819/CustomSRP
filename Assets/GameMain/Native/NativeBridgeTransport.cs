@@ -18,7 +18,7 @@ namespace Game.Native
 #if UNITY_IOS && !UNITY_EDITOR
         const string Lib = "__Internal";
 
-        // BoluoImp_*：iOS 在 UnityFramework 的 BoluoImp.swift；避免和 BBP BoluoBridge_Query 撞名。
+        // BoluoImp_*：iOS 在 UnityFramework 的 BoluoImp.swift。
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         static extern void BoluoImp_Notify(int type, int a, int b, int c);
 
@@ -65,6 +65,8 @@ namespace Game.Native
             {
                 Log.Warning($"[IMP] Notify type={type} failed: {e.Message}");
             }
+#elif UNITY_EDITOR
+            EditorNativeHost.OnNotify(type, a, b, c);
 #else
             Log.Debug($"[IMP] Notify (stub) type={type} a={a} b={b} c={c}");
 #endif
@@ -109,6 +111,8 @@ namespace Game.Native
                 Log.Warning($"[IMP] Query type={type} failed: {e.Message}");
                 return BridgeCode.ErrNotReady;
             }
+#elif UNITY_EDITOR
+            return EditorNativeHost.Query(type, a, b, c, inBlob, out outBlob);
 #else
             Log.Debug($"[IMP] Query (stub) type={type} a={a} b={b} c={c}");
             outBlob = "";

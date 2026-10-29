@@ -1,4 +1,5 @@
 using System;
+using Game.Native;
 using UnityEngine;
 
 namespace Game
@@ -8,14 +9,20 @@ namespace Game
     /// Usage:
     /// <code>
     /// UiDialogService.ShowCommonDialog("标题", "正文", onConfirm: () => Debug.Log("OK"));
-    /// UiDialogService.ShowDownloadProgress(0f);  // then call SetProgress(50f) to update
+    /// int ticket = UiDialogService.OpenDownloadProgress();
+    /// UiDialogService.SetDownloadProgress(ticket, 50f, 12f, 80f);
     /// </code>
     /// </summary>
     public static class UiDialogService
     {
         // Active progress form reference so callers can update progress.
         static DownloadProgressForm _activeProgressForm;
-        static int _activeProgressSerial;
+        static int _progressSeq;
+        static int _activeProgressTicket;
+        static int _retiredThrough;
+        static float _pendingPercent = -1f;
+        static float _pendingDownloadedMb;
+        static float _pendingTotalMb;
         static string _lastRequestFailure;
         static float _lastRequestFailureTime;
 
@@ -120,18 +127,79 @@ namespace Game
         }
 
         /// <summary>
-        /// Show download progress dialog. Returns the form reference for SetProgress.
+        /// Show download progress dialog. Returns the form if it opened synchronously.
+        /// Prefer <see cref="SetDownloadProgress"/> with the ticket from
+        /// <see cref="OpenDownloadProgress"/> — Yoo 加载是异步的，这里经常还是 null。
         /// </summary>
         public static DownloadProgressForm ShowDownloadProgress(Action onCancel = null)
         {
+            OpenDownloadProgress(onCancel);
+            return _activeProgressForm;
+        }
+
+        /// <summary>打开进度窗。返回的票据用来更新和关闭这一扇，避免关错后来的窗。</summary>
+        public static int OpenDownloadProgress(Action onCancel = null)
+        {
+            int ticket = ++_progressSeq;
+            _pendingPercent = 0f;
+            _pendingDownloadedMb = 0f;
+            _pendingTotalMb = 0f;
             var data = new DownloadProgressForm.UserData
             {
                 OnCancel = onCancel,
+                Ticket = ticket,
             };
-            // We open the form and capture its instance via OnOpen callback.
-            // The form stores itself in _activeProgressForm on open.
             UiAssets.OpenDialog(UiAssets.DownloadProgressForm, data);
-            return _activeProgressForm;
+            return ticket;
+        }
+
+        public static bool IsProgressRetired(int ticket)
+        {
+            return ticket > 0 && ticket <= _retiredThrough;
+        }
+
+        public static void AttachProgressForm(DownloadProgressForm form, int ticket)
+        {
+            _activeProgressForm = form;
+            _activeProgressTicket = ticket;
+            if (form != null && _pendingPercent >= 0f)
+                form.SetProgress(_pendingPercent, _pendingDownloadedMb, _pendingTotalMb);
+        }
+
+        public static void DetachProgressForm(DownloadProgressForm form)
+        {
+            if (_activeProgressForm != form)
+                return;
+            _activeProgressForm = null;
+            _activeProgressTicket = 0;
+        }
+
+        public static void SetDownloadProgress(
+            int ticket,
+            float percent,
+            float downloadedMb = 0f,
+            float totalMb = 0f)
+        {
+            if (ticket <= 0 || ticket <= _retiredThrough)
+                return;
+            _pendingPercent = Mathf.Clamp(percent, 0f, 100f);
+            _pendingDownloadedMb = Mathf.Max(0f, downloadedMb);
+            _pendingTotalMb = Mathf.Max(0f, totalMb);
+            if (_activeProgressTicket == ticket && _activeProgressForm != null)
+                _activeProgressForm.SetProgress(_pendingPercent, _pendingDownloadedMb, _pendingTotalMb);
+        }
+
+        /// <summary>关掉这一张进度窗。下载器没有按 bank 取消，这里只关界面。</summary>
+        public static void CloseDownloadProgress(int ticket)
+        {
+            if (ticket <= 0)
+                return;
+            if (ticket > _retiredThrough)
+                _retiredThrough = ticket;
+            if (_activeProgressTicket == ticket)
+                _pendingPercent = -1f;
+            if (_activeProgressTicket == ticket && _activeProgressForm != null)
+                _activeProgressForm.Dismiss();
         }
 
         /// <summary>
@@ -167,13 +235,21 @@ namespace Game
         }
 
         /// <summary>
-        /// Show no network dialog.
+        /// Show no network dialog. Defaults to island download copy;
+        /// pass title / body / primaryLabel to override (guest login quit path).
         /// </summary>
-        public static void ShowNoNetwork(Action onConfirm = null)
+        public static void ShowNoNetwork(
+            Action onConfirm = null,
+            string title = null,
+            string body = null,
+            string primaryLabel = null)
         {
             var data = new NoNetworkForm.UserData
             {
                 OnConfirm = onConfirm,
+                Title = title,
+                Body = body,
+                PrimaryLabel = primaryLabel,
             };
             UiAssets.OpenDialog(UiAssets.NoNetworkForm, data);
         }
@@ -270,7 +346,7 @@ namespace Game
             {
                 OnConfirm = () =>
                 {
-                    BoluoLogout.ExecuteLeave();
+                    HostIslandEntryGate.Leave();
                     onConfirm?.Invoke();
                 },
                 OnCancel = onCancel,

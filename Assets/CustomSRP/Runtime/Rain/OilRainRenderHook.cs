@@ -25,12 +25,20 @@ namespace CustomSRP
 
         void OnEnable()
         {
+            if (!Game.IslandLeakProbe.Allow(Game.IslandLeakProbe.Module.Rain))
+            {
+                enabled = false;
+                return;
+            }
+
             if (_settings == null)
                 _settings = OilRainSettings.Current ?? GetComponent<OilRainSettings>();
         }
 
         void LateUpdate()
         {
+            if (!Game.IslandLeakProbe.Allow(Game.IslandLeakProbe.Module.Rain))
+                return;
             if (_settings == null) return;
 
             float now = Time.unscaledTime;

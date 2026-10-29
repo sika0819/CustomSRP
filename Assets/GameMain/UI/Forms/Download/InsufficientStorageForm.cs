@@ -1,7 +1,4 @@
 using System;
-using UnityEngine;
-using UnityEngine.UIElements;
-using UnityGameFramework.Runtime;
 
 namespace Game
 {
@@ -12,50 +9,46 @@ namespace Game
     {
         public class UserData
         {
-            /// <summary>Required space in MB, e.g. "500MB".</summary>
-            public string RequiredSpace = "500MB";
+            /// <summary>Required space number, e.g. "500". Trailing MB/KB is stripped.</summary>
+            public string RequiredSpace = "500";
             public Action OnConfirm;
         }
 
         UserData _userData;
+        NoticeCardPresenter _card;
 
         protected override bool CloseWhenAnyButtonClicked => false;
-        protected override bool SlidesUpFromBottom => true;
+        protected override bool SlidesUpFromBottom => false;
 
         public override void OnOpen(object userData)
         {
             base.OnOpen(userData);
             _userData = userData as UserData;
+            _card = new NoticeCardPresenter();
+            _card.Bind(Root);
 
-            var title = Root.Q<Label>("title");
-            if (title != null) title.text = "存储空间不足";
-
-            var body = Root.Q<Label>("body");
-            if (body != null && _userData != null)
-                body.text = $"需要预留至少 {_userData.RequiredSpace} 存储空间，请清理后重试。";
-
-            var icon = Root.Q<VisualElement>("icon");
-            if (icon != null) icon.style.display = DisplayStyle.None;
-
-            var primary = Root.Q<Button>("primary");
-            if (primary != null)
+            DownloadDialogCopy.DialogCopy copy = DownloadDialogCopy.Storage(
+                _userData != null ? _userData.RequiredSpace : null);
+            _card.Apply(new NoticeCardContent
             {
-                var label = primary.Q<Label>("primaryLabel");
-                if (label != null) label.text = "确定";
-                OnClick("primary", () =>
-                {
-                    _userData?.OnConfirm?.Invoke();
-                    CloseSelf();
-                });
-            }
+                Title = copy.Title,
+                Body = copy.Body,
+                Icon = NoticeCardIcon.Tip,
+                PrimaryLabel = copy.PrimaryLabel,
+                ShowSecondary = copy.ShowSecondary,
+            });
 
-            // Hide secondary — single OK button.
-            var secondary = Root.Q<Button>("secondary");
-            if (secondary != null) secondary.style.display = DisplayStyle.None;
+            OnClick("primary", () =>
+            {
+                _userData?.OnConfirm?.Invoke();
+                CloseSelf();
+            });
         }
 
         public override void OnClose(bool isShutdown, object userData)
         {
+            _card?.Unbind();
+            _card = null;
             _userData = null;
             base.OnClose(isShutdown, userData);
         }

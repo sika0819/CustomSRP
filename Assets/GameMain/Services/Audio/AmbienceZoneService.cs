@@ -13,7 +13,7 @@ namespace Game
     /// Upgrades:
     /// - River/Waterfall 用 <see cref="WaterSurfaceProbe"/> 直接查场景里真实的水面最近点
     ///   （运行期采样，取代旧的编辑器烘焙 BakedWaterStation 方案）。
-    /// - Ocean/Lake 用 catalog 里的岸点 / 湖点（xz 距离）。
+    /// - Ocean 量到地形外海水线（60m 岸带）；Lake 用 catalog 湖点（xz 距离）。
     /// - Bank Ready 重试：bank 不再永久缓存失败，允许后续重试。
     /// - Voice 回收：订阅 <see cref="WanosInteraction.VoiceStateChanged"/>，voice stopped 时摘掉 id，
     ///   list 空且 source 仍在播放区间则 RepostSource。
@@ -23,8 +23,15 @@ namespace Game
     /// - 共用 biome bank（Forest/Grassland/Plateau）：同名 Play 只 Post 一次；离开整组才 Stop+Unload。
     /// - Distance RTPC + AttenuationGain：显示 dB 经 GainInvTransform 再写入（对齐 Boluo CurveForGain）。
     /// </summary>
-    public static class AmbienceZoneService
+    public sealed class AmbienceZoneService
     {
+        readonly IslandAudioSession _session;
+
+        public AmbienceZoneService(IslandAudioSession session)
+        {
+            _session = session;
+        }
+
         const float EvalIntervalSeconds = 0.25f;
         const int VoiceStopFadeMs = 250;
         /// <summary>
@@ -109,45 +116,46 @@ namespace Game
         public const string EmitterNamePrefix = "Amb_";
 
         // Scratch for exclusive-shared-bank Evaluate (Forest / Grassland / Plateau).
-        static bool[] _wantScratch;
-        static float[] _distScratch;
-        static Vector3[] _posScratch;
+        bool[] _wantScratch;
+        float[] _distScratch;
+        Vector3[] _posScratch;
 
         // Listener-still skip：听者移动 < 0.09m 时本 tick 结论不变，直接跳过。
         const float ListenerStillThresholdSq = 0.0078125f; // (0.09m)^2
-        static Vector3 _lastListener;
-        static bool _hasLastListener;
+        Vector3 _lastListener;
+        bool _hasLastListener;
+        bool _oceanShoreReady;
 
-        static GameObject _host;
-        static Transform _root;
-        static bool _started;
-        static bool _catalogBuilt;
-        static bool _contentAudioPaused;
+        GameObject _host;
+        Transform _root;
+        bool _started;
+        bool _catalogBuilt;
+        bool _contentAudioPaused;
         /// <summary>Iris / black hold: Evaluate may run but must not StartSource / Retain.</summary>
-        static bool _presetTransitionHeld;
-        static bool _pendingEvaluate;
+        bool _presetTransitionHeld;
+        bool _pendingEvaluate;
         /// <summary>回前台重起：已停本地态，等下一轮 Evaluate 重新 Post。</summary>
-        static bool _restartPending;
-        static float _restartNotBefore;
-        static readonly List<RuntimeSource> Sources = new List<RuntimeSource>(32);
+        bool _restartPending;
+        float _restartNotBefore;
+        readonly List<RuntimeSource> Sources = new List<RuntimeSource>(32);
 
         // Emitter GameObject pool: one per source, pre-allocated under _root.
         // Avoids per-enter new GameObject + per-exit Destroy churn.
-        static GameObject[] _emitterPool;
-        static bool[] _emitterInUse;
+        GameObject[] _emitterPool;
+        bool[] _emitterInUse;
 
         /// <summary>记录 voiceId → 所属 source index（用于回收）。</summary>
-        static readonly Dictionary<ulong, int> VoiceToSource = new Dictionary<ulong, int>();
+        readonly Dictionary<ulong, int> VoiceToSource = new Dictionary<ulong, int>();
 
         /// <summary>因 bank 未就绪而被拒绝的 bank 名（收到 OnBankLoaded 时清掉并重 Evaluate）。</summary>
-        static readonly HashSet<string> _pendingRetryBanks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        readonly HashSet<string> _pendingRetryBanks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>标记 inland water 已就绪（收到 OnInlandWaterReady 时设为 true，无需重复设）。</summary>
-        static bool _inlandWaterReady;
+        bool _inlandWaterReady;
         /// <summary>上一轮看见的篝火点燃态。变化时打破 listener-still，否则人站着火才点上永远不开播。</summary>
-        static bool _campfireIgnitedLatched;
-        static int _softStopDriveGen;
-        static int _attenuationDriveGen;
+        bool _campfireIgnitedLatched;
+        int _softStopDriveGen;
+        int _attenuationDriveGen;
 
         sealed class RuntimeSource
         {
@@ -206,12 +214,12 @@ namespace Game
         /// <summary>
         /// Stop 之后稍等再 Unregister。同一帧卸掉 object，引擎来不及吃 Stop_*，鸟叫会变成无主循环。
         /// </summary>
-        static readonly List<DeferredEmitterRelease> DeferredEmitterReleases = new List<DeferredEmitterRelease>(8);
+        readonly List<DeferredEmitterRelease> DeferredEmitterReleases = new List<DeferredEmitterRelease>(8);
         const float EmitterReleaseDelaySeconds = 0.5f;
 
-        public static bool IsReady => _started && _catalogBuilt;
+        public bool IsReady => _started && _catalogBuilt;
 
-        public static void SetContentAudioPaused(bool paused)
+        public void SetContentAudioPaused(bool paused)
         {
             if (_contentAudioPaused == paused)
                 return;
@@ -227,9 +235,9 @@ namespace Game
 
         /// <summary>
         /// Iris window: block new zone loads / plays. Cleared on reveal via
-        /// <see cref="PresetWeatherHold.Release"/>.
+        /// <see cref="PresetService.ReleaseWeatherHold"/>.
         /// </summary>
-        public static void SetPresetTransitionHeld(bool held)
+        public void SetPresetTransitionHeld(bool held)
         {
             if (_presetTransitionHeld == held)
                 return;
@@ -244,7 +252,7 @@ namespace Game
         /// Forces bank Release (doc: 虹膜中卸掉走路区域加载器).
         /// Preset path should already be ducked to silence — snap floor then stop with no fade.
         /// </summary>
-        public static void ClearAllPlaying()
+        public void ClearAllPlaying()
         {
             CancelAllSoftStops();
             SnapAllPlayingGainsToFloor();
@@ -252,14 +260,14 @@ namespace Game
         }
 
         /// <summary>
-        /// Re-push attenuation for live emitters using <see cref="ContentAudioDuck.Level01"/>.
+        /// Re-push attenuation for live emitters using <see cref="_session.Duck.Level01"/>.
         /// Called every frame while a preset duck ramp runs (Evaluate alone is too coarse).
         /// </summary>
-        public static void ApplyDuckToPlayingEmitters()
+        public void ApplyDuckToPlayingEmitters()
         {
             if (!_started || !_catalogBuilt)
                 return;
-            float duck = ContentAudioDuck.Level01;
+            float duck = _session.Duck.Level01;
             for (int i = 0; i < Sources.Count; i++)
             {
                 var src = Sources[i];
@@ -286,7 +294,7 @@ namespace Game
         /// 这里停掉本地态（保留 bank，避免重载空窗），下一轮 Evaluate 重新 Post。
         /// </para>
         /// </summary>
-        public static void RestartPlaying()
+        public void RestartPlaying()
         {
             if (!_started || !_catalogBuilt)
                 return;
@@ -300,21 +308,21 @@ namespace Game
             Log.Info("[AmbienceZone] restart playing (foreground restore)");
         }
 
-        public static void EvaluateNow()
+        public void EvaluateNow()
         {
             if (_started && _catalogBuilt)
             {
                 _pendingEvaluate = false;
                 InvalidateListenerStill();
                 Evaluate();
-                RainWaterProximityService.EvaluateNow();
+                _session.Rain.EvaluateNow();
                 return;
             }
 
             _pendingEvaluate = true;
         }
 
-        public static void Start()
+        public void Start()
         {
             if (_started)
                 return;
@@ -332,7 +340,7 @@ namespace Game
             StartAsync().Forget();
         }
 
-        public static void Shutdown()
+        public void Shutdown()
         {
             _started = false;
             WanosInteraction.VoiceStateChanged -= OnVoiceStateChanged;
@@ -351,7 +359,13 @@ namespace Game
             _inlandWaterReady = false;
             _campfireIgnitedLatched = false;
             _hasLastListener = false;
-            WaterSurfaceProbe.Clear();
+            _oceanShoreReady = false;
+            AmbienceZoneCatalog.ClearLiveShoreline();
+            _softStopDriveGen++;
+            _attenuationDriveGen++;
+            _emitterPool = null;
+            _emitterInUse = null;
+            GameEntry.World?.WaterProbe.Clear();
             if (_host != null)
             {
                 UnityEngine.Object.Destroy(_host);
@@ -363,7 +377,7 @@ namespace Game
         /// <summary>
         /// 听者移动小于阈值时本 tick 结论不变，跳过整轮评估。
         /// </summary>
-        static bool ShouldEvaluateListener(Vector3 listener)
+        bool ShouldEvaluateListener(Vector3 listener)
         {
             if (!_hasLastListener)
             {
@@ -381,7 +395,7 @@ namespace Game
         }
 
         /// <summary>清掉「听者没动」缓存，强制下一轮重新评估（传送 / 硬清后用）。</summary>
-        static void InvalidateListenerStill()
+        void InvalidateListenerStill()
         {
             _hasLastListener = false;
         }
@@ -389,7 +403,7 @@ namespace Game
         /// <summary>
         /// Bank Ready 后清掉 pending 记录并重新 Evaluate（让之前因 bank 未就绪而 Stop 的 source 重试）。
         /// </summary>
-        static void OnBankLoaded(string bankName)        {
+        void OnBankLoaded(string bankName)        {
             if (!_started)
                 return;
             if (string.IsNullOrEmpty(bankName))
@@ -403,14 +417,14 @@ namespace Game
         /// <summary>
         /// Inland water 加载完毕后触发 Evaluate（让河/瀑布 source 在 mesh collider 就绪后正确开始播放）。
         /// </summary>
-        static void OnInlandWaterReady(bool hasWater)
+        void OnInlandWaterReady(bool hasWater)
         {
             if (!_started)
                 return;
             Log.Info($"[AmbienceZone] inland water ready={hasWater} — retry Evaluate");
             _inlandWaterReady = true;
             // 内河就绪 → 重新采样真实水面点（河 / 瀑的最近点来源）。
-            WaterSurfaceProbe.Rebuild();
+            GameEntry.World?.WaterProbe.Rebuild();
             EvaluateNow();
         }
 
@@ -418,7 +432,7 @@ namespace Game
         /// Voice 停止时回调（由 WanosInteraction 转发 native 事件）。
         /// 摘掉 id；id 全部摘完且 source 仍在区间内则触发 RepostSource。
         /// </summary>
-        static void OnVoiceStateChanged(ulong voiceId, AudioVoiceState state)
+        void OnVoiceStateChanged(ulong voiceId, AudioVoiceState state)
         {
             if (!_started)
                 return;
@@ -459,7 +473,7 @@ namespace Game
             }
         }
 
-        static async UniTaskVoid StartAsync()
+        async UniTaskVoid StartAsync()
         {
             try
             {
@@ -504,7 +518,7 @@ namespace Game
             }
         }
 
-        static async UniTaskVoid WaitMapItemsAndExtend()
+        async UniTaskVoid WaitMapItemsAndExtend()
         {
             for (int i = 0; i < 1200; i++)
             {
@@ -533,12 +547,12 @@ namespace Game
                 Log.Debug("[AmbienceZone] inland water pending — will Evaluate on OnInlandWaterReady");
         }
 
-        static void EnsureHost()
+        void EnsureHost()
         {
             if (_host != null)
                 return;
             _host = new GameObject(HostName);
-            UnityEngine.Object.DontDestroyOnLoad(_host);
+            _host.transform.SetParent(_session.transform, false);
             _root = _host.transform;
         }
 
@@ -547,7 +561,7 @@ namespace Game
         /// Called once after <see cref="BuildStaticSources"/> + <see cref="BuildMapItemSources"/>.
         /// Subsequent enter/exit cycles reuse these instead of allocating/destroying.
         /// </summary>
-        static void EnsureEmitterPool()
+        void EnsureEmitterPool()
         {
             if (Sources.Count == 0) return;
             EnsureHost();
@@ -567,7 +581,7 @@ namespace Game
         }
 
         /// <summary>Mark the slot holding `go` as free and deactivate the GameObject.</summary>
-        static void ReturnEmitter(GameObject go)
+        void ReturnEmitter(GameObject go)
         {
             if (go == null || _emitterPool == null) return;
             for (int i = 0; i < _emitterPool.Length; i++)
@@ -582,7 +596,7 @@ namespace Game
         }
 
         /// <summary>Find an unused pool slot for `src`. Returns the GameObject or null if full.</summary>
-        static GameObject AcquireEmitterForSource(RuntimeSource src)
+        GameObject AcquireEmitterForSource(RuntimeSource src)
         {
             if (_emitterPool == null) return null;
             int srcIdx = Sources.IndexOf(src);
@@ -598,7 +612,7 @@ namespace Game
             return go;
         }
 
-        static void BuildStaticSources()
+        void BuildStaticSources()
         {
             var statics = AmbienceZoneCatalog.StaticEmitters;
             for (int i = 0; i < statics.Length; i++)
@@ -607,7 +621,7 @@ namespace Game
             }
         }
 
-        static void BuildMapItemSources()
+        void BuildMapItemSources()
         {
             var items = GameEntry.World?.MapItemSpawner?.AllMapItems;
             // 仅统计真正的 River_* 床位。MapItem 里的 WaterfallSplash/Mist 不能挡住
@@ -637,9 +651,11 @@ namespace Game
         /// Huodui 只在 MapItemExtras，不在 AllMapItem。不扫这份表就没有篝火声源。
         /// 只收 Campfire：河/瀑的 catalogIndex 会指回 AllMapItem 行。
         /// </summary>
-        static void AppendCampfireExtras()
+        void AppendCampfireExtras()
         {
-            IReadOnlyList<MapItemData> extras = EnvMapItemExtras.LoadedItems;
+            IReadOnlyList<MapItemData> extras = GameEntry.MapItemExtras != null
+                ? GameEntry.MapItemExtras.LoadedItems
+                : null;
             if (extras == null || extras.Count == 0)
                 return;
 
@@ -659,14 +675,14 @@ namespace Game
                 Log.Info("[AmbienceZone] campfire extras=" + added);
         }
 
-        static void AddSource(AmbienceEmitterSpec spec)
+        void AddSource(AmbienceEmitterSpec spec)
         {
             if (spec == null || string.IsNullOrEmpty(spec.PlayEvent))
                 return;
             Sources.Add(new RuntimeSource { Spec = spec });
         }
 
-        static void Evaluate()
+        void Evaluate()
         {
             FlushDeferredEmitterReleases(force: false);
             TickSoftStops();
@@ -686,7 +702,10 @@ namespace Game
             if (!WanosInteraction.TryGetListenerPosition(out Vector3 listener))
                 return;
 
-            bool campfireIgnited = CampfireWeatherGate.IsVisuallyIgnited;
+            EnsureLiveOceanShoreline();
+
+            bool campfireIgnited = AtmospherePropService.Instance != null
+                && AtmospherePropService.Instance.IsVisuallyIgnited;
             if (campfireIgnited != _campfireIgnitedLatched)
             {
                 _campfireIgnitedLatched = campfireIgnited;
@@ -715,14 +734,12 @@ namespace Game
                     || spec.Kind == AmbienceEmitterKind.Ocean
                     || spec.Kind == AmbienceEmitterKind.Lake)
                 {
-                    // Emitter 跟真实水面最近点；增益：
-                    // - Ocean：仍用 catalog 岸点（跟最近点会让 dist≈0、全岸满音）
-                    // - River/Waterfall：必须用表面最近点，否则沿河远离 catalog 原点时
-                    //   gainDist 上百米 → -96dB，贴着河也听不见（见 play dist=235 gain=-96 日志）
+                    // Emitter 跟真实水面 / 外海水线最近点。增益用这个距离：
+                    // 海是到水线的水平距离（贴岸响，60m 收到底），不是两个落点圆。
+                    // 河 / 瀑必须用表面最近点，否则沿河远离 catalog 原点时
+                    // gainDist 上百米 → -96dB，贴着河也听不见。
                     pos = EvaluateWaterSource(src, listener, out want);
-                    float gainDist = spec.Kind == AmbienceEmitterKind.Ocean
-                        ? Distance(spec, listener, ResolveEmitterPosition(spec))
-                        : Distance(spec, listener, pos);
+                    float gainDist = Distance(spec, listener, pos);
                     _wantScratch[i] = want;
                     _posScratch[i] = pos;
                     _distScratch[i] = gainDist;
@@ -773,7 +790,7 @@ namespace Game
             }
         }
 
-        static void EnsureEvalScratch(int n)
+        void EnsureEvalScratch(int n)
         {
             if (_wantScratch != null && _wantScratch.Length >= n)
                 return;
@@ -786,7 +803,7 @@ namespace Game
         /// Forest / Grassland / Plateau 多床位共用一个 bank + 一个 Play_*：只留最近床位 want=true。
         /// Sticky hysteresis: keep the currently playing bed until another is clearly nearer.
         /// </summary>
-        static void CollapseExclusiveSharedPlayWants(int n)
+        void CollapseExclusiveSharedPlayWants(int n)
         {
             for (int i = 0; i < n; i++)
             {
@@ -841,7 +858,7 @@ namespace Game
         /// 多床位 / 多岸点共用同一 Play/Stop：只留最近一处 Post，避免叠成「全岛一起响」。
         /// Ocean 两岸共用 Ocean_Calm_Quad；biome / 河 / 瀑同 Boluo 同名事件只打一次。
         /// </summary>
-        static bool IsExclusiveSharedPlayBank(string bank)
+        bool IsExclusiveSharedPlayBank(string bank)
         {
             if (string.IsNullOrEmpty(bank))
                 return false;
@@ -862,7 +879,7 @@ namespace Game
         /// Stop path KeepBank so exclusivity never unloads the suppressed side's bank.
         /// <see cref="AmbienceEmitterSpec.FixedWorldAnchor"/> 观景点瀑不参与互斥（可与湖同播）。
         /// </summary>
-        static void ApplyLakeWaterfallExclusion(int n)
+        void ApplyLakeWaterfallExclusion(int n)
         {
             int bestLake = -1;
             float bestLakeDist = float.MaxValue;
@@ -930,7 +947,7 @@ namespace Game
         /// <summary>
         /// 共用 bank 床位切换：把 Playing/Emitter/Voice 转到胜出床位，禁止 Stop↔Play 叠两层鸟叫。
         /// </summary>
-        static void TransferExclusiveSharedPlays(int n)
+        void TransferExclusiveSharedPlays(int n)
         {
             for (int i = 0; i < n; i++)
             {
@@ -960,7 +977,7 @@ namespace Game
             }
         }
 
-        static void TransferPlayOwnership(RuntimeSource from, RuntimeSource to, Vector3 toPos, float toDist)
+        void TransferPlayOwnership(RuntimeSource from, RuntimeSource to, Vector3 toPos, float toDist)
         {
             // 胜出床位接管 emitter / voice；from 只清本地态，不 Stop、不 Release bank。
             GameObject emitter = from.Emitter;
@@ -1033,7 +1050,7 @@ namespace Game
             }
         }
 
-        static Vector3 ClampEmitterStep(Vector3 from, Vector3 to)
+        Vector3 ClampEmitterStep(Vector3 from, Vector3 to)
         {
             Vector3 delta = to - from;
             float mag = delta.magnitude;
@@ -1043,12 +1060,37 @@ namespace Game
         }
 
         /// <summary>
-        /// River / Waterfall / Ocean / Lake：算出该床位的代表点 + 是否该播。
-        /// - River/Waterfall：用 <see cref="WaterSurfaceProbe"/> 查场景里真实水面最近点
-        ///   （运行期采样，跟场景一致；走近水边距离就变近，贴着水一定有声）。
-        /// - Ocean/Lake：catalog 里的岸点 / 湖点（xz 距离）。
+        /// 地形就绪后采样外海水线，贴岸 60m 内都能开海浪。
         /// </summary>
-        static Vector3 EvaluateWaterSource(RuntimeSource src, Vector3 listener, out bool want)
+        void EnsureLiveOceanShoreline()
+        {
+            if (_oceanShoreReady)
+                return;
+
+            Terrain terrain = IslandSceneComponent.Active != null
+                ? IslandSceneComponent.Active.Terrain
+                : null;
+            if (terrain == null)
+                terrain = Terrain.activeTerrain;
+            if (terrain == null || terrain.terrainData == null)
+                return;
+
+            int count = AmbienceZoneCatalog.RebuildLiveShoreline(terrain);
+            if (count <= 0)
+                return;
+
+            _oceanShoreReady = true;
+            InvalidateListenerStill();
+            Log.Info($"[AmbienceZone] ocean shoreline pts={count}");
+        }
+
+        /// <summary>
+        /// River / Waterfall / Ocean / Lake：算出该床位的代表点 + 是否该播。
+        /// - River/Waterfall：用 <see cref="WaterSurfaceProbe"/> 查场景里真实水面最近点。
+        /// - Ocean：到地形外海水线的水平距离，整段岸线 60m 内都播，发射器落在最近岸点。
+        /// - Lake：catalog 里的湖点（xz 距离）。
+        /// </summary>
+        Vector3 EvaluateWaterSource(RuntimeSource src, Vector3 listener, out bool want)
         {
             var spec = src.Spec;
 
@@ -1066,6 +1108,20 @@ namespace Game
             {
                 want = false;
                 return ResolveEmitterPosition(spec);
+            }
+
+            if (spec.Kind == AmbienceEmitterKind.Ocean)
+            {
+                if (!AmbienceZoneCatalog.TryNearestOceanShore(listener, out Vector3 shore, out float shell))
+                {
+                    want = false;
+                    return ResolveEmitterPosition(spec);
+                }
+
+                float oceanEnter = spec.EnterRadius;
+                float oceanExit = src.Playing ? EffectiveExitRadius(spec) : oceanEnter;
+                want = KeepPlayingWithExitGrace(src, shell, oceanEnter, oceanExit, 0f);
+                return shore;
             }
 
             float enter = spec.EnterRadius;
@@ -1091,7 +1147,8 @@ namespace Game
                     : WaterSurfaceProbe.SurfaceKind.Waterfall;
 
                 // 场景里还没内河（还没加载完）时探针没数据，先按 catalog / MapItem 单点走。
-                if (WaterSurfaceProbe.TryNearestAny(kind, listener, out Vector3 nearest, out float dWater))
+                WaterSurfaceProbe probe = GameEntry.World?.WaterProbe;
+                if (probe != null && probe.TryNearestAny(kind, listener, out Vector3 nearest, out float dWater))
                 {
                     bool muted = IsWaterfallMutedByCampfire(spec, listener);
                     want = !muted && KeepPlayingWithExitGrace(src, dWater, enter, exit, nearExtra);
@@ -1107,14 +1164,14 @@ namespace Game
             return fallback;
         }
 
-        static float EffectiveExitRadius(AmbienceEmitterSpec spec)
+        float EffectiveExitRadius(AmbienceEmitterSpec spec)
         {
             if (spec.Kind == AmbienceEmitterKind.Ocean)
                 return Mathf.Max(spec.ExitRadius, spec.EnterRadius + AmbienceZoneCatalog.OceanNearSurfaceMeters);
             return spec.ExitRadius;
         }
 
-        static bool IsWaterfallMutedByCampfire(AmbienceEmitterSpec spec, Vector3 listener)
+        bool IsWaterfallMutedByCampfire(AmbienceEmitterSpec spec, Vector3 listener)
         {
             if (spec.Kind != AmbienceEmitterKind.Waterfall)
                 return false;
@@ -1124,7 +1181,7 @@ namespace Game
             return IsInsideCampfireWaterfallMute(listener);
         }
 
-        static Vector3 ResolveEmitterPosition(AmbienceEmitterSpec spec)
+        Vector3 ResolveEmitterPosition(AmbienceEmitterSpec spec)
         {
             if (spec.Kind == AmbienceEmitterKind.River || spec.Kind == AmbienceEmitterKind.Waterfall)
             {
@@ -1139,7 +1196,7 @@ namespace Game
         }
 
         /// <summary>Repost 时取代表点（与 Evaluate 走同一条水面查询路径，探针没数据时退回 catalog）。</summary>
-        static Vector3 ResolveRepostPosition(AmbienceEmitterSpec spec, Vector3 listener)
+        Vector3 ResolveRepostPosition(AmbienceEmitterSpec spec, Vector3 listener)
         {
             if (spec.FixedWorldAnchor)
                 return ResolveEmitterPosition(spec);
@@ -1148,16 +1205,18 @@ namespace Game
                 var kind = spec.Kind == AmbienceEmitterKind.River
                     ? WaterSurfaceProbe.SurfaceKind.River
                     : WaterSurfaceProbe.SurfaceKind.Waterfall;
-                if (WaterSurfaceProbe.TryNearestAny(kind, listener, out Vector3 anchor, out _))
+                WaterSurfaceProbe probe = GameEntry.World?.WaterProbe;
+                if (probe != null && probe.TryNearestAny(kind, listener, out Vector3 anchor, out _))
                     return anchor;
             }
             return ResolveEmitterPosition(spec);
         }
 
-        static bool ShouldPlay(RuntimeSource src, Vector3 listener, Vector3 emitterPos)
+        bool ShouldPlay(RuntimeSource src, Vector3 listener, Vector3 emitterPos)
         {
             var spec = src.Spec;
-            if (spec.Kind == AmbienceEmitterKind.Campfire && !CampfireWeatherGate.IsVisuallyIgnited)
+            if (spec.Kind == AmbienceEmitterKind.Campfire
+                && (AtmospherePropService.Instance == null || !AtmospherePropService.Instance.IsVisuallyIgnited))
                 return false;
             if (spec.Kind == AmbienceEmitterKind.Ocean && listener.y > AmbienceZoneCatalog.OceanMaxPlayerY)
                 return false;
@@ -1176,7 +1235,7 @@ namespace Game
         }
 
         /// <summary>Big waterfall muted inside campfire 22m silence ring.</summary>
-        static bool IsInsideCampfireWaterfallMute(Vector3 listener)
+        bool IsInsideCampfireWaterfallMute(Vector3 listener)
         {
             float mute = AmbienceZoneCatalog.WaterfallCampfireMuteMeters;
             float muteSq = mute * mute;
@@ -1201,7 +1260,7 @@ namespace Game
         /// 再远仍有 <see cref="AmbienceZoneCatalog.ExitGraceSeconds"/> 时间宽限
         /// （对齐 Boluo Trigger Exit→Enter 抖动，避免 UnLoad↔Play 刺啦）。
         /// </summary>
-        static float NearMetersForExitGrace(AmbienceEmitterSpec spec)
+        float NearMetersForExitGrace(AmbienceEmitterSpec spec)
         {
             if (spec == null)
                 return 0f;
@@ -1228,7 +1287,7 @@ namespace Game
         /// Boluo trigger-overlap keep：进区立刻播；已播时 exit+near 内保持；
         /// 刚出 near 后 <see cref="AmbienceZoneCatalog.ExitGraceSeconds"/> 内仍保持（取消 Stop/UnLoad）。
         /// </summary>
-        static bool KeepPlayingWithExitGrace(
+        bool KeepPlayingWithExitGrace(
             RuntimeSource src, float dist, float enterRadius, float exitRadius, float nearExtraMeters)
         {
             float enter = enterRadius > 0f ? enterRadius : 0f;
@@ -1255,12 +1314,12 @@ namespace Game
             return Time.realtimeSinceStartup - src.OutsideSince < AmbienceZoneCatalog.ExitGraceSeconds;
         }
 
-        static bool IsBiomeKind(AmbienceEmitterKind kind) =>
+        bool IsBiomeKind(AmbienceEmitterKind kind) =>
             kind == AmbienceEmitterKind.Forest
             || kind == AmbienceEmitterKind.Grassland
             || kind == AmbienceEmitterKind.Plateau;
 
-        static float Distance(AmbienceEmitterSpec spec, Vector3 listener, Vector3 emitterPos)
+        float Distance(AmbienceEmitterSpec spec, Vector3 listener, Vector3 emitterPos)
         {
             if (spec.UseXzDistance)
             {
@@ -1272,9 +1331,9 @@ namespace Game
             return Vector3.Distance(listener, emitterPos);
         }
 
-        static float _nextAttenuationLogTime;
+        float _nextAttenuationLogTime;
 
-        static void KeepSourcePlaying(RuntimeSource src, Vector3 pos, float dist)
+        void KeepSourcePlaying(RuntimeSource src, Vector3 pos, float dist)
         {
             var spec = src.Spec;
             // Already audible: never re-Load / re-Post (Boluo「已播禁止再 Loading」).
@@ -1323,7 +1382,7 @@ namespace Game
         /// <summary>
         /// Boluo <c>WanosCurveForGain.GainInvTransform</c>：显示 Y → 引擎衰减增益（dB）。
         /// </summary>
-        static float GainInvTransform(float displayY)
+        float GainInvTransform(float displayY)
         {
             const float d1 = -9f;
             const float d2 = -12f;
@@ -1337,7 +1396,7 @@ namespace Game
             return -36f + (80f / 3f) * (displayY + 15f);
         }
 
-        static Vector2[] GainCurveForSpec(AmbienceEmitterSpec spec)
+        Vector2[] GainCurveForSpec(AmbienceEmitterSpec spec)
         {
             switch (spec.Kind)
             {
@@ -1369,7 +1428,7 @@ namespace Game
         /// 河 / 瀑 / 湖：不用 display→engine 变换（远端会压到 -96dB 听感「没声」），
         /// 改成直接引擎 dB：4m 内满音，到 Exit 半径 -24dB，靠近必能听见。
         /// </summary>
-        static float GainDbForDistance(AmbienceEmitterSpec spec, float distMeters)
+        float GainDbForDistance(AmbienceEmitterSpec spec, float distMeters)
         {
             if (spec != null
                 && (spec.Kind == AmbienceEmitterKind.River
@@ -1388,7 +1447,7 @@ namespace Game
             return GainInvTransform(displayY);
         }
 
-        static float EvaluateGainCurveDisplayY(Vector2[] curve, float distMeters)
+        float EvaluateGainCurveDisplayY(Vector2[] curve, float distMeters)
         {
             if (curve == null || curve.Length == 0)
                 return CurveFarDisplayDb;
@@ -1405,7 +1464,7 @@ namespace Game
             return curve[curve.Length - 1].y;
         }
 
-        static void StartSource(RuntimeSource src, Vector3 pos, float dist)
+        void StartSource(RuntimeSource src, Vector3 pos, float dist)
         {
             var spec = src.Spec;
             Log.Info($"[AmbienceZone] StartSource enter id={spec.Id} bank={spec.Bank}");
@@ -1463,7 +1522,7 @@ namespace Game
             }
         }
 
-        static void RepostSource(RuntimeSource src, Vector3 pos, float dist)
+        void RepostSource(RuntimeSource src, Vector3 pos, float dist)
         {
             var spec = src.Spec;
             if (src.Emitter == null)
@@ -1494,7 +1553,7 @@ namespace Game
         /// Water Quad bank 走 catalog 多声道（同点叠轨，对齐 Boluo 响度）；
         /// biome / 点源只用 Spec.PlayEvent，避免 Forest 重复叠音。
         /// </summary>
-        static string[] ResolvePlayEventsForSingleEmitter(AmbienceEmitterSpec spec)
+        string[] ResolvePlayEventsForSingleEmitter(AmbienceEmitterSpec spec)
         {
             if (spec == null)
                 return Array.Empty<string>();
@@ -1514,7 +1573,7 @@ namespace Game
 
         // Last-resort fallback when the pool is missing. Keep behavior identical
         // to the original implementation (new GameObject under _root at pos).
-        static GameObject CreateEmitter(Vector3 pos)
+        GameObject CreateEmitter(Vector3 pos)
         {
             var go = new GameObject(EmitterName(pos));
             go.transform.SetParent(_root, false);
@@ -1522,9 +1581,9 @@ namespace Game
             return go;
         }
 
-        static string EmitterName(Vector3 pos) => $"Amb_{pos.x:F0}_{pos.y:F0}_{pos.z:F0}";
+        string EmitterName(Vector3 pos) => $"Amb_{pos.x:F0}_{pos.y:F0}_{pos.z:F0}";
 
-        static void PostSourceEvents(RuntimeSource src, string[] plays)
+        void PostSourceEvents(RuntimeSource src, string[] plays)
         {
             // 清旧 voice 记录
             for (int i = 0; i < src.VoiceIds.Count; i++)
@@ -1554,7 +1613,7 @@ namespace Game
         /// 湖瀑互斥同理). Biome/campfire Release with per-kind delay.
         /// Preset clear uses <paramref name="forceReleaseBank"/>.
         /// </summary>
-        static bool ShouldKeepBankOnWalkStop(AmbienceEmitterSpec spec)
+        bool ShouldKeepBankOnWalkStop(AmbienceEmitterSpec spec)
         {
             if (spec == null)
                 return false;
@@ -1570,7 +1629,7 @@ namespace Game
             }
         }
 
-        static float UnloadDelaySecondsFor(AmbienceEmitterSpec spec)
+        float UnloadDelaySecondsFor(AmbienceEmitterSpec spec)
         {
             if (spec == null)
                 return WanosBankStore.DefaultUnloadDelaySeconds;
@@ -1598,7 +1657,7 @@ namespace Game
         /// 3. 释放 emitter
         /// 4. 按策略 Release bank（或 KeepBank）
         /// </summary>
-        static float PushSlewedAttenuation(RuntimeSource src, float dist, float targetDb)
+        float PushSlewedAttenuation(RuntimeSource src, float dist, float targetDb)
         {
             src.LastTargetGainDb = targetDb;
             src.LastTargetDistance = dist;
@@ -1632,13 +1691,13 @@ namespace Game
             return WriteDuckedGain(src, slewedDist, slewedGain);
         }
 
-        static float WriteDuckedGain(RuntimeSource src, float dist, float preDuckGainDb)
+        float WriteDuckedGain(RuntimeSource src, float dist, float preDuckGainDb)
         {
             // dist here is the Distance RTPC actually written (already slewed by caller).
             src.LastPostedDistance = dist;
             if (float.IsNaN(src.LastSlewedDistance))
                 src.LastSlewedDistance = dist;
-            float ducked = Mathf.Lerp(GainFloorDb, preDuckGainDb, ContentAudioDuck.Level01);
+            float ducked = Mathf.Lerp(GainFloorDb, preDuckGainDb, _session.Duck.Level01);
             if (src.Emitter != null)
                 WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, ducked);
             return ducked;
@@ -1648,7 +1707,7 @@ namespace Game
         /// Boluo CurveForGain 每 FixedUpdate 推增益；本工程 Evaluate 只有 4Hz，
         /// 边缘走时必须每帧把 SmoothDamp / Distance RTPC 追完，否则听感就是电流音。
         /// </summary>
-        static void EnsureAttenuationDrive()
+        void EnsureAttenuationDrive()
         {
             if (!_started)
                 return;
@@ -1656,7 +1715,7 @@ namespace Game
             DriveAttenuationSlews(gen).Forget();
         }
 
-        static async UniTaskVoid DriveAttenuationSlews(int gen)
+        async UniTaskVoid DriveAttenuationSlews(int gen)
         {
             while (gen == _attenuationDriveGen && _started)
             {
@@ -1667,7 +1726,7 @@ namespace Game
             }
         }
 
-        static void TickAttenuationSlews()
+        void TickAttenuationSlews()
         {
             if (!_started || !_catalogBuilt || _contentAudioPaused || _presetTransitionHeld)
                 return;
@@ -1709,7 +1768,7 @@ namespace Game
             }
         }
 
-        static bool AnyDistanceSlewPending()
+        bool AnyDistanceSlewPending()
         {
             for (int i = 0; i < Sources.Count; i++)
             {
@@ -1724,7 +1783,7 @@ namespace Game
             return false;
         }
 
-        static void BeginSoftStop(
+        void BeginSoftStop(
             RuntimeSource src,
             float seconds,
             bool forceReleaseBank = false,
@@ -1744,7 +1803,7 @@ namespace Game
             DriveSoftStops(gen).Forget();
         }
 
-        static async UniTaskVoid DriveSoftStops(int gen)
+        async UniTaskVoid DriveSoftStops(int gen)
         {
             while (gen == _softStopDriveGen && _started)
             {
@@ -1755,7 +1814,7 @@ namespace Game
             }
         }
 
-        static void CancelSoftStop(RuntimeSource src)
+        void CancelSoftStop(RuntimeSource src)
         {
             if (src == null || !src.SoftStopping)
                 return;
@@ -1764,14 +1823,14 @@ namespace Game
             src.SoftStopKeepBank = false;
         }
 
-        static void CancelAllSoftStops()
+        void CancelAllSoftStops()
         {
             _softStopDriveGen++;
             for (int i = 0; i < Sources.Count; i++)
                 CancelSoftStop(Sources[i]);
         }
 
-        static bool AnySoftStopping()
+        bool AnySoftStopping()
         {
             for (int i = 0; i < Sources.Count; i++)
             {
@@ -1781,7 +1840,7 @@ namespace Game
             return false;
         }
 
-        static bool AnyGainSlewPending()
+        bool AnyGainSlewPending()
         {
             for (int i = 0; i < Sources.Count; i++)
             {
@@ -1797,14 +1856,14 @@ namespace Game
             return false;
         }
 
-        static float SoftStopGainNow(RuntimeSource src)
+        float SoftStopGainNow(RuntimeSource src)
         {
             float t = Mathf.Clamp01(
                 (Time.realtimeSinceStartup - src.SoftStopStartedAt) / src.SoftStopSeconds);
             return Mathf.Lerp(src.SoftStopFromGainDb, GainFloorDb, t);
         }
 
-        static void TickSoftStops()
+        void TickSoftStops()
         {
             if (!_started || !_catalogBuilt)
                 return;
@@ -1834,7 +1893,7 @@ namespace Game
             }
         }
 
-        static void SnapAllPlayingGainsToFloor()
+        void SnapAllPlayingGainsToFloor()
         {
             for (int i = 0; i < Sources.Count; i++)
             {
@@ -1848,7 +1907,7 @@ namespace Game
             }
         }
 
-        static void StopSource(
+        void StopSource(
             RuntimeSource src,
             bool forceReleaseBank = false,
             bool keepBank = false,
@@ -1906,7 +1965,7 @@ namespace Game
             Log.Info($"[AmbienceZone] stop id={spec.Id} keepBank={keep}");
         }
 
-        static bool AnyOtherSourceHoldsBank(RuntimeSource self, string bank)
+        bool AnyOtherSourceHoldsBank(RuntimeSource self, string bank)
         {
             if (self == null || string.IsNullOrEmpty(bank))
                 return false;
@@ -1923,7 +1982,7 @@ namespace Game
             return false;
         }
 
-        static void StopAllPlaying(
+        void StopAllPlaying(
             bool forceReleaseBank = false,
             bool keepBank = false,
             int fadeMs = VoiceStopFadeMs)
@@ -1936,7 +1995,7 @@ namespace Game
             }
         }
 
-        static void FlushDeferredEmitterReleases(bool force)
+        void FlushDeferredEmitterReleases(bool force)
         {
             float now = Time.realtimeSinceStartup;
             for (int i = DeferredEmitterReleases.Count - 1; i >= 0; i--)

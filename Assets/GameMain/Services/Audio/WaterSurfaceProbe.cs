@@ -11,7 +11,7 @@ using UnityGameFramework.Runtime;
 namespace Game
 {
     /// <summary>场景内水体（河 / 瀑布）的运行时最近点查询。</summary>
-    public static class WaterSurfaceProbe
+    public sealed class WaterSurfaceProbe
     {
         public enum SurfaceKind
         {
@@ -29,11 +29,11 @@ namespace Game
 
         const int MaxSamplesPerSurface = 128;
 
-        static readonly List<Surface> Surfaces = new List<Surface>(8);
-        static GameObject _sourceRoot;
-        static bool _built;
+        readonly List<Surface> Surfaces = new List<Surface>(8);
+        GameObject _sourceRoot;
+        bool _built;
 
-        public static bool IsReady
+        public bool IsReady
         {
             get
             {
@@ -42,14 +42,14 @@ namespace Game
             }
         }
 
-        public static void Clear()
+        public void Clear()
         {
             Surfaces.Clear();
             _sourceRoot = null;
             _built = false;
         }
 
-        public static void Rebuild()
+        public void Rebuild()
         {
             var world = IslandWorldService.Instance;
             GameObject root = world != null ? world.InlandWaterInstance : null;
@@ -86,7 +86,7 @@ namespace Game
             Log.Info($"[WaterProbe] rebuilt surfaces={Surfaces.Count} [{names}]");
         }
 
-        static void EnsureBuilt()
+        void EnsureBuilt()
         {
             var world = IslandWorldService.Instance;
             GameObject root = world != null ? world.InlandWaterInstance : null;
@@ -95,7 +95,7 @@ namespace Game
             Rebuild();
         }
 
-        public static bool TryNearest(
+        public bool TryNearest(
             SurfaceKind kind, Vector3 listener, float maxDist,
             out Vector3 closest, out float dist)
         {
@@ -104,7 +104,7 @@ namespace Game
             return dist <= maxDist;
         }
 
-        public static bool TryNearestAny(
+        public bool TryNearestAny(
             SurfaceKind kind, Vector3 listener,
             out Vector3 closest, out float dist)
         {
@@ -134,14 +134,14 @@ namespace Game
             return any;
         }
 
-        public static bool TryNearestRiver(
+        public bool TryNearestRiver(
             Vector3 listener, float maxDist,
             out Vector3 closest, out float dist)
         {
             return TryNearest(SurfaceKind.River, listener, maxDist, out closest, out dist);
         }
 
-        public static void GetAllPoints(List<Vector3> dst)
+        public void GetAllPoints(List<Vector3> dst)
         {
             if (dst == null)
                 return;
@@ -156,7 +156,7 @@ namespace Game
             }
         }
 
-        static float DistanceToBounds(Bounds b, Vector3 p)
+        float DistanceToBounds(Bounds b, Vector3 p)
         {
             float dx = Mathf.Max(b.min.x - p.x, 0f) + Mathf.Max(p.x - b.max.x, 0f);
             float dy = Mathf.Max(b.min.y - p.y, 0f) + Mathf.Max(p.y - b.max.y, 0f);
@@ -164,7 +164,7 @@ namespace Game
             return Mathf.Sqrt(dx * dx + dy * dy + dz * dz);
         }
 
-        static float DistanceToSurface(Surface s, Vector3 listener, out Vector3 closest)
+        float DistanceToSurface(Surface s, Vector3 listener, out Vector3 closest)
         {
             closest = s.Points[0];
             float bestSq = float.MaxValue;
@@ -182,7 +182,7 @@ namespace Game
             return Mathf.Sqrt(bestSq);
         }
 
-        static Surface BuildSurface(Transform t)
+        Surface BuildSurface(Transform t)
         {
             if (!TryClassify(t.name, out SurfaceKind kind))
                 return null;
@@ -248,7 +248,7 @@ namespace Game
         }
 
         /// <summary>Waterfall* / River_04 → 瀑；其余 River_* → 河。</summary>
-        static bool TryClassify(string name, out SurfaceKind kind)
+        bool TryClassify(string name, out SurfaceKind kind)
         {
             kind = SurfaceKind.River;
             if (string.IsNullOrEmpty(name))
@@ -273,7 +273,7 @@ namespace Game
         /// 仅可读网格返回顶点；否则 null，由 <see cref="AppendLocalBoundsSamples"/> 兜底。
         /// （避免引入 Unity.Collections / MeshData API 兼容坑。）
         /// </summary>
-        static Vector3[] ReadVertices(Mesh mesh)
+        Vector3[] ReadVertices(Mesh mesh)
         {
             if (mesh == null || !mesh.isReadable)
                 return null;
@@ -290,7 +290,7 @@ namespace Game
         }
 
         /// <summary>局部包围盒上采点（中心 + 角 + 边中点），覆盖长条河带。</summary>
-        static void AppendLocalBoundsSamples(
+        void AppendLocalBoundsSamples(
             List<Vector3> dst, Bounds local, Matrix4x4 localToWorld, int budget)
         {
             Vector3 c = local.center;
@@ -331,7 +331,7 @@ namespace Game
             }
         }
 
-        static void AppendWorldBoundsSamples(List<Vector3> dst, Bounds world, int edgeSteps)
+        void AppendWorldBoundsSamples(List<Vector3> dst, Bounds world, int edgeSteps)
         {
             Vector3 c = world.center;
             Vector3 e = world.extents;

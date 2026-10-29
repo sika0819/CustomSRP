@@ -35,6 +35,7 @@
 | `Input/` + `Entity/` | [08](08-input-camera.md) | 虚拟摇杆、移动输入、第一人称相机 |
 | `BoluoApi/` + `Native/` | [09](09-boluoapi-native.md) | 登录换票、签名、Bank 下载、原生桥 |
 | `Procedure/` + `Native/` + `Persistence/` | [12](12-session-lifecycle.md) | 冷启动、换票、进岛、退登、切账号、注销 |
+| （壳+Unity 端到端） | [登录进岛退登再登录完整链路](../../../../AndroidProject/Docs/登录进岛退登再登录完整链路.md) | 流程图 / 时序图 / IMP 106–108 / 宿主竞态 |
 | （跨模块坑） | [10](10-bug-index.md) | 已知坑总表与排障流程 |
 | （雨视觉） | [11](11-rain-device-visual.md) | 真机雨丝 Editor 有 / 真机无 |
 

@@ -143,6 +143,80 @@ namespace Game.BoluoApi
             NormalQueue.Clear();
             Actives.Clear();
             ProgressEpoch = 0;
+            DownloadCellularGate.ResetForNewSession();
+        }
+
+        /// <summary>
+        /// 流量窗「继续」前 Priority：把待下 bank 提到 User 队列头。
+        /// 须在 <see cref="DownloadCellularGate.UserAllowCellularAlways"/> 之前调用。
+        /// </summary>
+        public static void PriorityBanks(IList<string> bankNames)
+        {
+            if (bankNames == null || bankNames.Count == 0)
+                return;
+
+            for (int i = bankNames.Count - 1; i >= 0; i--)
+            {
+                string name = bankNames[i];
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                string stem = AudioEnginePaths.StripBankExtension(name);
+                if (IsLocalReady(stem))
+                    continue;
+
+                if (!Entries.TryGetValue(stem, out QueueEntry entry) || entry?.Item == null)
+                {
+                    if (!PresetBankCatalog.TryGet(stem, out BankRemoteInfo remote) || remote == null)
+                        continue;
+                    List<BankDownloadItem> built = BuildQueue(new[] { remote });
+                    if (built.Count == 0 || string.IsNullOrEmpty(built[0].Url))
+                        continue;
+                    entry = new QueueEntry
+                    {
+                        Item = built[0],
+                        LoadIntoEngine = true,
+                        Kind = BankQueueKind.User,
+                    };
+                    Entries[stem] = entry;
+                }
+                else
+                {
+                    entry.Kind = BankQueueKind.User;
+                    entry.LoadIntoEngine = true;
+                }
+
+                PlaceInQueue(stem, BankQueueKind.User, preempt: true);
+            }
+
+            Log.Info($"[BankDownloader] PriorityBanks count={bankNames.Count}");
+        }
+
+        /// <summary>开闸后续泵；禁止与 Priority / Allow 叠第二次 Resume。</summary>
+        public static void NotifyTransmitAllowed()
+        {
+            if (_pausedForLeave)
+                return;
+            EnsureRunner();
+        }
+
+        /// <summary>关闸：蜂窝上活跃槽 Abort 回队，等 Wi‑Fi 或再次开闸。</summary>
+        public static void HoldForCellularPolicy()
+        {
+            if (DownloadCellularGate.CanTransmitNow())
+                return;
+
+            for (int i = 0; i < Actives.Count; i++)
+            {
+                if (Actives[i] != null)
+                    Actives[i].Abort = true;
+            }
+
+            Log.Info(
+                $"[BankDownloader] hold for cellular policy actives={Actives.Count} " +
+                $"userQ={UserQueue.Count} startQ={StartupQueue.Count} normalQ={NormalQueue.Count}");
+            if (!_pausedForLeave
+                && (UserQueue.Count > 0 || StartupQueue.Count > 0 || NormalQueue.Count > 0 || Actives.Count > 0))
+                EnsureRunner();
         }
 
         /// <summary>下载完成 / 落盘变更后清缓存；bankName 空则全清。</summary>
@@ -492,7 +566,7 @@ namespace Game.BoluoApi
                 {
                     if (loadIntoEngine)
                     {
-                        await WaitUntilLoadingCoverHidden();
+                        await WaitUntilSafeToLoadBank();
                         TryLoadBank(item);
                     }
                     NotifyBankReady(item.BankName);
@@ -812,9 +886,14 @@ namespace Game.BoluoApi
 
         static void PumpStarts()
         {
+            if (!DownloadCellularGate.CanTransmitNow())
+                return;
+
             int max = DesiredMaxSlots();
             while (Actives.Count < max)
             {
+                if (!DownloadCellularGate.CanTransmitNow())
+                    break;
                 if (!TryDequeueNext(out string bankName, out var kind))
                     break;
                 if (IsActive(bankName))
@@ -887,7 +966,17 @@ namespace Game.BoluoApi
 
             try
             {
-                await WaitForNetworkAsync();
+                if (!await WaitForNetworkAsync(() => slot.Abort) || slot.Abort)
+                {
+                    entry.Item.State = BankDownloadState.Pending;
+                    entry.Item.Progress = 0f;
+                    entry.Item.Error = null;
+                    RequeueAfterAbort(bankName, entry.Kind);
+                    FireProgress(entry);
+                    Log.Info($"[BankDownloader] aborted before transfer, requeue {bankName} kind={entry.Kind}");
+                    return;
+                }
+
                 bool aborted = false;
                 bool needBackoff = await DownloadOneWithRetries(
                     entry.Item,
@@ -910,7 +999,7 @@ namespace Game.BoluoApi
                 {
                     if (entry.LoadIntoEngine)
                     {
-                        await WaitUntilLoadingCoverHidden();
+                        await WaitUntilSafeToLoadBank();
                         TryLoadBank(entry.Item);
                         await UniTask.Yield(PlayerLoopTiming.Update);
                     }
@@ -1346,8 +1435,8 @@ namespace Game.BoluoApi
                     }
                 }
 
-                await WaitForNetworkAsync();
-                if (shouldAbort != null && shouldAbort())
+                if (!await WaitForNetworkAsync(shouldAbort)
+                    || (shouldAbort != null && shouldAbort()))
                 {
                     onAborted?.Invoke();
                     return false;
@@ -1569,14 +1658,21 @@ namespace Game.BoluoApi
             }
         }
 
-        static async UniTask<bool> WaitForNetworkAsync()
+        /// <returns>false if aborted while waiting。</returns>
+        static async UniTask<bool> WaitForNetworkAsync(Func<bool> shouldAbort = null)
         {
             float interval = Retry.NetworkCheckIntervalSeconds > 0
                 ? Retry.NetworkCheckIntervalSeconds
                 : 2f;
-            while (Application.internetReachability == NetworkReachability.NotReachable)
+            while (!DownloadCellularGate.CanTransmitNow())
+            {
+                if (shouldAbort != null && shouldAbort())
+                    return false;
+                // 无网或 WifiOnly+蜂窝：停在槽内等可达/开闸；HoldForCellularPolicy 会 Abort。
                 await UniTask.Delay(TimeSpan.FromSeconds(interval), DelayType.UnscaledDeltaTime);
-            return true;
+            }
+
+            return shouldAbort == null || !shouldAbort();
         }
 
         static float ResolveDownloadProgress01(
@@ -1639,12 +1735,42 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 加载罩还在时不进原生 LoadBank。那次调用占住主线程，近场 Prefill 无法揭罩。
+        /// 原生 LoadBank 占主线程。
+        /// 铺装期间不能灌，否则近场 Prefill 无法揭罩。
+        /// 罩还盖着且近场已铺完：在罩下灌，卡顿不进已经能看的岛。
+        /// 罩已经撤了：让过揭罩静默窗，避免和 StartEngine / 第一帧全场景叠在同一拍上把岛卡死。
         /// </summary>
-        static async UniTask WaitUntilLoadingCoverHidden()
+        static async UniTask WaitUntilSafeToLoadBank()
         {
-            while (BootLoadingService.IsVisible)
+            while (true)
+            {
+                if (EnvItemStreamerLite.PrefillSuppressRender)
+                {
+                    await UniTask.Yield(PlayerLoopTiming.Update);
+                    continue;
+                }
+
+                if (BootLoadingService.IsVisible)
+                {
+                    IslandWorldService world = GameEntry.World;
+                    if (world == null || !world.IsNearReady)
+                    {
+                        await UniTask.Yield(PlayerLoopTiming.Update);
+                        continue;
+                    }
+
+                    return;
+                }
+
+                if (EnvStreamingConfig.IsPostUncoverQuiet)
+                {
+                    await UniTask.Yield(PlayerLoopTiming.Update);
+                    continue;
+                }
+
                 await UniTask.Yield(PlayerLoopTiming.Update);
+                return;
+            }
         }
 
         static void TryLoadBank(BankDownloadItem item)
@@ -1662,7 +1788,14 @@ namespace Game.BoluoApi
                 return;
             }
 
+            var sw = Stopwatch.StartNew();
             bool ok = WanosAudio.WanosBankStore.LoadFromPath(item.BankName, path);
+            sw.Stop();
+            if (sw.ElapsedMilliseconds >= 200)
+            {
+                Log.Warning(
+                    $"[BankDownloader] TryLoadBank slow bank={item.BankName} ms={sw.ElapsedMilliseconds} ok={ok}");
+            }
             if (!ok)
             {
                 // 探测具体原因

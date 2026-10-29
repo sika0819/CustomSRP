@@ -39,6 +39,7 @@ Shader "CustomSRP/OilOceanNPR"
         _IntersectionDistortion ("Intersection Distort", Float) = 0.12
         _RefractionStrength ("Refraction", Range(0, 1)) = 0.55
         _DepthVertical ("Depth Absorption", Range(0.3, 4)) = 1.35
+        // 岸沫眼深窗尺度（水平米×0.05 映射）。越大白沫带越宽。
         _ShoreFoamWidth ("Shore Foam Width (m)", Range(8, 28)) = 16
 
         _SunPathStrength ("Sun Path Strength", Range(0, 4)) = 2.4

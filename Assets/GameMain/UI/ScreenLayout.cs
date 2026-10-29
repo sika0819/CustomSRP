@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UIElements;
+using UnityGameFramework.Runtime;
 
 namespace Game
 {
@@ -102,9 +103,21 @@ namespace Game
         {
             CurrentSize(out _width, out _height);
             _orientation = Screen.orientation;
-            UIDocument[] documents = FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude);
-            for (int i = 0; i < documents.Length; i++)
-                Apply(documents[i]);
+            if (GameEntry.UI != null)
+            {
+                UIForm[] forms = GameEntry.UI.GetAllLoadedUIForms();
+                for (int i = 0; i < forms.Length; i++)
+                {
+                    UIDocument document = forms[i] != null
+                        ? forms[i].GetComponent<UIDocument>()
+                        : null;
+                    Apply(document);
+                }
+            }
+
+            BootEarlyCover cover = BootEarlyCover.Instance;
+            if (cover != null)
+                Apply(cover.GetComponent<UIDocument>());
             Changed?.Invoke();
         }
     }

@@ -24,7 +24,8 @@ namespace Game
             if (_helpersConfigured)
                 return;
 
-            SoundComponent sound = Object.FindAnyObjectByType<SoundComponent>();
+            SoundComponent sound =
+                UnityGameFramework.Runtime.GameEntry.GetComponent<SoundComponent>();
             if (sound == null)
                 return;
 

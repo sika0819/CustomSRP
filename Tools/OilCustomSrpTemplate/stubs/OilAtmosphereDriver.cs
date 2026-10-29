@@ -5,17 +5,19 @@ namespace CustomSRP
     /// <summary>
     /// Template stub replacing the GameMain WeatherService bridge.
     /// Real projects should swap this for the full OilAtmosphereDriver from the source repo.
+    /// The skybox passes itself in; this stub does not search the scene.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class OilAtmosphereDriver : MonoBehaviour
     {
-        public static OilAtmosphereDriver EnsureOnSkybox()
+        public static OilAtmosphereDriver EnsureOnSkybox(OilSkyboxTime sky = null)
         {
-            var sky = Object.FindAnyObjectByType<OilSkyboxTime>();
             if (sky == null)
-                return Object.FindAnyObjectByType<OilAtmosphereDriver>();
+                sky = Game.AtmosphereVisualRegistry.Skybox as OilSkyboxTime;
+            if (sky == null)
+                return null;
 
-            var existing = sky.GetComponent<OilAtmosphereDriver>();
+            OilAtmosphereDriver existing = sky.GetComponent<OilAtmosphereDriver>();
             if (existing != null)
                 return existing;
 

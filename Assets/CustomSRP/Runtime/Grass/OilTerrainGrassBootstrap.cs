@@ -5,7 +5,7 @@ namespace CustomSRP
 {
     /// <summary>
     /// CustomSRP 侧草地接线：材质 / compute / 每株型单张纹理 + 可选 bake bytes。
-    /// 进岛由 Game.IslandGrassService 调用（反射），勿在编辑器菜单里误用 DontDestroyOnLoad。
+    /// 进岛由 Game.IslandGrassService 调用（反射）。绘制器落在当时的激活场景里。
     /// </summary>
     public static class OilTerrainGrassBootstrap
     {

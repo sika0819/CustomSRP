@@ -17,8 +17,8 @@ namespace Game
         public float StickYawSpeed = 70f;
         public float Pitch = 12f;
         /// <summary>
-        /// Eye above ground. Boluo <c>Player.selfHeight</c> / preset <c>playerHeight</c> is 6;
-        /// this rig puts the transform at the eye, so the value is used directly.
+        /// Eye above ground while walking. Preset <c>PlayerHeight</c> is the Boluo capsule
+        /// height (center at the origin), not this offset.
         /// </summary>
         public float EyeHeight = 3;
         public float Gravity = 28f;
@@ -95,12 +95,14 @@ namespace Game
         float _heightDuration;
         float _heightElapsed;
 
-        /// <summary>After <see cref="ApplyPreset"/>, keep the eye planted (no gravity step)
-        /// until the player walks (stick Y).</summary>
-        bool _holdPresetFraming;
+        enum EyeDrive
+        {
+            Locomotion,
+            Push,
+            Locked,
+        }
 
-        /// <summary>Preset iris transition owns pose; LateUpdate only keeps rotation.</summary>
-        bool _transitionDriven;
+        EyeDrive _drive = EyeDrive.Locomotion;
 
         /// <summary>
         /// 进岛揭罩前锁死位姿：不吃重力、不吃视角输入。
@@ -115,19 +117,15 @@ namespace Game
         float _pinUntilUnscaled;
         Vector3 _pinnedEye;
 
-        Vector3 _exitDollyFrom;
-        Vector3 _exitDollyTo;
-        float _exitDollyT;
-        Vector3 _enterDollyFrom;
-        Vector3 _enterDollyTo;
-        float _enterDollyYawFrom;
-        float _enterDollyYawTo;
-        bool _enterDollyActive;
+        Vector3 _pushFrom;
+        Vector3 _pushTo;
+        float _pushT;
 
-        const float ExitPullMeters = 2.2f;
-        const float ExitWalkSpeedScale = 0.4f;
-        const float RevealFarMinDistance = 6f;
-        const float RevealFarDistanceScale = 2.5f;
+        /// <summary>眼睛。胶囊在下一帧按这个坐标新建，避免启用旧胶囊时弹回。</summary>
+        Vector3 _lockedEye;
+
+        const float PushMeters = 2.2f;
+        const float PushWalkSpeedScale = 0.4f;
 
         /// <summary>True while the height lerp is in progress.</summary>
         public bool IsHeightTransitioning => _heightTransitioning;
@@ -164,6 +162,9 @@ namespace Game
         {
             IslandLocomotionState.IsWalking = false;
             ApplyRenderScale(false);
+            if (_cc != null)
+                _cc.enabled = false;
+            LocomotionInput.ClearAll();
             if (Current == this)
                 Current = null;
         }
@@ -210,221 +211,200 @@ namespace Game
             EnsureBody();
         }
 
+        /// <summary>沿水平朝向后退，离开挡住路的区域门。</summary>
+        public void StepBack(float meters)
+        {
+            if (meters <= 0f)
+                return;
+            Vector3 back = Quaternion.Euler(0f, _yaw, 0f) * Vector3.back;
+            Vector3 foot = transform.position - Vector3.up * EyeHeight;
+            Teleport(foot + back * meters, _yaw);
+        }
+
+        /// <summary>脚落到 <paramref name="worldPos"/> 的地面上，眼睛抬到行走高度。出生和读档用。</summary>
         public void Teleport(Vector3 worldPos, float yawDegrees)
         {
-            _holdPresetFraming = false;
+            _drive = EyeDrive.Locomotion;
             _yaw = yawDegrees;
             _verticalSpeed = 0f;
+            _smoothedMove = Vector2.zero;
             EnsureBody();
             Vector3 ground = SampleGround(worldPos);
             SetPose(ground + Vector3.up * EyeHeight, Quaternion.Euler(Pitch, _yaw, 0f));
         }
 
-        public void ApplyPreset(IslandPresetAsset preset)
+        /// <summary>
+        /// 眼睛直接放到世界坐标并锁定。之后的推镜采样会被忽略，直到玩家推动摇杆。
+        /// </summary>
+        public void TeleportEye(Vector3 worldEye, float yawDegrees, float pitchDegrees)
         {
-            if (preset == null)
-                return;
-            if (preset.PlayerHeight > 0.1f)
-                EyeHeight = preset.PlayerHeight;
-
-            ComputePresetPose(preset, preset.CameraToTargetDis, out Vector3 camPos, out float yaw);
-            _yaw = yaw;
-            // 切预设只改左右朝向。眼睛高于注视点，LookAt 会算出低头，把俯仰钉在水平。
-            Pitch = 0f;
+            _yaw = yawDegrees;
+            if (pitchDegrees > 180f)
+                pitchDegrees -= 360f;
+            Pitch = Mathf.Clamp(pitchDegrees, -85f, 85f);
             _verticalSpeed = 0f;
-            _holdPresetFraming = true;
-            _enterDollyActive = false;
-
-            SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
+            _heightTransitioning = false;
+            _smoothedMove = Vector2.zero;
+            _speedRatio = 0f;
+            LocomotionInput.ClearAll();
+            _drive = EyeDrive.Locked;
+            _lockedEye = worldEye;
+            if (_cc != null && _cc.enabled)
+                _cc.enabled = false;
+            Quaternion rot = Quaternion.Euler(Pitch, _yaw, 0f);
+            transform.SetPositionAndRotation(_lockedEye, rot);
+            Physics.SyncTransforms();
+            if (_spawnHold)
+            {
+                _heldPosition = _lockedEye;
+                _hasHeldPosition = true;
+            }
         }
 
-        /// <summary>Iris exit: plant dolly from current eye toward a closer point along look.</summary>
-        public void BeginExitDolly()
+        /// <summary>落点正下方的地面。采到返回 true；失败时 <paramref name="ground"/> 仍是传入点。</summary>
+        public bool TryGroundUnder(Vector3 worldPos, out Vector3 ground)
         {
-            _transitionDriven = true;
+            Vector3 snapped = worldPos;
+            EnvGroundFit fit = GameEntry.GroundFit;
+            if (fit != null && fit.TrySnapY(ref snapped))
+            {
+                ground = snapped;
+                return true;
+            }
+
+            Vector3 origin = worldPos + Vector3.up * TerrainProbeUp;
+            float dist = TerrainProbeUp + TerrainProbeDown;
+            int count = Physics.RaycastNonAlloc(
+                origin, Vector3.down, GroundHits, dist, GroundMask, QueryTriggerInteraction.Ignore);
+            float bestY = float.PositiveInfinity;
+            Vector3 best = worldPos;
+            bool found = false;
+            for (int i = 0; i < count; i++)
+            {
+                if (GroundHits[i].normal.y < GroundNormalMinY)
+                    continue;
+                if (GroundHits[i].point.y >= bestY)
+                    continue;
+                bestY = GroundHits[i].point.y;
+                best = GroundHits[i].point;
+                found = true;
+            }
+
+            ground = found ? best : worldPos;
+            return found;
+        }
+
+        /// <summary>落点正下方的地面。采不到时退回传入点。</summary>
+        public Vector3 GroundUnder(Vector3 worldPos)
+        {
+            TryGroundUnder(worldPos, out Vector3 ground);
+            return ground;
+        }
+
+        /// <summary>沿当前朝向前推一段。不读预设。已锁定时调用会重新进入推镜。</summary>
+        public void BeginPush()
+        {
+            _drive = EyeDrive.Push;
             _heightTransitioning = false;
             _verticalSpeed = 0f;
-            SetBodyCollisionEnabled(false);
-            _exitDollyFrom = transform.position;
-            _exitDollyT = 0f;
+            if (_cc != null && _cc.enabled)
+                _cc.enabled = false;
+            _pushFrom = transform.position;
+            _pushT = 0f;
             Vector3 forward = Quaternion.Euler(0f, _yaw, 0f) * Vector3.forward;
-            Vector3 near = _exitDollyFrom + forward * ExitPullMeters;
+            Vector3 near = _pushFrom + forward * PushMeters;
             Vector3 ground = SampleGround(near);
-            _exitDollyTo = new Vector3(near.x, ground.y + EyeHeight, near.z);
+            _pushTo = new Vector3(near.x, ground.y + EyeHeight, near.z);
         }
 
-        public void SampleExitDolly(float t01)
+        /// <summary>推镜插值。锁定之后调用无效，避免盖掉瞬移。</summary>
+        public void SamplePush(float t01)
         {
+            if (_drive != EyeDrive.Push)
+                return;
             t01 = Mathf.Clamp01(t01);
-            _exitDollyT = t01;
-            Vector3 pos = Vector3.Lerp(_exitDollyFrom, _exitDollyTo, t01);
+            _pushT = t01;
+            Vector3 pos = Vector3.Lerp(_pushFrom, _pushTo, t01);
             SetPose(pos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
         }
 
-        /// <summary>
-        /// Non-low-end exit: small forward walk baked into the dolly path.
-        /// Free cinematic motion — no CharacterController.
-        /// </summary>
-        public void NudgeExitWalk(float dt)
+        /// <summary>推镜途中顺朝向再挪一点。锁定之后调用无效。</summary>
+        public void NudgePush(float dt)
         {
-            if (dt <= 0f)
+            if (_drive != EyeDrive.Push || dt <= 0f)
                 return;
             Vector3 forward = Quaternion.Euler(0f, _yaw, 0f) * Vector3.forward;
-            Vector3 delta = forward * (MoveSpeed * ExitWalkSpeedScale * dt);
-            _exitDollyFrom += delta;
-            _exitDollyTo += delta;
-            Vector3 pos = Vector3.Lerp(_exitDollyFrom, _exitDollyTo, _exitDollyT);
+            Vector3 delta = forward * (MoveSpeed * PushWalkSpeedScale * dt);
+            _pushFrom += delta;
+            _pushTo += delta;
+            Vector3 pos = Vector3.Lerp(_pushFrom, _pushTo, _pushT);
             SetPose(pos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
         }
 
         /// <summary>
-        /// Black-swap teleport: land at a farther framing, then <see cref="SampleEnterDolly"/>
-        /// eases to the preset everyday distance.
+        /// 虹膜揭开结束。已经瞬移锁定的眼睛保持不动，不在这里打开胶囊。
+        /// 若黑场没有瞬移、仍停在推镜，则交回行走。
         /// </summary>
-        public void ApplyPresetForReveal(IslandPresetAsset preset)
+        public void EndPush()
         {
-            if (preset == null)
+            if (_drive != EyeDrive.Push)
                 return;
-            if (preset.PlayerHeight > 0.1f)
-                EyeHeight = preset.PlayerHeight;
-
-            Pitch = 0f;
             _verticalSpeed = 0f;
-            _heightTransitioning = false;
-            _holdPresetFraming = true;
-            _transitionDriven = true;
-            SetBodyCollisionEnabled(false);
-
-            float finalDist = preset.CameraToTargetDis;
-            if (finalDist <= 0f)
-            {
-                ComputePresetPose(preset, finalDist, out Vector3 camPos, out float yaw);
-                _yaw = yaw;
-                _enterDollyActive = false;
-                SetPose(camPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
-                return;
-            }
-
-            float farDist = Mathf.Max(finalDist * RevealFarDistanceScale, RevealFarMinDistance);
-            ComputePresetPose(preset, farDist, out Vector3 farPos, out float farYaw);
-            ComputePresetPose(preset, finalDist, out Vector3 nearPos, out float nearYaw);
-            _yaw = farYaw;
-            _enterDollyFrom = farPos;
-            _enterDollyTo = nearPos;
-            _enterDollyYawFrom = farYaw;
-            _enterDollyYawTo = nearYaw;
-            _enterDollyActive = true;
-
-            SetPose(farPos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
-        }
-
-        public void SampleEnterDolly(float t01)
-        {
-            t01 = Mathf.Clamp01(t01);
-            if (!_enterDollyActive)
-                return;
-            Vector3 pos = Vector3.Lerp(_enterDollyFrom, _enterDollyTo, t01);
-            _yaw = Mathf.LerpAngle(_enterDollyYawFrom, _enterDollyYawTo, t01);
-            SetPose(pos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
-        }
-
-        public void EndTransitionDrive()
-        {
-            if (_enterDollyActive)
-            {
-                _yaw = _enterDollyYawTo;
-                SetPose(_enterDollyTo, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
-                _enterDollyActive = false;
-            }
-
-            _transitionDriven = false;
-            _holdPresetFraming = true;
-            _verticalSpeed = 0f;
-            EnsureBody();
+            DropStaleBody(transform.position);
+            _drive = EyeDrive.Locomotion;
         }
 
         /// <summary>
-        /// 退登 / 二次揭幕：清 iris 驱动与 StayBehind 闩，避免「有声但不能走」。
+        /// 退登 / 二次揭幕：清推镜和锁定，避免「有声但不能走」。
         /// </summary>
         public void ForceUnlockLocomotion()
         {
-            _transitionDriven = false;
-            _enterDollyActive = false;
-            _holdPresetFraming = false;
             _heightTransitioning = false;
             _verticalSpeed = 0f;
-            SetBodyCollisionEnabled(true);
-            EnsureBody();
+            _smoothedMove = Vector2.zero;
+            DropStaleBody(transform.position);
+            _drive = EyeDrive.Locomotion;
         }
 
-        void ComputePresetPose(IslandPresetAsset preset, float cameraToTargetDis, out Vector3 camPos, out float yaw)
+        void ReleaseLockToWalk()
         {
-            Vector3 ground = SampleGround(preset.TargetPos);
-            float yawOffset = Mathf.DeltaAngle(0f, preset.CameraOffset.y);
-
-            // CameraToTargetDis <= 0：眼睛落在 TargetPos 的 XZ。
-            // TargetPos.y > 1 时用该高度（准备入睡），否则 y 是占位，高度 = 地面 + EyeHeight。
-            if (cameraToTargetDis <= 0f)
-            {
-                float eyeY = ground.y + EyeHeight;
-                if (preset.TargetPos.y > 1f)
-                {
-                    eyeY = preset.TargetPos.y;
-                    float stand = eyeY - ground.y;
-                    if (stand > 0.5f && stand < 40f)
-                        EyeHeight = stand;
-                }
-
-                camPos = new Vector3(preset.TargetPos.x, eyeY, preset.TargetPos.z);
-                yaw = preset.TargetRotateY + yawOffset;
-                return;
-            }
-
-            // StayBehind：眼睛在 behind 点贴地 + EyeHeight。behind.y 是注视点半高，
-            // 用目标处地表高度重新采样 behind 的 XZ，避免 behind.y + EyeHeight 把眼睛抬飞。
-            // Unity yaw：forward = (sin(y), 0, cos(y))，behind = lookAt − forward * dist。
-            // 严格按注释：behind = lookAt − (sin·d, 0, cos·d)。旧版写成了 +sin·d，
-            // 落在注视点同一侧而不是正后方，HorizontalYaw 会把 yaw 翻 ~180°（取负）。
-            float halfHeight = Mathf.Max(0.5f, EyeHeight * 0.5f);
-            Vector3 lookAt = ground + Vector3.up * halfHeight;
-            float dist = Mathf.Max(0.05f, cameraToTargetDis);
-            float yawRad = preset.TargetRotateY * Mathf.Deg2Rad;
-            Vector3 forwardXZ = new Vector3(Mathf.Sin(yawRad), 0f, Mathf.Cos(yawRad));
-            Vector3 behind = lookAt - forwardXZ * dist;
-            Vector3 camGround = SampleGround(new Vector3(behind.x, ground.y, behind.z));
-            camPos = new Vector3(behind.x, camGround.y + EyeHeight, behind.z);
-            yaw = HorizontalYaw(camPos, lookAt) + yawOffset;
-        }
-
-        void ReleasePresetFraming()
-        {
-            _holdPresetFraming = false;
+            Vector3 eye = _lockedEye;
             _verticalSpeed = 0f;
+            _smoothedMove = Vector2.zero;
 
-            // Preset 期间可能临时把 EyeHeight 拉高（StayBehind 鸟瞰 / 高位置注视点）。
-            // 走路时还原为 Inspector 默认值，让相机自然回到 FP 眼睛高度。
             if (_defaultEyeHeight > 0f && !Mathf.Approximately(EyeHeight, _defaultEyeHeight))
             {
                 EyeHeight = _defaultEyeHeight;
-                _appliedEyeHeight = -1f; // force EnsureBody to rebuild the capsule
+                _appliedEyeHeight = -1f;
             }
 
-            Vector3 ground = SampleGround(transform.position);
-            EnsureBody();
-            float startY = transform.position.y;
+            DropStaleBody(eye);
+            _drive = EyeDrive.Locomotion;
+
+            Vector3 ground = SampleGround(eye);
+            float startY = eye.y;
             float targetY = ground.y + EyeHeight;
-
             if (HeightTransitionDuration > 0f && Mathf.Abs(startY - targetY) > 0.01f)
-            {
-                // Keep current (preset) Y visible; the height lerp in LateUpdate will drop it.
                 StartHeightTransition(startY, targetY);
-            }
-            else
+        }
+
+        /// <summary>
+        /// 旧胶囊记着禁用前的坐标。拆掉后在当前眼睛上新建，本帧不 Move。
+        /// </summary>
+        void DropStaleBody(Vector3 eye)
+        {
+            if (_cc != null)
             {
-                SetPose(
-                    new Vector3(transform.position.x, targetY, transform.position.z),
-                    Quaternion.Euler(Pitch, _yaw, 0f));
+                _cc.enabled = false;
+                DestroyImmediate(_cc);
+                _cc = null;
             }
+
+            _appliedEyeHeight = -1f;
+            _appliedRadius = -1f;
+            transform.position = eye;
+            Physics.SyncTransforms();
+            EnsureBody();
         }
 
         // ─── Per-frame ─────────────────────────────────────────────────────────────
@@ -432,10 +412,6 @@ namespace Game
         void LateUpdate()
         {
             ApplyAspectFov();
-
-            float dt = Time.deltaTime;
-            if (dt <= 0f)
-                return;
 
             if (_spawnHold)
             {
@@ -452,35 +428,46 @@ namespace Game
                 return;
             }
 
-            if (_transitionDriven)
+            if (_drive == EyeDrive.Push)
             {
-                // Form owns world position during iris exit / enter.
                 IslandLocomotionState.IsWalking = false;
                 transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
                 ApplyRenderScale(false);
                 return;
             }
 
+            if (_drive == EyeDrive.Locked)
+            {
+                IslandLocomotionState.IsWalking = false;
+                transform.SetPositionAndRotation(_lockedEye, Quaternion.Euler(Pitch, _yaw, 0f));
+                if (_cc != null && _cc.enabled)
+                    _cc.enabled = false;
+                ApplyRenderScale(false);
+
+                float lockDt = Time.deltaTime;
+                if (lockDt > 0f)
+                {
+                    ConsumeMoveInput(lockDt);
+                    if (IsWalking)
+                        ReleaseLockToWalk();
+                    else
+                        ApplyStickYaw(lockDt);
+                }
+
+                if (_drive == EyeDrive.Locked)
+                    transform.SetPositionAndRotation(_lockedEye, Quaternion.Euler(Pitch, _yaw, 0f));
+                return;
+            }
+
+            float dt = Time.deltaTime;
+            if (dt <= 0f)
+                return;
+
             ConsumeLookInput();
             ConsumeMoveInput(dt);
 
             bool walking = IsWalking;
             IslandLocomotionState.IsWalking = walking;
-
-            if (_holdPresetFraming)
-            {
-                // StayBehind pose: allow yaw only; walking releases into FP locomotion.
-                if (walking)
-                    ReleasePresetFraming();
-                else
-                {
-                    IslandLocomotionState.IsWalking = false;
-                    ApplyStickYaw(dt);
-                    ApplyRenderScale(false);
-                    transform.rotation = Quaternion.Euler(Pitch, _yaw, 0f);
-                    return;
-                }
-            }
 
             EnsureBody();
             ApplyRenderScale(walking);
@@ -723,9 +710,8 @@ namespace Game
         // ─── Pose / sampling ───────────────────────────────────────────────────────
 
         /// <param name="unconstrained">
-        /// Preset / iris dolly: exact authored eye — skip the water clamp.
-        /// While <see cref="_transitionDriven"/>, CharacterController stays off so PhysX
-        /// cannot shove the capsule mid-animation.
+        /// Push / teleport: exact eye — skip the water clamp.
+        /// While not in locomotion, the capsule stays off so it cannot restore the previous eye.
         /// </param>
         void SetPose(Vector3 pos, Quaternion rot, bool unconstrained = false)
         {
@@ -738,6 +724,7 @@ namespace Game
             if (wasEnabled)
                 _cc.enabled = false;
             transform.SetPositionAndRotation(pos, rot);
+            Physics.SyncTransforms();
             if (_spawnHold)
             {
                 _heldPosition = transform.position;
@@ -747,22 +734,14 @@ namespace Game
                 return;
             }
 
-            if (_transitionDriven)
+            if (_drive != EyeDrive.Locomotion)
                 return;
-            if (wasEnabled)
-                _cc.enabled = true;
-        }
-
-        void SetBodyCollisionEnabled(bool on)
-        {
-            if (!on)
+            if (wasEnabled && _cc != null)
             {
-                if (_cc != null && _cc.enabled)
-                    _cc.enabled = false;
-                return;
+                _cc.enabled = true;
+                transform.SetPositionAndRotation(pos, rot);
+                Physics.SyncTransforms();
             }
-
-            EnsureBody();
         }
 
         /// <summary>海上（脚底落在海平面下的海底）/ 河里：水平位移回滚。</summary>
@@ -806,7 +785,8 @@ namespace Game
             }
 
             // 河：水平近河道且竖直也在河面容差内；已站在桥/码头甲板（明显高于河面）则放行。
-            if (WaterSurfaceProbe.TryNearestRiver(
+            WaterSurfaceProbe probe = GameEntry.World?.WaterProbe;
+            if (probe != null && probe.TryNearestRiver(
                     foot, RiverQueryRadius, out Vector3 nearest, out _))
             {
                 float dx = foot.x - nearest.x;
@@ -887,30 +867,8 @@ namespace Game
         Vector3 SampleGround(Vector3 worldPos)
         {
             // 高度图贴地，不吃树冠/石头。射线先命中树会把切预设的眼睛抬飞。
-            Vector3 snapped = worldPos;
-            if (EnvGroundFit.TrySnapY(ref snapped))
-                return snapped;
-
-            Vector3 origin = worldPos + Vector3.up * TerrainProbeUp;
-            float dist = TerrainProbeUp + TerrainProbeDown;
-            int count = Physics.RaycastNonAlloc(origin, Vector3.down, GroundHits, dist, GroundMask,
-                QueryTriggerInteraction.Ignore);
-            float bestY = float.PositiveInfinity;
-            Vector3 best = worldPos;
-            bool found = false;
-            for (int i = 0; i < count; i++)
-            {
-                // 树干/墙面法线接近水平；只取朝上的表面，避免落在树冠上。
-                if (GroundHits[i].normal.y < GroundNormalMinY)
-                    continue;
-                if (GroundHits[i].point.y >= bestY)
-                    continue;
-                bestY = GroundHits[i].point.y;
-                best = GroundHits[i].point;
-                found = true;
-            }
-
-            return found ? best : worldPos;
+            TryGroundUnder(worldPos, out Vector3 ground);
+            return ground;
         }
 
         // ─── Render-scale / FOV ────────────────────────────────────────────────────
@@ -972,16 +930,5 @@ namespace Game
             cam.fieldOfView = 2f * Mathf.Atan(tanHalfHorizontal / aspect) * Mathf.Rad2Deg;
         }
 
-        // ─── Math helpers ──────────────────────────────────────────────────────────
-
-        /// <summary>水平朝向（度）。Unity yaw：forward = (sin(yaw), 0, cos(yaw))。</summary>
-        static float HorizontalYaw(Vector3 from, Vector3 to)
-        {
-            Vector3 flat = to - from;
-            flat.y = 0f;
-            if (flat.sqrMagnitude < 1e-6f)
-                return 0f;
-            return Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg;
-        }
     }
 }

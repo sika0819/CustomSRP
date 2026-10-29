@@ -2992,7 +2992,13 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
 
     MPNowPlayingInfoCenter *center = [MPNowPlayingInfoCenter defaultCenter];
     center.nowPlayingInfo = info;
-    
+    // iOS 13+ 公开属性。只写 PlaybackRate 时，直播卡片（IsLiveStream）的播放/暂停按钮经常不换图标。
+    if (@available(iOS 13.0, *)) {
+        center.playbackState = self.isMuted
+            ? MPNowPlayingPlaybackStatePaused
+            : MPNowPlayingPlaybackStatePlaying;
+    }
+
     // 与参考实现对齐：不要在这里动态禁用 play/pause。
     // 控制中心/锁屏的主按钮在不同系统版本可能绑定到 pauseCommand / togglePlayPauseCommand，
     // 动态禁用会导致按钮“变灰不可点”。

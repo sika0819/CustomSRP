@@ -65,7 +65,6 @@ namespace WanosAudio
                 return;
             }
             Instance = this;
-            DontDestroyOnLoad(gameObject);
             ArtworkDefault = Path.Combine(
                 Application.streamingAssetsPath, "WanosAudio", "Artwork", "boluo.png");
         }

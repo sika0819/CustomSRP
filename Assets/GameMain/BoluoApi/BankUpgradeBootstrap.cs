@@ -42,6 +42,8 @@ namespace Game.BoluoApi
         static bool _started;
         static int _runId;
         static bool _fatal;
+        static bool _silentDeferred;
+        static bool _mobilePromptLatched;
         static UniTaskCompletionSource _catalogTcs = new UniTaskCompletionSource();
         static UniTaskCompletionSource _criticalTcs = new UniTaskCompletionSource();
 
@@ -52,6 +54,8 @@ namespace Game.BoluoApi
         {
             _started = false;
             _fatal = false;
+            _silentDeferred = false;
+            _mobilePromptLatched = false;
             _catalogTcs = new UniTaskCompletionSource();
             _criticalTcs = new UniTaskCompletionSource();
             AudioEnginePaths.ResetSession();
@@ -64,6 +68,9 @@ namespace Game.BoluoApi
         {
             _started = false;
             _runId++;
+            _silentDeferred = false;
+            _mobilePromptLatched = false;
+            DownloadCellularGate.ResetForNewSession();
         }
 
         public static void Start(bool loadIntoEngine = false)
@@ -307,6 +314,20 @@ namespace Game.BoluoApi
                     Log.Warning("[BankUpgradeBootstrap] deviceToken missing — upgrade/bank may fail");
                 }
 
+#if UNITY_EDITOR
+                // Play Mode 壳占位票（pm_device_tok_keep 等）不是服务端签发的。
+                // 拿去打 upgrade/bank 会得到「deviceToken 鉴权失败」并 Log.Error，测试直接失败。
+                if (Game.Native.EditorNativeHost.UsesLocalShellTickets)
+                {
+                    int local = PresetBankCatalog.SetFromLocalStreaming();
+                    Log.Info(
+                        $"[BankUpgradeBootstrap] local shell tickets — skip upgrade/bank, local banks={local}");
+                    ReleaseCriticalFromLocal(loadIntoEngine);
+                    _catalogTcs.TrySetResult();
+                    return;
+                }
+#endif
+
                 var data = await BankUpgradeClient.RequestUpgradeBank(failFast: true);
                 if (data == null)
                 {
@@ -330,7 +351,7 @@ namespace Game.BoluoApi
                     return;
                 }
 
-                Log.Info($"[BankUpgradeBootstrap] catalog ok banks={data.banks.Count} — Critical then Rest");
+                Log.Info($"[BankUpgradeBootstrap] catalog ok banks={data.banks.Count} — Critical local, Rest silent");
                 MusicCatalog.SetServerData(data.musicLists);
                 if (!MusicCatalog.IsReady)
                     MusicCatalog.LoadAsync();
@@ -338,36 +359,15 @@ namespace Game.BoluoApi
                     EnsureEssentialBanksLoaded();
                 _catalogTcs.TrySetResult();
 
-                var critical = PresetBankCatalog.ResolveRemotes(CriticalBankNames);
-                // 对齐老工程 WanosDownloadManagerStandalone：单路串行，避免 3 路抢带宽把百兆 bank 拖死。
-                BankDownloader.SetStartupParallelSlots(1);
-                await BankDownloader.DownloadBanks(
-                    critical,
-                    loadIntoEngine: loadIntoEngine,
-                    onComplete: null,
-                    onItemDone: null,
-                    onItemProgress: null,
-                    prioritize: true,
-                    preempt: false);
+                // Critical：StreamingAssets 复制/落盘即可，不静默 HTTP。
+                await StreamingBankCatalog.EnsureLoadedAsync();
+                ReleaseCriticalFromLocal(loadIntoEngine);
 
-                _criticalTcs.TrySetResult();
-                Log.Info($"[BankUpgradeBootstrap] Critical wave done loadIntoEngine={loadIntoEngine}");
+                // 与线上版本不一致 → 申请下载弹窗；用户确认后再走门禁链。
+                PromptCriticalUpdateIfNeeded(loadIntoEngine);
 
-                var rest = CollectRestRemotes(CriticalBankNames);
-                if (rest.Count > 0)
-                {
-                    BankDownloader.SetStartupParallelSlots(1);
-                    await BankDownloader.DownloadBanks(
-                        rest,
-                        loadIntoEngine: loadIntoEngine,
-                        onComplete: null,
-                        onItemDone: null,
-                        onItemProgress: null,
-                        prioritize: false,
-                        preempt: false);
-                }
-
-                Log.Info($"[BankUpgradeBootstrap] Rest wave finished count={rest.Count}");
+                // Rest：Wi‑Fi / 已开闸可静默；蜂窝未开闸则巡检叠流量窗。
+                await StartOrDeferRestDownload(loadIntoEngine, runId);
             }
             catch (Exception e)
             {
@@ -377,6 +377,246 @@ namespace Game.BoluoApi
                 _criticalTcs.TrySetResult();
                 _catalogTcs.TrySetResult();
             }
+        }
+
+        /// <summary>
+        /// Critical 与 catalog 不一致时弹申请下载；点「立即下载」后再无网→存储→流量→下。
+        /// 点「返回」保留首包本地 bank，不强制更新。
+        /// </summary>
+        static void PromptCriticalUpdateIfNeeded(bool loadIntoEngine)
+        {
+            List<string> needUpdate = CollectCriticalNeedingUpdate();
+            if (needUpdate.Count == 0)
+            {
+                Log.Info("[BankUpgradeBootstrap] Critical all local/streaming — skip HTTP");
+                return;
+            }
+
+            string size = DownloadNetworkGate.FormatSizeMb(needUpdate);
+            Log.Info(
+                $"[BankUpgradeBootstrap] Critical need update count={needUpdate.Count} size={size}MB — show RequestDownload");
+            UiDialogService.ShowRequestDownload(
+                size,
+                () => OnCriticalUpdateConfirmed(needUpdate, loadIntoEngine),
+                onReturn: null);
+        }
+
+        static void OnCriticalUpdateConfirmed(List<string> bankNames, bool loadIntoEngine)
+        {
+            if (bankNames == null || bankNames.Count == 0)
+                return;
+
+            if (!DownloadNetworkGate.TryPassDownloadGates(
+                    bankNames,
+                    onAllowAfterMobile: () => DownloadCriticalUpdates(bankNames, loadIntoEngine).Forget(),
+                    onWifiOnly: null,
+                    onBlockedRetreat: null))
+                return;
+
+            DownloadCriticalUpdates(bankNames, loadIntoEngine).Forget();
+        }
+
+        static async UniTaskVoid DownloadCriticalUpdates(List<string> bankNames, bool loadIntoEngine)
+        {
+            var remotes = PresetBankCatalog.ResolveRemotes(bankNames);
+            if (remotes.Count == 0)
+                return;
+
+            int ticket = UiDialogService.OpenDownloadProgress();
+            try
+            {
+                BankDownloader.SetStartupParallelSlots(1);
+                await BankDownloader.DownloadBanks(
+                    remotes,
+                    loadIntoEngine: loadIntoEngine,
+                    onComplete: null,
+                    onItemDone: null,
+                    onItemProgress: null,
+                    prioritize: true,
+                    preempt: true);
+                Log.Info($"[BankUpgradeBootstrap] Critical update done count={remotes.Count}");
+            }
+            finally
+            {
+                UiDialogService.CloseDownloadProgress(ticket);
+            }
+        }
+
+        static List<string> CollectCriticalNeedingUpdate()
+        {
+            var names = new List<string>(CriticalBankNames.Length);
+            for (int i = 0; i < CriticalBankNames.Length; i++)
+            {
+                string name = CriticalBankNames[i];
+                if (CriticalNeedsHttpUpdate(name))
+                    names.Add(name);
+            }
+
+            return names;
+        }
+
+        /// <summary>
+        /// Critical 要不要 HTTP：首包版本与线上一致 → 否；首包有版本但不等 → 是；
+        /// 否则看磁盘是否满足 catalog。
+        /// </summary>
+        static bool CriticalNeedsHttpUpdate(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return false;
+            if (!PresetBankCatalog.TryGet(name, out BankRemoteInfo remote) || remote == null)
+                return false;
+            if (string.IsNullOrEmpty(remote.url))
+                return false;
+
+            if (!string.IsNullOrEmpty(remote.version)
+                && StreamingBankCatalog.IsSameVersionAsStreaming(name, remote.version))
+                return false;
+
+            if (!string.IsNullOrEmpty(remote.version)
+                && StreamingBankCatalog.TryGetVersion(name, out string localVer)
+                && !string.IsNullOrEmpty(localVer))
+                return true;
+
+            return !BankDownloader.IsLocalReady(name);
+        }
+
+        static async UniTask StartOrDeferRestDownload(bool loadIntoEngine, int runId)
+        {
+            var rest = CollectRestRemotes(CriticalBankNames);
+            int pending = CountPendingRemotes(rest);
+            if (pending <= 0)
+            {
+                Log.Info("[BankUpgradeBootstrap] Rest wave empty / all local");
+                return;
+            }
+
+            if (!DownloadCellularGate.CanTransmitNow())
+            {
+                Log.Info(
+                    "[BankUpgradeBootstrap] defer silent Rest — " +
+                    $"offline={DownloadCellularGate.IsOffline()} " +
+                    $"needMobilePrompt={DownloadCellularGate.NeedsMobileDataPrompt()} pending={pending}");
+                _silentDeferred = true;
+                RunSilentRestPatrol(loadIntoEngine, runId).Forget();
+                return;
+            }
+
+            await DownloadRest(loadIntoEngine);
+        }
+
+        static async UniTask DownloadRest(bool loadIntoEngine)
+        {
+            var rest = CollectRestRemotes(CriticalBankNames);
+            if (rest.Count == 0)
+                return;
+
+            BankDownloader.SetStartupParallelSlots(1);
+            await BankDownloader.DownloadBanks(
+                rest,
+                loadIntoEngine: loadIntoEngine,
+                onComplete: null,
+                onItemDone: null,
+                onItemProgress: null,
+                prioritize: false,
+                preempt: false);
+            Log.Info($"[BankUpgradeBootstrap] Rest wave finished count={rest.Count}");
+        }
+
+        /// <summary>
+        /// 进岛后：仅 Rest 静默待下。蜂窝未开闸 → 叠流量窗；Wi‑Fi / 已开闸 → 开 Rest。
+        /// Critical 更新只走 <see cref="PromptCriticalUpdateIfNeeded"/>，不进静默队列。
+        /// </summary>
+        static async UniTaskVoid RunSilentRestPatrol(bool loadIntoEngine, int runId)
+        {
+            const int maxPasses = 180;
+            bool storagePrompted = false;
+            for (int i = 0; i < maxPasses; i++)
+            {
+                await UniTask.Delay(1000, DelayType.UnscaledDeltaTime);
+                if (runId != _runId || !_silentDeferred)
+                    return;
+
+                List<string> pending = CollectPendingRestBankNames();
+                if (pending.Count == 0)
+                {
+                    _silentDeferred = false;
+                    Log.Info("[BankUpgradeBootstrap] silent Rest patrol — nothing pending");
+                    return;
+                }
+
+                if (DownloadCellularGate.IsOffline())
+                    continue;
+
+                if (!storagePrompted
+                    && DownloadNetworkGate.TryBlockIfInsufficientStorage(pending))
+                {
+                    storagePrompted = true;
+                    continue;
+                }
+
+                if (DownloadCellularGate.NeedsMobileDataPrompt())
+                {
+                    if (_mobilePromptLatched)
+                        continue;
+                    _mobilePromptLatched = true;
+                    DownloadNetworkGate.TryShowMobileDataPrompt(
+                        pending,
+                        onAllowContinue: () =>
+                        {
+                            _silentDeferred = false;
+                            DownloadRest(loadIntoEngine).Forget();
+                        },
+                        onWifiOnly: () => { _mobilePromptLatched = false; });
+                    continue;
+                }
+
+                if (!DownloadCellularGate.CanTransmitNow())
+                    continue;
+
+                _silentDeferred = false;
+                Log.Info("[BankUpgradeBootstrap] silent Rest patrol — transmit ok");
+                await DownloadRest(loadIntoEngine);
+                return;
+            }
+
+            Log.Warning("[BankUpgradeBootstrap] silent Rest patrol timed out still deferred");
+        }
+
+        static List<string> CollectPendingRestBankNames()
+        {
+            var names = new List<string>(64);
+            var rest = CollectRestRemotes(CriticalBankNames);
+            for (int i = 0; i < rest.Count; i++)
+            {
+                BankRemoteInfo info = rest[i];
+                if (info == null || string.IsNullOrEmpty(info.bankName))
+                    continue;
+                if (string.IsNullOrEmpty(info.url))
+                    continue;
+                if (BankDownloader.IsLocalReady(info.bankName))
+                    continue;
+                names.Add(info.bankName);
+            }
+
+            return names;
+        }
+
+        static int CountPendingRemotes(List<BankRemoteInfo> remotes)
+        {
+            if (remotes == null)
+                return 0;
+            int n = 0;
+            for (int i = 0; i < remotes.Count; i++)
+            {
+                BankRemoteInfo info = remotes[i];
+                if (info == null || string.IsNullOrEmpty(info.bankName) || string.IsNullOrEmpty(info.url))
+                    continue;
+                if (BankDownloader.IsLocalReady(info.bankName))
+                    continue;
+                n++;
+            }
+
+            return n;
         }
 
         static void ReleaseCriticalFromLocal(bool loadIntoEngine)

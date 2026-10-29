@@ -30,6 +30,8 @@ namespace CustomSRP
 
         public static bool IsActive(PostFXStack stack)
         {
+            if (!Game.IslandLeakProbe.Allow(Game.IslandLeakProbe.Module.Warp))
+                return false;
             if (!OilWarpDriver.IsActive)
                 return false;
             PostFXSettings settings = stack != null ? stack.Settings : null;

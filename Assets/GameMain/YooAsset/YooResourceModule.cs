@@ -323,10 +323,14 @@ namespace Game
                 $"[YooAsset] UnloadUnused status={op.Status} destroyedLoaders={op.DestroyedLoaderCount}");
         }
 
-        /// <summary>Load an addressed asset; caller owns the handle (Release when done).</summary>
+        /// <summary>
+        /// Load an addressed asset. Caller owns the handle until Release.
+        /// <paramref name="trackLeave"/> 在 LoadAssetAsync 返回后立刻登记，协程被停掉也能在卸场景成功后放开。
+        /// </summary>
         public static IEnumerator LoadAssetCoroutine<T>(
             string location,
-            System.Action<T, AssetHandle> onDone) where T : UnityEngine.Object
+            System.Action<T, AssetHandle> onDone,
+            bool trackLeave = false) where T : UnityEngine.Object
         {
             LastError = null;
             if (!IsInitialized || DefaultPackage == null)
@@ -346,6 +350,8 @@ namespace Game
 
             Log.Info($"[YooAsset] handle enter loc={location}");
             AssetHandle handle = DefaultPackage.LoadAssetAsync<T>(location);
+            if (trackLeave)
+                GameEntry.TrackLeaveHandle(handle);
             Log.Info($"[YooAsset] handle created loc={location} done={handle.IsDone}");
             // 不要 yield return handle。Handle.Current 是 Provider（也是 IEnumerator），
             // Unity 会嵌套抽干它；Provider 没完成时 MoveNext 一直为 true，主线程不再渲染。
@@ -392,7 +398,8 @@ namespace Game
         /// <summary>Load + InstantiateSync; caller owns the handle until the instance is destroyed.</summary>
         public static IEnumerator InstantiateCoroutine(
             string location,
-            System.Action<GameObject, AssetHandle> onDone)
+            System.Action<GameObject, AssetHandle> onDone,
+            bool trackLeave = false)
         {
             GameObject prefab = null;
             AssetHandle handle = null;
@@ -400,7 +407,7 @@ namespace Game
             {
                 prefab = asset;
                 handle = h;
-            });
+            }, trackLeave);
 
             if (prefab == null)
             {

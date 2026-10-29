@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -8,7 +9,7 @@ namespace Game.Native
     /// 宿主交权进岛门闩：早挂后 ProcedureGuestLogin 停在 LoadingForm，
     /// 等 N→U Push <see cref="MsgType.HostArmIslandEntry"/>（enterHybridGame）再进 ProcedureIsland。
     /// 退登 Push <see cref="MsgType.HostLeaveIsland"/> 复位门闩并退回 GuestLogin，否则二次登录无法再交权。
-    /// Editor / 非 Hybrid 不挡，避免 Play Mode 卡死。
+    /// Editor 由 <see cref="EditorNativeHost"/> 应答握手，因此同样要等 106，避免 Play Mode 绕过宿主时序。
     /// </summary>
     public static class HostIslandEntryGate
     {
@@ -35,20 +36,22 @@ namespace Game.Native
 
         public static bool ShouldWaitForHost()
         {
-#if UNITY_EDITOR
-            return false;
-#else
             return NativeSession.IsHybridAvailable();
-#endif
         }
 
         public static void Arm()
         {
+            // 本轮已经接到 106。宿主重发不得再进岛，等 107 拆闩。
             if (Interlocked.Exchange(ref _armed, 1) != 0)
+            {
+                Log.Info("[IMP] HostArmIslandEntry ignored — already armed");
+                IslandEntryLog.Skip("gate", "alreadyArmed", "gen=" + Generation);
                 return;
+            }
 
             Interlocked.Increment(ref _generation);
             Log.Info($"[IMP] HostIslandEntryGate armed gen={Generation}");
+            IslandEntryLog.Ok("gate", "armed", "gen=" + Generation);
         }
 
         public static void Reset()
@@ -70,14 +73,33 @@ namespace Game.Native
             Reset();
             NativeMessages.ResetIslandReadyFlag();
             NativeOverlayGate.Apply(present: 0, touchEnabled: 1, bottomHidden: 0);
-            if (leaveReason == MsgType.HostLeaveReasonAccountDeleted)
-                Game.BoluoLogout.ExecuteAccountDeleted();
-            else
-                Game.BoluoLogout.ExecuteLeave();
-            Game.BoluoApi.BankUpgradeBootstrap.InvalidateAfterLeave();
+            // 清会话会抛。先记下退回，下一帧 ProcedureIsland 才能 BeginLeave。
+            // 抛在请求之后被吃掉，也不能把流程留在岛上。
             Game.ProcedureIsland.RequestReturnToGuestLogin();
+            // Leave 刚拆掉门闩。人已经在 GuestLogin 时立刻回报 a=0，宿主才会重发 106。
+            if (Game.ProcedureGuestLogin.IsCurrent)
+                NativeMessages.ReturnedToGuestLogin(0);
+            try
+            {
+#if UNITY_EDITOR
+                EditorNativeHost.RevokeUserTicket();
+#endif
+                if (leaveReason == MsgType.HostLeaveReasonAccountDeleted)
+                    Game.BoluoLogout.ExecuteAccountDeleted();
+                else
+                    Game.BoluoLogout.ExecuteLeave();
+                Game.BoluoApi.BankUpgradeBootstrap.InvalidateAfterLeave();
+            }
+            catch (Exception e)
+            {
+                Log.Error("[IMP] HostLeaveIsland cleanup failed: " + e);
+                string err = e.Message ?? "throw";
+                IslandEntryLog.Fail("gate", "leaveCleanup", "err=" + err.Replace(' ', '_').Replace('\n', '_'));
+            }
+
             Log.Info(
                 $"[IMP] HostLeaveIsland reason={leaveReason} gen={Generation} — gates reset, return to GuestLogin requested");
+            IslandEntryLog.Ok("gate", "leave", "leaveReason=" + leaveReason + " gen=" + Generation);
         }
     }
 }

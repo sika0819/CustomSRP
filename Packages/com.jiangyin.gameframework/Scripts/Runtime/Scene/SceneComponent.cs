@@ -1,4 +1,4 @@
-﻿//------------------------------------------------------------
+//------------------------------------------------------------
 // Game Framework
 // Copyright © 2013-2021 Jiang Yin. All rights reserved.
 // Homepage: https://gameframework.cn/
@@ -109,6 +109,20 @@ namespace UnityGameFramework.Runtime
             {
                 m_SceneManager.SetResourceManager(GameFrameworkEntry.GetModule<IResourceManager>());
             }
+        }
+
+        /// <summary>
+        /// 设置场景管理器的资源管理器。真机把 Yoo 资源管理器接进来，编辑器仍用 EditorResourceHelper。
+        /// </summary>
+        public void SetResourceManager(IResourceManager resourceManager)
+        {
+            if (resourceManager == null)
+            {
+                Log.Error("Resource manager is invalid.");
+                return;
+            }
+
+            m_SceneManager.SetResourceManager(resourceManager);
         }
 
         /// <summary>

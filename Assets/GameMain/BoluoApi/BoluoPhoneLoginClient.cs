@@ -209,7 +209,7 @@ namespace Game.BoluoApi
             string userId = resp.data.userId ?? "";
             if (!string.IsNullOrEmpty(token))
             {
-                GuestSession.ApplyUserSession(token, userId, isGuest: false);
+                GuestSession.ApplyUserSession(token, userId, isGuest: false, saveLocal: true);
                 AccountPasswordLoginThrottle.ClearAll();
                 Log.Info(
                     $"[PhoneLogin] loginAndStopCancel ok (new token) userId={userId} " +
@@ -278,7 +278,7 @@ namespace Game.BoluoApi
             bool isCancel = ParseIsCancel(resp.data.isCancel);
             string cancelMsg = resp.data.cancelMsg ?? "";
 
-            GuestSession.ApplyUserSession(token, userId, isGuest: false);
+            GuestSession.ApplyUserSession(token, userId, isGuest: false, saveLocal: true);
             AccountPasswordLoginThrottle.ClearAll();
             Log.Info(
                 $"[PhoneLogin] {tag} ok userId={userId} tokenLen={token.Length} " +

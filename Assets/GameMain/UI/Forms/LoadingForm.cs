@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEngine.Video;
@@ -21,6 +22,7 @@ namespace Game
         RenderTexture _texture;
         bool _landscape;
         float _coverAlpha = 1f;
+        bool _dismissing;
 
         public float CoverAlpha => _coverAlpha;
 
@@ -34,7 +36,29 @@ namespace Game
 
         public override void OnOpen(object userData)
         {
+            // 揭罩之后才送达的 Open：不要先把 Document 打开，否则会整页闪回加载罩。
+            if (!BootLoadingService.AcceptOpen)
+            {
+                _dismissing = true;
+                base.OnOpen(userData);
+                Debug.LogWarning("[LoadingForm] stale open after cover dismissed");
+                RejectStaleOpen();
+                return;
+            }
+
+            _dismissing = false;
+            // ForceVeilOff 会关掉 Document。框架再次打开只 SetActive，不会把 enabled 设回来。
+            // 必须在 base.OnOpen 读 rootVisualElement 之前启用，否则 Root 为空，Bind 不会跑。
+            if (!gameObject.activeSelf)
+                gameObject.SetActive(true);
+            UIDocument document = GetComponent<UIDocument>();
+            if (document != null && !document.enabled)
+                document.enabled = true;
+
             base.OnOpen(userData);
+            if (Root == null)
+                return;
+
             for (int i = 0; i < HiddenPages.Length; i++)
             {
                 VisualElement page = Root.Q(HiddenPages[i]);
@@ -55,17 +79,9 @@ namespace Game
                     layer.style.display = DisplayStyle.None;
             }
 
-            _coverRoot = Root.Q("root") ?? Root;
-            _still = Root.Q("campfireStill");
-            _video = Root.Q("campfireVideo");
-            if (_still != null)
-                _still.pickingMode = PickingMode.Ignore;
-            if (_video != null)
-            {
-                _video.pickingMode = PickingMode.Ignore;
-                // Before player/RT setup: empty video layer must not paint black over still.
-                HideVideoLayer();
-            }
+            RebindChrome(Root);
+            // Before player/RT setup: empty video layer must not paint black over still.
+            HideVideoLayer();
 
             // Apply still as early as possible so first UITK paint is orientation 底图.
             ApplyStillForCurrentOrientation();
@@ -77,19 +93,16 @@ namespace Game
                 loading.BringToFront();
             }
 
-            _fill = Root.Q("fill");
-            if (_fill != null)
-            {
-                _fill.style.transformOrigin = new TransformOrigin(Length.Percent(0), Length.Percent(50));
-                _fill.style.width = Length.Percent(100);
-            }
-
-            _progressLabel = Root.Q<Label>("labelprogress");
-            _titleLabel = Root.Q<Label>("labeltitle");
             if (_titleLabel != null)
             {
                 _titleLabel.style.display = DisplayStyle.Flex;
                 _titleLabel.style.color = Color.white;
+            }
+
+            if (_coverRoot != null)
+            {
+                _coverRoot.style.display = DisplayStyle.Flex;
+                _coverRoot.pickingMode = PickingMode.Position;
             }
 
             SetCoverAlpha(1f);
@@ -136,10 +149,19 @@ namespace Game
         }
 
         /// <summary>
+        /// 淡出开始后禁止再把静帧 / 视频铺回来。视频首帧若赶在揭罩时到达，会把加载页再画一帧。
+        /// </summary>
+        public void BeginDismiss()
+        {
+            _dismissing = true;
+        }
+
+        /// <summary>
         /// Boluo PrepareBlackFade: drop still/video/bar so the last second is a black veil, not a washed island.
         /// </summary>
         public void PrepareBlackFade()
         {
+            _dismissing = true;
             if (_still != null)
                 _still.style.display = DisplayStyle.None;
             if (_video != null)
@@ -164,11 +186,83 @@ namespace Game
         }
 
         /// <summary>
-        /// 退登重登：UIManager Close 后 UITK 偶发仍挡全屏黑罩。进岛前强制拆视觉。
+        /// Hide 之后才进 OnOpen 的实例：立刻拆视觉，下一帧再 Close，避免在 OnOpen 里重入关界面。
         /// </summary>
+        public void RejectStaleOpen()
+        {
+            _dismissing = true;
+            ForceVeilOff();
+            int serial = UIForm != null ? UIForm.SerialId : 0;
+            MonoBehaviour host = GameEntry.Base;
+            if (serial == 0 || host == null || !host.isActiveAndEnabled)
+            {
+                if (serial != 0 && GameEntry.UI != null)
+                    GameEntry.UI.CloseUIForm(serial);
+                return;
+            }
+
+            host.StartCoroutine(CloseRejectedNextFrame(serial));
+        }
+
+        IEnumerator CloseRejectedNextFrame(int serial)
+        {
+            yield return null;
+            if (this == null || !_dismissing)
+                yield break;
+            if (GameEntry.UI != null)
+                GameEntry.UI.CloseUIForm(serial);
+        }
+
+        public override void OnDepthChanged(int uiGroupDepth, int depthInUIGroup)
+        {
+            // 关闭过程里改 sortingOrder 会把已经摘掉的视觉树再挂回面板，罩就撤不掉。
+            if (_dismissing)
+                return;
+            base.OnDepthChanged(uiGroupDepth, depthInUIGroup);
+        }
+
         public void ForceVeilOff()
         {
+            _dismissing = true;
             _coverAlpha = 0f;
+            ReleaseVideoNow();
+            ConcealTree();
+        }
+
+        /// <summary>退登卸 GPU 前调用。硬解和目标 RT 不能留到下一趟进岛。</summary>
+        public void ReleasePlaybackForLeave() => ReleaseVideoNow();
+
+        /// <summary>
+        /// Stop 不够：Android 硬解和目标 RT 会留到 OnClose。罩不关界面时解码器就叠到下一趟进岛上。
+        /// </summary>
+        void ReleaseVideoNow()
+        {
+            if (_player != null)
+            {
+                _player.Stop();
+                _player.clip = null;
+                _player.targetTexture = null;
+            }
+
+            if (_texture != null)
+            {
+                _texture.Release();
+                Destroy(_texture);
+                _texture = null;
+            }
+
+            if (_video != null)
+                _video.style.backgroundImage = new StyleBackground(StyleKeyword.None);
+        }
+
+        public void DisarmDocument()
+        {
+            _dismissing = true;
+            DisableDocumentNow();
+        }
+
+        void ConcealTree()
+        {
             if (_coverRoot != null)
             {
                 _coverRoot.style.opacity = 0f;
@@ -179,22 +273,35 @@ namespace Game
             if (Root != null)
             {
                 Root.style.display = DisplayStyle.None;
+                Root.style.opacity = 0f;
                 Root.pickingMode = PickingMode.Ignore;
             }
 
             UIDocument document = GetComponent<UIDocument>();
-            if (document != null)
+            VisualElement panelRoot = document != null ? document.rootVisualElement : null;
+            if (panelRoot != null)
             {
-                if (document.rootVisualElement != null)
-                {
-                    document.rootVisualElement.style.display = DisplayStyle.None;
-                    document.rootVisualElement.pickingMode = PickingMode.Ignore;
-                }
+                panelRoot.style.display = DisplayStyle.None;
+                panelRoot.style.opacity = 0f;
+                panelRoot.pickingMode = PickingMode.Ignore;
+            }
+        }
 
-                document.enabled = false;
+        void DisableDocumentNow()
+        {
+            UIDocument document = GetComponent<UIDocument>();
+            if (document == null)
+                return;
+
+            VisualElement panelRoot = document.rootVisualElement;
+            if (panelRoot != null)
+            {
+                panelRoot.style.display = DisplayStyle.None;
+                panelRoot.style.opacity = 0f;
+                panelRoot.RemoveFromHierarchy();
             }
 
-            gameObject.SetActive(false);
+            document.enabled = false;
         }
 
         /// <summary>
@@ -202,23 +309,25 @@ namespace Game
         /// </summary>
         public void RestoreCover()
         {
+            _dismissing = false;
             gameObject.SetActive(true);
             UIDocument document = GetComponent<UIDocument>();
+            VisualElement tree = null;
             if (document != null)
             {
                 document.enabled = true;
-                if (document.rootVisualElement != null)
+                tree = document.rootVisualElement;
+                if (tree != null)
                 {
-                    document.rootVisualElement.style.display = DisplayStyle.Flex;
-                    document.rootVisualElement.pickingMode = PickingMode.Position;
+                    tree.style.display = DisplayStyle.Flex;
+                    tree.pickingMode = PickingMode.Position;
                 }
             }
 
-            if (Root != null)
-            {
-                Root.style.display = DisplayStyle.Flex;
-                Root.pickingMode = PickingMode.Position;
-            }
+            // 启用 Document 会换一棵树。按新树重新取出节点，不要改已经脱离面板的旧引用。
+            if (tree != null)
+                BindRoot(tree);
+            RebindChrome(tree ?? Root);
 
             if (_coverRoot != null)
             {
@@ -231,7 +340,7 @@ namespace Game
                 _still.style.display = DisplayStyle.Flex;
             // Do not show video until Prepare/first frame — black RT would flash over still.
             HideVideoLayer();
-            VisualElement loading = Root != null ? Root.Q("uiloading") : null;
+            VisualElement loading = tree != null ? tree.Q("uiloading") : null;
             if (loading != null)
             {
                 loading.style.display = DisplayStyle.Flex;
@@ -243,6 +352,30 @@ namespace Game
 
             SetCoverAlpha(1f);
             ApplyOrientation();
+        }
+
+        void RebindChrome(VisualElement tree)
+        {
+            if (tree == null)
+                return;
+
+            _coverRoot = tree.Q("root") ?? tree;
+            _still = tree.Q("campfireStill");
+            _video = tree.Q("campfireVideo");
+            if (_still != null)
+                _still.pickingMode = PickingMode.Ignore;
+            if (_video != null)
+                _video.pickingMode = PickingMode.Ignore;
+
+            _fill = tree.Q("fill");
+            if (_fill != null)
+            {
+                _fill.style.transformOrigin = new TransformOrigin(Length.Percent(0), Length.Percent(50));
+                _fill.style.width = Length.Percent(100);
+            }
+
+            _progressLabel = tree.Q<Label>("labelprogress");
+            _titleLabel = tree.Q<Label>("labeltitle");
         }
 
         public override void OnClose(bool isShutdown, object userData)
@@ -269,6 +402,8 @@ namespace Game
 
         void ApplyStillForCurrentOrientation()
         {
+            if (_dismissing)
+                return;
             bool landscape = ScreenLayout.IsLandscapeForAssets;
             if (_still == null)
                 return;
@@ -280,6 +415,8 @@ namespace Game
 
         void ApplyOrientation()
         {
+            if (_dismissing)
+                return;
             bool landscape = ScreenLayout.IsLandscapeForAssets;
             // Still first: host tear-splash / first UITK frame must show 横竖屏底图, not black RT.
             ApplyStillForCurrentOrientation();
@@ -360,7 +497,7 @@ namespace Game
 
         void ShowVideoLayer()
         {
-            if (_video == null)
+            if (_dismissing || _video == null)
                 return;
             if (_texture != null)
                 _video.style.backgroundImage = Background.FromRenderTexture(_texture);

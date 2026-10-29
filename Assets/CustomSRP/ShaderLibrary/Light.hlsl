@@ -74,7 +74,7 @@ OtherShadowData GetOtherShadowData(float4 lightShadowData)
     return data;
 }
 
-Light GetOtherLight(int index, Surface surfaceWS, ShadowData shadowData)
+Light GetOtherLight(int index, Surface surfaceWS)
 {
     OtherLightData data = _OtherLightData[index];
     Light light;
@@ -90,14 +90,9 @@ Light GetOtherLight(int index, Surface surfaceWS, ShadowData shadowData)
     float spotAttenuation = Square(
         saturate(dot(spotDirection, light.direction) *
             data.spotAngle.x + data.spotAngle.y));
-    OtherShadowData otherShadowData = GetOtherShadowData(data.shadowData);
-    otherShadowData.lightPositionWS = position;
-    otherShadowData.lightDirectionWS = light.direction;
-    otherShadowData.spotDirectionWS = spotDirection;
-    otherShadowData.strength *= shadowData.strength;
-    light.attenuation =
-        GetOtherShadowAttenuation(otherShadowData, shadowData, surfaceWS) *
-        spotAttenuation * rangeAttenuation / distanceSqr;
+    // Point/Spot never cast. OtherShadows.ReserveShadows uploads strength 0,
+    // and this path must not sample _OtherShadowAtlas either.
+    light.attenuation = spotAttenuation * rangeAttenuation / distanceSqr;
     return light;
 }
 

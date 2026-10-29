@@ -33,7 +33,6 @@ namespace Game.Native
 #if UNITY_IOS && !UNITY_EDITOR
         const string Lib = "__Internal";
 #elif UNITY_ANDROID && !UNITY_EDITOR
-        // Separate from BBP libboluobridge.so
         const string Lib = "boluoimp";
 #endif
 
@@ -82,7 +81,10 @@ namespace Game.Native
             Interlocked.Increment(ref _queued);
             // iOS 主线程就是 Unity 主线程，可以当场 Drain。
             // Android 热更（HybridCLR）仍等 BoluoNativeBridge.Update。
-#if !UNITY_ANDROID || UNITY_EDITOR
+            // Editor 对齐 Android：只入队，避免同栈 Drain 把时序问题藏掉。
+#if UNITY_IOS && !UNITY_EDITOR
+            Drain();
+#elif !UNITY_ANDROID && !UNITY_EDITOR
             Drain();
 #endif
         }
@@ -90,6 +92,10 @@ namespace Game.Native
         /// <summary>Editor / 单测：模拟原生 Push。</summary>
         public static void SimulatePush(int type, int a = 0, int b = 0, int c = 0)
         {
+#if UNITY_EDITOR
+            if (type == MsgType.HostLeaveIsland)
+                EditorNativeHost.NoteLeaveQueued();
+#endif
             OnNativePush(type, a, b, c);
         }
 

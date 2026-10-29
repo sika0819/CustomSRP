@@ -69,6 +69,7 @@ namespace Game.Native
             NativeTimerService.Reset();
 #if UNITY_EDITOR
             NativeOverlayGate.ResetForEditor();
+            EditorNativeHost.ResetRuntime();
 #endif
         }
 
@@ -106,14 +107,18 @@ namespace Game.Native
         static void OnWorldReady(object sender, GameFramework.Event.GameEventArgs e)
         {
             if (!Game.ProcedureIsland.AcceptsIslandReadyNotify)
+            {
+                IslandEntryLog.Skip("islandReady", Game.ProcedureIsland.IslandReadyBlockReason);
                 return;
+            }
+
             NotifyIslandReady();
         }
 
         static void PublishOverlay()
         {
             CaptureOverlay();
-            Game.HudBottomIcons.SyncNativeHidden(BottomIconsHidden);
+            Game.IslandMainForm.Current?.SyncNativeHidden(BottomIconsHidden);
             if (Game.GameEntry.Event == null)
                 return;
             Game.GameEntry.Event.Fire(null, NativeOverlayEventArgs.Create(

@@ -9,8 +9,8 @@ using UnityGameFramework.Runtime;
 namespace Game.Editor
 {
     /// <summary>
-    /// Play entry = Launch only. Runtime loads IslandTerrain + IslandOcean + InlandWater via YooAsset
-    /// (AssetRaw/Island + AssetRaw/Ocean; no Resources, no LoadScene).
+    /// Play entry = Launch only. Island.unity is additive via GameFramework Scene.
+    /// Terrain / ocean / inland water still instantiate from YooAsset into that scene.
     /// </summary>
     public static class IslandSceneWiring
     {
@@ -64,6 +64,8 @@ namespace Game.Editor
 
         public static void SetLaunchOnlyBuildSettings()
         {
+            // Island 走 YooAsset 附加加载。放进 Build Settings 后 Unity 拒绝把它打进 AssetBundle，
+            // 真机 CheckLocationValid 会报 location missing，登录后停在进岛。
             EditorBuildSettings.scenes = new[]
             {
                 new EditorBuildSettingsScene(LaunchScene, true),

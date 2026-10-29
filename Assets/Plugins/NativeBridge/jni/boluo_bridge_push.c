@@ -1,6 +1,6 @@
 /*
  * IMP push + iOS host Notify/Query/Sign forwarder.
- * Android: libboluoimp.so (avoid clashing with BBP libboluobridge.so)
+ * Android: libboluoimp.so
  * iOS: compiled into UnityFramework (__Internal)
  */
 #include <stdint.h>

@@ -88,8 +88,8 @@ namespace Game
         public static float RockRampLandmarkHideDistance = 280f;
 
         /// <summary>
-        /// Android Native DrawMeshInstanced。编辑器默认关；真机移动档在
-        /// <see cref="ApplyMobileTierDefaults"/> 里打开。
+        /// 手机 Native DrawMeshInstanced（Android / iOS）。编辑器默认关；
+        /// 真机仅中档和高档在 <see cref="ApplyMobileTierDefaults"/> 里打开，低档关。
         /// 树/石/桥走 <see cref="ShouldForceSkipNativeInstancing"/>（多 MR/多材质）；
         /// 合批只接单 MeshRenderer + 单材质。剥掉 OilNPR INSTANCING_ON 也会整片不可见。
         /// </summary>
@@ -550,6 +550,17 @@ namespace Game
             SmallVegShowDistance = 24f;
             ClutterHideDistance = 40f;
             ClutterShowDistance = 32f;
+
+            // 低档再收一档灌木 / 花 / 杂物。合批关掉后这些走 MeshRenderer，少铺一点省片元。
+            if (IslandGraphicsTier.GpuTier == IslandGraphicsTier.Tier.Low)
+            {
+                GuanmuHideDistance = 60f;
+                GuanmuShowDistance = 48f;
+                SmallVegHideDistance = 20f;
+                SmallVegShowDistance = 16f;
+                ClutterHideDistance = 28f;
+                ClutterShowDistance = 22f;
+            }
             // 栏杆/稻草人：真机勿跟普通 clutter 32m；盖住农场簇与中距观景点。
             StructuralClutterHideDistance = 120f;
             StructuralClutterShowDistance = 100f;
@@ -563,7 +574,7 @@ namespace Game
             Ring1EnterRadius = Mathf.Max(Ring1EnterRadius, TreeRing1EnterRadius);
             Ring1ExitRadius = Mathf.Max(Ring1ExitRadius, TreeRing1ExitRadius);
 
-            NativeInstancingEnabled = true;
+            NativeInstancingEnabled = IslandGraphicsTier.AllowsNativeInstancing;
             NativeInstancingMaxDist = Mathf.Max(180f, TreeBillboardKeepRadius);
             SpawnPerFrameBudget = 8;
             DespawnPerFrameBudget = 8;

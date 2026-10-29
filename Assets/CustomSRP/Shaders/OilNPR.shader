@@ -27,7 +27,7 @@ Shader "CustomSRP/OilNPR"
         // Billboard only: keep _OilFoliage on, but disable the foliage path around noon
         // (period≈1). Near leaves leave this off so they stay foliage all day.
         [Toggle] _OilFoliageSkipDay ("Foliage Off At Noon", Float) = 0
-        // Runtime-only (EnvTreeBillboardUtil); not authored on shared mats.
+        // Runtime-only (EnvTreeBillboardService); not authored on shared mats.
         [HideInInspector] [Toggle] _OilCrossBillboard ("Tree Cross Billboard", Float) = 0
         [HideInInspector] [Toggle] _OilYBillboard ("Tree Y Billboard", Float) = 0
         [NoScaleOffset] _BumpMap ("Billboard Baked Normal (RGB)", 2D) = "bump" {}

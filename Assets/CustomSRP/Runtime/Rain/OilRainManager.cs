@@ -17,16 +17,20 @@ namespace CustomSRP
 
         void OnEnable()
         {
+            if (!Game.IslandLeakProbe.Allow(Game.IslandLeakProbe.Module.Rain))
+            {
+                enabled = false;
+                return;
+            }
+
             if (_autoFindInScene)
             {
                 if (_settings == null)
                     _settings = OilRainSettings.Current;
                 if (_rippleManager == null)
-                    _rippleManager = GetComponent<OilRainRippleManager>()
-                        ?? FindAnyObjectByType<OilRainRippleManager>();
+                    _rippleManager = GetComponent<OilRainRippleManager>();
                 if (_renderHook == null)
-                    _renderHook = GetComponent<OilRainRenderHook>()
-                        ?? FindAnyObjectByType<OilRainRenderHook>();
+                    _renderHook = GetComponent<OilRainRenderHook>();
                 if (_streakQuad == null)
                     _streakQuad = GetComponent<OilRainStreakQuad>();
             }

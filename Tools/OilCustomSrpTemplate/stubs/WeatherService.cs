@@ -22,7 +22,6 @@ namespace Game
                 return existing;
 
             var go = new GameObject("WeatherService");
-            Object.DontDestroyOnLoad(go);
             return go.AddComponent<WeatherService>();
         }
 

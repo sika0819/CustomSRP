@@ -165,6 +165,7 @@ namespace Game.Editor
             AddGroup(package, "Audios", "Assets/AssetRaw/Audios", nameof(AddressByFileName), nameof(PackDirectory), nameof(CollectAll));
             AddGroup(package, "UIRaw", "Assets/AssetRaw/UI", nameof(AddressByFileName), nameof(PackSeparately), nameof(CollectAll));
             AddGroup(package, "Scenes", "Assets/AssetRaw/Scenes", nameof(AddressByFileName), nameof(PackDirectory), nameof(CollectScene));
+            AddGroup(package, "GameMainScenes", "Assets/GameMain/Scenes/Island.unity", nameof(AddressByFileName), nameof(PackDirectory), nameof(CollectScene));
             // Address = file name (IslandTerrain / IslandOcean) for YooAsset LoadAssetAsync.
             AddGroup(package, "Island", "Assets/AssetRaw/Island", nameof(AddressByFileName), nameof(PackDirectory), nameof(CollectAll));
             AddGroup(package, "Ocean", "Assets/AssetRaw/Ocean", nameof(AddressByFileName), nameof(PackDirectory), nameof(CollectAll));

@@ -67,21 +67,45 @@ namespace CustomSRP
 
         void OnEnable()
         {
-            if (_settings == null) _settings = OilRainSettings.Current ?? FindAnyObjectByType<OilRainSettings>();
+            if (!Game.IslandLeakProbe.Allow(Game.IslandLeakProbe.Module.Rain))
+            {
+                enabled = false;
+                return;
+            }
+
+            if (_settings == null) _settings = OilRainSettings.Current;
             if (_targetCamera == null) _targetCamera = Camera.main;
             _followTarget = transform.position;
             EnsureResources();
             PushRippleGlobals();
         }
 
+        /// <summary>退登清掉全局雨水贴图，并拆掉运行时生成的 atlas / quad / 材质。</summary>
+        public static void ReleaseSession()
+        {
+            Shader.SetGlobalTexture(kRippleAtlasId, null);
+            Shader.SetGlobalTexture(kSplashAtlasId, null);
+            Shader.SetGlobalFloat(kRippleEnabledId, 0f);
+            OilRainFlipbookDriver[] drivers = FindObjectsByType<OilRainFlipbookDriver>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < drivers.Length; i++)
+                drivers[i].ReleaseOwned();
+        }
+
         void OnDisable()
         {
+            Shader.SetGlobalTexture(kRippleAtlasId, null);
+            Shader.SetGlobalTexture(kSplashAtlasId, null);
             Shader.SetGlobalFloat(kRippleEnabledId, 0f);
             ReleaseGenerated();
         }
 
         void LateUpdate()
         {
+            if (!Game.IslandLeakProbe.Allow(Game.IslandLeakProbe.Module.Rain))
+                return;
+            if (Game.IslandGpuReclaim.CoverOnly)
+                return;
             if (_settings == null) return;
             if (_targetCamera == null) _targetCamera = Camera.main;
 
@@ -317,6 +341,18 @@ namespace CustomSRP
                 Mathf.Max(1, _settings.splashFlipbookRows),
                 Mathf.Max(1, _settings.splashFlipbookFrames));
             return _generatedSplash;
+        }
+
+        void ReleaseOwned()
+        {
+            ReleaseGenerated();
+            if (_quad != null)
+                DestroyImmediate(_quad);
+            _quad = null;
+            if (_splashMaterial != null)
+                DestroyImmediate(_splashMaterial);
+            _splashMaterial = null;
+            _mpb = null;
         }
 
         void ReleaseGenerated()

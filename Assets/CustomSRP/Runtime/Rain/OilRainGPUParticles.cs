@@ -17,7 +17,7 @@ namespace CustomSRP
 
         void OnEnable()
         {
-            if (_settings == null) _settings = OilRainSettings.Current ?? FindAnyObjectByType<OilRainSettings>();
+            if (_settings == null) _settings = OilRainSettings.Current;
         }
     }
 }

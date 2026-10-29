@@ -1,10 +1,9 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
-    <Style src="../../GameFormShared.uss" />
-    <Style src="NoNetworkForm.uss" />
-    <ui:Template name="CommonDialog" src="../../Components/CommonDialog.uxml" />
+    <Style src="../GameFormShared.uss" />
+    <ui:Template name="NoticeCard" src="../../Components/NoticeCard.uxml" />
     <ui:VisualElement name="root" class="game-form-backdrop">
         <ui:VisualElement name="stage" class="game-form-stage">
-            <ui:Instance template="CommonDialog" name="dialog" />
+            <ui:Instance template="NoticeCard" name="dialog" style="position: absolute; left: 96px; top: 1233px; width: 933px; height: 1083px;" />
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

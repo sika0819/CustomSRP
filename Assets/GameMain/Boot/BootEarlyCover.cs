@@ -81,14 +81,27 @@ namespace Game
         {
             _tipText = string.IsNullOrEmpty(tip) ? _tipText : tip;
             _progress = Mathf.Clamp01(progress);
-            CacheElements();
-            if (_root != null)
-                _root.style.display = DisplayStyle.Flex;
+            if (_document == null)
+                _document = GetComponent<UIDocument>();
             if (_document != null)
             {
                 _document.sortingOrder = SortingOrder;
                 if (!_document.enabled)
                     _document.enabled = true;
+            }
+
+            CacheElements();
+            if (_root != null)
+            {
+                _root.style.display = DisplayStyle.Flex;
+                _root.style.opacity = 1f;
+            }
+
+            VisualElement panelRoot = _document != null ? _document.rootVisualElement : null;
+            if (panelRoot != null && panelRoot != _root)
+            {
+                panelRoot.style.display = DisplayStyle.Flex;
+                panelRoot.style.opacity = 1f;
             }
 
             ApplyStillForOrientation();
@@ -118,10 +131,34 @@ namespace Game
         public void Hide()
         {
             _showing = false;
+            if (_document == null)
+                _document = GetComponent<UIDocument>();
+            CacheElements();
             if (_root != null)
+            {
                 _root.style.display = DisplayStyle.None;
+                _root.style.opacity = 0f;
+            }
+
+            if (_document == null)
+                return;
+
+            VisualElement panelRoot = _document.rootVisualElement;
+            if (panelRoot != null)
+            {
+                panelRoot.style.display = DisplayStyle.None;
+                panelRoot.style.opacity = 0f;
+                panelRoot.pickingMode = PickingMode.Ignore;
+            }
+        }
+
+        public void Disarm()
+        {
+            _showing = false;
+            if (_document == null)
+                _document = GetComponent<UIDocument>();
             if (_document != null)
-                _document.sortingOrder = -1;
+                _document.enabled = false;
         }
 
         public static void HideIfAny()

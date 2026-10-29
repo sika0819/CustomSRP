@@ -30,6 +30,10 @@ namespace Game
         Vector2 _origin;
         Vector2 _offset;
         int _pointerId = -1;
+        // Press on empty space is armed but invisible until it leaves the dead zone.
+        // Showing the knob on PointerDown made the first HUD tap flash and miss.
+        int _armPointerId = -1;
+        Vector2 _armOriginPanel;
         float _ringSize = RingDesign;
         float _knobSize = KnobDesign;
         float _deadZone = DeadZoneDesign;
@@ -56,6 +60,7 @@ namespace Game
                 _hit.UnregisterCallback<PointerMoveEvent>(OnMove);
                 _hit.UnregisterCallback<PointerUpEvent>(OnUp);
                 _hit.UnregisterCallback<PointerCancelEvent>(OnCancel);
+                _hit.UnregisterCallback<PointerCaptureOutEvent>(OnCaptureOut);
             }
 
             _paint?.RemoveFromHierarchy();
@@ -106,8 +111,13 @@ namespace Game
 
         public void TickFrame(bool allowBegin)
         {
-            if (!allowBegin && _active)
-                ForceEnd();
+            if (_armPointerId >= 0 && (!allowBegin || !IsPointerHeld(_armPointerId)))
+                ClearArm();
+
+            // 松手事件偶发不到（拖动中改层级 / 捕获被抢走）。手指已经不在，先清掉，
+            // 否则下一次按下会因为 _active 被直接丢掉。
+            if (_active && (!allowBegin || !IsPointerHeld(_pointerId)))
+                EndAndRelease();
         }
 
         public bool TryGetMove(out Vector2 direction, out float speedRatio)
@@ -130,12 +140,7 @@ namespace Game
             return true;
         }
 
-        public void ForceEnd()
-        {
-            if (_active && _hit != null && _pointerId >= 0 && _hit.HasPointerCapture(_pointerId))
-                _hit.ReleasePointer(_pointerId);
-            End();
-        }
+        public void ForceEnd() => EndAndRelease();
 
         public bool OwnsPointer(int fingerId) =>
             _active && _pointerId == fingerId;
@@ -176,6 +181,7 @@ namespace Game
             _hit.RegisterCallback<PointerMoveEvent>(OnMove);
             _hit.RegisterCallback<PointerUpEvent>(OnUp);
             _hit.RegisterCallback<PointerCancelEvent>(OnCancel);
+            _hit.RegisterCallback<PointerCaptureOutEvent>(OnCaptureOut);
 
             ApplyLayoutScale();
             HideGlyphs();
@@ -256,27 +262,85 @@ namespace Game
 
         void OnDown(PointerDownEvent evt)
         {
-            if (_active || evt.button != 0)
+            if (evt.button > 0 || IgnoreCompatibilityMouse(evt.pointerId))
                 return;
             if (HudOverlayGate.BlocksLocomotion())
                 return;
-            if (!ShouldBegin(evt))
+
+            // 命中层在 HUD 上面或拾取还没热好时，第一次按下会打到全屏层。
+            // 转给底下的图标，避免摇杆圆点闪一下、点击要再来一次。
+            if (TryForwardHudPress(evt))
+            {
+                evt.StopPropagation();
+                return;
+            }
+
+            if (!CanArm(evt.position))
                 return;
 
-            _pointerId = evt.pointerId;
-            _origin = ToLocal(evt.position);
-            _offset = Vector2.zero;
-            _active = true;
-            _hit.CapturePointer(_pointerId);
-            _paint.BringToFront();
-            ShowAt(_origin, Vector2.zero);
+            // 上一次松手丢了：同一根手指的新按下必须重开。另一根手指按住时不抢。
+            if (_active)
+            {
+                if (evt.pointerId != _pointerId && IsPointerHeld(_pointerId))
+                    return;
+                EndAndRelease();
+            }
+
+            // 空白处仍是按下就出圆点。HUD 上的点已经在上面转走了，不会闪在图标上。
+            Begin(evt.pointerId, evt.position);
             evt.StopPropagation();
         }
 
         void OnMove(PointerMoveEvent evt)
         {
-            if (!_active || evt.pointerId != _pointerId)
+            if (IgnoreCompatibilityMouse(evt.pointerId))
                 return;
+
+            if (_armPointerId >= 0 && evt.pointerId == _armPointerId)
+            {
+                if ((evt.pressedButtons & 1) == 0 && !IsPointerHeld(_armPointerId))
+                {
+                    ClearArm();
+                    return;
+                }
+
+                Vector2 armLocal = ToLocal(evt.position);
+                Vector2 armOffset = armLocal - ToLocal(_armOriginPanel);
+                if (armOffset.magnitude < _deadZone)
+                    return;
+                if (HudOverlayGate.BlocksLocomotion() || !CanArm(evt.position))
+                {
+                    ClearArm();
+                    return;
+                }
+
+                CommitArm(evt.position);
+                evt.StopPropagation();
+                return;
+            }
+
+            if (!_active)
+            {
+                // PointerDown 被面板吞掉时，按下后的移动仍能落到命中层。
+                // 只记下起点，死区内不画圆点、不捕获，避免点 HUD 时闪一下并把点击抢走。
+                if ((evt.pressedButtons & 1) == 0 || !IsPointerHeld(evt.pointerId))
+                    return;
+                if (HudOverlayGate.BlocksLocomotion() || !IsOurs(evt.target as VisualElement))
+                    return;
+                if (!CanArm(evt.position))
+                    return;
+                Arm(evt.pointerId, evt.position);
+                return;
+            }
+
+            if (evt.pointerId != _pointerId)
+                return;
+            if ((evt.pressedButtons & 1) == 0 && !IsPointerHeld(_pointerId))
+            {
+                EndAndRelease();
+                return;
+            }
+
             Vector2 local = ToLocal(evt.position);
             Vector2 offset = local - _origin;
             float mag = offset.magnitude;
@@ -289,36 +353,142 @@ namespace Game
 
         void OnUp(PointerUpEvent evt)
         {
+            if (IgnoreCompatibilityMouse(evt.pointerId))
+                return;
+            if (_armPointerId >= 0 && evt.pointerId == _armPointerId)
+            {
+                ClearArm();
+                return;
+            }
+
             if (!_active || evt.pointerId != _pointerId)
                 return;
-            if (_hit.HasPointerCapture(_pointerId))
-                _hit.ReleasePointer(_pointerId);
-            End();
+            EndAndRelease();
             evt.StopPropagation();
         }
 
         void OnCancel(PointerCancelEvent evt)
         {
+            if (_armPointerId >= 0 && evt.pointerId == _armPointerId)
+                ClearArm();
             if (!_active || evt.pointerId != _pointerId)
                 return;
-            if (_hit.HasPointerCapture(_pointerId))
-                _hit.ReleasePointer(_pointerId);
+            EndAndRelease();
+        }
+
+        void OnCaptureOut(PointerCaptureOutEvent evt)
+        {
+            if (!_active || evt.pointerId != _pointerId)
+                return;
+            // 捕获已经不在了，只清状态，不再 ReleasePointer。
             End();
         }
 
-        bool ShouldBegin(PointerDownEvent evt)
+        void Arm(int pointerId, Vector2 panelPosition)
         {
-            if (_hit?.panel == null)
+            _armPointerId = pointerId;
+            _armOriginPanel = panelPosition;
+        }
+
+        void ClearArm()
+        {
+            _armPointerId = -1;
+        }
+
+        void CommitArm(Vector2 currentPanel)
+        {
+            int id = _armPointerId;
+            Vector2 originPanel = _armOriginPanel;
+            _armPointerId = -1;
+            Begin(id, originPanel);
+
+            Vector2 local = ToLocal(currentPanel);
+            Vector2 offset = local - _origin;
+            float mag = offset.magnitude;
+            if (mag > _maxDrag && mag > 1e-4f)
+                offset *= _maxDrag / mag;
+            _offset = offset;
+            ShowAt(_origin, offset);
+        }
+
+        void Begin(int pointerId, Vector2 panelPosition)
+        {
+            _pointerId = pointerId;
+            _origin = ToLocal(panelPosition);
+            _offset = Vector2.zero;
+            _active = true;
+            _hit.CapturePointer(_pointerId);
+            // 只在起手时抬到最前。拖动中每帧 BringToFront 会改层级，UITK 可能把这次松手事件丢掉。
+            _paint.BringToFront();
+            ShowAt(_origin, Vector2.zero);
+        }
+
+        bool TryForwardHudPress(PointerDownEvent evt)
+        {
+            VisualElement picked = PickUnder(evt.position);
+            if (picked == null || IsOurs(picked) || !IsHudControl(picked))
                 return false;
 
-            VisualElement target = evt.target as VisualElement;
-            if (target != null && IsOurs(target))
-                return true;
+            PickingMode mode = _hit.pickingMode;
+            _hit.pickingMode = PickingMode.Ignore;
+            try
+            {
+                using (PointerDownEvent forwarded = PointerDownEvent.GetPooled(evt))
+                {
+                    forwarded.target = picked;
+                    picked.SendEvent(forwarded);
+                }
+            }
+            finally
+            {
+                if (_hit != null)
+                    _hit.pickingMode = mode;
+            }
 
-            VisualElement picked = _hit.panel.Pick(evt.position);
+            return true;
+        }
+
+        bool CanArm(Vector2 panelPosition)
+        {
+            VisualElement picked = PickUnder(panelPosition);
             if (picked == null || IsOurs(picked))
                 return true;
             return !IsHudControl(picked);
+        }
+
+        VisualElement PickUnder(Vector2 panelPosition)
+        {
+            if (_hit?.panel == null)
+                return null;
+            PickingMode mode = _hit.pickingMode;
+            _hit.pickingMode = PickingMode.Ignore;
+            VisualElement picked = _hit.panel.Pick(panelPosition);
+            _hit.pickingMode = mode;
+            return picked;
+        }
+
+        static bool IgnoreCompatibilityMouse(int pointerId) =>
+            pointerId == PointerId.mousePointerId && Input.touchCount > 0;
+
+        static bool IsPointerHeld(int pointerId)
+        {
+            if (Input.touchCount > 0)
+            {
+                // UITK 触摸 pointerId = fingerId + touchPointerIdBase。两种都认，避免映射差一帧就把拖动掐掉。
+                for (int i = 0; i < Input.touchCount; i++)
+                {
+                    Touch touch = Input.GetTouch(i);
+                    if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
+                        continue;
+                    if (touch.fingerId == pointerId
+                        || touch.fingerId + PointerId.touchPointerIdBase == pointerId)
+                        return true;
+                }
+
+                return false;
+            }
+
+            return pointerId == PointerId.mousePointerId && Input.GetMouseButton(0);
         }
 
         bool IsOurs(VisualElement el)
@@ -340,8 +510,10 @@ namespace Game
                 if (n is Button)
                     return true;
                 string name = n.name ?? string.Empty;
-                if (name == "hudHeader" || name == "hudIcons" || name == "root"
-                    || name == "uitkJoystickHit" || name == "joystickRoot")
+                // 图标层里的任意子节点都是 HUD。点在上面不能拉出摇杆。
+                if (name == "hudHeader" || name == "hudIcons")
+                    return true;
+                if (name == "root" || name == "uitkJoystickHit" || name == "joystickRoot")
                     continue;
                 if (n.pickingMode == PickingMode.Ignore)
                     continue;
@@ -386,9 +558,6 @@ namespace Game
             {
                 SetShown(_ring, false);
             }
-
-            _paint.BringToFront();
-            _knob.BringToFront();
         }
 
         static void Place(VisualElement el, Vector2 center, float size)
@@ -410,11 +579,20 @@ namespace Game
             SetShown(_knob, false);
         }
 
+        void EndAndRelease()
+        {
+            int id = _pointerId;
+            End();
+            if (_hit != null && id >= 0 && _hit.HasPointerCapture(id))
+                _hit.ReleasePointer(id);
+        }
+
         void End()
         {
             _active = false;
             _offset = Vector2.zero;
             _pointerId = -1;
+            ClearArm();
             HideGlyphs();
         }
     }

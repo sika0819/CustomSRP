@@ -149,6 +149,10 @@ namespace Game.Editor
                 SetLayerRecursive(root.transform, waterLayer);
             }
 
+            System.Type waterBody = System.Type.GetType("CustomSRP.OilWaterBody, Assembly-CSharp");
+            if (waterBody != null && root.GetComponent(waterBody) == null)
+                root.AddComponent(waterBody);
+
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
             AssetDatabase.SaveAssets();

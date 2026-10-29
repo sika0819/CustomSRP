@@ -24,6 +24,8 @@ namespace Game
         AssetHandle _spawnPoseHandle;
         readonly List<AssetHandle> _inlandChildHandles = new List<AssetHandle>(8);
         readonly List<MapItemData> _extrasCache = new List<MapItemData>(64);
+        readonly WaterSurfaceProbe _waterProbe = new WaterSurfaceProbe();
+        IslandSpawnPoseAsset _spawnPoseAsset;
         bool _loaded;
 
         /// <summary>Fires once after inland water is loaded (or confirmed missing). Safe to poll for null.</summary>
@@ -35,8 +37,12 @@ namespace Game
         /// </summary>
         public static bool InlandWaterReady { get; private set; }
 
-        /// <summary>单例入口，供 <see cref="WaterSurfaceProbe"/> 等 static 类访问。</summary>
         public static IslandWorldService Instance { get; private set; }
+
+        public WaterSurfaceProbe WaterProbe => _waterProbe;
+
+        /// <summary>出生点配置。静态 <see cref="IslandSpawnPose"/> 只保留回退坐标。</summary>
+        public IslandSpawnPoseAsset SpawnPoseAsset => _spawnPoseAsset;
 
         public bool IsLoaded => _loaded;
 
@@ -52,25 +58,76 @@ namespace Game
         public GameObject OceanInstance => _oceanInstance;
         public GameObject InlandWaterInstance => _inlandWaterInstance;
 
-        public static IslandWorldService Ensure()
+        /// <summary>
+        /// 退登后世界留在内存里，但脚本和渲染先停掉。
+        /// 加载罩期间 LateUpdate 仍会扫实例矩阵；父节点若已坏，localToWorldMatrix 不再返回。
+        /// </summary>
+        public void SetSimulationActive(bool active)
         {
-            IslandWorldService existing = FindAnyObjectByType<IslandWorldService>();
-            if (existing != null)
+            SetActive(_terrainInstance, active);
+            SetActive(_oceanInstance, active);
+            SetActive(_inlandWaterInstance, active);
+            // 地图物件重新 SetActive 后，下一帧合批/脚本会去走 Transform，主线程不再返回。
+            // 地形、海、草地和相机可以恢复。树和建筑靠退登前的合批矩阵画，不激活节点。
+            if (!active)
             {
-                Instance = existing;
-                return existing;
+                SetActive(_mapItemRoot, false);
+                if (_mapItemSpawner != null)
+                    _mapItemSpawner.enabled = false;
+                EnvNativeInstancing.SetRunning(false);
+            }
+            if (IslandJoystickCamera.Current != null)
+                IslandJoystickCamera.Current.enabled = active;
+
+            if (active)
+            {
+                // 椰树、码头不进合批，渲染器挂在地图根上。根关掉就看不见。
+                // 先关掉子节点上的脚本再激活，避免脚本 LateUpdate 去走 Transform。
+                ResumeMapRenderers();
+                EnvNativeInstancing.SetRunning(true, freezeTransforms: true);
+            }
+            Log.Info("[IslandWorld] simulation active=" + active
+                + " map=" + (_mapItemRoot != null && _mapItemRoot.activeSelf));
+        }
+
+        static void SetActive(GameObject go, bool active)
+        {
+            if (go != null && go.activeSelf != active)
+                go.SetActive(active);
+        }
+
+        void ResumeMapRenderers()
+        {
+            if (_mapItemRoot == null || _mapItemRoot.activeSelf)
+                return;
+            MonoBehaviour[] behaviours = _mapItemRoot.GetComponentsInChildren<MonoBehaviour>(true);
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                if (behaviours[i] != null)
+                    behaviours[i].enabled = false;
             }
 
-            var go = new GameObject("IslandWorldService");
-            DontDestroyOnLoad(go);
-            return go.AddComponent<IslandWorldService>();
+            Log.Info("[IslandWorld] map behaviours off n=" + behaviours.Length);
+            _mapItemRoot.SetActive(true);
+        }
+
+        public static IslandWorldService Ensure()
+        {
+            IslandWorldService service = IslandServiceHost.Ensure(Instance, "IslandWorldService");
+            Instance = service;
+            return service;
         }
 
         void Awake()
         {
             if (Instance != null && Instance != this)
+            {
                 Destroy(gameObject);
+                return;
+            }
+
             Instance = this;
+            GameEntry.World = this;
         }
 
         public IEnumerator Load(System.Action<float, string> reportProgress)
@@ -94,58 +151,58 @@ namespace Game
             // 出生点配置最先加载：SpawnMapItems / ApplySpawnPose 都要读它。
             yield return LoadSpawnPose();
 
-            reportProgress?.Invoke(0.72f, "正在加载地形...");
-            yield return YooResourceModule.InstantiateCoroutine(
-                SceneAssets.IslandTerrainLocation,
-                (go, handle) =>
-                {
-                    _terrainInstance = go;
-                    _terrainHandle = handle;
-                });
+            bool probe = IslandLeakProbe.Enabled;
+            if (probe)
+                Log.Info("[LeakProbe] 进岛只加载已经打开的模块");
 
-            if (_terrainInstance == null)
+            if (IslandLeakProbe.Allow(IslandLeakProbe.Module.Terrain))
             {
-                Log.Error(
-                    "YooAsset missing location '{0}' ({1}). Island entry will not wait.",
-                    SceneAssets.IslandTerrainLocation,
-                    SceneAssets.IslandTerrainPrefabPath);
-                Release();
-                LoadFailed = true;
-                yield break;
+                reportProgress?.Invoke(0.72f, "正在加载地形...");
+                yield return LoadTerrain(fatal: !probe);
+                if (LoadFailed)
+                    yield break;
+            }
+            else
+            {
+                Log.Info("[LeakProbe] terrain OFF");
             }
 
-            reportProgress?.Invoke(0.78f, "正在加载海洋...");
-            yield return YooResourceModule.InstantiateCoroutine(
-                SceneAssets.IslandOceanLocation,
-                (go, handle) =>
-                {
-                    _oceanInstance = go;
-                    _oceanHandle = handle;
-                });
-
-            if (_oceanInstance == null)
+            if (IslandLeakProbe.Allow(IslandLeakProbe.Module.Ocean))
             {
-                Log.Error(
-                    "YooAsset missing location '{0}' ({1}). Island entry will not wait.",
-                    SceneAssets.IslandOceanLocation,
-                    SceneAssets.IslandOceanPrefabPath);
-                Release();
-                LoadFailed = true;
-                yield break;
+                reportProgress?.Invoke(0.78f, "正在加载海洋...");
+                yield return LoadOcean(fatal: !probe);
+                if (LoadFailed)
+                    yield break;
+            }
+            else
+            {
+                Log.Info("[LeakProbe] ocean OFF");
             }
 
-            IslandMobileTune.ApplyAfterTerrainSpawn(_terrainInstance);
-
-            reportProgress?.Invoke(0.79f, "正在加载河流瀑布...");
-            yield return SpawnInlandWater();
+            if (IslandLeakProbe.Allow(IslandLeakProbe.Module.Inland))
+            {
+                reportProgress?.Invoke(0.79f, "正在加载河流瀑布...");
+                yield return SpawnInlandWater();
+            }
+            else
+            {
+                Log.Info("[LeakProbe] inland OFF");
+            }
 
             reportProgress?.Invoke(0.80f, "正在铺装环境...");
             yield return SpawnMapItems(reportProgress);
-            IsNearReady = _terrainInstance != null;
+            IsNearReady = probe || _terrainInstance != null;
 
-            reportProgress?.Invoke(0.86f, "正在铺装草地...");
             IslandGrassService grass = GameEntry.Grass ?? IslandGrassService.Ensure();
-            yield return grass.Load();
+            if (IslandLeakProbe.Allow(IslandLeakProbe.Module.Grass))
+            {
+                reportProgress?.Invoke(0.86f, "正在铺装草地...");
+                yield return grass.Load();
+            }
+            else
+            {
+                Log.Info("[LeakProbe] grass OFF");
+            }
 
             // 水体最近点改成运行期直接从场景采样（见 WaterSurfaceProbe），
             // 不再加载任何烘焙的水域资源。
@@ -169,68 +226,73 @@ namespace Game
                 GameEntry.Event.Fire(this, IslandWorldReadyEventArgs.Create(mapCount, spawned, extras));
         }
 
-        public void Release()
-        {
-            (GameEntry.Grass ?? IslandGrassService.Active)?.Release();
+        bool _released;
+        int _terrainGate;
+        int _oceanGate;
 
-            if (_mapItemSpawner != null)
+        public void Release() => Release(destroyObjects: true);
+
+        void Release(bool destroyObjects)
+        {
+            if (_released)
+                return;
+            _released = true;
+
+            if (destroyObjects)
+                (GameEntry.Grass ?? IslandGrassService.Active)?.Release();
+
+            if (destroyObjects && _mapItemSpawner != null)
             {
                 _mapItemSpawner.Release();
                 _mapItemSpawner = null;
             }
 
-            if (_mapItemRoot != null)
+            // 坐标表不挂在地图根上。拆根之前清掉；进程拆世界时场景还在，不能等服务 OnDestroy。
+            if (GameEntry.MapItemExtras != null)
+                GameEntry.MapItemExtras.Clear();
+
+            if (destroyObjects && _mapItemRoot != null)
             {
-                UnityEngine.Object.Destroy(_mapItemRoot);
+                DestroyUnlinked(_mapItemRoot);
                 _mapItemRoot = null;
             }
 
-            _mapItemHandle?.Release();
-            _mapItemHandle = null;
+            DropHandle(ref _mapItemHandle, destroyObjects);
 
-            // 水体最近点改成运行期采样，场景卸载时清掉缓存。
-            WaterSurfaceProbe.Clear();
+            _waterProbe.Clear();
 
-            if (_spawnPoseHandle != null)
+            DropHandle(ref _spawnPoseHandle, destroyObjects);
+            _spawnPoseAsset = null;
+
+            if (destroyObjects && _inlandWaterInstance != null)
             {
-                _spawnPoseHandle.Release();
-                _spawnPoseHandle = null;
-            }
-            IslandSpawnPose.Unload();
-
-            if (_inlandWaterInstance != null)
-            {
-                UnityEngine.Object.Destroy(_inlandWaterInstance);
+                DestroyUnlinked(_inlandWaterInstance);
                 _inlandWaterInstance = null;
             }
 
-            if (_oceanInstance != null)
+            if (destroyObjects && _oceanInstance != null)
             {
-                UnityEngine.Object.Destroy(_oceanInstance);
+                DestroyUnlinked(_oceanInstance);
                 _oceanInstance = null;
             }
 
+            GameEntry.UnbindGroundFit();
             if (_terrainInstance != null)
             {
-                DestroyMobileShadowMaterials(_terrainInstance);
-                UnityEngine.Object.Destroy(_terrainInstance);
+                if (destroyObjects)
+                    DestroyUnlinked(_terrainInstance);
                 _terrainInstance = null;
             }
 
-            _inlandWaterHandle?.Release();
-            _inlandWaterHandle = null;
-            for (int i = 0; i < _inlandChildHandles.Count; i++)
-                _inlandChildHandles[i]?.Release();
-            _inlandChildHandles.Clear();
-            _oceanHandle?.Release();
-            _oceanHandle = null;
-            _terrainHandle?.Release();
-            _terrainHandle = null;
+            DropHandle(ref _inlandWaterHandle, destroyObjects);
+            DropChildHandles(destroyObjects);
+            DropHandle(ref _oceanHandle, destroyObjects);
+            DropHandle(ref _terrainHandle, destroyObjects);
             _extrasCache.Clear();
 
-            AtmospherePropRegistry.Clear();
-            CampfireWeatherGate.ClearVisualIgnited();
-            CampfireWeatherGate.SetSuppressIgnite(true);
+            AtmospherePropService props = GameEntry.AtmosphereProps;
+            props?.ClearRuntime();
+            FireController.ReleaseSharedFlameMaterial();
 
             // 离岛时必须把静态标志复位：否则下一次进岛时，音频侧会误判“水体已就绪”，
             // 直接沿用上一次场景的过期探针。
@@ -245,21 +307,158 @@ namespace Game
         }
 
         /// <summary>
-        /// (MobileShadow) 是进岛时克隆的地形材质，Destroy(地形) 不会销毁它。
+        /// destroyObjects 为真：实例已经拆掉，当场 Release 并从登记摘掉。
+        /// 场景卸载：只丢掉字段，句柄留在 <see cref="IslandLeaveHandles"/>，等卸场景成功。
         /// </summary>
-        static void DestroyMobileShadowMaterials(GameObject terrainRoot)
+        static void DropHandle(ref AssetHandle handle, bool releaseNow)
         {
-            Terrain[] terrains = terrainRoot.GetComponentsInChildren<Terrain>(true);
-            for (int i = 0; i < terrains.Length; i++)
+            if (releaseNow)
+                GameEntry.ReleaseLeaveHandle(handle);
+            handle = null;
+        }
+
+        void DropChildHandles(bool releaseNow)
+        {
+            if (releaseNow)
             {
-                Terrain terrain = terrains[i];
-                if (terrain == null)
-                    continue;
-                Material mat = terrain.materialTemplate;
-                if (mat == null || mat.name.IndexOf("(MobileShadow)", System.StringComparison.Ordinal) < 0)
-                    continue;
-                terrain.materialTemplate = null;
-                UnityEngine.Object.Destroy(mat);
+                for (int i = 0; i < _inlandChildHandles.Count; i++)
+                    GameEntry.ReleaseLeaveHandle(_inlandChildHandles[i]);
+            }
+
+            _inlandChildHandles.Clear();
+        }
+
+        /// <summary>本服务拆世界时用：先摘掉父节点再立刻销毁。场景卸载不进这里。</summary>
+        void DestroyUnlinked(GameObject go)
+        {
+            if (go == null)
+                return;
+            go.hideFlags = HideFlags.None;
+            Transform t = go.transform;
+            if (t != null && t.parent != null)
+                t.SetParent(null, false);
+            DestroyImmediate(go);
+        }
+
+        /// <summary>泄漏对照在进岛之后补开地形、海、河或草。</summary>
+        public IEnumerator ActivateModule(IslandLeakProbe.Module module)
+        {
+            switch (module)
+            {
+                case IslandLeakProbe.Module.Terrain:
+                    yield return LoadTerrain(fatal: false);
+                    break;
+                case IslandLeakProbe.Module.Ocean:
+                    yield return LoadOcean(fatal: false);
+                    break;
+                case IslandLeakProbe.Module.Inland:
+                    yield return SpawnInlandWater();
+                    InlandWaterReady = _inlandWaterInstance != null;
+                    OnInlandWaterReady?.Invoke(_inlandWaterInstance != null);
+                    break;
+                case IslandLeakProbe.Module.Grass:
+                    IslandGrassService grass = GameEntry.Grass ?? IslandGrassService.Ensure();
+                    yield return grass.Load();
+                    break;
+                default:
+                    yield break;
+            }
+
+            IslandLeakProbe.LogMemory(IslandLeakProbe.Display(module) + " loaded");
+        }
+
+        IEnumerator LoadTerrain(bool fatal)
+        {
+            if (_terrainInstance != null)
+                yield break;
+
+            while (System.Threading.Interlocked.CompareExchange(ref _terrainGate, 1, 0) != 0)
+            {
+                if (_terrainInstance != null)
+                    yield break;
+                yield return null;
+            }
+
+            try
+            {
+                if (_terrainInstance != null)
+                    yield break;
+
+                yield return YooResourceModule.InstantiateCoroutine(
+                    SceneAssets.IslandTerrainLocation,
+                    (go, handle) =>
+                    {
+                        _terrainInstance = go;
+                        _terrainHandle = handle;
+                    },
+                    trackLeave: true);
+
+                if (_terrainInstance == null)
+                {
+                    Log.Error(
+                        "YooAsset missing location '{0}' ({1}). Island entry will not wait.",
+                        SceneAssets.IslandTerrainLocation,
+                        SceneAssets.IslandTerrainPrefabPath);
+                    if (fatal)
+                    {
+                        Release();
+                        LoadFailed = true;
+                    }
+
+                    yield break;
+                }
+
+                GameEntry.BindGroundFit(_terrainInstance);
+                IslandMobileTune.ApplyAfterTerrainSpawn(_terrainInstance);
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _terrainGate, 0);
+            }
+        }
+
+        IEnumerator LoadOcean(bool fatal)
+        {
+            if (_oceanInstance != null)
+                yield break;
+
+            while (System.Threading.Interlocked.CompareExchange(ref _oceanGate, 1, 0) != 0)
+            {
+                if (_oceanInstance != null)
+                    yield break;
+                yield return null;
+            }
+
+            try
+            {
+                if (_oceanInstance != null)
+                    yield break;
+
+                yield return YooResourceModule.InstantiateCoroutine(
+                    SceneAssets.IslandOceanLocation,
+                    (go, handle) =>
+                    {
+                        _oceanInstance = go;
+                        _oceanHandle = handle;
+                    },
+                    trackLeave: true);
+
+                if (_oceanInstance == null)
+                {
+                    Log.Error(
+                        "YooAsset missing location '{0}' ({1}). Island entry will not wait.",
+                        SceneAssets.IslandOceanLocation,
+                        SceneAssets.IslandOceanPrefabPath);
+                    if (fatal)
+                    {
+                        Release();
+                        LoadFailed = true;
+                    }
+                }
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _oceanGate, 0);
             }
         }
 
@@ -270,8 +469,7 @@ namespace Game
         /// </summary>
         IEnumerator LoadSpawnPose()
         {
-            _spawnPoseHandle?.Release();
-            _spawnPoseHandle = null;
+            DropHandle(ref _spawnPoseHandle, releaseNow: true);
 
             IslandSpawnPoseAsset asset = null;
             if (YooResourceModule.DefaultPackage != null
@@ -284,7 +482,8 @@ namespace Game
                     {
                         asset = loaded;
                         _spawnPoseHandle = handle;
-                    });
+                    },
+                    trackLeave: true);
             }
 
 #if UNITY_EDITOR
@@ -295,16 +494,17 @@ namespace Game
             }
 #endif
 
-            if (asset != null)
+            _spawnPoseAsset = asset;
+            if (asset == null)
             {
-                IslandSpawnPose.Load(asset);
-            }
-            else
-            {
-                IslandSpawnPose.Load(null);
                 Log.Warning(
                     "[IslandWorld] IslandSpawnPose config missing — using built-in default pose");
             }
+            (Vector3 pos, float yaw) = IslandSpawnPose.Resolve(asset);
+            Log.Info(
+                "[IslandSpawnPose] configured=" + (asset != null) +
+                " derived=" + (asset != null && asset.DeriveFromPreset) +
+                " pos=" + pos + " yaw=" + yaw.ToString("F2"));
         }
 
         IEnumerator SpawnInlandWater()
@@ -315,11 +515,8 @@ namespace Game
                 _inlandWaterInstance = null;
             }
 
-            _inlandWaterHandle?.Release();
-            _inlandWaterHandle = null;
-            for (int i = 0; i < _inlandChildHandles.Count; i++)
-                _inlandChildHandles[i]?.Release();
-            _inlandChildHandles.Clear();
+            DropHandle(ref _inlandWaterHandle, releaseNow: true);
+            DropChildHandles(releaseNow: true);
 
             if (YooResourceModule.DefaultPackage != null
                 && YooResourceModule.DefaultPackage.CheckLocationValid(SceneAssets.IslandInlandWaterLocation))
@@ -330,7 +527,8 @@ namespace Game
                     {
                         _inlandWaterInstance = go;
                         _inlandWaterHandle = handle;
-                    });
+                    },
+                    trackLeave: true);
             }
 
 #if UNITY_EDITOR
@@ -359,7 +557,8 @@ namespace Game
 
         IEnumerator SpawnInlandWaterFromExtras()
         {
-            yield return EnvMapItemExtras.LoadDataCoroutine(_extrasCache);
+            if (GameEntry.MapItemExtras != null)
+                yield return GameEntry.MapItemExtras.LoadDataCoroutine(_extrasCache);
             var root = new GameObject("IslandInlandWater");
             int placed = 0;
 
@@ -382,7 +581,8 @@ namespace Game
                             instance = go;
                             if (handle != null)
                                 _inlandChildHandles.Add(handle);
-                        });
+                        },
+                        trackLeave: true);
                 }
 
 #if UNITY_EDITOR
@@ -425,8 +625,7 @@ namespace Game
                 UnityEngine.Object.Destroy(_mapItemRoot);
 
             _mapItemRoot = null;
-            _mapItemHandle?.Release();
-            _mapItemHandle = null;
+            DropHandle(ref _mapItemHandle, releaseNow: true);
 
             if (YooResourceModule.DefaultPackage != null
                 && YooResourceModule.DefaultPackage.CheckLocationValid(SceneAssets.MapItemLocation))
@@ -437,7 +636,8 @@ namespace Game
                     {
                         _mapItemRoot = go;
                         _mapItemHandle = handle;
-                    });
+                    },
+                    trackLeave: true);
             }
 
 #if UNITY_EDITOR
@@ -468,6 +668,7 @@ namespace Game
             else
             {
                 var focusGo = new GameObject("MapItemFocus");
+                focusGo.transform.SetParent(_mapItemRoot.transform, false);
                 focusGo.transform.position = IslandSpawnPose.DefaultPos;
                 focus = focusGo.transform;
             }
@@ -477,7 +678,17 @@ namespace Game
 
         void OnDestroy()
         {
-            Release();
+            bool owner = Instance == this || GameEntry.World == this;
+            if (Instance == this)
+                Instance = null;
+            if (GameEntry.World == this)
+                GameEntry.World = null;
+            if (!owner)
+                return;
+
+            // 流程离岛已在场景还在时 Release(true)。这里只兜没走 BeginLeave 的销毁：不拆实例，句柄留到卸场景成功。
+            Release(destroyObjects: false);
+            OnInlandWaterReady = null;
         }
     }
 }

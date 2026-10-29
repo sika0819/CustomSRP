@@ -1,16 +1,48 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityGameFramework.Runtime;
 
 namespace Game
 {
     /// <summary>
     /// 贴地：Flowers_Flat 卡片 + 树（Songshu/Lvshu/Yeshu/Guanmu）Y 贴 Terrain。
+    /// 挂在地形实例上，地形创建之后由 <see cref="GameEntry.BindGroundFit"/> 绑定。
     /// 树额外下压一小段，抵消 HeightmapPixelError / 枢轴略高于可视根底。
     /// </summary>
-    public static class EnvGroundFit
+    public sealed class EnvGroundFit : MonoBehaviour
     {
         /// <summary>树枢轴相对地表再下沉的米数（负值）。不改 mesh。</summary>
         public const float TreeBuryMeters = -0.12f;
+
+        Terrain _terrain;
+
+        /// <summary>只认这次创建出来的地形，不扫场景。</summary>
+        public void Bind(GameObject terrainRoot)
+        {
+            _terrain = null;
+            if (terrainRoot == null)
+                return;
+
+            // 地形在子物体上。Instantiate 时 OnEnable 可能还没登记进 IslandSceneComponent。
+            Terrain terrain = terrainRoot.GetComponentInChildren<Terrain>(true);
+            if (terrain != null && terrain.terrainData != null)
+            {
+                _terrain = terrain;
+                IslandSceneComponent.Active?.RegisterTerrain(terrain);
+                return;
+            }
+
+            Log.Error("[EnvGroundFit] terrain instance has no Terrain data");
+        }
+
+        public void Clear() => _terrain = null;
+
+        void OnDestroy()
+        {
+            _terrain = null;
+            if (GameEntry.GroundFit == this)
+                GameEntry.UnbindGroundFit();
+        }
 
         public static bool IsFlatGroundCard(string prefabName)
         {
@@ -20,7 +52,7 @@ namespace Game
         }
 
         /// <summary>按类别决定是否贴地，以及是否下压。</summary>
-        public static bool TrySnapMapItemY(ref Vector3 worldPos, string category, string prefabName)
+        public bool TrySnapMapItemY(ref Vector3 worldPos, string category, string prefabName)
         {
             if (IsFlatGroundCard(prefabName))
                 return TrySnapY(ref worldPos, 0f);
@@ -31,35 +63,18 @@ namespace Game
             return false;
         }
 
-        public static bool TrySnapY(ref Vector3 worldPos)
+        public bool TrySnapY(ref Vector3 worldPos)
         {
             return TrySnapY(ref worldPos, 0f);
         }
 
-        public static bool TrySnapY(ref Vector3 worldPos, float yBias)
+        public bool TrySnapY(ref Vector3 worldPos, float yBias)
         {
-            Terrain terrain = ResolveTerrain();
-            if (terrain != null && terrain.terrainData != null)
-                return TrySnapY(ref worldPos, terrain.terrainData, terrain.transform.position, yBias);
+            Terrain terrain = _terrain;
+            if (terrain == null || terrain.terrainData == null)
+                return false;
 
-            return false;
-        }
-
-        static Terrain ResolveTerrain()
-        {
-            Terrain terrain = Terrain.activeTerrain;
-            if (terrain != null && terrain.terrainData != null)
-                return terrain;
-
-            // Island 异步加载时 activeTerrain 偶发为空，回退场景内查找
-            var all = Object.FindObjectsByType<Terrain>(FindObjectsInactive.Exclude);
-            for (int i = 0; i < all.Length; i++)
-            {
-                if (all[i] != null && all[i].terrainData != null)
-                    return all[i];
-            }
-
-            return null;
+            return TrySnapY(ref worldPos, terrain.terrainData, terrain.transform.position, yBias);
         }
 
         public static bool TrySnapY(ref Vector3 worldPos, TerrainData data, Vector3 terrainOrigin)

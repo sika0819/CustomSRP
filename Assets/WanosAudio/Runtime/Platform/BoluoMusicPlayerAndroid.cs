@@ -44,9 +44,20 @@ namespace WanosAudio
                 return;
             }
             Instance = this;
-            DontDestroyOnLoad(gameObject);
+            KeepWithLaunch();
             // jar StreamingAssets 不能 File 打开；传 AssetManager 相对路径。
             ArtworkDefault = "WanosAudio/Artwork/boluo.png";
+        }
+
+        /// <summary>
+        /// 进岛后才补建时，激活场景是 Island。挪回 Launch，退登卸岛不会把它拆掉。
+        /// </summary>
+        void KeepWithLaunch()
+        {
+            var launch = UnityEngine.SceneManagement.SceneManager.GetSceneByName("Launch");
+            if (!launch.IsValid() || !launch.isLoaded || gameObject.scene == launch)
+                return;
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(gameObject, launch);
         }
 
         public void InitializeAfterLogin()

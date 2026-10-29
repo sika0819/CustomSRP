@@ -1,9 +1,1 @@
-#dialog #card {
-    background-image: url("../../Textures/NoticeCard/panel.png");
-    -unity-background-scale-mode: stretch-to-fill;
-    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
-}
-
-#dialog #icon {
-    display: none;
-}
+/* 无网络使用 NoticeCard，样式在 Components/NoticeCard.uss。 */

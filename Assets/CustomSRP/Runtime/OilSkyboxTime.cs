@@ -1,3 +1,4 @@
+using Game;
 using UnityEngine;
 using UnityEngine.Rendering;
 #if UNITY_EDITOR
@@ -540,18 +541,8 @@ namespace CustomSRP
         void Reset()
         {
             sun = GetComponent<Light>();
-            if (sun == null || sun.type != LightType.Directional)
-            {
-                Light[] lights = FindObjectsByType<Light>();
-                for (int i = 0; i < lights.Length; i++)
-                {
-                    if (lights[i].type == LightType.Directional)
-                    {
-                        sun = lights[i];
-                        break;
-                    }
-                }
-            }
+            if (sun != null && sun.type != LightType.Directional)
+                sun = null;
         }
 
         void OnEnable()
@@ -563,15 +554,19 @@ namespace CustomSRP
                 return;
             }
 
-            // Island terrain may spawn after scene load; attach the Game→SRP bridge here.
+            // Register before drivers attach so they read GameEntry, not a scene search.
             // EnsureOnSkybox → SyncFromWeatherService writes WeatherService Hours/Look into
             // timeOfDay before Apply, so the prefab noon default never reaches the first frame.
-            OilAtmosphereDriver.EnsureOnSkybox();
-            OilWarpDriver.EnsureOnSkybox();
+            AtmosphereVisualRegistry.RegisterSkybox(this);
+            OilAtmosphereDriver.EnsureOnSkybox(this);
+            OilWarpDriver.EnsureOnSkybox(this);
             if (driveSun && sun == null)
             {
                 ResolveSunLight();
             }
+
+            if (sun != null && sun.type == LightType.Directional)
+                IslandSceneComponent.Active?.RegisterLight(sun, true);
 
             // Keep a look already chosen by WeatherService before this component enabled.
             if (s_activeLookId != OilSkyLookId.Canonical || ActiveLookId != OilSkyLookId.Canonical)
@@ -591,6 +586,7 @@ namespace CustomSRP
 
         void OnDisable()
         {
+            AtmosphereVisualRegistry.UnregisterSkybox(this);
 #if UNITY_EDITOR
             CancelEditorSunDrive();
 #endif
@@ -598,6 +594,7 @@ namespace CustomSRP
 
         void OnDestroy()
         {
+            AtmosphereVisualRegistry.UnregisterSkybox(this);
 #if UNITY_EDITOR
             CancelEditorSunDrive();
 #endif
@@ -760,20 +757,7 @@ namespace CustomSRP
         {
             Light self = GetComponent<Light>();
             if (self != null && self.type == LightType.Directional)
-            {
                 sun = self;
-                return;
-            }
-
-            Light[] lights = FindObjectsByType<Light>();
-            for (int i = 0; i < lights.Length; i++)
-            {
-                if (lights[i] != null && lights[i].type == LightType.Directional)
-                {
-                    sun = lights[i];
-                    return;
-                }
-            }
         }
 
         /// <summary>
@@ -783,29 +767,11 @@ namespace CustomSRP
         public void DisableCompetingDirectionalLights()
         {
             if (sun == null)
-            {
                 ResolveSunLight();
-            }
 
-            if (sun == null)
-            {
-                return;
-            }
-
-            Light[] lights = FindObjectsByType<Light>(FindObjectsInactive.Include);
-            for (int i = 0; i < lights.Length; i++)
-            {
-                Light other = lights[i];
-                if (other == null || other == sun || other.type != LightType.Directional)
-                {
-                    continue;
-                }
-
-                if (other.enabled)
-                {
-                    other.enabled = false;
-                }
-            }
+            if (sun != null)
+                IslandSceneComponent.Active?.RegisterLight(sun, true);
+            IslandSceneComponent.Active?.DisableDirectionalsExceptSun();
         }
 
         void ApplySun(float period)
@@ -838,7 +804,6 @@ namespace CustomSRP
             {
                 sun.color = color;
             }
-
             if (!Mathf.Approximately(sun.intensity, intensity))
             {
                 sun.intensity = intensity;
@@ -1428,6 +1393,13 @@ namespace CustomSRP
         /// Soft OilCanvas weave as the shared fog dry-brush (not OilBrush dabs).
         /// Large tiles keep the haze scumbled instead of dense trypophobic holes.
         /// </summary>
+        /// <summary>退登后天空材质已经拆掉。全局贴图还指着它，UnloadUnused 就收不回这块图。</summary>
+        public static void ClearFogCanvasGlobal()
+        {
+            Shader.SetGlobalTexture(OilFogCanvasId, null);
+            Shader.SetGlobalFloat(OilFogCanvasEnableId, 0f);
+        }
+
         static void PushFogCanvasGlobal(Material mat)
         {
             if (mat == null)
@@ -1466,9 +1438,6 @@ namespace CustomSRP
             Shader.SetGlobalVector(OilSkyMoonDirId, MoonDirectionAt(period));
         }
 
-        static float _lastEnvironmentPeriod = float.NaN;
-        static OilCloudLayer _cachedCloudLayer;
-
         /// <summary>Foggy weather weight 0–1 for OilDistanceFog.Soften (set by OilAtmosphereDriver).</summary>
         static float s_foggyBlend;
 
@@ -1491,12 +1460,28 @@ namespace CustomSRP
             // Vector, not Color: Linear SetGlobalColor sRGB→linear crushes night greens
             // (same pitfall as BoluoTreeBillboardAmbientSync).
             Shader.SetGlobalVector(OilPeriodAmbientId, new Vector4(fill.r, fill.g, fill.b, 1f));
+            // Water uses the planar camera RT. Skybox default-reflection mode
+            // re-renders this material into a cubemap whenever _Period changes.
+            StopEngineSkyboxReflection();
+        }
 
-            if (float.IsNaN(_lastEnvironmentPeriod) || Mathf.Abs(period - _lastEnvironmentPeriod) > 0.02f)
+        /// <summary>
+        /// Drop Lighting's Skybox reflection mode so the engine does not keep
+        /// rendering this skybox into a cubemap. Specular on oil shaders does not
+        /// sample that cubemap; water samples <c>_OilPlanarReflectTex</c>.
+        /// </summary>
+        public static void StopEngineSkyboxReflection()
+        {
+            // customReflection throws when the slot holds a cube RenderTexture
+            // (or any non-Cubemap). customReflectionTexture accepts both.
+            if (RenderSettings.defaultReflectionMode == DefaultReflectionMode.Custom
+                && RenderSettings.customReflectionTexture == null)
             {
-                _lastEnvironmentPeriod = period;
-                DynamicGI.UpdateEnvironment();
+                return;
             }
+
+            RenderSettings.customReflectionTexture = null;
+            RenderSettings.defaultReflectionMode = DefaultReflectionMode.Custom;
         }
 
         /// <summary>
@@ -1543,12 +1528,8 @@ namespace CustomSRP
 
         static float ResolveCumulus()
         {
-            if (_cachedCloudLayer == null)
-            {
-                _cachedCloudLayer = Object.FindAnyObjectByType<OilCloudLayer>();
-            }
-
-            return _cachedCloudLayer != null ? _cachedCloudLayer.coverage : 0f;
+            OilCloudLayer layer = OilCloudLayer.Current;
+            return layer != null ? layer.coverage : 0f;
         }
 
         /// <summary>Main-light tint/intensity at period (same table as <see cref="ApplySun"/>).</summary>
@@ -1704,7 +1685,7 @@ namespace CustomSRP
                 moonDisc = Color.black,
                 moonGlow = Color.black,
                 lightColor = new Color(1f, 0.9804f, 0.8235f),
-                lightIntensity = 1.5f,
+                lightIntensity = 1.0f,
                 fogColor = new Color(0.4252f, 0.6011f, 0.8585f),
                 ambientZenith = new Color(0.5922f, 0.7098f, 0.4824f),
                 ambientHorizon = new Color(0.4824f, 0.7098f, 0.6628f),

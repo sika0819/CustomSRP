@@ -227,8 +227,7 @@ namespace Game
                 _oilWarpWeight = next;
                 if (_oilWarpWeight > 1e-4f)
                 {
-                    OilWarpVisual.SetImmersiveWarp(
-                        _breath.Breath01, _oilWarpWeight, _breath.BreathPhaseRadians);
+                    PushOilWarp(_breath.Breath01, _oilWarpWeight, _breath.BreathPhaseRadians);
                     _oilWarpDirty = true;
                 }
                 else
@@ -236,12 +235,15 @@ namespace Game
             }
         }
 
+        static void PushOilWarp(float breath01, float weight01, float phaseRadians) =>
+            IslandSceneComponent.Active?.OilWarp?.SetImmersiveWarp(breath01, weight01, phaseRadians);
+
         void ClearOilWarp()
         {
             _oilWarpWeight = 0f;
             if (!_oilWarpDirty)
                 return;
-            OilWarpVisual.SetImmersiveWarp(0f, 0f, 0f);
+            PushOilWarp(0f, 0f, 0f);
             _oilWarpDirty = false;
         }
     }

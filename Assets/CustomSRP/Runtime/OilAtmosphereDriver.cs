@@ -41,6 +41,7 @@ namespace CustomSRP
         bool _visualReady;
         int _syncedCelestialLookId = -1;
         bool _presetEventBound;
+        bool _weatherHoldBound;
 
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.AfterSceneLoad)]
         static void AutoAttach() => EnsureOnSkybox();
@@ -49,11 +50,12 @@ namespace CustomSRP
         /// Attach beside OilSkyboxTime when the island world exists.
         /// Does not create an orphan host before the terrain prefab is spawned.
         /// </summary>
-        public static OilAtmosphereDriver EnsureOnSkybox()
+        public static OilAtmosphereDriver EnsureOnSkybox(OilSkyboxTime sky = null)
         {
-            OilSkyboxTime sky = FindAnyObjectByType<OilSkyboxTime>();
             if (sky == null)
-                return FindAnyObjectByType<OilAtmosphereDriver>();
+                sky = AtmosphereVisualRegistry.Skybox as OilSkyboxTime;
+            if (sky == null)
+                return AtmosphereVisualRegistry.Driver as OilAtmosphereDriver;
 
             OilAtmosphereDriver onSky = sky.GetComponent<OilAtmosphereDriver>();
             if (onSky != null)
@@ -65,13 +67,12 @@ namespace CustomSRP
                 return onSky;
             }
 
-            // Drop orphan hosts created before the terrain prefab existed.
-            OilAtmosphereDriver[] all = FindObjectsByType<OilAtmosphereDriver>();
-            for (int i = 0; i < all.Length; i++)
-            {
-                if (all[i] != null && all[i].GetComponent<OilSkyboxTime>() == null)
-                    Destroy(all[i].gameObject);
-            }
+            // Drop the orphan host created before the terrain prefab existed.
+            // Destroy is deferred, so the new component's OnEnable wins the registry slot.
+            if (AtmosphereVisualRegistry.Driver is OilAtmosphereDriver orphan
+                && orphan != null
+                && orphan.GetComponent<OilSkyboxTime>() == null)
+                Destroy(orphan.gameObject);
 
             return sky.gameObject.AddComponent<OilAtmosphereDriver>();
         }
@@ -89,8 +90,9 @@ namespace CustomSRP
 
         void OnEnable()
         {
+            AtmosphereVisualRegistry.RegisterDriver(this);
             BindPresetEvent();
-            PresetWeatherHold.HeldChanged += OnWeatherHoldChanged;
+            BindWeatherHold();
             SyncFromWeatherService();
         }
 
@@ -110,13 +112,15 @@ namespace CustomSRP
 
         void OnDisable()
         {
-            PresetWeatherHold.HeldChanged -= OnWeatherHoldChanged;
+            AtmosphereVisualRegistry.UnregisterDriver(this);
+            UnbindWeatherHold();
             UnbindPresetEvent();
         }
 
         void LateUpdate()
         {
             BindPresetEvent();
+            BindWeatherHold();
             SyncCelestialLookFromPreset();
         }
 
@@ -127,9 +131,11 @@ namespace CustomSRP
             if (SkyboxTime == null)
                 SkyboxTime = GetComponent<OilSkyboxTime>();
             if (SkyboxTime == null)
-                SkyboxTime = FindAnyObjectByType<OilSkyboxTime>();
+                SkyboxTime = AtmosphereVisualRegistry.Skybox as OilSkyboxTime;
             if (CloudLayer == null)
-                CloudLayer = FindAnyObjectByType<OilCloudLayer>();
+                CloudLayer = GetComponent<OilCloudLayer>();
+            if (CloudLayer == null)
+                CloudLayer = OilCloudLayer.Current;
         }
 
         /// <summary>
@@ -142,11 +148,6 @@ namespace CustomSRP
             // Try pipeline asset first (always set in CustomRenderPipelineAsset).
             var pipeline = GraphicsSettings.defaultRenderPipeline as CustomRenderPipelineAsset;
             OilRainSettings settings = pipeline?.Settings?.rainSettings;
-
-            // Fallback: find in scene if pipeline not assigned yet.
-            if (settings == null)
-                settings = FindAnyObjectByType<OilRainSettings>();
-
             OilRainSettings.Current = settings;
         }
 
@@ -236,6 +237,26 @@ namespace CustomSRP
             SkyboxTime.ClearColorOverride();
         }
 
+        void BindWeatherHold()
+        {
+            if (_weatherHoldBound)
+                return;
+            PresetService presets = PresetService.Instance;
+            if (presets == null)
+                return;
+            presets.WeatherHoldChanged += OnWeatherHoldChanged;
+            _weatherHoldBound = true;
+        }
+
+        void UnbindWeatherHold()
+        {
+            if (!_weatherHoldBound)
+                return;
+            if (PresetService.Instance != null)
+                PresetService.Instance.WeatherHoldChanged -= OnWeatherHoldChanged;
+            _weatherHoldBound = false;
+        }
+
         void BindPresetEvent()
         {
             if (_presetEventBound || GameEntry.Event == null)
@@ -256,8 +277,20 @@ namespace CustomSRP
 
         void OnPresetChanged(object sender, GameEventArgs e)
         {
-            if (e is PresetChangedEventArgs preset)
-                SkyboxTime?.ApplyPresetPoster(preset.PresetId);
+            if (e is not PresetChangedEventArgs)
+                return;
+
+            // 展位图取样会盖掉预设的时段、天气和雾。这里按 WeatherService 已写入的预设重推。
+            WeatherService weather = GameEntry.Weather;
+            if (weather != null)
+            {
+                SetLookKind(weather.LookKind);
+                SetTimeOfDayHours(weather.Hours);
+                SetWeather(weather.Kind, weather.Level);
+                SetFogDensity(weather.FogDensity);
+                SetLightColorOverride(weather.LightColorOverride);
+            }
+
             // Force re-pin dawn/sleep looks even when CurrentId is unchanged (re-apply same preset).
             _syncedCelestialLookId = -1;
             SyncCelestialLookFromPreset();
@@ -386,7 +419,9 @@ namespace CustomSRP
                 CloudLayer.coverage = _displayedCloud;
 
             // Preset iris close / black / half-open: force dry so rain never punches through.
-            float rainIntensity = PresetWeatherHold.IsHeld ? 0f : _displayedRain;
+            float rainIntensity = PresetService.Instance != null && PresetService.Instance.IsWeatherHeld
+                ? 0f
+                : _displayedRain;
             OilRainSettings settings = OilRainSettings.Current;
             if (settings != null && Mathf.Abs(settings.intensity - rainIntensity) > 0.0001f)
                 settings.intensity = rainIntensity;

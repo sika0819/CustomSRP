@@ -2,6 +2,10 @@ using UnityEngine;
 
 namespace Game
 {
+    /// <summary>
+    /// 岛屿预设。挂在 Island 场景里，状态跟着场景销毁。
+    /// 退登在卸载前调 AbortTransition，避免 SchemeState 停在切换中。
+    /// </summary>
     public sealed class PresetService : MonoBehaviour
     {
         public const string PresetFolder = "Assets/GameMain/Environment/IslandPresets";
@@ -17,20 +21,29 @@ namespace Game
 
         public IslandPresetAsset[] Presets => _presets;
 
+        public static PresetService Instance { get; private set; }
+
         public static PresetService Ensure()
         {
-            PresetService existing = FindAnyObjectByType<PresetService>();
-            if (existing != null)
-                return existing;
-
-            var go = new GameObject("PresetService");
-            DontDestroyOnLoad(go);
-            return go.AddComponent<PresetService>();
+            PresetService service = IslandServiceHost.Ensure(Instance, "PresetService");
+            Instance = service;
+            return service;
         }
 
         void Awake()
         {
+            Instance = this;
+            GameEntry.Presets = this;
             ReloadFromResources();
+        }
+
+        void OnDestroy()
+        {
+            WeatherHoldChanged = null;
+            if (Instance == this)
+                Instance = null;
+            if (GameEntry.Presets == this)
+                GameEntry.Presets = null;
         }
 
         public void SetPresets(IslandPresetAsset[] presets)
@@ -111,7 +124,7 @@ namespace Game
             GameEntry.Music?.ForceRetargetAtLanding(ResolvePresetMusicBank(preset));
             // Drop every content 3D voice before teleport so old emitters never follow.
             // Iris path already cleared + held; direct Apply clears here then retriggers below.
-            AudioInteractionBootstrap.ClearContent3D();
+            IslandAudioSession.Instance?.ClearContent3D();
 
             CurrentId = id;
             GameEntry.Weather?.SetLookKind(preset.LookKind);
@@ -130,17 +143,11 @@ namespace Game
             GameEntry.Weather?.SetLightColorOverride(lightOverride);
 
             if (teleportPlayer)
-            {
-                // Iris path: far framing then enter-dolly. Direct Apply (no transition): final pose.
-                if (SchemeState == 1)
-                    IslandJoystickCamera.Current?.ApplyPresetForReveal(preset);
-                else
-                    IslandJoystickCamera.Current?.ApplyPreset(preset);
-            }
+                TeleportCamera(preset);
 
             // Iris transition holds precip + zone ambience until reveal; direct Apply retriggers now.
             if (SchemeState != 1)
-                AudioInteractionBootstrap.RetriggerContentAtListener();
+                IslandAudioSession.Instance?.RetriggerContentAtListener();
 
             // Veil path keeps SchemeState=1 until MarkPlaying; direct Apply is already live.
             if (SchemeState != 1)
@@ -150,10 +157,95 @@ namespace Game
                 GameEntry.Event.Fire(this, PresetChangedEventArgs.Create(preset));
         }
 
+        /// <summary>
+        /// 菠萝 CharacterController 中心在原点、skin 0.08，注视点是胶囊中心。
+        /// StayBehind 的 cameraPitch 为 0，相机与注视点同高，距离用 CameraToTargetDis，朝向再乘 CameraOffset。
+        /// </summary>
+        const float BoluoCapsuleSkin = 0.08f;
+        const float DefaultCapsuleHeight = 6f;
+        const float DefaultFollowDistance = 3f;
+
+        void TeleportCamera(IslandPresetAsset preset)
+        {
+            IslandJoystickCamera cam = IslandJoystickCamera.Current;
+            if (cam == null && Camera.main != null)
+                cam = Camera.main.GetComponent<IslandJoystickCamera>();
+            if (cam == null)
+                return;
+            if (!cam.isActiveAndEnabled)
+                cam.enabled = true;
+
+            float capsule = preset.PlayerHeight > 0.1f ? preset.PlayerHeight : DefaultCapsuleHeight;
+            Vector3 look;
+            if (cam.TryGroundUnder(preset.TargetPos, out Vector3 feet))
+            {
+                feet.x = preset.TargetPos.x;
+                feet.z = preset.TargetPos.z;
+                look = feet + Vector3.up * (capsule * 0.5f + BoluoCapsuleSkin);
+            }
+            else
+            {
+                // 采不到地面时，TargetPos.y 已是菠萝角色 transform（胶囊中心），不要再加半高。
+                look = preset.TargetPos;
+            }
+
+            float dist = preset.CameraToTargetDis > 0.01f ? preset.CameraToTargetDis : DefaultFollowDistance;
+            Quaternion yawOnly = Quaternion.Euler(0f, preset.TargetRotateY, 0f);
+            Vector3 eye = look + yawOnly * (Vector3.back * dist);
+            Vector3 toLook = look - eye;
+            Quaternion offset = Quaternion.Euler(preset.CameraOffset);
+            Quaternion face = toLook.sqrMagnitude < 1e-8f
+                ? yawOnly * offset
+                : Quaternion.LookRotation(toLook, Vector3.up) * offset;
+            Vector3 euler = face.eulerAngles;
+            float pitch = euler.x > 180f ? euler.x - 360f : euler.x;
+            float yaw = euler.y > 180f ? euler.y - 360f : euler.y;
+            cam.TeleportEye(eye, yaw, Mathf.Clamp(pitch, -85f, 85f));
+        }
+
         /// <summary>Interrupt (leave island / form close) — drop switching latch without a stuck busy state.</summary>
         public void AbortTransition()
         {
             SchemeState = CurrentId > 0 ? 2 : 0;
+        }
+
+        public bool IsWeatherHeld { get; private set; }
+
+        public event System.Action WeatherHoldChanged;
+
+        /// <summary>
+        /// 虹膜关闭期间压住雨景、降水声和环境声加载。完全揭开后才 <see cref="ReleaseWeatherHold"/>。
+        /// </summary>
+        public void BeginWeatherHold()
+        {
+            if (IsWeatherHeld)
+                return;
+            IsWeatherHeld = true;
+            IslandAudioSession.Instance?.Duck.BeginSilent();
+            IslandAudioSession.Instance?.Ambience.SetPresetTransitionHeld(true);
+            WeatherHoldChanged?.Invoke();
+        }
+
+        public void ReleaseWeatherHold()
+        {
+            if (!IsWeatherHeld)
+                return;
+            IsWeatherHeld = false;
+            IslandAudioSession.Instance?.Ambience.SetPresetTransitionHeld(false);
+            WeatherHoldChanged?.Invoke();
+            IslandAudioSession.Instance?.Weather.Refresh();
+            IslandAudioSession.Instance?.RetriggerContentAtListener();
+        }
+
+        /// <summary>打断 / 离岛：放下闩，不重新触发环境声。</summary>
+        public void AbortWeatherHold()
+        {
+            if (!IsWeatherHeld)
+                return;
+            IsWeatherHeld = false;
+            IslandAudioSession.Instance?.Ambience.SetPresetTransitionHeld(false);
+            IslandAudioSession.Instance?.Duck.SnapFull();
+            WeatherHoldChanged?.Invoke();
         }
 
         /// <summary>First <c>Music*</c> entry in <see cref="IslandPresetAsset.BankNames"/>, or null.</summary>

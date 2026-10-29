@@ -132,21 +132,14 @@ half3 OilNPROtherLights(
     int first = tile.GetFirstLightIndexInTile();
     int last = tile.GetLastLightIndexInTile();
 #if defined(OIL_MOBILE_PERF)
-    // Campfire + one spare; skip GetOtherShadowAttenuation.
+    // Campfire + one spare. Other lights do not sample the shadow atlas.
     last = min(last, first + 1);
 #endif
     half steps = max(shadeSteps * 0.5h, 2.0h);
     half3 sum = 0.0h;
-#if !defined(OIL_MOBILE_PERF)
-    ShadowData shadowData = GetShadowData(surfaceWS);
-#endif
     for (int j = first; j <= last; j++)
     {
-#if defined(OIL_MOBILE_PERF)
         Light light = GetOtherLightNoShadow(tile.GetLightIndex(j), surfaceWS);
-#else
-        Light light = GetOtherLight(tile.GetLightIndex(j), surfaceWS, shadowData);
-#endif
         if ((surfaceWS.renderingLayerMask & light.renderingLayerMask) == 0u)
         {
             continue;

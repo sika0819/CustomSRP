@@ -27,11 +27,12 @@ namespace CustomSRP
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void AutoAttach() => EnsureOnSkybox();
 
-        public static OilWarpDriver EnsureOnSkybox()
+        public static OilWarpDriver EnsureOnSkybox(OilSkyboxTime sky = null)
         {
-            OilSkyboxTime sky = FindAnyObjectByType<OilSkyboxTime>();
             if (sky == null)
-                return FindAnyObjectByType<OilWarpDriver>();
+                sky = AtmosphereVisualRegistry.Skybox as OilSkyboxTime;
+            if (sky == null)
+                return _instance;
 
             OilWarpDriver onSky = sky.GetComponent<OilWarpDriver>();
             if (onSky != null)
@@ -43,14 +44,13 @@ namespace CustomSRP
         void OnEnable()
         {
             _instance = this;
-            OilWarpVisual.Driver = this;
+            IslandSceneComponent.Active?.RegisterOilWarp(this);
             PushGlobals();
         }
 
         void OnDisable()
         {
-            if (OilWarpVisual.Driver == (IOilWarpVisualDriver)this)
-                OilWarpVisual.Driver = null;
+            IslandSceneComponent.Active?.UnregisterOilWarp(this);
             if (_instance == this)
                 _instance = null;
             ClearGlobals();

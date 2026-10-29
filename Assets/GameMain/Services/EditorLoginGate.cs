@@ -5,9 +5,8 @@ namespace Game
 {
     /// <summary>
     /// Editor Play 登录门闩：等「编辑器登录」窗口放行（手机正式账号或游客按钮）。
-    /// 仅 <c>UNITY_EDITOR</c> 有意义；真机 hybrid 走宿主 Arm。
-    /// 已落盘的正式 / 游客会话均可复用，无需再点登录（主动清空 / 退登除外）。
-    /// 注销确认期：会话已落盘但 <see cref="CancelPendingLogin"/> 为真时暂不进岛。
+    /// 仅 Editor 有意义。Play Mode 仍走宿主时序：登录窗写票，<c>EditorNativeHost</c> 下一帧 Push 106，
+    /// <c>ProcedureGuestLogin</c> Query 之后才进岛。注销确认期会话已落盘但暂不交权。
     /// </summary>
     public static class EditorLoginGate
     {

@@ -10,8 +10,15 @@ namespace Game
     /// Maps <see cref="WeatherService"/> Kind/Level to Wind/Rain bank loops + Boluo weather RTPCs.
     /// RTPC names and scale match old GameData: <c>Wind</c>/<c>Rain</c>/<c>Foggy</c> = state × 30.
     /// </summary>
-    public static class WeatherAudioBridge
+    public sealed class WeatherAudioBridge
     {
+        readonly IslandAudioSession _session;
+
+        public WeatherAudioBridge(IslandAudioSession session)
+        {
+            _session = session;
+        }
+
         public const string WindBank = "Wind";
         public const string RainBank = "Rain";
         public const string WindPlay = "Play_Wind";
@@ -24,33 +31,33 @@ namespace Game
         public const string RainParam = "Rain";
         public const string FoggyParam = "Foggy";
 
-        static bool _started;
-        static bool _subscribed;
-        static bool _contentAudioPaused;
-        static bool _windPlaying;
-        static bool _rainPlaying;
-        static bool _windBankHeld;
-        static bool _rainBankHeld;
-        static bool _windMissing;
-        static bool _rainMissing;
+        bool _started;
+        bool _subscribed;
+        bool _contentAudioPaused;
+        bool _windPlaying;
+        bool _rainPlaying;
+        bool _windBankHeld;
+        bool _rainBankHeld;
+        bool _windMissing;
+        bool _rainMissing;
         /// <summary>Logical weather intensity (pre-duck). Written value = logical × ContentAudioDuck.</summary>
-        static float _windLogical;
-        static float _rainLogical;
-        static float _foggyLogical;
-        static float _windWritten = float.NaN;
-        static float _rainWritten = float.NaN;
-        static float _foggyWritten = float.NaN;
+        float _windLogical;
+        float _rainLogical;
+        float _foggyLogical;
+        float _windWritten = float.NaN;
+        float _rainWritten = float.NaN;
+        float _foggyWritten = float.NaN;
         /// <summary>
         /// Rain RTPC at the moment <c>Play_Rain</c> was posted.
         /// Bank blend: small 0–55, medium starts at 32. A voice posted at 中/大
         /// does not arm Rain_Small when the parameter later falls to 30.
         /// </summary>
-        static float _rainPostedAt = float.NaN;
+        float _rainPostedAt = float.NaN;
 
         /// <summary>Rain_Medium blend clip min. 小雨 is 30, so values below this are small-only.</summary>
         const float LightRainExclusiveMax = 32f;
 
-        public static void Start()
+        public void Start()
         {
             if (_started)
                 return;
@@ -59,7 +66,7 @@ namespace Game
             ApplyFromWeather();
         }
 
-        public static void Shutdown()
+        public void Shutdown()
         {
             _started = false;
             Unsubscribe();
@@ -74,7 +81,7 @@ namespace Game
             _rainPostedAt = float.NaN;
         }
 
-        public static void SetContentAudioPaused(bool paused)
+        public void SetContentAudioPaused(bool paused)
         {
             if (_contentAudioPaused == paused)
                 return;
@@ -93,7 +100,7 @@ namespace Game
         /// Hard-stop wind/rain loops without changing the BGM content-pause latch.
         /// Preset iris: zero RTPCs first (already ducked), then stop — keep banks retained.
         /// </summary>
-        public static void ClearPlaying()
+        public void ClearPlaying()
         {
             WriteLogicalRtpc(WindParam, 0f, ref _windLogical, ref _windWritten);
             WriteLogicalRtpc(RainParam, 0f, ref _rainLogical, ref _rainWritten);
@@ -103,10 +110,10 @@ namespace Game
             _rainPostedAt = float.NaN;
         }
 
-        public static void Refresh() => ApplyFromWeather();
+        public void Refresh() => ApplyFromWeather();
 
-        /// <summary>Re-push Wind/Rain/Foggy × <see cref="ContentAudioDuck.Level01"/> (preset ramp).</summary>
-        public static void ReapplyDuckedRtpcs()
+        /// <summary>Re-push Wind/Rain/Foggy × <see cref="_session.Duck.Level01"/> (preset ramp).</summary>
+        public void ReapplyDuckedRtpcs()
         {
             if (!_started)
                 return;
@@ -119,7 +126,7 @@ namespace Game
         /// 回前台 / 打断恢复：风 / 雨循环的 voice 可能已被引擎掐掉，但本地态还认为在播
         /// （StartLoop 会因 <c>playing == true</c> 直接 return）→ 清本地态后按当前天气重起。
         /// </summary>
-        public static void RestorePlaying()
+        public void RestorePlaying()
         {
             if (!_started)
                 return;
@@ -130,7 +137,7 @@ namespace Game
             ApplyFromWeather();
         }
 
-        static void Subscribe()
+        void Subscribe()
         {
             if (_subscribed)
                 return;
@@ -141,7 +148,7 @@ namespace Game
             _subscribed = true;
         }
 
-        static void Unsubscribe()
+        void Unsubscribe()
         {
             if (!_subscribed)
                 return;
@@ -151,9 +158,9 @@ namespace Game
             _subscribed = false;
         }
 
-        static void OnWeatherChanged(object sender, GameEventArgs e) => ApplyFromWeather();
+        void OnWeatherChanged(object sender, GameEventArgs e) => ApplyFromWeather();
 
-        static void OnBankLoaded(string bankName)
+        void OnBankLoaded(string bankName)
         {
             if (!_started || string.IsNullOrEmpty(bankName))
                 return;
@@ -169,7 +176,7 @@ namespace Game
             ApplyFromWeather();
         }
 
-        static void ApplyFromWeather()
+        void ApplyFromWeather()
         {
             if (!_started || !WanosInteraction.IsReady || _contentAudioPaused)
                 return;
@@ -181,7 +188,7 @@ namespace Game
             bool wantWind = false;
             bool wantRain = false;
 
-            if (weather != null && !PresetWeatherHold.IsHeld)
+            if (weather != null && !(PresetService.Instance != null && PresetService.Instance.IsWeatherHeld))
             {
                 if (weather.IsWeatherTransitioning)
                 {
@@ -237,7 +244,7 @@ namespace Game
                 // 大雨/中雨已在播时，只把 Rain RTPC 降到 30 不会拉起 Rain_Small
                 // （0 档起声、或小雨那条已经按 loop_times=1 放完，抬/降参数都补不回来）。
                 // 虹膜把 RTPC 乘到 0 时不要在这一帧重起：0 档 Play_Rain 起不来小雨。
-                if (NeedsLightRainRearm(rain) && rain * ContentAudioDuck.Level01 >= 1f)
+                if (NeedsLightRainRearm(rain) && rain * _session.Duck.Level01 >= 1f)
                 {
                     Log.Info(
                         $"[WeatherAudio] rearm Play_Rain light rtpc={rain:F1} postedAt={_rainPostedAt:F1}");
@@ -258,10 +265,10 @@ namespace Game
                 _rainPostedAt = float.NaN;
             }
 
-            RainWaterProximityService.EvaluateNow();
+            _session.Rain.EvaluateNow();
         }
 
-        static bool NeedsLightRainRearm(float rain)
+        bool NeedsLightRainRearm(float rain)
         {
             return _rainPlaying
                    && !float.IsNaN(_rainPostedAt)
@@ -269,22 +276,22 @@ namespace Game
                    && rain < LightRainExclusiveMax;
         }
 
-        static void WriteLogicalRtpc(string name, float logical, ref float logicalField, ref float writtenField)
+        void WriteLogicalRtpc(string name, float logical, ref float logicalField, ref float writtenField)
         {
             logicalField = logical;
             ForceWrite(name, logical, ref writtenField);
         }
 
-        static void ForceWrite(string name, float logical, ref float writtenField)
+        void ForceWrite(string name, float logical, ref float writtenField)
         {
-            float ducked = logical * ContentAudioDuck.Level01;
+            float ducked = logical * _session.Duck.Level01;
             if (!float.IsNaN(writtenField) && Mathf.Approximately(writtenField, ducked))
                 return;
             writtenField = ducked;
             WanosEngine.SetGlobalParameter(name, ducked);
         }
 
-        static void StartLoop(
+        void StartLoop(
             ref bool playing,
             ulong objectId,
             string bank,
@@ -313,7 +320,7 @@ namespace Game
             Log.Info($"[WeatherAudio] play {playEvent}");
         }
 
-        static void StopLoop(
+        void StopLoop(
             ref bool playing,
             ulong objectId,
             string stopEvent,
@@ -333,7 +340,7 @@ namespace Game
         }
 
         /// <summary>Stop voice/event only; leave <see cref="_windBankHeld"/> / rain retain intact.</summary>
-        static void StopLoopKeepBank(ref bool playing, ulong objectId, string stopEvent)
+        void StopLoopKeepBank(ref bool playing, ulong objectId, string stopEvent)
         {
             if (!playing)
                 return;

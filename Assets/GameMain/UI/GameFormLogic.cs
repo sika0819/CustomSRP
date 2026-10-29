@@ -9,6 +9,12 @@ namespace Game
     public class GameFormLogic : UIFormLogic
     {
         protected VisualElement Root { get; private set; }
+
+        /// <summary>Document 重建后换上新的视觉树根。setter 不能再标 protected（CS0273）。</summary>
+        protected void BindRoot(VisualElement root)
+        {
+            Root = root;
+        }
         protected virtual bool CloseWhenAnyButtonClicked => false;
 
         /// <summary>
@@ -82,7 +88,7 @@ namespace Game
 
             if (HidesBottomHudIcons)
             {
-                HudBottomIcons.PushHide();
+                IslandMainForm.Current?.PushBottomHide();
                 _hidBottomIcons = true;
             }
 
@@ -100,6 +106,10 @@ namespace Game
 
             if (CloseOnBackdropClick)
                 BindBackdropDismiss();
+            else
+                // 不点空白关闭时，stage 的 USS Ignore 会让子树命中不稳定；
+                // 下载弹窗等要把舞台和卡片改成可点。
+                EnableStagePicking();
 
             if (CloseWhenAnyButtonClicked)
             {
@@ -108,12 +118,27 @@ namespace Game
             }
         }
 
+        void EnableStagePicking()
+        {
+            if (Root == null)
+                return;
+            // stage USS 默认 Ignore（给底部 sheet 点空白关闭用）。下载弹窗等不走
+            // BindBackdropDismiss，必须把舞台和 NoticeCard 改回可点，否则按钮看起来点不了。
+            Root.Query(className: "game-form-stage").ForEach(stage =>
+                stage.pickingMode = PickingMode.Position);
+            Root.Query(className: "notice-card").ForEach(card =>
+                card.pickingMode = PickingMode.Position);
+            VisualElement dialog = Root.Q("dialog");
+            if (dialog != null)
+                dialog.pickingMode = PickingMode.Position;
+        }
+
         public override void OnClose(bool isShutdown, object userData)
         {
             if (_hidBottomIcons)
             {
                 _hidBottomIcons = false;
-                HudBottomIcons.PopShow();
+                IslandMainForm.Current?.PopBottomShow();
             }
 
             ScreenLayout.Changed -= OnScreenChanged;
@@ -263,10 +288,26 @@ namespace Game
             if (element == null || action == null)
                 return;
 
+            // ClickEvent 要等按下和抬起落在同一元素上。启动后第一次点经常被摇杆捕获
+            // 或面板缩放挤掉，看起来闪一下，要点第二次。按下就触发，抬起丢失也算点中。
             element.pickingMode = PickingMode.Position;
-            EventCallback<ClickEvent> callback = _ => action();
+            element.focusable = false;
+            EventCallback<PointerDownEvent> callback = evt =>
+            {
+                if (evt.button != 0)
+                    return;
+                if (evt.pointerId == PointerId.mousePointerId && Input.touchCount > 0)
+                    return;
+                action();
+                evt.StopPropagation();
+            };
             element.RegisterCallback(callback);
-            _clicks.Add((element, callback));
+            _trackingCallbacks.Add((element, callback));
+
+            // 按下已经执行。拦住随后冒泡的 ClickEvent，避免点到按钮又被父级当成点空白处关掉。
+            EventCallback<ClickEvent> swallow = evt => evt.StopPropagation();
+            element.RegisterCallback(swallow);
+            _clicks.Add((element, swallow));
         }
 
         void ClearClicks()
@@ -279,9 +320,15 @@ namespace Game
             {
                 var (element, cb) = _trackingCallbacks[i];
                 if (cb is EventCallback<PointerDownEvent> pd)
+                {
                     element.UnregisterCallback(pd, TrickleDown.TrickleDown);
+                    element.UnregisterCallback(pd);
+                }
                 else if (cb is EventCallback<PointerUpEvent> pu)
+                {
                     element.UnregisterCallback(pu, TrickleDown.TrickleDown);
+                    element.UnregisterCallback(pu);
+                }
             }
             _trackingCallbacks.Clear();
         }

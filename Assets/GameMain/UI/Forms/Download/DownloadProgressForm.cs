@@ -1,82 +1,75 @@
 using System;
-using UnityEngine;
-using UnityEngine.UIElements;
-using UnityGameFramework.Runtime;
 
 namespace Game
 {
     /// <summary>
-    /// Download progress dialog with animated progress bar.
+    /// Download progress dialog. Closing the card does not stop the downloader.
     /// </summary>
     public class DownloadProgressForm : GameFormLogic
     {
         public class UserData
         {
             public Action OnCancel;
+            public int Ticket;
         }
 
         UserData _userData;
-        VisualElement _progressFill;
-        Label _progressText;
+        NoticeCardPresenter _card;
 
         protected override bool CloseWhenAnyButtonClicked => false;
-        protected override bool SlidesUpFromBottom => true;
+        protected override bool SlidesUpFromBottom => false;
 
         public override void OnOpen(object userData)
         {
             base.OnOpen(userData);
             _userData = userData as UserData;
-
-            // Hide title/body/icon — progress bar is the focus.
-            var title = Root.Q<Label>("title");
-            if (title != null) title.style.display = DisplayStyle.None;
-            var body = Root.Q<Label>("body");
-            if (body != null) body.style.display = DisplayStyle.None;
-            var icon = Root.Q<VisualElement>("icon");
-            if (icon != null) icon.style.display = DisplayStyle.None;
-
-            // Show progress elements.
-            var track = Root.Q<VisualElement>("progress-track");
-            if (track != null) track.style.display = DisplayStyle.Flex;
-            _progressFill = Root.Q<VisualElement>("progress-fill");
-            _progressText = Root.Q<Label>("progress-text");
-            if (_progressText != null)
+            int ticket = _userData != null ? _userData.Ticket : 0;
+            if (UiDialogService.IsProgressRetired(ticket))
             {
-                _progressText.style.display = DisplayStyle.Flex;
-                _progressText.text = "0%";
+                if (Root != null)
+                    Root.schedule.Execute(Dismiss);
+                return;
             }
 
-            // Hide secondary (no cancel in simple version), show primary as cancel.
-            var primary = Root.Q<Button>("primary");
-            if (primary != null)
+            _card = new NoticeCardPresenter();
+            _card.Bind(Root);
+            _card.Apply(new NoticeCardContent
             {
-                var label = primary.Q<Label>("primaryLabel");
-                if (label != null) label.text = "取消下载";
-                OnClick("primary", () =>
-                {
-                    _userData?.OnCancel?.Invoke();
-                    CloseSelf();
-                });
-            }
-            var secondary = Root.Q<Button>("secondary");
-            if (secondary != null) secondary.style.display = DisplayStyle.None;
+                Title = "场景资源加载中...",
+                ShowBody = false,
+                Icon = NoticeCardIcon.Downloading,
+                PrimaryLabel = "我知道了",
+                ShowSecondary = false,
+                ShowProgress = true,
+            });
+
+            OnClick("primary", () =>
+            {
+                _userData?.OnCancel?.Invoke();
+                CloseSelf();
+            });
+
+            UiDialogService.AttachProgressForm(this, ticket);
+        }
+
+        public void Dismiss()
+        {
+            CloseSelfImmediate();
         }
 
         /// <summary>
-        /// Call this externally to update progress (0–100).
+        /// percent 为 0–100。体积未知时 downloadedMb 与 totalMb 传 0。
         /// </summary>
-        public void SetProgress(float percent)
+        public void SetProgress(float percent, float downloadedMb = 0f, float totalMb = 0f)
         {
-            if (_progressFill != null)
-                _progressFill.style.width = Length.Percent(Mathf.Clamp(percent, 0f, 100f));
-            if (_progressText != null)
-                _progressText.text = $"{(int)percent}%";
+            _card?.SetProgress(percent, downloadedMb, totalMb);
         }
 
         public override void OnClose(bool isShutdown, object userData)
         {
-            _progressFill = null;
-            _progressText = null;
+            UiDialogService.DetachProgressForm(this);
+            _card?.Unbind();
+            _card = null;
             _userData = null;
             base.OnClose(isShutdown, userData);
         }

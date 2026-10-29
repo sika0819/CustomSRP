@@ -49,7 +49,7 @@ Material:
     - _BumpTile: 80
     - _DepthVertical: 4
     - _DstBlend: 10
-    - _FoamStrength: 0.34
+    - _FoamStrength: 1.35
     - _IntersectionClipping: 0.293
     - _IntersectionDistortion: 0.12
     - _IntersectionFalloff: 1

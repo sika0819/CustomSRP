@@ -7,6 +7,8 @@ struct CloudAttributes
 {
     float3 positionOS : POSITION;
     float2 uv : TEXCOORD0;
+    // 0 on the low ring, high-ring SDF bias on the baked upper copy.
+    float ringBias : TEXCOORD1;
 };
 
 struct CloudVaryings
@@ -15,6 +17,7 @@ struct CloudVaryings
     float2 uv : VAR_CLOUD_UV;
     float2 noiseUV : VAR_NOISE_UV;
     float3 positionWS : VAR_POSITION;
+    float ringBias : VAR_RING_BIAS;
 };
 
 CloudVaryings CloudVertex(CloudAttributes input)
@@ -30,6 +33,7 @@ CloudVaryings CloudVertex(CloudAttributes input)
 #endif
     output.positionWS = positionWS;
     output.uv = input.uv;
+    output.ringBias = input.ringBias;
     float yaw = _OilCloudWind.y;
     output.noiseUV = input.uv * _NoiseMap_ST.xy + _NoiseMap_ST.zw + float2(yaw * 0.10, yaw * 0.04);
     return output;
@@ -119,28 +123,26 @@ half4 CloudFragment(CloudVaryings input) : SV_Target
     float dawn = saturate(_OilCloudDawn);
 
     float coverage = saturate(_OilCloudParams.y);
-    float sdfThreshold = lerp(_SdfMax, _SdfMin, coverage) + _OilCloudRingBias;
+    float sdfThreshold = lerp(_SdfMax, _SdfMin, coverage) + input.ringBias;
     // Derivatives before any return. A branch here would break the rim mip.
     float aa = max(fwidth(sdf), 1e-4);
     float atlas = baseMap.a;
     float soft = _SdfSoftness * lerp(1.0, 1.75, dawn);
     half4 stroke = SampleCloudStroke(cloudUV);
     half brush = CloudBrushAmount(stroke);
-    // Contour bristle is color-only. Alpha is a hard oil fill from the map.
+    // Contour bristle is color-only. Body stays opaque; alpha is 1px SDF AA only.
     float threshold = sdfThreshold + ((float)brush - 0.5) * 0.5 * aa;
-    float aaRim = aa * 0.3;
+    float aaRim = max(aa, 1e-4);
     float shape = smoothstep(threshold - aaRim, threshold + aaRim, sdf);
     // Padding gate only — never use atlas.a as a soft opacity multiply.
     float pad = step(0.05, atlas);
+    float alpha = shape * pad;
     // Alpha 0 matches the old clip, and it leaves early-Z on. clip() made Mali
     // shade the whole ring, including cards sitting behind the terrain.
-    if (shape * pad < 0.02)
+    if (alpha < 0.02)
     {
         return half4(0.0h, 0.0h, 0.0h, 0.0h);
     }
-
-    // Mapped cloud is opaque paint — dye fog on RGB later, never thin alpha.
-    float alpha = 1.0;
 
     half3 body = (half3)_OilCloudColor.rgb;
     half3 highlight = (half3)_OilCloudHighlight.rgb;
@@ -188,10 +190,11 @@ half4 CloudFragment(CloudVaryings input) : SV_Target
     float fringe = max(outer, max(band, saturate(baseMap.g)));
     fringe = saturate(fringe);
     fringe *= lerp(1.0, fringe, 0.35);
+    // Keep rim inside the filled shape so G-edge does not chalk the AA stairsteps.
+    fringe *= shape;
     half rim = (half)fringe * edgeW * (half)lerp(0.4, 1.0, sunProx);
     color += highlight * rim * 0.45h;
     color += half3(1.00h, 0.96h, 0.86h) * rim * (half)dawn * 0.35h;
-    // Rim light stays on color only — do not re-feather alpha with a soft halo.
 
     color = CloudHorizonWash(color, dirW);
     color = CloudPainterly(color, stroke, (half)baseMap.g);

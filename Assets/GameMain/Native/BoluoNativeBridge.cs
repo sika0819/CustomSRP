@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Game.Native
 {
-    /// <summary>主线程 Drain Push 队列；DontDestroyOnLoad。</summary>
+    /// <summary>主线程 Drain Push 队列。建在 Launch 里，Launch 不卸载。</summary>
     public sealed class BoluoNativeBridge : MonoBehaviour
     {
         static BoluoNativeBridge _instance;
@@ -34,6 +34,9 @@ namespace Game.Native
 
         void Update()
         {
+#if UNITY_EDITOR
+            EditorNativeHost.Tick();
+#endif
             NativePushReceiver.Drain();
             Game.NowPlayingService.Tick();
 #if UNITY_EDITOR

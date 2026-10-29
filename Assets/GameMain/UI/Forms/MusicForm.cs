@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Cysharp.Threading.Tasks;
 using Game.BoluoApi;
 using Game.BoluoApi.Music;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityGameFramework.Runtime;
+using WanosAudio;
 
 namespace Game
 {
@@ -24,6 +24,12 @@ namespace Game
 
         /// <summary>Music that the user intends to play after its bank finishes downloading.</summary>
         (int album, int track)? _pendingMusic;
+
+        /// <summary>Bumps when a newer download click supersedes an in-flight play-after-download.</summary>
+        int _playAfterDownloadGen;
+
+        const int BankDecodePollMs = 50;
+        const int BankDecodeWaitMs = 8000;
 
         /// <summary>Currently centred album index.</summary>
         int _centerAlbum;
@@ -1870,13 +1876,9 @@ namespace Game
         // Download gates & pending music
         // -----------------------------------------------------------------------
 
-        void ShowGateTip(string message)
-        {
-            UiTipToast.ShowMessage(message, 2.5f);
-        }
-
         /// <summary>
         /// F5 download gate checks + pending music enqueue.
+        /// 无网 → 存储 → 流量 → 开下；拒流量清 PendingDownloadIntent。
         /// </summary>
         void TriggerMusicDownload(int album, int track)
         {
@@ -1885,40 +1887,18 @@ namespace Game
                 return;
 
             string bankName = tracks[track].BankName;
+            string[] banks = { bankName };
 
-            // Gate 1: No network.
-            if (Application.internetReachability == NetworkReachability.NotReachable)
-            {
-                ShowGateTip("需要网络连接");
+            if (!DownloadNetworkGate.TryPassDownloadGates(
+                    banks,
+                    onAllowAfterMobile: () => DoDownload(album, track, bankName),
+                    onWifiOnly: () =>
+                    {
+                        ClearPendingMusic();
+                        _list?.schedule.Execute(() => _list?.RefreshItems());
+                    },
+                    onBlockedRetreat: null))
                 return;
-            }
-
-            // Gate 2: Insufficient storage (rough estimate).
-            long requiredKb = 0;
-            if (PresetBankCatalog.TryGet(bankName, out var remoteInfo) && remoteInfo != null)
-            {
-                if (!string.IsNullOrEmpty(remoteInfo.size) && long.TryParse(remoteInfo.size, out long sizeKb))
-                    requiredKb = sizeKb;
-            }
-
-            if (requiredKb > 0)
-            {
-                long requiredBytes = requiredKb * 1024L;
-                if (GetAvailableStorageBytes() < requiredBytes * 2)
-                {
-                    ShowGateTip("存储空间不足");
-                    return;
-                }
-            }
-
-            // Gate 3: Mobile data without user consent.
-            // TODO: Wire up a user-consent dialog. For now, allow.
-            // if (Application.internetReachability == NetworkReachability.ReachableViaCarrierData
-            //     && !UserHasConsentedToMobileDownload)
-            // {
-            //     ShowMobileDownloadConsentDialog(() => DoDownload(album, track, bankName));
-            //     return;
-            // }
 
             DoDownload(album, track, bankName);
         }
@@ -1926,8 +1906,11 @@ namespace Game
         void DoDownload(int album, int track, string bankName)
         {
             // Shared with PresetForm — mutual overwrite (Boluo PendingDownloadIntent).
+            _playAfterDownloadGen++;
             _pendingMusic = (album, track);
             PendingDownloadIntent.SetMusic(album, track);
+            // Next frame: rebinding inside this click would unregister the callback mid-dispatch.
+            _list?.schedule.Execute(() => _list?.RefreshItems());
 
             // Initiate priority download.
             if (PresetBankCatalog.TryGet(bankName, out var remote))
@@ -1939,6 +1922,7 @@ namespace Game
             {
                 Log.Warning($"[MusicForm] Bank not found in PresetBankCatalog: {bankName}");
                 ClearPendingMusic();
+                _list?.schedule.Execute(() => _list?.RefreshItems());
             }
         }
 
@@ -1999,11 +1983,114 @@ namespace Game
                 int album = PendingDownloadIntent.MusicAlbum;
                 int track = PendingDownloadIntent.MusicTrack;
                 if (item.State == BankDownloadState.Ready || item.State == BankDownloadState.Skipped)
-                    GameEntry.Music?.PlayIndex(album, track);
+                {
+                    // Keep the spinner up until the bank is decoded. PlayIndex stops the
+                    // current song first; posting before decode leaves that stop in place.
+                    int gen = _playAfterDownloadGen;
+                    string guid = !string.IsNullOrEmpty(item.Guid)
+                        ? item.Guid
+                        : MusicCatalog.GetTrack(album, track)?.BankGuid;
+                    PlayDownloadedTrackAsync(gen, album, track, item.BankName, guid).Forget();
+                    _list?.RefreshItems();
+                    return;
+                }
+
                 ClearPendingMusic();
             }
 
             _list?.RefreshItems();
+        }
+
+        bool StillPendingDownload(int gen, int album, int track) =>
+            gen == _playAfterDownloadGen && PendingDownloadIntent.IsMusicMatch(album, track);
+
+        /// <summary>
+        /// Wait until the freshly loaded bank can accept PostEvent, then switch playback to it.
+        /// Current BGM keeps playing during the wait.
+        /// </summary>
+        async UniTaskVoid PlayDownloadedTrackAsync(int gen, int album, int track, string bankName, string guidText)
+        {
+            try
+            {
+                bool still = await WaitUntilBankPlayable(gen, album, track, bankName, guidText);
+                if (!still || !StillPendingDownload(gen, album, track))
+                    return;
+
+                if (!string.IsNullOrEmpty(bankName)
+                    && !WanosBankStore.IsLoaded(bankName)
+                    && !WanosBankStore.Load(bankName))
+                {
+                    Log.Warning($"[MusicForm] downloaded bank not in engine: {bankName}");
+                    return;
+                }
+
+                if (!WanosEngine.IsPlaybackEnabled)
+                {
+                    WanosEngine.EnablePlayback("music-download");
+                    WanosEngine.StartEngine("music-download");
+                    WanosEngine.Unmute("music-download");
+                }
+
+                var albumData = MusicCatalog.GetAlbum(album);
+                var tracks = MusicCatalog.GetTracks(album);
+                if (albumData != null && track >= 0 && track < tracks.Count)
+                    MarkHeard(albumData.Name, tracks[track].MusicName);
+
+                Log.Info($"[MusicForm] download ready → play album={album} track={track} bank={bankName}");
+                GameEntry.Music?.PlayIndex(album, track, restart: true);
+                if (GameEntry.Music != null && !GameEntry.Music.IsPlaying && StillPendingDownload(gen, album, track))
+                {
+                    await UniTask.Delay(150, DelayType.UnscaledDeltaTime);
+                    if (StillPendingDownload(gen, album, track))
+                        GameEntry.Music.PlayIndex(album, track, restart: true);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Warning($"[MusicForm] play after download failed: {e.Message}");
+            }
+            finally
+            {
+                if (StillPendingDownload(gen, album, track))
+                    ClearPendingMusic();
+                _list?.RefreshItems();
+            }
+        }
+
+        async UniTask<bool> WaitUntilBankPlayable(int gen, int album, int track, string bankName, string guidText)
+        {
+            if (!TryParseBankGuid(guidText, out ulong bankId) || !WanosNative.Instance.BankDecodeQueryAvailable)
+            {
+                await UniTask.Delay(200, DelayType.UnscaledDeltaTime);
+                return StillPendingDownload(gen, album, track);
+            }
+
+            int waited = 0;
+            while (waited < BankDecodeWaitMs)
+            {
+                if (!StillPendingDownload(gen, album, track))
+                    return false;
+                if (WanosNative.Instance.IsBankDecoded(bankId))
+                    return true;
+                if (!WanosNative.Instance.BankDecodeQueryAvailable)
+                    return StillPendingDownload(gen, album, track);
+                await UniTask.Delay(BankDecodePollMs, DelayType.UnscaledDeltaTime);
+                waited += BankDecodePollMs;
+            }
+
+            Log.Warning($"[MusicForm] bank decode wait timed out bank={bankName} id={bankId} — play anyway");
+            return StillPendingDownload(gen, album, track);
+        }
+
+        static bool TryParseBankGuid(string text, out ulong guid)
+        {
+            guid = 0;
+            if (string.IsNullOrWhiteSpace(text))
+                return false;
+            text = text.Trim();
+            if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                text = text.Substring(2);
+            return ulong.TryParse(text, out guid);
         }
 
         void ClearPendingMusic()
@@ -2011,23 +2098,6 @@ namespace Game
             _pendingMusic = null;
             if (PendingDownloadIntent.Current == PendingDownloadIntent.Kind.Music)
                 PendingDownloadIntent.Clear();
-        }
-
-        /// <summary>
-        /// Rough estimate of available storage in bytes ( PersistentDataPath drive).
-        /// Returns <c>long.MaxValue</c> on failure (no gate triggered).
-        /// </summary>
-        static long GetAvailableStorageBytes()
-        {
-            try
-            {
-                string path = Application.persistentDataPath;
-                var drive = new DriveInfo(Path.GetPathRoot(path) ?? path);
-                if (drive.IsReady)
-                    return drive.AvailableFreeSpace;
-            }
-            catch { /* ignore */ }
-            return long.MaxValue;
         }
 
         // -----------------------------------------------------------------------

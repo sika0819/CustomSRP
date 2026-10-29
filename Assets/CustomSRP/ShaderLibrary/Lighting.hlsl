@@ -34,8 +34,7 @@ float3 GetLighting(Fragment fragment, Surface surfaceWS, BRDF brdf, GI gi)
     int lastLightIndex = tile.GetLastLightIndexInTile();
     for (int j = tile.GetFirstLightIndexInTile(); j <= lastLightIndex; j++)
     {
-        Light light = GetOtherLight(
-            tile.GetLightIndex(j), surfaceWS, shadowData);
+        Light light = GetOtherLight(tile.GetLightIndex(j), surfaceWS);
         if (RenderingLayersOverlap(surfaceWS, light))
         {
             color += GetLighting(surfaceWS, brdf, light);

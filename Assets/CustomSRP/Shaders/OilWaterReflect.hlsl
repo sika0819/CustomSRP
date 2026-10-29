@@ -338,21 +338,25 @@ half3 ApplyOilWaterReflection(
         half edgeFade = (half)(edge.x * edge.y);
         if (edgeFade > 0.001h)
         {
+            // 镜子只画景物，清空处 alpha 为 0。天空留解析色，不把清屏黑盖上去。
 #if defined(OIL_MOBILE_PERF)
-            half3 planar = (half3)SAMPLE_TEXTURE2D_LOD(
-                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv, 0.0).rgb;
+            half4 planarTex = SAMPLE_TEXTURE2D_LOD(
+                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv, 0.0);
+            half3 planar = (half3)planarTex.rgb;
+            half planarMask = planarTex.a;
 #else
             // 主扭曲在 U。竖向两 tap 对 192px 镜子几乎看不出，海面全屏时却每像素多两次采样。
             float2 texel = max(_OilPlanarReflectTex_TexelSize.xy, float2(1.0 / 160.0, 1.0 / 160.0));
             float smear = 2.0 + (float)distortAmt * 18.0;
             texel.x *= smear;
-            half3 planar = (half3)SAMPLE_TEXTURE2D_LOD(
-                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv, 0.0).rgb;
-            planar += (half3)SAMPLE_TEXTURE2D_LOD(
-                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv + float2(texel.x, 0.0), 0.0).rgb;
-            planar += (half3)SAMPLE_TEXTURE2D_LOD(
-                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv - float2(texel.x, 0.0), 0.0).rgb;
-            planar *= 1.0h / 3.0h;
+            half4 p0 = SAMPLE_TEXTURE2D_LOD(
+                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv, 0.0);
+            half4 p1 = SAMPLE_TEXTURE2D_LOD(
+                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv + float2(texel.x, 0.0), 0.0);
+            half4 p2 = SAMPLE_TEXTURE2D_LOD(
+                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv - float2(texel.x, 0.0), 0.0);
+            half3 planar = (half3)(p0.rgb + p1.rgb + p2.rgb) * (1.0h / 3.0h);
+            half planarMask = (p0.a + p1.a + p2.a) * (1.0h / 3.0h);
 #endif
             // 植被溢绿削一档；山体轮廓保留。
             half maxRB = max(planar.r, planar.b);
@@ -360,7 +364,7 @@ half3 ApplyOilWaterReflection(
             planar.g = lerp(planar.g, maxRB, gPush * 0.72h);
             planar.b = saturate(planar.b + gPush * 0.12h);
             // 平面相机倒影（山/岸）拉满 edgeFade，不再 ×0.32 冲没。
-            reflectCol = lerp(reflectCol, planar, edgeFade);
+            reflectCol = lerp(reflectCol, planar, edgeFade * planarMask);
         }
     }
 

@@ -150,6 +150,9 @@ namespace Game
                 GameEntry.UI.SetUIFormHelper(EnsureYooUIFormHelper(host));
             }
 
+            if (GameEntry.Base != null && !GameEntry.Base.EditorResourceMode && GameEntry.Scene != null)
+                GameEntry.Scene.SetResourceManager(yoo);
+
             Log.Info("[InitYooAsset] UI ResourceManager → YooAssetResourceManager");
         }
 

@@ -142,15 +142,13 @@ struct Varyings
     float3 normalWS : VAR_NORMAL;
     float2 worldXZ : TEXCOORD0;
     float2 waveDir0 : TEXCOORD1;
-    // Rest-plane eye depth：岸沫用静止面深度，避免 Gerstner 上下抖 rim。
-    float restEyeDepth : TEXCOORD2;
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
-// 对齐 OilRiverShore：Depth 窗 × IntersectionNoise × Shore Clip（无 Foam 笔刷贴图）。
-// 抗闪：UV 只用空间 warp（不用 bump/涟漪法线）；时间滚动放慢；clip 窗加宽。
+// 对齐 OilRiverShore：Depth 窗 × IntersectionNoise × crest 碎边（无 Foam 笔刷贴图）。
+// 抗闪：UV 跟 crest/短波法线（同河），不用涟漪；时间滚动放慢；clip 贴浪唇。
 void SampleShoreBrush(
-    float2 worldXZ, float gradient, float warp01,
+    float2 worldXZ, float gradient, float crest, half2 waveXZ,
     out half mask, out half wash)
 {
     half g = saturate((half)gradient);
@@ -165,8 +163,8 @@ void SampleShoreBrush(
     }
 
     float t = _Time.y;
-    // 空间扰动固定在世界 XZ，避免法线动画把碎边拖成闪烁。
-    float2 offsetVector = float2(warp01 - 0.5, warp01 - 0.5);
+    // 同河：crest + 短波切向把碎沫拉到浪花边缘，而不是浅滩中心填白。
+    float2 offsetVector = saturate(float2(crest, crest) + (float2)waveXZ);
     float2 interUv = worldXZ + offsetVector * _IntersectionDistortion;
     // 原 -t 滚动过快 + 硬 clip → 沫缘逐帧开合；降速并双样混合压闪。
     float speed = max(_IntersectionSpeed, 0.0) * 0.35;
@@ -184,15 +182,16 @@ void SampleShoreBrush(
         nUV * 1.37 + interTime * float2(-0.61, 0.47) + 0.17, shoreMip).r;
     half noise = max(n0, n1 * 0.85h);
 #endif
-    noise = saturate(noise * (half)(dist * 1.15) + (half)(dist * 0.42));
+    // 少填实心带，碎沫更贴 depth 交线。
+    noise = saturate(noise * (half)(dist * 1.35) + (half)(dist * 0.28));
 
-    half softLo = (half)max(_IntersectionClipping - 0.28, 0.0);
-    half softHi = (half)min(_IntersectionClipping + 0.32, 1.0);
+    half softLo = (half)max(_IntersectionClipping - 0.16, 0.0);
+    half softHi = (half)min(_IntersectionClipping + 0.20, 1.0);
     mask = smoothstep(softLo, softHi, noise)
         * strength
-        * (half)saturate((float)g * 1.15);
+        * (half)saturate((float)g * 1.25);
     // 浅水 wash：同河，只给一点，不作奶白渐变。
-    wash = saturate(g * g * g) * strength * 0.22h;
+    wash = saturate(g * g * g) * strength * 0.08h;
 }
 
 half3 SineWaveNormal(float2 worldXZ, out half crest)
@@ -263,25 +262,52 @@ float OilOceanStableSceneEyeDepth(
     return min(centerEye, min(min(d1, d2), min(d3, d4)));
 }
 
-// surfaceEye：用静止海面眼深（restEyeDepth），不跟波浪上下抖。
-half OilOceanDepthFoamRim(float surfaceEye, float sceneEye, float foamReachM)
+// 水面柱深。陆地挡在水前 → 0；无场景 depth → 大值（外海）。
+float OilOceanWaterColumn(float surfaceEye, float sceneEye)
 {
     if (sceneEye < 1e-3)
     {
-        return 0.0h;
+        return 80.0;
     }
 
-    float viewDepth = max(sceneEye - surfaceEye, 0.0);
-    float reach = max(foamReachM, 0.35);
-    if (viewDepth > reach * 2.5)
+    if (sceneEye + 0.02 < surfaceEye)
+    {
+        return 0.0;
+    }
+
+    return max(sceneEye - surfaceEye, 0.0);
+}
+
+// 拍岸白沫：峰值落在蓝水浪缘；远处关掉 fwidth，避免 depth 噪声假沫点。
+half OilOceanDepthFoamRim(
+    float surfaceEye, float sceneEye, float foamReachM, float camDist)
+{
+    float column = OilOceanWaterColumn(surfaceEye, sceneEye);
+    if (column > 40.0)
     {
         return 0.0h;
     }
 
-    // 更宽的 smoothstep，降低阈值附近的二值跳变。
-    half rim = (half)pow(saturate(1.0 - smoothstep(0.04, reach * 1.15, viewDepth)), 1.45);
-    rim *= (half)(1.0 - saturate((surfaceEye - sceneEye) * 3.0));
-    return rim;
+    float reach = max(foamReachM, 0.35);
+    if (column > reach * 2.3)
+    {
+        return 0.0h;
+    }
+
+    float peak = reach * 0.4;
+    float halfW = reach * 0.48;
+    half band = (half)saturate(1.0 - abs(column - peak) / max(halfW, 1e-3));
+    band = band * band * (3.0h - 2.0h * band);
+
+    half nearF = (half)saturate(1.0 - smoothstep(45.0, 140.0, camDist));
+    float colEdge = abs(ddx(column)) + abs(ddy(column));
+    half edge = (half)saturate(colEdge / max(reach * 0.2, 0.035)) * nearF;
+    half rim = band * lerp(0.55h, 1.0h, edge);
+
+    rim *= (half)smoothstep(0.04, peak * 0.55, column);
+    rim *= (half)(1.0 - saturate((surfaceEye - sceneEye) * 4.0));
+    rim *= lerp(band, 1.0h, nearF);
+    return saturate(rim);
 }
 
 Varyings OilOceanNPRPassVertex(Attributes input)
@@ -292,8 +318,6 @@ Varyings OilOceanNPRPassVertex(Attributes input)
 
     float3 positionWS = TransformObjectToWorld(input.positionOS);
     float2 xz = positionWS.xz;
-    // 岸沫 depth 锚定静止面，位移后再算 clip。
-    output.restEyeDepth = -TransformWorldToView(positionWS).z;
     float t = _Time.y;
     float k0 = 0.00314;
     float k1 = 0.00449;
@@ -332,7 +356,8 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     half crest;
     half3 waveN = SineWaveNormal(input.worldXZ, crest);
     half3 geoN = normalize((half3)input.normalWS);
-    half3 normalWS = normalize(lerp(geoN, waveN, 0.55h));
+    half3 foamN = normalize(lerp(geoN, waveN, 0.55h));
+    half3 normalWS = foamN;
     float camDist = length(_WorldSpaceCameraPos - input.positionWS);
 
     float2 paintSt = OceanMonetPaintUv(
@@ -389,16 +414,14 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     glass *= lerp(0.9h, 0.4h, overlook);
     glass = saturate(glass);
 
-    float foamReach = clamp(_ShoreFoamWidth * 0.045, 0.35, 1.4);
-#if defined(OIL_MOBILE_PERF)
-    // 移动端：单样 + 静止面深度已压掉波浪闪；省 4 次 depth tap。
+    // 静水位 + 略偏深水的沫带：白沫落在蓝浪缘，不落在透视沙滩。
+    // 必须用实际画出的浪面眼深。restEyeDepth 与位移后屏幕像素不对齐 → 沫偏到沙滩。
+    float surfaceEye = fragment.depth;
+    float foamReach = clamp(_ShoreFoamWidth * 0.05, 0.4, 1.6);
+    // 不用邻域 min：会把浅滩往岸上扩，白沫画到沙滩。
     float shoreSceneEye = fragment.bufferDepth;
-#else
-    float shoreSceneEye = OilOceanStableSceneEyeDepth(
-        fragment.screenUV, fragment.bufferDepth, input.restEyeDepth, max(foamReach, 0.55));
-#endif
-    half lipGrad = OilOceanDepthFoamRim(input.restEyeDepth, shoreSceneEye, foamReach);
-    lipGrad = saturate(lipGrad * 1.35h);
+    half lipGrad = OilOceanDepthFoamRim(surfaceEye, shoreSceneEye, foamReach, camDist);
+    lipGrad = saturate(lipGrad * 1.25h);
     half edge = lipGrad;
 
     half night = OilWaterNightWeight(_OilSkyPeriod);
@@ -447,13 +470,24 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     color = OilWeaveTint(color, paintSt * 6.0);
 #endif
 
-    half depthRim = OilOceanDepthFoamRim(input.restEyeDepth, shoreSceneEye, 0.55);
-    depthRim *= (1.0h - glass * 0.7h) * water;
-    half shoreGrad = max(lipGrad, depthRim * (1.0h - lipGrad * 0.55h));
+    // 透视沙滩（glass 很高）灭实心白；礁石薄交线近景兜底。
+    half depthRim = OilOceanDepthFoamRim(surfaceEye, shoreSceneEye, min(foamReach, 0.55), camDist);
+    half nearOnly = (half)saturate(1.0 - smoothstep(40.0, 160.0, camDist));
+    depthRim *= (1.0h - glass * 0.75h) * water * nearOnly;
+    half shoreGrad = max(lipGrad, depthRim * 0.5h * (1.0h - lipGrad));
+    // 透视沙滩减浓，但不整段掐死（夜晚 glass 偏高会把沫灭没）。
+    shoreGrad *= lerp(1.0h, 0.45h, saturate(glass));
+    half crestAmt = lerp(crest, 0.5h, overlook);
+    shoreGrad *= lerp(0.9h, 1.05h, crestAmt);
+    shoreGrad *= (half)saturate(1.15 - overlook * 0.55h);
 
     half shoreMask;
     half shoreWash;
-    SampleShoreBrush(input.worldXZ, shoreGrad, columnN, shoreMask, shoreWash);
+    SampleShoreBrush(
+        input.worldXZ, shoreGrad, crest, half2(foamN.x, foamN.z), shoreMask, shoreWash);
+    half inFront = (half)saturate((surfaceEye - shoreSceneEye) * 4.0);
+    shoreMask *= (1.0h - inFront);
+    shoreWash *= (1.0h - inFront);
 
 #if !defined(OIL_MOBILE_PERF)
     // 折射只在浅滩 glass 窗口。外海 glass≈0，不要每像素再采一张全分辨率颜色。
@@ -500,8 +534,8 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
 
     // 钛白岸沫：直接靠向 _FoamColor，避免深蓝紫水体把沫染灰。
     half3 foamCol = (half3)_FoamColor.rgb;
-    half foamNight = lerp(1.0h, 0.45h, night);
-    half foamMix = saturate(shoreWash * 0.42h + shoreMask * 0.92h) * foamNight;
+    half foamNight = lerp(1.0h, 0.7h, night);
+    half foamMix = saturate(shoreWash * 0.18h + shoreMask * 0.95h) * foamNight;
     color = lerp(color, foamCol, foamMix);
     alpha = saturate(alpha + shoreMask * 0.35h + relief * 0.06h);
 

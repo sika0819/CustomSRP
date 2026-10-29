@@ -5,6 +5,7 @@
     top: 0;
     bottom: 0;
     overflow: visible;
+    picking-mode: Position;
     background-image: url("../Textures/NoticeCard/panel.png");
     -unity-background-scale-mode: stretch-to-fill;
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
@@ -57,6 +58,124 @@
     color: rgba(0, 0, 0, 1.000);
     white-space: normal;
     -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+    overflow: visible;
+}
+
+.notice-card__icon.notice-card__icon--download {
+    background-image: url("../Textures/NoticeCard/need-download.png");
+}
+
+.notice-card__icon.notice-card__icon--downloading {
+    background-image: url("../Textures/NoticeCard/downloading.png");
+}
+
+.notice-card__icon.notice-card__icon--tip {
+    background-image: url("../Textures/LoadingForm/storage-fullstoragepage-icon.png");
+}
+
+.notice-card__progress {
+    display: none;
+    position: absolute;
+    left: 84px;
+    top: 480px;
+    width: 765px;
+    height: 220px;
+    flex-direction: column;
+}
+
+.notice-card--progress .notice-card__progress {
+    display: flex;
+}
+
+.notice-card--progress .notice-card__body {
+    display: none;
+}
+
+.notice-card--progress .notice-card__secondary {
+    display: none;
+}
+
+.notice-card__sentence {
+    min-height: 48px;
+    margin: 0;
+    padding: 0;
+    -unity-text-align: middle-left;
+    font-size: 36px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: normal;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+
+.notice-card__eta {
+    height: 48px;
+    margin: 0;
+    padding: 0;
+    -unity-text-align: middle-left;
+    font-size: 39px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: nowrap;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+
+.notice-card__progress-track {
+    position: relative;
+    width: 609px;
+    height: 24px;
+    margin-top: 8px;
+    margin-bottom: 0;
+    margin-left: 0;
+    margin-right: 0;
+    overflow: hidden;
+    background-image: url("../Textures/NoticeCard/progress-track.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.notice-card__progress-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    transform-origin: 0% 50%;
+    scale: 0 1;
+    background-image: url("../Textures/NoticeCard/progress-fill.png");
+    -unity-background-scale-mode: stretch-to-fill;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+}
+
+.notice-card__size-row {
+    flex-direction: row;
+    align-items: center;
+    height: 48px;
+    margin-top: 12px;
+    margin-bottom: 0;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+.notice-card__downloaded {
+    margin: 0;
+    padding: 0;
+    -unity-text-align: middle-left;
+    font-size: 39px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: nowrap;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+}
+
+.notice-card__size-detail {
+    margin-left: 4px;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    padding: 0;
+    -unity-text-align: middle-left;
+    font-size: 36px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: nowrap;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
 }
 
 .notice-card__primary {
@@ -69,6 +188,7 @@
     margin-top: 0;
     margin-right: 0;
     margin-bottom: 0;
+    picking-mode: Position;
     background-image: url("../Textures/NoticeCard/primary.png");
     -unity-background-scale-mode: stretch-to-fill;
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
@@ -106,6 +226,7 @@
     margin-top: 0;
     margin-right: 0;
     margin-bottom: 0;
+    picking-mode: Position;
     background-color: rgba(255, 255, 255, 1.000);
     padding: 0;
     border-width: 0;

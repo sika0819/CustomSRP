@@ -14,10 +14,19 @@ namespace Game.Native
         {
             BoluoSession.LoadFromPrefs();
             if (!forceRefresh && BoluoSession.IsDeviceTokenValid())
+            {
+                IslandEntryLog.Skip(
+                    "deviceTicket",
+                    "reuse",
+                    "len=" + BoluoSession.DeviceToken.Length);
                 return true;
+            }
 
             if (!IsHybridAvailable())
+            {
+                IslandEntryLog.Fail("deviceTicket", "hybridOff");
                 return false;
+            }
 
             int flags = 0;
             if (forceRefresh || !BoluoSession.IsDeviceTokenValid())
@@ -28,18 +37,21 @@ namespace Game.Native
             if (code != BridgeCode.Ok)
             {
                 Log.Warning($"[NativeSession] EnsureDeviceToken code={code}");
+                IslandEntryLog.Fail("deviceTicket", "query", "code=" + code);
                 return false;
             }
 
             if (!TryParseExpireToken(blob, out uint expire, out string token))
             {
                 Log.Warning("[NativeSession] EnsureDeviceToken bad blob");
+                IslandEntryLog.Fail("deviceTicket", "badBlob");
                 return false;
             }
 
             if (string.IsNullOrEmpty(token))
             {
                 Log.Warning("[NativeSession] EnsureDeviceToken empty token");
+                IslandEntryLog.Fail("deviceTicket", "empty");
                 return false;
             }
 
@@ -50,30 +62,58 @@ namespace Game.Native
             BoluoSession.SetDeviceToken(token, expire);
             Log.Info(
                 $"[NativeSession] deviceToken len={token.Length} expire={expire} force={forceRefresh}");
+            IslandEntryLog.Ok(
+                "deviceTicket",
+                "ready",
+                "len=" + token.Length + " expire=" + expire + " force=" + (forceRefresh ? 1 : 0));
             return !string.IsNullOrEmpty(BoluoSession.DeviceToken);
         }
 
         public static bool TryGetUserToken(out string token)
         {
-            return TryGetUserSession(out token, out _, out _);
+            return TryGetUserSession(out token, out _, out _, out _);
         }
 
         /// <summary>
-        /// Hybrid 用户票。blob 新格式 <c>expire\ttoken\tisGuest\tuserId</c>；
-        /// 旧格式 <c>token</c> / <c>expire\ttoken</c> → isGuest=true、userId 空（不写进度盘）。
+        /// Hybrid 用户票。blob：<c>expire\ttoken\tuserId\tsaveLocal</c>。
+        /// 真机 <paramref name="isGuest"/> 恒为 false。缺 userId 时调用方停在罩上等待。
+        /// <paramref name="saveLocal"/> 为 false 时不写岛内进度。
         /// </summary>
-        public static bool TryGetUserSession(out string token, out bool isGuest, out string userId)
+        public static bool TryGetUserSession(
+            out string token, out bool isGuest, out string userId, out bool saveLocal)
         {
             token = "";
-            isGuest = true;
+            isGuest = false;
             userId = "";
+            saveLocal = false;
             int code = NativeBridgeTransport.Query(
                 MsgType.SessionGetToken, MsgType.TokenKindUser, 0, 0, null, out string blob);
             if (code != BridgeCode.Ok)
+            {
+                IslandEntryLog.Fail("userTicket", "query", "code=" + code);
                 return false;
-            if (!TryParseUserSessionBlob(blob, out _, out token, out isGuest, out userId))
+            }
+
+            if (!TryParseUserSessionBlob(blob, out _, out token, out isGuest, out userId, out saveLocal))
+            {
+                IslandEntryLog.Fail("userTicket", "badBlob");
                 return false;
-            return !string.IsNullOrEmpty(token);
+            }
+
+            if (string.IsNullOrEmpty(token))
+            {
+                IslandEntryLog.Fail("userTicket", "empty");
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(userId))
+                IslandEntryLog.Fail("userTicket", "userIdEmpty", "len=" + token.Length);
+            else
+                IslandEntryLog.Ok(
+                    "userTicket",
+                    "unity",
+                    "len=" + token.Length + " userId=" + userId + " saveLocal=" + (saveLocal ? 1 : 0));
+            return true;
         }
 
         public static bool TryGetHostChannel(out string channel)
@@ -150,21 +190,26 @@ namespace Game.Native
 
         public static bool TryParseExpireToken(string blob, out uint expire, out string token)
         {
-            return TryParseUserSessionBlob(blob, out expire, out token, out _, out _);
+            return TryParseUserSessionBlob(blob, out expire, out token, out _, out _, out _);
         }
 
         /// <summary>
-        /// 解析 user token blob。
-        /// 四段：<c>expire\ttoken\tisGuest\tuserId</c>（isGuest 为 0/1）；
-        /// 一段/两段旧格式：仅 token（或 expire+token），isGuest=true。
+        /// 解析 user token blob。真机 <paramref name="isGuest"/> 恒为 false。
+        /// 四段新格式：<c>expire\ttoken\tuserId\tsaveLocal</c>（末段 0/1，第三段不是 0/1）。
+        /// 四段旧格式：<c>expire\ttoken\tisGuest\tuserId</c>（第三段 0/1），userId 取末段，
+        /// saveLocal = isGuest 为 0。
+        /// 三段没有 saveLocal：userId 照读，saveLocal=false。
+        /// 一段/两段只有 token 时 userId 为空。
         /// </summary>
         public static bool TryParseUserSessionBlob(
-            string blob, out uint expire, out string token, out bool isGuest, out string userId)
+            string blob, out uint expire, out string token, out bool isGuest, out string userId,
+            out bool saveLocal)
         {
             expire = 0;
             token = "";
-            isGuest = true;
+            isGuest = false;
             userId = "";
+            saveLocal = false;
             if (string.IsNullOrEmpty(blob))
                 return false;
 
@@ -173,8 +218,33 @@ namespace Game.Native
             {
                 uint.TryParse(parts[0], out expire);
                 token = parts[1] ?? "";
-                isGuest = parts[2] != "0";
-                userId = parts[3] ?? "";
+                string third = parts[2] ?? "";
+                string fourth = parts[3] ?? "";
+                bool thirdIsFlag = third == "0" || third == "1";
+                bool fourthIsFlag = fourth == "0" || fourth == "1";
+                if (fourthIsFlag && !thirdIsFlag)
+                {
+                    userId = third;
+                    saveLocal = fourth == "1";
+                }
+                else if (thirdIsFlag)
+                {
+                    userId = fourth;
+                    saveLocal = third == "0";
+                }
+                else
+                {
+                    userId = third;
+                }
+
+                return !string.IsNullOrEmpty(token);
+            }
+
+            if (parts.Length == 3)
+            {
+                uint.TryParse(parts[0], out expire);
+                token = parts[1] ?? "";
+                userId = parts[2] ?? "";
                 return !string.IsNullOrEmpty(token);
             }
 
@@ -186,7 +256,7 @@ namespace Game.Native
 
             if (parts.Length == 2)
             {
-                // expire\ttoken 或误传 token\tuserId：首段可解析为 uint 则当 expire
+                // deviceToken：expire\ttoken。或误传 token\tuserId：首段不是 uint 则当 userId。
                 if (uint.TryParse(parts[0], out expire))
                     token = parts[1] ?? "";
                 else
@@ -195,15 +265,6 @@ namespace Game.Native
                     userId = parts[1] ?? "";
                 }
 
-                return !string.IsNullOrEmpty(token);
-            }
-
-            // 三段：expire\ttoken\tisGuest（无 userId）
-            if (parts.Length == 3)
-            {
-                uint.TryParse(parts[0], out expire);
-                token = parts[1] ?? "";
-                isGuest = parts[2] != "0";
                 return !string.IsNullOrEmpty(token);
             }
 

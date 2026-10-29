@@ -26,6 +26,9 @@ namespace WanosAudio
 
         readonly object _gate = new object();
         bool _created;
+        bool _bankDecodeQueryBroken;
+        int _mixerJoinDepth;
+        bool _loggedMixerJoin;
 
         WanosNative() { }
 
@@ -66,6 +69,20 @@ namespace WanosAudio
 
         [DllImport("libWanosAudioMac.dylib", CallingConvention = CallingConvention.Cdecl)]
         static extern int WanosDSP_IsEngineRunning();
+
+        // WIAEngine 6000 bundle：IAE 首字段是 Impl*，Impl+0x10 是 WanosAudioDSP*。
+        // StopDspTread 会 join 混音线程；StartProcess 会拆掉 DSP，这里只重启线程。
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
+            EntryPoint = "_ZN3IAE22InteractiveAudioEngine16GetCurrentEngineEv")]
+        static extern IntPtr GetCurrentEngine();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
+            EntryPoint = "_ZN13WanosAudioDSP12StopDspTreadEv")]
+        static extern void StopDspThread(IntPtr self);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
+            EntryPoint = "_ZN13WanosAudioDSP13StartDspTreadEv")]
+        static extern void StartDspThread(IntPtr self);
 #endif
 
         // --- Core lifecycle (already wired) ---
@@ -118,6 +135,10 @@ namespace WanosAudio
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "IsBankDecoded", BestFitMapping = false, ThrowOnUnmappableChar = true)]
         static extern bool IsBankDecodedNative([MarshalAs(UnmanagedType.LPUTF8Str)] string bankName);
+
+        // Engine export is `int IsBankDecoded(unsigned long long bank_id)` (0 = decoded).
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "IsBankDecoded")]
+        static extern int IsBankDecodedByIdNative(ulong bankId);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SaveBank", BestFitMapping = false, ThrowOnUnmappableChar = true)]
         static extern WanosResult SaveBankNative([MarshalAs(UnmanagedType.LPUTF8Str)] string bankName);
@@ -470,31 +491,153 @@ namespace WanosAudio
         {
             if (string.IsNullOrEmpty(path))
                 return WanosResult.InvalidFilePath;
-            try
+            WanosResult result = WanosResult.BankOpenFailed;
+            RunWithMixerJoined(() =>
             {
-                return LoadBankFromPath(path);
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"[{LogTag}] LoadBank({path}): {e.Message}");
-                return WanosResult.BankOpenFailed;
-            }
+                try
+                {
+                    result = LoadBankFromPath(path);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[{LogTag}] LoadBank({path}): {e.Message}");
+                    result = WanosResult.BankOpenFailed;
+                }
+            });
+            return result;
         }
 
         public WanosResult UnloadBankByTag(string tag)
         {
             if (string.IsNullOrEmpty(tag))
                 return WanosResult.InvalidFilePath;
+            WanosResult result = WanosResult.InvalidEngine;
+            RunWithMixerJoined(() =>
+            {
+                try
+                {
+                    result = UnloadBank(tag);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[{LogTag}] UnloadBank({tag}): {e.Message}");
+                    result = WanosResult.InvalidEngine;
+                }
+            });
+            return result;
+        }
+
+        /// <summary>
+        /// LoadBank / UnloadBank 会改正在被混音的组图。
+        /// DSP 线程在 AudioGroupInst::getDataInternal 里读到半截节点就是 SIGSEGV（编辑器直接退出）。
+        /// 先 join 混音线程，改完再 StartDspTread。不要走 StartProcess，那会拆掉 DSP。
+        /// </summary>
+        void RunWithMixerJoined(Action body)
+        {
+            if (body == null)
+                return;
+
+#if !UNITY_OSX
+            body();
+            return;
+#else
+            bool outer = _mixerJoinDepth == 0;
+            bool restart = false;
+            IntPtr dsp = IntPtr.Zero;
+            if (outer && _created)
+            {
+                dsp = TryGetMixer();
+                if (dsp != IntPtr.Zero)
+                {
+                    // StopDspTread 看的是 +0x80 的运行标志，不是 IsProcessRunning 的 +0x81。
+                    try
+                    {
+                        restart = Marshal.ReadByte(dsp, 0x80) != 0;
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogWarning($"[{LogTag}] mixer flag read failed: {e.Message}");
+                        dsp = IntPtr.Zero;
+                        restart = false;
+                    }
+                }
+
+                if (restart)
+                {
+                    if (!_loggedMixerJoin)
+                    {
+                        _loggedMixerJoin = true;
+                        Debug.Log($"[{LogTag}] join mixer before bank mutation");
+                    }
+
+                    try
+                    {
+                        StopDspThread(dsp);
+                        // join 之后 std::thread id 必须是 0。非 0 再 StartDspTread 会 std::terminate。
+                        if (Marshal.ReadInt64(dsp, 0x88) != 0)
+                        {
+                            Debug.LogError($"[{LogTag}] mixer thread still live after join — skip restart");
+                            restart = false;
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogWarning($"[{LogTag}] StopDspThread: {e.Message}");
+                        restart = false;
+                    }
+                }
+            }
+
+            _mixerJoinDepth++;
             try
             {
-                return UnloadBank(tag);
+                body();
+            }
+            finally
+            {
+                _mixerJoinDepth--;
+                if (outer && restart && dsp != IntPtr.Zero)
+                {
+                    try
+                    {
+                        StartDspThread(dsp);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogWarning($"[{LogTag}] StartDspThread: {e.Message}");
+                    }
+                }
+            }
+#endif
+        }
+
+#if UNITY_OSX
+        static IntPtr TryGetMixer()
+        {
+            try
+            {
+                IntPtr engine = GetCurrentEngine();
+                if (!LooksLikeObject(engine))
+                    return IntPtr.Zero;
+                IntPtr impl = Marshal.ReadIntPtr(engine);
+                if (!LooksLikeObject(impl))
+                    return IntPtr.Zero;
+                IntPtr dsp = Marshal.ReadIntPtr(impl, 0x10);
+                return LooksLikeObject(dsp) ? dsp : IntPtr.Zero;
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[{LogTag}] UnloadBank({tag}): {e.Message}");
-                return WanosResult.InvalidEngine;
+                Debug.LogWarning($"[{LogTag}] mixer lookup failed: {e.Message}");
+                return IntPtr.Zero;
             }
         }
+
+        static bool LooksLikeObject(IntPtr p)
+        {
+            long v = p.ToInt64();
+            return v > 0x10000L && (v & 7L) == 0;
+        }
+#endif
 
         /// <summary>
         /// Stop a specific voice with optional fade-out (ms).
@@ -906,6 +1049,28 @@ namespace WanosAudio
                 return false;
             }
         }
+
+        /// <summary>
+        /// <c>IsBankDecoded(unsigned long long)</c>. True when the engine reports the bank decoded (return 0).
+        /// False when not yet decoded, the id is 0, or this export is unavailable.
+        /// </summary>
+        public bool IsBankDecoded(ulong bankId)
+        {
+            if (bankId == 0 || _bankDecodeQueryBroken)
+                return false;
+            try
+            {
+                return IsBankDecodedByIdNative(bankId) == 0;
+            }
+            catch (Exception e)
+            {
+                _bankDecodeQueryBroken = true;
+                Debug.LogWarning($"[{LogTag}] IsBankDecoded(id) unavailable: {e.Message}");
+                return false;
+            }
+        }
+
+        public bool BankDecodeQueryAvailable => !_bankDecodeQueryBroken;
 
         public bool SaveBank(string bankName)
         {

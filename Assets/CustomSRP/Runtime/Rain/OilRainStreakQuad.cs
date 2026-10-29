@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Game;
 using Game.Native;
 using UnityEngine;
@@ -42,6 +43,71 @@ namespace CustomSRP
         bool _raining;
         bool _ownsMaterial;
 
+        static readonly List<CurtainLease> LiveCurtains = new List<CurtainLease>(2);
+
+        struct CurtainLease
+        {
+            public GameObject Go;
+            public Mesh Mesh;
+            public Material Material;
+        }
+
+        /// <summary>卸掉 Island 之后拆挂在 Launch 相机上的雨幕。延迟 Destroy 在卸场景时会被丢掉。</summary>
+        public static void ReleaseForLeave()
+        {
+            for (int i = LiveCurtains.Count - 1; i >= 0; i--)
+                DestroyLeaseImmediate(LiveCurtains[i]);
+            LiveCurtains.Clear();
+            SweepOrphanCurtains();
+        }
+
+        static void DestroyLeaseImmediate(CurtainLease lease)
+        {
+            if (lease.Go != null)
+            {
+                var filter = lease.Go.GetComponent<MeshFilter>();
+                if (filter != null)
+                    filter.sharedMesh = null;
+                var renderer = lease.Go.GetComponent<MeshRenderer>();
+                if (renderer != null)
+                    renderer.sharedMaterial = null;
+                Object.DestroyImmediate(lease.Go);
+            }
+
+            if (lease.Mesh != null)
+                Object.DestroyImmediate(lease.Mesh);
+            if (lease.Material != null)
+                Object.DestroyImmediate(lease.Material);
+        }
+
+        static void SweepOrphanCurtains()
+        {
+            Camera[] cameras = Camera.allCameras;
+            for (int i = 0; i < cameras.Length; i++)
+            {
+                Camera cam = cameras[i];
+                if (cam == null)
+                    continue;
+                Transform parent = cam.transform;
+                for (int c = parent.childCount - 1; c >= 0; c--)
+                {
+                    Transform child = parent.GetChild(c);
+                    if (child == null || child.name != "~OilRainCurtain")
+                        continue;
+                    var filter = child.GetComponent<MeshFilter>();
+                    Mesh mesh = filter != null ? filter.sharedMesh : null;
+                    var renderer = child.GetComponent<MeshRenderer>();
+                    Material mat = renderer != null ? renderer.sharedMaterial : null;
+                    DestroyLeaseImmediate(new CurtainLease
+                    {
+                        Go = child.gameObject,
+                        Mesh = mesh,
+                        Material = mat != null && mat.name == "OilRainCurtain_Runtime" ? mat : null,
+                    });
+                }
+            }
+        }
+
         void OnEnable()
         {
             ResolveSettings();
@@ -57,6 +123,8 @@ namespace CustomSRP
 
         void LateUpdate()
         {
+            if (!IslandLeakProbe.Allow(IslandLeakProbe.Module.Rain))
+                return;
             ResolveSettings();
             if (_settings == null)
                 return;
@@ -248,6 +316,12 @@ namespace CustomSRP
             _renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
             _renderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
             _renderer.allowOcclusionWhenDynamic = false;
+            LiveCurtains.Add(new CurtainLease
+            {
+                Go = go,
+                Mesh = _filter.sharedMesh,
+                Material = _material,
+            });
         }
 
         void ApplyLayout(int state, float quality)

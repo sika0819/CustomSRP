@@ -14,6 +14,9 @@ namespace Game
     {
         void Awake()
         {
+            EnsureIslandSceneComponent();
+            // 关域重载时静态槽可能还指着上一轮句柄袋。
+            CloseLeaveHandles();
             // Survives Disable Domain Reload — RuntimeInitializeOnLoadMethod will not re-fire.
             BootLoadingService.ResetSession();
             YooResourceModule.ResetSession();
@@ -24,12 +27,18 @@ namespace Game
             WanosSoundSetup.ResetSession();
             MusicPlaylist.ResetSession();
             UiTipToast.ResetSession();
-            AudioInteractionBootstrap.ResetSession();
+            IslandAudioSession.ResetSession();
             AudioAppLifecycle.ResetSession();
             AudioAppLifecycle.EnsureExists();
+            AtmosphereVisualRegistry.Clear();
             // Before SoundComponent.Start: swap helper type names to Wanos implementations.
             WanosSoundSetup.ConfigureHelpersBeforeSoundStart();
             ApplyDeviceGraphicsPolicy();
+            // 真机触摸会再合成一次鼠标事件。第一次点 UI 时两套指针互相取消，
+            // 按钮只闪一下，要点第二次。编辑器没有触摸，保留鼠标。
+#if !UNITY_EDITOR
+            Input.simulateMouseWithTouches = false;
+#endif
         }
 
         void Start()
@@ -113,7 +122,7 @@ namespace Game
         void OnDestroy()
         {
             BootLoadingService.ResetSession();
-            AudioInteractionBootstrap.Shutdown();
+            IslandAudioSession.Instance?.Shutdown();
             // Unload stops DSP then DestoryEngine. Editor also forces this on
             // ExitingPlayMode; second call is a no-op if already torn down.
             WanosAudio.WanosEngine.Unload("GameEntry.OnDestroy");

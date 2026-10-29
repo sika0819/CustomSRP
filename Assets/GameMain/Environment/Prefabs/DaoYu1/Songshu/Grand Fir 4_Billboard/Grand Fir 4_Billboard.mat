@@ -53,7 +53,7 @@ Material:
     - _Canvas: 1
     - _CanvasStrength: 0.1
     - _Clipping: 1
-    - _Cull: 2
+    - _Cull: 0
     - _Cutoff: 0.35
     - _DstBlend: 0
     - _EdgeFade: 0.12
@@ -63,7 +63,7 @@ Material:
     - _OilCrossBillboard: 0
     - _OilFoliage: 0
     - _OilFoliageSkipDay: 0
-    - _OilYBillboard: 0
+    - _OilYBillboard: 1
     - _PaintThickness: 0.18
     - _ReceiveShadows: 0
     - _ShadeLift: 0.58

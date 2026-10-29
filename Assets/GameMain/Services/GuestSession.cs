@@ -38,6 +38,15 @@ namespace Game
             }
         }
 
+        public static bool SaveLocal
+        {
+            get
+            {
+                BoluoSession.LoadFromPrefs();
+                return BoluoSession.SaveLocal;
+            }
+        }
+
         public static bool IsLoggedIn => !string.IsNullOrEmpty(UserToken);
 
         public static void LoadFromPrefs()
@@ -45,7 +54,7 @@ namespace Game
             BoluoSession.LoadFromPrefs();
         }
 
-        public static void ApplyUserSession(string token, string userId, bool isGuest)
+        public static void ApplyUserSession(string token, string userId, bool isGuest, bool saveLocal)
         {
             BoluoSession.LoadFromPrefs();
             string prevId = BoluoSession.UserId ?? "";
@@ -61,7 +70,8 @@ namespace Game
 
             BoluoSession.ApplyUserSession(
                 new UserSession { token = token ?? "", userId = nextId },
-                isGuest);
+                isGuest,
+                saveLocal);
             PlayerPrefs.SetInt(IsGuestKey, isGuest ? 1 : 0);
             PlayerPrefs.Save();
         }
@@ -80,7 +90,7 @@ namespace Game
             // 稳定 id：勿用 string.GetHashCode（跨进程不稳定）。
             string id = "guest_" + StableHex8(device);
             string token = "editor_guest_" + id;
-            ApplyUserSession(token, id, isGuest: true);
+            ApplyUserSession(token, id, isGuest: true, saveLocal: false);
         }
 
         static string StableHex8(string raw)

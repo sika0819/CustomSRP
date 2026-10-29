@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using UnityEngine;
@@ -6,84 +8,127 @@ using UnityEngine;
 namespace Game
 {
     /// <summary>
-    /// 铺装进度监视。不改 PlayerLoop：拿掉 Present 之后下一帧照样不回来。
+    /// 一次铺装一份进度。监视线程只看自己的会话，停掉后不会接着看下一次。
+    /// 主线程卡在同步加载里时玩家循环不会再走，所以用墙钟记进度，不靠下一帧。
     /// </summary>
-    public static class PrefillFrameGate
+    public sealed class PrefillFrameGate
     {
-        static Thread _watch;
-        static volatile bool _watchRun;
-        static string _watchPath;
+        const double StallSeconds = 2.0;
+        const double LogIntervalSeconds = 1.0;
+        const int SampleMs = 250;
 
-        public static int Done;
-        public static int Phase;
+        static readonly object FileLock = new object();
 
-        public static void Begin()
+        sealed class Session
         {
-            Done = 0;
-            Phase = 1;
-            StartWatch();
+            public volatile bool Run;
+            public long Packed;
+            public long ChangedTicks;
+            public string Path;
+            public int Id;
         }
 
-        public static void End()
-        {
-            Phase = 0;
-            StopWatch();
-        }
+        Session _session;
+        int _nextId;
 
-        static void StartWatch()
+        public void Begin()
         {
-            StopWatch();
-            _watchPath = Path.Combine(Application.persistentDataPath, "prefill_watch.txt");
-            _watchRun = true;
-            _watch = new Thread(Watch)
+            End();
+            var session = new Session
+            {
+                Run = true,
+                Path = Path.Combine(Application.persistentDataPath, "prefill_watch.txt"),
+                Id = ++_nextId,
+                ChangedTicks = Stopwatch.GetTimestamp(),
+            };
+            Volatile.Write(ref session.Packed, Pack(1, 0));
+            _session = session;
+            var thread = new Thread(() => Watch(session))
             {
                 IsBackground = true,
                 Name = "PrefillWatch",
             };
-            _watch.Start();
+            thread.Start();
         }
 
-        static void StopWatch()
+        public void End()
         {
-            _watchRun = false;
-            _watch = null;
+            Session session = _session;
+            _session = null;
+            if (session != null)
+                session.Run = false;
         }
 
-        static void Watch()
+        /// <summary>phase 与 done 一次写完。done 变化才刷新墙钟，只改 phase 不算有进度。</summary>
+        public void Mark(int phase, int done)
         {
-            int lastDone = -1;
-            int still = 0;
-            while (_watchRun)
+            Session session = _session;
+            if (session == null || !session.Run)
+                return;
+
+            long prev = Volatile.Read(ref session.Packed);
+            if ((int)prev != done)
+                Volatile.Write(ref session.ChangedTicks, Stopwatch.GetTimestamp());
+            Volatile.Write(ref session.Packed, Pack(phase, done));
+        }
+
+        static long Pack(int phase, int done)
+        {
+            return ((long)phase << 32) | (uint)done;
+        }
+
+        static void Watch(Session session)
+        {
+            long lastChanged = Volatile.Read(ref session.ChangedTicks);
+            long lastLog = 0;
+            while (session.Run)
             {
-                Thread.Sleep(1000);
-                if (!_watchRun)
+                Thread.Sleep(SampleMs);
+                if (!session.Run)
                     break;
-                int done = Done;
-                int phase = Phase;
-                if (done == lastDone)
-                    still++;
-                else
+
+                long packed = Volatile.Read(ref session.Packed);
+                long changed = Volatile.Read(ref session.ChangedTicks);
+                if (changed != lastChanged)
                 {
-                    still = 0;
-                    lastDone = done;
+                    lastChanged = changed;
+                    lastLog = 0;
                 }
 
-                if (still < 2)
+                long now = Stopwatch.GetTimestamp();
+                double still = Seconds(changed, now);
+                if (still < StallSeconds)
                     continue;
+                if (lastLog != 0 && Seconds(lastLog, now) < LogIntervalSeconds)
+                    continue;
+                if (!session.Run)
+                    break;
 
-                string line = DateTime.Now.ToString("HH:mm:ss.fff")
-                    + " done=" + done + " phase=" + phase + " still=" + still;
+                lastLog = now;
+                int phase = (int)(packed >> 32);
+                int done = (int)packed;
+                string line = DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)
+                    + " s=" + session.Id
+                    + " done=" + done
+                    + " phase=" + phase
+                    + " still=" + still.ToString("0.0", CultureInfo.InvariantCulture);
                 try
                 {
-                    File.AppendAllText(_watchPath, line + "\n");
+                    lock (FileLock)
+                        File.AppendAllText(session.Path, line + "\n");
                 }
                 catch (Exception)
                 {
                     // 监视线程不能再拖垮铺装。
                 }
 
-                Debug.Log("[PrefillFrameGate] stall " + line);
+                UnityEngine.Debug.Log("[PrefillFrameGate] stall " + line);
             }
+        }
+
+        static double Seconds(long from, long to)
+        {
+            return (to - from) / (double)Stopwatch.Frequency;
         }
     }
 }

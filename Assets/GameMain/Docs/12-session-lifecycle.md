@@ -2,6 +2,8 @@
 
 模块文档索引见 [00-overview.md](00-overview.md)。启动遮罩与 Procedure 内部阶段见 [01-boot-procedure.md](01-boot-procedure.md)，换票与 Bank HTTP 见 [09-boluoapi-native.md](09-boluoapi-native.md)。本文只串「人在哪一阶段、票和声音怎么交接」。
 
+**壳 ↔ Unity 端到端流程图 / 时序图 / 退登竞态**见 Android 文档：[登录进岛退登再登录完整链路.md](../../../../AndroidProject/Docs/登录进岛退登再登录完整链路.md)。
+
 ## 职责与边界
 
 四个 `Procedure` 是唯一阶段机，入口是 `ProcedureLaunch`。退登不回到 Launch，也不 `LoadScene`，只从 `ProcedureIsland` 切回 `ProcedureGuestLogin`。
@@ -137,7 +139,7 @@ WaitCriticalThenCueAsync（不等待完成）
 
 不要在离岛调用 `MusicPlaylist.ResetSession`：它会把 `_stoppedByUser` 抬回 false，回前台会把曲目拉起来。
 
-下一帧 `ProcedureIsland` 作废揭罩代际，关 Main / Panel / Dialog / Tip，盖上加载罩，`ChangeState<ProcedureGuestLogin>`。`OnLeave`（非杀进程）再停一次内容声、`StopEngine`、`World.Release`、排队 `IslandLeaveAssetReclaim`。
+下一帧 `ProcedureIsland` 作废揭罩代际，关 Main / Panel / Dialog / Tip，盖上加载罩，先 `DestroyImmediate` 运行时网格，再 `UnloadScene` Island。`OnLeave`（非杀进程）再停一次内容声、`StopEngine`。场景物体的 `OnDestroy` 不 `Release` Yoo 句柄。`UnloadSceneSuccess` 且 Island 已经不在之后，才 `Release` 预制体和文本句柄，拆挂在 Launch 相机上的雨幕，回收空闲 UI 池，然后排队 `IslandLeaveAssetReclaim`。卸场景失败且场景还在时不放这些句柄，也不回 GuestLogin。
 
 留下：设备票、该 userId 进度桶、已载入的音乐 bank、听者 Avatar 与 Music/Wind/Rain 逻辑对象。
 

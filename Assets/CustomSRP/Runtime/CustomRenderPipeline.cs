@@ -9,7 +9,7 @@ namespace CustomSRP
 {
     public partial class CustomRenderPipeline : RenderPipeline
     {
-        readonly RenderGraph _renderGraph;
+        RenderGraph _renderGraph;
         readonly CustomRenderPipelineSettings _settings;
         readonly CameraRenderer _cameraRenderer;
         bool _uiOverlayReady;
@@ -56,22 +56,45 @@ namespace CustomSRP
             _renderGraph.Cleanup();
         }
 
+        /// <summary>
+        /// 退登后把池里的整屏目标还给驱动。Cleanup 会注销这张图，所以立刻换一张空的。
+        /// </summary>
+        public static void FlushGpuPool()
+        {
+            if (RenderPipelineManager.currentPipeline is not CustomRenderPipeline pipeline)
+                return;
+            pipeline._renderGraph.Cleanup();
+            pipeline._renderGraph = new RenderGraph("Custom SRP Render Graph");
+        }
+
         partial void InitializeForEditor();
 
         partial void DisposeForEditor();
 
-        static bool _stallQuiet;
+        /// <summary>
+        /// 上一帧命令缓冲在 ClearGlobalBindings 之后才绑上这些纹理。
+        /// 退登改走 CoverOnly 后不再覆盖，全局槽会把整屏和阴影图留在显存里。
+        /// </summary>
+        public static void ReleasePinnedGlobals()
+        {
+            Shader.SetGlobalTexture(Shader.PropertyToID("_CameraColorTexture"), null);
+            Shader.SetGlobalTexture(Shader.PropertyToID("_CameraDepthTexture"), null);
+            Shader.SetGlobalTexture(Shader.PropertyToID("_CameraDepthTexture_ForRain"), null);
+            Shader.SetGlobalTexture(Shader.PropertyToID("_DirectionalShadowAtlas"), null);
+            Shader.SetGlobalTexture(Shader.PropertyToID("_OtherShadowAtlas"), null);
+            Shader.SetGlobalTexture(Shader.PropertyToID("_PostFXSource"), null);
+            Shader.SetGlobalTexture(Shader.PropertyToID("_PostFXSource2"), null);
+            Shader.SetGlobalTexture(Shader.PropertyToID("_SourceTexture"), null);
+            Shader.SetGlobalBuffer(Shader.PropertyToID("_DirectionalLightData"), (ComputeBuffer)null);
+            Shader.SetGlobalBuffer(Shader.PropertyToID("_OtherLightData"), (ComputeBuffer)null);
+            Shader.SetGlobalBuffer(Shader.PropertyToID("_ForwardPlusTiles"), (ComputeBuffer)null);
+            Shader.SetGlobalBuffer(Shader.PropertyToID("_DirectionalShadowCascades"), (ComputeBuffer)null);
+            Shader.SetGlobalBuffer(Shader.PropertyToID("_DirectionalShadowMatrices"), (ComputeBuffer)null);
+            Shader.SetGlobalBuffer(Shader.PropertyToID("_OtherShadowData"), (ComputeBuffer)null);
+        }
 
         protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
         {
-            if (!_stallQuiet)
-            {
-                _stallQuiet = true;
-                Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
-            }
-#if !UNITY_EDITOR
-            UnityEngine.Debug.Log($"[Stall] render-begin cameras={cameras.Count}");
-#endif
             EnsureUIOverlay();
             BeginContextRendering(context, cameras);
             try
@@ -79,8 +102,8 @@ namespace CustomSRP
                 for (int i = 0; i < cameras.Count; i++)
                 {
                     Camera camera = cameras[i];
-                    // 铺装只留主相机清屏 + 加载 UI，镜像相机会把整岛再画一遍。
-                    if (!EnvItemStreamerLite.PrefillSuppressRender)
+                    // 铺装和退登只留主相机清屏 + 加载 UI，镜像相机会把整岛再画一遍。
+                    if (!EnvItemStreamerLite.PrefillSuppressRender && !IslandGpuReclaim.CoverOnly)
                     {
                         OilPlanarReflection.RenderBefore(
                             context, camera, _renderGraph, _cameraRenderer, _settings);
@@ -108,10 +131,10 @@ namespace CustomSRP
                 EndContextRendering(context, cameras);
             }
 
-            _renderGraph.EndFrame();
-#if !UNITY_EDITOR
-            UnityEngine.Debug.Log("[Stall] render-end");
-#endif
+            // CoverOnly / Prefill 只清屏，不录 RenderGraph。再 EndFrame 会把上一帧
+            // 池里的整屏和阴影纹理继续挂在 GfxDevice 上，退登后 kgsl 降不下来。
+            if (!EnvItemStreamerLite.PrefillSuppressRender && !IslandGpuReclaim.CoverOnly)
+                _renderGraph.EndFrame();
         }
     }
 }

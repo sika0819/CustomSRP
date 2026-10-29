@@ -9,19 +9,26 @@ namespace Game
     /// unsmoothed AttenuationGain zipper are audible. Duck to silence <b>before</b> Clear/Retarget,
     /// then fade back on reveal — C#-side root fix that does not depend on native fade.
     /// </summary>
-    public static class ContentAudioDuck
+    public sealed class ContentAudioDuck
     {
+        readonly IslandAudioSession _session;
+
+        public ContentAudioDuck(IslandAudioSession session)
+        {
+            _session = session;
+        }
+
         const float DefaultSilentSeconds = 1.5f;
         const float DefaultFullSeconds = 0.85f;
 
-        static float _from = 1f;
-        static float _to = 1f;
-        static float _startTime;
-        static float _duration;
-        static int _driveGen;
+        float _from = 1f;
+        float _to = 1f;
+        float _startTime;
+        float _duration;
+        int _driveGen;
 
         /// <summary>1 = full loudness, 0 = silence.</summary>
-        public static float Level01
+        public float Level01
         {
             get
             {
@@ -32,19 +39,19 @@ namespace Game
             }
         }
 
-        public static bool IsSilent => Level01 <= 0.001f;
+        public bool IsSilent => Level01 <= 0.001f;
 
-        public static void BeginSilent(float seconds = DefaultSilentSeconds)
+        public void BeginSilent(float seconds = DefaultSilentSeconds)
         {
             StartRamp(0f, Mathf.Max(0.05f, seconds));
         }
 
-        public static void BeginFull(float seconds = DefaultFullSeconds)
+        public void BeginFull(float seconds = DefaultFullSeconds)
         {
             StartRamp(1f, Mathf.Max(0.05f, seconds));
         }
 
-        public static void SnapFull()
+        public void SnapFull()
         {
             _from = _to = 1f;
             _duration = 0f;
@@ -52,7 +59,7 @@ namespace Game
             PushNow();
         }
 
-        public static void SnapSilent()
+        public void SnapSilent()
         {
             _from = _to = 0f;
             _duration = 0f;
@@ -60,7 +67,13 @@ namespace Game
             PushNow();
         }
 
-        static void StartRamp(float target, float seconds)
+        /// <summary>停掉渐变协程，不再推动引擎。会话销毁时调用，避免异步把已毁会话留住。</summary>
+        public void CancelDrive()
+        {
+            _driveGen++;
+        }
+
+        void StartRamp(float target, float seconds)
         {
             _from = Level01;
             _to = target;
@@ -70,7 +83,7 @@ namespace Game
             Drive(gen).Forget();
         }
 
-        static async UniTaskVoid Drive(int gen)
+        async UniTaskVoid Drive(int gen)
         {
             // Frame-rate push: ambience Evaluate is 4 Hz and skips when listener is still /
             // preset-held — duck would otherwise staircase or stall mid-iris.
@@ -90,11 +103,11 @@ namespace Game
             }
         }
 
-        static void PushNow()
+        void PushNow()
         {
             GameEntry.Music?.PushVolumesToEngine();
-            WeatherAudioBridge.ReapplyDuckedRtpcs();
-            AmbienceZoneService.ApplyDuckToPlayingEmitters();
+            _session.Weather?.ReapplyDuckedRtpcs();
+            _session.Ambience?.ApplyDuckToPlayingEmitters();
         }
     }
 }

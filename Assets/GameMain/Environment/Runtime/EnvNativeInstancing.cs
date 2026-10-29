@@ -5,13 +5,15 @@ using UnityEngine.Rendering;
 namespace Game
 {
     /// <summary>
-    /// Android Native DrawMeshInstanced 合批（无 GPUI）。Editor/iOS 为 no-op。
+    /// 手机 Native DrawMeshInstanced 合批（无 GPUI）。Android / iOS 真机；编辑器为 no-op。
     /// </summary>
     public sealed class EnvNativeInstancing : MonoBehaviour
     {
         const int BatchSize = 1023;
 
         static EnvNativeInstancing _instance;
+        bool _freezeTransforms;
+        bool _loggedFrozenDraw;
 
         readonly List<Prototype> _prototypes = new List<Prototype>(64);
         readonly Dictionary<EntityId, int> _assetIdToIndex = new Dictionary<EntityId, int>(64);
@@ -144,18 +146,84 @@ namespace Game
             if (_instance != null)
                 return _instance;
             var go = new GameObject("[EnvNativeInstancing]");
-            DontDestroyOnLoad(go);
-            go.hideFlags = HideFlags.HideInHierarchy;
+            // 挂在当前岛屿场景里，随场景卸载。不要 DontDestroyOnLoad，也不要 HideInHierarchy。
             _instance = go.AddComponent<EnvNativeInstancing>();
             return _instance;
         }
 
-        /// <summary>
-        /// 离岛松开 Mesh/Material。物体保留，下次 <see cref="Ensure"/> 复用。
-        /// 不摘的话 Yoo UnloadUnused 看不到 ref=0，二次 Prefill 会在高水位上同步 Instantiate。
-        /// </summary>
-        public void Clear()
+        /// <summary>暂停或恢复合批绘制。freezeTransforms 时沿用已有矩阵，不再读 Transform。</summary>
+        public static void SetRunning(bool running, bool freezeTransforms = false)
         {
+            if (_instance == null)
+                return;
+            _instance._freezeTransforms = freezeTransforms;
+            _instance._loggedFrozenDraw = false;
+            _instance.enabled = running;
+            if (running && freezeTransforms)
+                UnityGameFramework.Runtime.Log.Info("[EnvNativeInstancing] resume frozen");
+        }
+
+        /// <summary>退登时立刻拆掉公告板运行时材质，不等场景 OnDestroy。</summary>
+        public static void ReleaseForLeave()
+        {
+            if (_instance == null)
+                return;
+            _instance.Clear(immediate: true);
+        }
+
+        /// <summary>
+        /// 进程拆世界时拆掉合批宿主。场景卸载不要走这里，物体随 Island 场景销毁。
+        /// </summary>
+        public static void DestroySingleton()
+        {
+            if (_instance == null)
+                return;
+            EnvNativeInstancing inst = _instance;
+            _instance = null;
+            inst.Clear(immediate: true);
+            inst.DestroyUnlinked();
+        }
+
+        /// <summary>拆掉自己这个合批宿主。只从 <see cref="DestroySingleton"/> 进来。</summary>
+        void DestroyUnlinked()
+        {
+            GameObject go = gameObject;
+            if (go == null)
+                return;
+            go.hideFlags = HideFlags.None;
+            Transform t = transform;
+            if (t != null && t.parent != null)
+                t.SetParent(null, false);
+            DestroyImmediate(go);
+        }
+
+        void OnDestroy()
+        {
+            if (_instance == this)
+                _instance = null;
+            Clear(immediate: false);
+        }
+
+        /// <summary>
+        /// 松开 Mesh/Material。公告板材质是运行时克隆，不摘掉卸包看不到 ref=0。
+        /// 灌木和杂物握的是资源上的共享材质，不能销毁。
+        /// </summary>
+        public void Clear(bool immediate)
+        {
+            for (int i = 0; i < _prototypes.Count; i++)
+            {
+                Prototype proto = _prototypes[i];
+                Material material = proto.Material;
+                proto.Mesh = null;
+                proto.Material = null;
+                if (material == null || !material.name.EndsWith("(YBillboard)"))
+                    continue;
+                if (immediate)
+                    DestroyImmediate(material);
+                else
+                    Destroy(material);
+            }
+
             _prototypes.Clear();
             _buckets.Clear();
             _assetIdToIndex.Clear();
@@ -170,7 +238,7 @@ namespace Game
         /// </summary>
         public static bool TryDropOneEmptyPrototype()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             return _instance != null && _instance.DropOneEmptyPrototype();
 #else
             return false;
@@ -195,7 +263,7 @@ namespace Game
 
         public int AddPrototype(GameObject prefabAsset, bool mainCameraOnly, bool canCastShadows)
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (prefabAsset == null)
                 return -1;
             EntityId assetId = prefabAsset.GetEntityId();
@@ -231,23 +299,23 @@ namespace Game
         }
 
         /// <summary>
-        /// Far-tree single-card billboard prototype (Y-facing material instance).
+        /// Far-tree single-card billboard prototype. Uses the baked Y-facing material.
         /// Separate key space from <see cref="AddPrototype"/> so LOD0 veg and tree bb coexist.
         /// </summary>
         public int AddBillboardPrototype(GameObject prefabAsset, bool mainCameraOnly)
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (prefabAsset == null)
                 return -1;
             EntityId assetId = prefabAsset.GetEntityId();
             if (_bbAssetIdToIndex.TryGetValue(assetId, out int existing))
                 return existing;
 
-            if (!EnvTreeBillboardUtil.TryExtractBillboard(
-                    prefabAsset, out Mesh mesh, out Material sharedMat, out Bounds localBounds))
+            EnvTreeBillboardService billboards = GameEntry.Billboards;
+            if (billboards == null || !billboards.TryExtractBillboard(
+                    prefabAsset, out Mesh mesh, out Material material, out Bounds localBounds))
                 return -1;
 
-            Material material = EnvTreeBillboardUtil.CreateYBillboardMaterial(sharedMat);
             if (mesh == null || material == null)
                 return -1;
 
@@ -275,7 +343,7 @@ namespace Game
 
         public int GetBillboardPrototypeIndex(GameObject instanceOrPrefab)
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (instanceOrPrefab == null)
                 return -1;
             if (_bbAssetIdToIndex.TryGetValue(instanceOrPrefab.GetEntityId(), out int byAsset))
@@ -295,7 +363,7 @@ namespace Game
 
         public int GetPrototypeIndex(GameObject instanceOrPrefab)
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (instanceOrPrefab == null)
                 return -1;
             if (_assetIdToIndex.TryGetValue(instanceOrPrefab.GetEntityId(), out int byAsset))
@@ -309,7 +377,7 @@ namespace Game
 
         public bool TryAddInstance(GameObject go, int protoIndex)
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (go == null || protoIndex < 0 || protoIndex >= _buckets.Count)
                 return false;
             if (_prototypes[protoIndex].Mesh == null || _prototypes[protoIndex].Material == null)
@@ -329,7 +397,7 @@ namespace Game
 
         public void RemoveInstance(GameObject go, int protoIndex)
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (go != null && protoIndex >= 0 && protoIndex < _buckets.Count)
                 _buckets[protoIndex].Remove(go);
             if (go != null)
@@ -337,7 +405,7 @@ namespace Game
 #endif
         }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
         bool DropOneEmptyPrototype()
         {
             for (int i = 0; i < _prototypes.Count; i++)
@@ -393,7 +461,7 @@ namespace Game
 
         void LateUpdate()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             DrawAll();
 #endif
         }
@@ -402,7 +470,7 @@ namespace Game
         {
             if (EnvItemStreamerLite.PrefillSuppressRender)
                 return;
-            Camera cam = ResolveCamera();
+            Camera cam = _freezeTransforms ? FrozenCamera() : ResolveCamera();
             if (cam == null)
                 return;
 
@@ -420,8 +488,10 @@ namespace Game
                     continue;
 
                 // Full sweep every 30 frames to drop destroyed GOs; otherwise dirty-only.
+                // 退登后再读 Transform.localToWorldMatrix 时主线程不返回，沿用进岛时的矩阵。
                 bool forceSync = (_syncFrame % 30) == 0;
-                bucket.SyncMatrices(forceSync);
+                if (!_freezeTransforms)
+                    bucket.SyncMatrices(forceSync);
                 // Shadow-capable prototypes (big trees / buildings) split into a near
                 // casting batch and a far non-casting batch, mirroring the streamer's
                 // per-distance ShadowCastMaxDist toggle. Prototypes that never cast
@@ -475,6 +545,18 @@ namespace Game
                     FlushBatch(cam, proto, _batch, batchCount, ShadowCastingMode.Off);
                 }
             }
+
+            if (_freezeTransforms && !_loggedFrozenDraw)
+            {
+                _loggedFrozenDraw = true;
+                UnityGameFramework.Runtime.Log.Info("[EnvNativeInstancing] frozen draw done");
+            }
+        }
+
+        static Camera FrozenCamera()
+        {
+            // 地图根保持未激活时 Camera.main 能返回。不要去激活地图节点再找相机。
+            return Camera.main;
         }
 
         static void FlushBatch(

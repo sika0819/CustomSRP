@@ -8,6 +8,8 @@ using GameFramework.ObjectPool;
 using GameFramework.Resource;
 using UnityEngine;
 using YooAsset;
+using LoadSceneMode = UnityEngine.SceneManagement.LoadSceneMode;
+using LocalPhysicsMode = UnityEngine.SceneManagement.LocalPhysicsMode;
 using UnityGameFramework.Runtime;
 using Object = UnityEngine.Object;
 using Log = UnityGameFramework.Runtime.Log;
@@ -21,6 +23,7 @@ namespace Game
     public sealed class YooAssetResourceManager : MonoBehaviour, IResourceManager
     {
         readonly Dictionary<object, AssetHandle> _handles = new Dictionary<object, AssetHandle>();
+        readonly Dictionary<string, SceneHandle> _sceneHandles = new Dictionary<string, SceneHandle>();
         string _readOnlyPath;
         string _readWritePath;
         string _currentVariant;
@@ -312,29 +315,106 @@ namespace Game
         }
 
         public void LoadScene(string sceneAssetName, LoadSceneCallbacks loadSceneCallbacks)
-            => FailScene(sceneAssetName, loadSceneCallbacks, null);
+            => LoadScene(sceneAssetName, 0, loadSceneCallbacks, null);
 
         public void LoadScene(string sceneAssetName, int priority, LoadSceneCallbacks loadSceneCallbacks)
-            => FailScene(sceneAssetName, loadSceneCallbacks, null);
+            => LoadScene(sceneAssetName, priority, loadSceneCallbacks, null);
 
         public void LoadScene(string sceneAssetName, LoadSceneCallbacks loadSceneCallbacks, object userData)
-            => FailScene(sceneAssetName, loadSceneCallbacks, userData);
+            => LoadScene(sceneAssetName, 0, loadSceneCallbacks, userData);
 
         public void LoadScene(string sceneAssetName, int priority, LoadSceneCallbacks loadSceneCallbacks,
             object userData)
-            => FailScene(sceneAssetName, loadSceneCallbacks, userData);
-
-        static void FailScene(string sceneAssetName, LoadSceneCallbacks cbs, object userData)
         {
-            cbs?.LoadSceneFailureCallback?.Invoke(
-                sceneAssetName, LoadResourceStatus.AssetError, "Scene load via YooGF not used.", userData);
+            StartCoroutine(LoadSceneCoroutine(sceneAssetName, priority, loadSceneCallbacks, userData));
+        }
+
+        IEnumerator LoadSceneCoroutine(string sceneAssetName, int priority, LoadSceneCallbacks callbacks, object userData)
+        {
+            float started = Time.realtimeSinceStartup;
+            if (callbacks == null)
+                yield break;
+
+            ResourcePackage package = YooResourceModule.DefaultPackage;
+            if (!YooResourceModule.IsInitialized || package == null || !package.CheckLocationValid(sceneAssetName))
+            {
+                callbacks.LoadSceneFailureCallback?.Invoke(
+                    sceneAssetName,
+                    LoadResourceStatus.NotExist,
+                    "Yoo scene location missing: " + sceneAssetName,
+                    userData);
+                yield break;
+            }
+
+            uint yooPriority = priority > 0 ? (uint)priority : 0u;
+            SceneHandle handle = package.LoadSceneAsync(
+                sceneAssetName, LoadSceneMode.Additive, LocalPhysicsMode.None, false, yooPriority);
+            while (!handle.IsDone)
+            {
+                callbacks.LoadSceneUpdateCallback?.Invoke(sceneAssetName, handle.Progress, userData);
+                yield return null;
+            }
+
+            if (handle.Status != EOperationStatus.Succeed)
+            {
+                string err = string.IsNullOrEmpty(handle.LastError) ? "Yoo LoadScene failed." : handle.LastError;
+                handle.Release();
+                callbacks.LoadSceneFailureCallback?.Invoke(
+                    sceneAssetName, LoadResourceStatus.AssetError, err, userData);
+                yield break;
+            }
+
+            // 上一趟退登若没放开，这里再进会把引用计数叠上去，包就再也卸不掉。
+            ReleaseScene(sceneAssetName);
+            _sceneHandles[sceneAssetName] = handle;
+            callbacks.LoadSceneSuccessCallback?.Invoke(
+                sceneAssetName, Time.realtimeSinceStartup - started, userData);
+        }
+
+        /// <summary>
+        /// 卸掉 Unity 场景之后必须 Release。本包的 UnloadAsync 只卸场景，不减引用计数。
+        /// 句柄留在 provider 里的话，场景包和它依赖的 bundle 会一直占着。
+        /// </summary>
+        public void ReleaseScene(string sceneAssetName)
+        {
+            if (string.IsNullOrEmpty(sceneAssetName))
+                return;
+            if (!_sceneHandles.TryGetValue(sceneAssetName, out SceneHandle handle))
+                return;
+            _sceneHandles.Remove(sceneAssetName);
+            if (handle != null && handle.IsValid)
+                handle.Release();
         }
 
         public void UnloadScene(string sceneAssetName, UnloadSceneCallbacks unloadSceneCallbacks)
-            => unloadSceneCallbacks?.UnloadSceneSuccessCallback?.Invoke(sceneAssetName, null);
+            => UnloadScene(sceneAssetName, unloadSceneCallbacks, null);
 
         public void UnloadScene(string sceneAssetName, UnloadSceneCallbacks unloadSceneCallbacks, object userData)
-            => unloadSceneCallbacks?.UnloadSceneSuccessCallback?.Invoke(sceneAssetName, userData);
+        {
+            StartCoroutine(UnloadSceneCoroutine(sceneAssetName, unloadSceneCallbacks, userData));
+        }
+
+        IEnumerator UnloadSceneCoroutine(string sceneAssetName, UnloadSceneCallbacks callbacks, object userData)
+        {
+            if (callbacks == null)
+                yield break;
+
+            if (!_sceneHandles.TryGetValue(sceneAssetName, out SceneHandle handle) || handle == null || !handle.IsValid)
+            {
+                callbacks.UnloadSceneFailureCallback?.Invoke(sceneAssetName, userData);
+                yield break;
+            }
+
+            // 先留在字典里。卸失败还能重试；卸成功由调用方 ReleaseScene，避免句柄先被摘掉就再也 Release 不到。
+            UnloadSceneOperation operation = handle.UnloadAsync();
+            while (!operation.IsDone)
+                yield return null;
+
+            if (operation.Status == EOperationStatus.Succeed)
+                callbacks.UnloadSceneSuccessCallback?.Invoke(sceneAssetName, userData);
+            else
+                callbacks.UnloadSceneFailureCallback?.Invoke(sceneAssetName, userData);
+        }
 
         public string GetBinaryPath(string binaryAssetName) => null;
 

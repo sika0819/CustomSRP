@@ -5,6 +5,7 @@ using Cysharp.Threading.Tasks;
 using Newtonsoft.Json;
 using UnityGameFramework.Runtime;
 using Game.Utility;
+using Game.Native;
 using UnityEngine.Networking;
 
 namespace Game.BoluoApi
@@ -94,6 +95,18 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
+        /// Hybrid 票只向宿主 Query。Editor 宿主自己打 HTTP 时关掉，避免 Query 自己。
+        /// </summary>
+        static bool PreferHybridTicket()
+        {
+#if UNITY_EDITOR
+            if (Game.Native.EditorNativeHost.HostOwnsHttp)
+                return false;
+#endif
+            return Game.Native.NativeSession.IsHybridAvailable();
+        }
+
+        /// <summary>
         /// 独立包 / 无原生 userToken 时走 POST touristLogin；hybrid 优先 JNI。
         /// upgrade/bank 需要 Header userToken，否则 banks=0。
         /// </summary>
@@ -106,25 +119,31 @@ namespace Game.BoluoApi
         {
             // Hybrid：宿主 SSOT 优先。退登后 Prefs 可能仍有旧游客票；
             // 若先 short-circuit Prefs，游客→正式会沿用脏 token / 跳过 JNI 新票。
-            if (Game.Native.NativeSession.IsHybridAvailable())
+            if (PreferHybridTicket())
             {
                 if (Game.Native.NativeSession.TryGetUserSession(
-                        out string hybridToken, out bool hybridGuest, out string hybridUserId)
+                        out string hybridToken, out bool hybridIsGuest, out string hybridUserId,
+                        out bool hybridSaveLocal)
                     && !string.IsNullOrEmpty(hybridToken))
                 {
-                    // 宿主已是正式票时清掉 Unity 侧游客缓存，再写入正式会话。
-                    BoluoSession.LoadFromPrefs();
-                    if (!hybridGuest
-                        && (BoluoSession.IsGuest || string.IsNullOrEmpty(BoluoSession.UserToken)
-                            || !string.Equals(BoluoSession.UserToken, hybridToken, StringComparison.Ordinal)))
+                    // 身份只认原生 userId。缺 userId 停在罩上，不把票当成游客。
+                    if (string.IsNullOrEmpty(hybridUserId))
                     {
-                        Game.GuestSession.Clear();
+                        Log.Warning(
+                            $"[DeviceLogin] hybrid userToken len={hybridToken.Length} " +
+                            "without userId — wait host");
+                        return false;
                     }
 
-                    Game.GuestSession.ApplyUserSession(hybridToken, hybridUserId, hybridGuest);
+                    // 真机宿主不报游客。Editor 宿主 blob 带 isGuest，否则本地游客会被写成正式账号。
+#if !UNITY_EDITOR
+                    hybridIsGuest = false;
+#endif
+                    Game.GuestSession.ApplyUserSession(
+                        hybridToken, hybridUserId, hybridIsGuest, saveLocal: hybridSaveLocal);
                     Log.Info(
                         $"[DeviceLogin] hybrid userToken len={hybridToken.Length} " +
-                        $"guest={hybridGuest} userId={hybridUserId}");
+                        $"userId={hybridUserId} guest={hybridIsGuest} saveLocal={hybridSaveLocal}");
                     return true;
                 }
 
@@ -136,11 +155,13 @@ namespace Game.BoluoApi
                 {
                     Log.Warning(
                         "[DeviceLogin] hybrid empty userToken — clear stale Unity session, wait host");
+                    IslandEntryLog.Wait("userTicket", "staleCleared");
                     Game.GuestSession.Clear();
                 }
                 else
                 {
                     Log.Warning("[DeviceLogin] hybrid empty userToken — wait host");
+                    IslandEntryLog.Wait("userTicket", "hostEmpty");
                 }
 
                 return false;
@@ -170,22 +191,27 @@ namespace Game.BoluoApi
 
         /// <summary>
         /// 若本地 deviceToken 有效则跳过；否则 boluoRsa + boluoDeviceLogin。
+        /// <paramref name="forceRefresh"/> 为真时忽略仍有效的本地票（Editor 占位票换真票）。
         /// </summary>
-        public static async UniTask<bool> EnsureDeviceTokenAsync(bool failFast)
+        public static async UniTask<bool> EnsureDeviceTokenAsync(bool failFast, bool forceRefresh = false)
         {
             SignatureLib.Init();
             BoluoSession.LoadFromPrefs();
 
-            if (BoluoSession.IsDeviceTokenValid())
+            if (!forceRefresh && BoluoSession.IsDeviceTokenValid())
             {
                 Log.Info(
                     $"[DeviceLogin] reuse deviceToken len={BoluoSession.DeviceToken.Length} " +
                     $"expire={BoluoSession.DeviceTokenExpireTime}");
+                IslandEntryLog.Skip(
+                    "deviceTicket",
+                    "reuse",
+                    "len=" + BoluoSession.DeviceToken.Length);
                 return true;
             }
 
-            // Hybrid：设备票只向宿主要。失败停在罩上重试，不让 Unity 自己 boluoRsa / deviceLogin。
-            if (Game.Native.NativeSession.IsHybridAvailable())
+            // Hybrid：设备票只向宿主要。强制重刷时宿主自己打 HTTP，不 Query 占位票。
+            if (!forceRefresh && PreferHybridTicket())
             {
                 bool ok = Game.Native.NativeSession.EnsureDeviceToken(forceRefresh: true);
                 if (ok)
@@ -384,7 +410,7 @@ namespace Game.BoluoApi
                 return false;
             }
 
-            BoluoSession.ApplyUserSession(resp.data, isGuest: true);
+            BoluoSession.ApplyUserSession(resp.data, isGuest: true, saveLocal: false);
             Log.Info(
                 $"[DeviceLogin] touristLogin ok userToken len={resp.data.token.Length} " +
                 $"userId={resp.data.userId ?? ""}");

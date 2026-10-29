@@ -22,7 +22,6 @@ float4 _OilCloudParams; // x moonBlend, y coverage, z unused, w unused
 float4 _OilCloudWind;   // x yaw speed, y yaw radians, z cell disturb, w wind 0-1
 float _OilCloudDawn;
 float _OilCloudNight;
-float _OilCloudRingBias;
 
 CBUFFER_START(UnityPerMaterial)
     float4 _NoiseMap_ST;

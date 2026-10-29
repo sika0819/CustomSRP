@@ -25,6 +25,7 @@ namespace CustomSRP
             TexelSizeId = Shader.PropertyToID("_OilFilterTexelSize"),
             HasDepthId = Shader.PropertyToID("_OilFilterHasDepth"),
             RadiusScaleId = Shader.PropertyToID("_OilFilterRadiusScale"),
+            StrengthId = Shader.PropertyToID("_OilFilterStrength"),
             DepthCopyId = Shader.PropertyToID("_CameraDepthTexture");
 
         TextureHandle _source;
@@ -35,16 +36,41 @@ namespace CustomSRP
         Vector2Int _bufferSize;
 
         /// <summary>
-        /// Map buffer short side → radius scale. Large TVs stay capped so the smear
-        /// does not go soft. Phone half-res (short side under 720) gets a higher cap
-        /// so the same 4 taps still read as a dab after bilinear upscale.
+        /// Map buffer short side → texel radius. Large TVs shrink so the smear stays
+        /// sharp. Phone standstill is half-res (short side ~540): a scale of 1 still
+        /// paints about 2× the 1080 reference on screen, so those buffers cap under 1.
         /// </summary>
         public static float ComputeRadiusScale(int bufferWidth, int bufferHeight)
         {
-            int shortSide = Mathf.Max(1, Mathf.Min(bufferWidth, bufferHeight));
+            int shortSide = ShortSide(bufferWidth, bufferHeight);
             float scale = RadiusRefShortSide / shortSide;
-            float maxScale = shortSide < 720 ? 1.65f : 1.15f;
-            return Mathf.Clamp(scale, 0.45f, maxScale);
+            if (shortSide < RadiusRefShortSide)
+                scale = Mathf.Min(scale, SmallBufferCap(shortSide));
+            return Mathf.Clamp(scale, 0.45f, 1f);
+        }
+
+        /// <summary>
+        /// Edge blend. 1080+ stays authored; phone half-res eases so standstill
+        /// wet-oil does not replace the edge. Short side 540 → 0.73, 1080 → 1.
+        /// </summary>
+        public static float ComputeStrength(int bufferWidth, int bufferHeight)
+        {
+            int shortSide = ShortSide(bufferWidth, bufferHeight);
+            if (shortSide >= RadiusRefShortSide)
+                return 1f;
+            return SmallBufferCap(shortSide);
+        }
+
+        static int ShortSide(int bufferWidth, int bufferHeight)
+        {
+            return Mathf.Max(1, Mathf.Min(bufferWidth, bufferHeight));
+        }
+
+        // Short side 540 → 0.73, 1080 → 1. Continuous so a resolution step does not pop.
+        static float SmallBufferCap(int shortSide)
+        {
+            float t = shortSide / RadiusRefShortSide;
+            return Mathf.Lerp(0.45f, 1f, t);
         }
 
         void Render(UnsafeGraphContext context)
@@ -57,6 +83,7 @@ namespace CustomSRP
                 buffer.SetGlobalVector(TexelSizeId, new Vector4(1f / w, 1f / h, w, h));
                 buffer.SetGlobalFloat(HasDepthId, _hasDepth ? 1f : 0f);
                 buffer.SetGlobalFloat(RadiusScaleId, ComputeRadiusScale(w, h));
+                buffer.SetGlobalFloat(StrengthId, ComputeStrength(w, h));
                 if (_hasDepth)
                     buffer.SetGlobalTexture(DepthCopyId, _depth);
 

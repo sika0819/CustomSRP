@@ -27,6 +27,12 @@ namespace Game.Native
         public const int HostLeaveIsland = 107;
         public const int HostLeaveReasonLogout = 0;
         public const int HostLeaveReasonAccountDeleted = 1;
+        /// <summary>
+        /// U→N：流程已经在 GuestLogin。宿主这时才能把 Unity 视图 GONE。
+        /// 退登当帧 GONE 会暂停引擎，BeginLeave 跑不完，再登录停在旧岛上。
+        /// <c>a=0</c> 门口在等 106；<c>a=1</c> 已经接到本轮 106。宿主按这个回报决定重发还是停手。
+        /// </summary>
+        public const int ReturnedToGuestLogin = 108;
 
         public const int MediaPause = 0;
         public const int MediaPlay = 1;

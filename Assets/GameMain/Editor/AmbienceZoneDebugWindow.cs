@@ -170,10 +170,15 @@ namespace Game
                 DrawLabel(listenerPos + Vector3.up * 3f, "Listener", _listenerColor);
             }
 
+            if (_showOceans)
+                DrawOceanShore(listenerPos);
+
             // Draw all static emitters
             foreach (var spec in AmbienceZoneCatalog.StaticEmitters)
             {
                 if (!ShouldShowEmiterKind(spec.Kind))
+                    continue;
+                if (spec.Kind == AmbienceEmitterKind.Ocean)
                     continue;
 
                 Color color = GetColorForKind(spec.Kind);
@@ -236,6 +241,28 @@ namespace Game
                 AmbienceEmitterKind.Plateau => _plateauColor,
                 _ => Color.gray
             };
+        }
+
+        void DrawOceanShore(Vector3 listenerPos)
+        {
+            Color color = _oceanColor;
+            int live = AmbienceZoneCatalog.LiveShoreCount;
+            if (live > 0)
+            {
+                Handles.color = color;
+                int stride = live > 240 ? 4 : 2;
+                for (int i = 0; i < live; i += stride)
+                    Handles.DrawWireDisc(AmbienceZoneCatalog.LiveShorePoint(i), Vector3.up, 4f);
+            }
+
+            if (!AmbienceZoneCatalog.TryNearestOceanShore(listenerPos, out Vector3 shore, out float shell))
+                return;
+
+            Handles.color = color;
+            Handles.SphereHandleCap(0, shore, Quaternion.identity, 2f, EventType.Repaint);
+            Handles.DrawLine(shore, listenerPos);
+            string label = $"ocean shore\n{shell:F1}m / {AmbienceZoneCatalog.OceanAttenuationMeters:F0}m";
+            DrawLabel(shore + Vector3.up * 2f, label, color);
         }
 
         void DrawEmitter(AmbienceEmitterSpec spec, Vector3 listenerPos, Color color)

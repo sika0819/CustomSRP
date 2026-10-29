@@ -45,14 +45,7 @@ namespace Game.Native
                     Game.GameEntry.Event.Fire(null, NativeProfileBadgeEventArgs.Create(visible != 0));
             });
 
-            MessageRouter.Register(MsgType.HostArmIslandEntry, (_, __, ___) =>
-            {
-                HostIslandEntryGate.Arm();
-            });
-            MessageRouter.Register(MsgType.HostLeaveIsland, (a, __, ___) =>
-            {
-                HostIslandEntryGate.Leave(a);
-            });
+            // 106/107 只在 HostIslandEntryGate 里注册一次。这里再 Register 只会覆盖成同一个 Arm/Leave。
 
             Log.Info("[IMP] NativeBridgeBootstrap handlers registered");
         }
