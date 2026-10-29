@@ -993,10 +993,20 @@ namespace Game
             if (IslandJoystickCamera.Current != null)
                 IslandPlayerPosSave.ReplantAfterTerrainReady(IslandJoystickCamera.Current);
 
-            // 先放行触摸，再淡出罩。二次进岛 Prefill 抢主线程时，揭罩前 warmup 会把「即将进入」拖成几十秒。
+            // 先放行触摸，再淡出罩。二次进岛 Prefill 抢主线程时，揭罩前整包 PSO 会把「即将进入」拖成几十秒。
+            // 这里只在罩下扫出生朝向左右几帧（墙钟 1.5s 封顶），把侧面变体和走路档 RT 提前画掉。
             // 淡出前不要关 Loading。Close 会拆掉罩，接着再打开就会整页闪一次。
             // 只放渲染。流送留到草地和 extras 结束，避免和淡出抢同一帧。
             EnvItemStreamerLite.ReleaseRenderHold();
+            if (IslandJoystickCamera.Current != null)
+            {
+                await IslandJoystickCamera.Current.WarmupEntryLookAsync(
+                    () => gen != _uncoverGeneration);
+            }
+
+            if (Stale("afterLookWarmup"))
+                return;
+
             UnlockLocomotionAfterUncover(closeLoadingCover: false);
             const float fadeSec = 0.35f;
             BootLoadingService.FadeHide(fadeSec);
@@ -1045,14 +1055,14 @@ namespace Game
                 "hasForm=" + (BootLoadingService.HasForm ? 1 : 0)
                 + " visible=" + (BootLoadingService.IsVisible ? 1 : 0));
 
-            // Gmj PSO 预热挪到揭罩后；再延迟松闩，防宿主晚推 overlay 钉死行走。
+            // 朝向预热在淡出前的罩下做完。这里只延迟松闩，防宿主晚推 overlay 钉死行走。
             PostUncoverWarmupAndRelockAsync(gen).Forget();
         }
 
         static async UniTaskVoid PostUncoverWarmupAndRelockAsync(int gen)
         {
             float wallStart = Time.realtimeSinceStartup;
-            Log.Info("[Hitch] PostUncoverWarmup begin");
+            Log.Info("[Hitch] PostUncoverRelock begin");
             await UniTask.Delay(200, DelayType.UnscaledDeltaTime);
             if (gen != _uncoverGeneration)
                 return;
@@ -1062,7 +1072,7 @@ namespace Game
                 return;
             UnlockLocomotionAfterUncover();
             Log.Info(
-                "[Hitch] PostUncoverWarmup end wallMs="
+                "[Hitch] PostUncoverRelock end wallMs="
                 + ((Time.realtimeSinceStartup - wallStart) * 1000f).ToString("F0"));
         }
 

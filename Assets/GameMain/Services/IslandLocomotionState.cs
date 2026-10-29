@@ -16,5 +16,13 @@ namespace Game
 
         /// <summary>True if OilPlanarReflection actually re-rendered the mirror this frame.</summary>
         public static bool MirrorRenderedThisFrame { get; set; }
+
+        /// <summary>
+        /// Frames left where a yaw change must not force a full mirror redraw.
+        /// Set when the camera render scale changes (stand/walk). The same frame
+        /// already rebuilds the color buffer; stacking a mirror cull is the
+        /// startup turn-walk hitch. Countdown lives on the island camera.
+        /// </summary>
+        public static int MirrorTurnGraceFrames;
     }
 }

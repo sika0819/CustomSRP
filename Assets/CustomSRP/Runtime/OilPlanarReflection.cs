@@ -33,6 +33,7 @@ namespace CustomSRP
         // so a stale RT immediately reads as slide / shake / "one frame behind".
         // Rules (pose vs previous frame):
         //   any meaningful turn              -> every frame (never throttle yaw/pitch)
+        //   except MirrorTurnGraceFrames     -> walk interval / move rules (scale just changed)
         //   walking on mobile, little turn   -> every WalkMirrorInterval frames
         //   fast move (standing / desktop)   -> every frame
         //   slow creep, no turn              -> even frames only
@@ -378,8 +379,14 @@ namespace CustomSRP
             float turn = Quaternion.Angle(source.transform.rotation, _prevFrameRot);
 
             // Screen-UV planar sample + stale RT = shake / lag. Never skip on look.
+            // 走路/站立切换 renderScale 的头两帧例外：那一帧已经在重建主相机 RT，
+            // 再强制整遍倒影就是刚进岛边转边走的那一下。宽限内先复用上一张倒影。
             if (turn > StillTurnAngle)
+            {
+                if (IslandLocomotionState.MirrorTurnGraceFrames > 0)
+                    return false;
                 return true;
+            }
 
             // Mobile walk, mostly translation: interval reuse (tiny RT hides walk parallax).
             if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)

@@ -1,5 +1,8 @@
+using System;
+using Cysharp.Threading.Tasks;
 using Game.Native;
 using UnityEngine;
+using UnityGameFramework.Runtime;
 
 namespace Game
 {
@@ -132,6 +135,14 @@ namespace Game
         bool _hasHeldPosition;
         Vector3 _heldPosition;
 
+        /// <summary>揭罩前在罩下扫几个朝向，把侧面着色器变体和走路档 RT 先画出来。</summary>
+        bool _entryLookWarmup;
+        bool _entryLookWalking;
+        float _entryLookYaw;
+        /// <summary>左右各两档。再多会把「即将进入」拖长；墙钟另有上限。</summary>
+        static readonly float[] EntryLookYawOffsets = { -90f, -45f, 45f, 90f };
+        const float EntryLookWarmupCapSeconds = 1.5f;
+
         /// <summary>揭罩后胶囊还没贴地时，把眼睛钉在已摆好的高度，避免第一帧重力下坠。</summary>
         bool _pinUntilGrounded;
         float _pinUntilUnscaled;
@@ -231,6 +242,66 @@ namespace Game
             _pinnedEye = transform.position;
             LocomotionInput.ClearAll();
             EnsureBody();
+        }
+
+        /// <summary>
+        /// 罩还盖着、摇杆还没放开时，按出生朝向左右各画几帧。
+        /// 侧面物体的着色器变体，以及走路档那套中间 RT，都在这一段里第一次提交。
+        /// 墙钟到顶就停，避免把「即将进入」拖成几十秒。调用时必须仍在 <see cref="HoldSpawnPose"/>。
+        /// </summary>
+        public async UniTask WarmupEntryLookAsync(Func<bool> stale)
+        {
+            if (!_spawnHold)
+                return;
+
+            float wallStart = Time.realtimeSinceStartup;
+            int frames = 0;
+            Log.Info("[Hitch] EntryLookWarmup begin yaw=" + _yaw.ToString("F1"));
+            _entryLookWarmup = true;
+            _entryLookWalking = true;
+            try
+            {
+                for (int i = 0; i < EntryLookYawOffsets.Length; i++)
+                {
+                    if (!_spawnHold || (stale != null && stale()))
+                        return;
+                    if (Time.realtimeSinceStartup - wallStart >= EntryLookWarmupCapSeconds)
+                        break;
+                    _entryLookYaw = _yaw + EntryLookYawOffsets[i];
+                    // LateUpdate 之前就摆好，原生实例的视锥和管线剔除看到的是同一朝向。
+                    SnapHeldYaw(_entryLookYaw);
+                    await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
+                    frames++;
+                }
+
+                if (_spawnHold
+                    && (stale == null || !stale())
+                    && Time.realtimeSinceStartup - wallStart < EntryLookWarmupCapSeconds)
+                {
+                    // 最后一帧回到出生朝向和站立分辨率，淡出时看到的是站立画面。
+                    _entryLookWalking = false;
+                    _entryLookYaw = _yaw;
+                    SnapHeldYaw(_yaw);
+                    await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
+                    frames++;
+                }
+            }
+            finally
+            {
+                _entryLookWarmup = false;
+                _entryLookWalking = false;
+                IslandLocomotionState.IsWalking = false;
+                if (this != null)
+                {
+                    if (_spawnHold)
+                        SnapHeldYaw(_yaw);
+                    ApplyRenderScale(false);
+                }
+                Log.Info(
+                    "[Hitch] EntryLookWarmup end wallMs="
+                    + ((Time.realtimeSinceStartup - wallStart) * 1000f).ToString("F0")
+                    + " frames=" + frames);
+            }
         }
 
         /// <summary>
@@ -486,22 +557,41 @@ namespace Game
 
         // ─── Per-frame ─────────────────────────────────────────────────────────────
 
+        /// <summary>出生锁定期只改朝向，位置留在已经贴地的眼睛上。</summary>
+        void SnapHeldYaw(float yaw)
+        {
+            Quaternion heldRot = Quaternion.Euler(Pitch, yaw, 0f);
+            if (_hasHeldPosition)
+                transform.SetPositionAndRotation(_heldPosition, heldRot);
+            else
+                transform.rotation = heldRot;
+        }
+
         void LateUpdate()
         {
+            if (IslandLocomotionState.MirrorTurnGraceFrames > 0)
+                IslandLocomotionState.MirrorTurnGraceFrames--;
+
             ApplyAspectFov();
 
             if (_spawnHold)
             {
-                IslandLocomotionState.IsWalking = false;
+                float yaw = _yaw;
+                bool walkingScale = false;
+                if (_entryLookWarmup)
+                {
+                    yaw = _entryLookYaw;
+                    walkingScale = _entryLookWalking;
+                    // 每帧刷新：侧面几帧都在转，不能让倒影跟着重画一整遍。
+                    IslandLocomotionState.MirrorTurnGraceFrames = 2;
+                }
+
+                IslandLocomotionState.IsWalking = walkingScale;
                 LocomotionInput.ClearAll();
-                Quaternion heldRot = Quaternion.Euler(Pitch, _yaw, 0f);
-                if (_hasHeldPosition)
-                    transform.SetPositionAndRotation(_heldPosition, heldRot);
-                else
-                    transform.rotation = heldRot;
+                SnapHeldYaw(yaw);
                 if (_cc != null && _cc.enabled)
                     _cc.enabled = false;
-                ApplyRenderScale(false);
+                ApplyRenderScale(walkingScale);
                 return;
             }
 
@@ -1128,6 +1218,8 @@ namespace Game
             {
                 IslandCameraSrpSetup.SetRenderScale(gameObject, scale);
                 _appliedRenderScale = scale;
+                // 这一帧会重建中间 RT。转头强制倒影让到后面两帧，避免叠在同一帧。
+                IslandLocomotionState.MirrorTurnGraceFrames = 2;
             }
 
             // 默认 60；闲置沉浸 25 省电。原生半层 YieldsGpu 时由 NativeOverlayGate 接管。
