@@ -378,8 +378,9 @@ namespace Game.Editor
         }
 
         /// <summary>
-        /// 近景叶片：Alpha Clip + ShadowCaster Clip + 接收阴影。
-        /// LOD 广告牌：只保 Clip，默认不投射也不接收阴影（远景省 shadow atlas / PCF）。
+        /// 树叶（非片树）：Alpha Clip + ShadowCaster Clip，不接收阴影、只投射。
+        /// 近远网格 LOD 共用同一材质，接收阴影会让近处吃到级联、远处没有，切 LOD 时树叶明暗跳。
+        /// LOD 广告牌：只保 Clip，不投射也不接收（远景省 shadow atlas / PCF）。
         /// 部署前调用，写入材质供 Yoo 打变体。
         /// </summary>
         [MenuItem("GameMain/Boluo/Ensure Foliage Clip + Shadows", false, 123)]
@@ -402,6 +403,8 @@ namespace Game.Editor
 
                 string n = mat.name.ToLowerInvariant();
                 bool billboard = n.Contains("billboard");
+                // 树叶：各档网格 LOD 共用材质，一律不接收、只投射。片树另走上面的关闭分支。
+                bool treeLeaf = !billboard && n.Contains("leaf");
                 bool foliage = billboard
                                || n.Contains("shu") || n.Contains("guanmu") || n.Contains("huacao")
                                || n.Contains("leaf") || n.Contains("fern") || n.Contains("grass")
@@ -492,16 +495,33 @@ namespace Game.Editor
 
                     if (mat.HasProperty("_ReceiveShadows"))
                     {
-                        if (mat.GetFloat("_ReceiveShadows") < 0.5f)
+                        if (treeLeaf)
                         {
-                            mat.SetFloat("_ReceiveShadows", 1f);
-                            dirty = true;
-                        }
+                            if (mat.GetFloat("_ReceiveShadows") > 0.5f)
+                            {
+                                mat.SetFloat("_ReceiveShadows", 0f);
+                                dirty = true;
+                            }
 
-                        if (!mat.IsKeywordEnabled("_RECEIVE_SHADOWS"))
+                            if (mat.IsKeywordEnabled("_RECEIVE_SHADOWS"))
+                            {
+                                mat.DisableKeyword("_RECEIVE_SHADOWS");
+                                dirty = true;
+                            }
+                        }
+                        else
                         {
-                            mat.EnableKeyword("_RECEIVE_SHADOWS");
-                            dirty = true;
+                            if (mat.GetFloat("_ReceiveShadows") < 0.5f)
+                            {
+                                mat.SetFloat("_ReceiveShadows", 1f);
+                                dirty = true;
+                            }
+
+                            if (!mat.IsKeywordEnabled("_RECEIVE_SHADOWS"))
+                            {
+                                mat.EnableKeyword("_RECEIVE_SHADOWS");
+                                dirty = true;
+                            }
                         }
                     }
                 }

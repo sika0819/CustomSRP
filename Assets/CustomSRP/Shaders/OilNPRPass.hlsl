@@ -61,14 +61,19 @@ Varyings OilNPRPassVertex(Attributes input)
         positionOS = OilTreeCrossBillboardRotateYaw(
             input.positionOS, input.normalOS, normalOS, normalWS, keep);
     }
-    else if (yBb > 0.5)
-    {
-        positionOS = OilTreeYBillboardRotateYaw(
-            input.positionOS, input.normalOS, normalOS, normalWS);
-    }
     else
     {
-        normalWS = TransformObjectToWorldNormal(input.normalOS);
+#if defined(OIL_Y_BILLBOARD)
+        if (yBb > 0.5)
+        {
+            positionOS = OilTreeYBillboardRotateYaw(
+                input.positionOS, input.normalOS, normalOS, normalWS);
+        }
+        else
+#endif
+        {
+            normalWS = TransformObjectToWorldNormal(input.normalOS);
+        }
     }
 
     // 风力偏移：树叶在局部空间摇摆，不离树干。
@@ -134,6 +139,11 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     }
 #endif
 
+    // 片树烘焙：贴图颜色 = 近树 _BaseMap * _BaseColor，光照留到运行时同一套模型。
+#if defined(OIL_BILLBOARD_ALBEDO_CAPTURE)
+    return half4(albedo, alpha);
+#endif
+
     half3 geometricNormal = normalize((half3)input.normalWS);
     // Cull Off (e.g. tent canvas): flip so underside lighting faces the viewer.
     if (!isFrontFace)
@@ -196,6 +206,39 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
 #endif
         return half4(bb, alpha);
     }
+
+#if defined(OIL_Y_BILLBOARD)
+    // 片树专用变体。朝上烘焙法线；晨昏夜走 OilTreeCrossBillboardShade（只跑树叶光照）。
+    // 移动端时段收成 0/1，同一像素不叠 NPR 和树叶光照。过渡 lerp 只留非移动端。
+    float yBbFrag = _OilYBillboard;
+    if (yBbFrag > 0.5)
+    {
+        half periodW = (half)OilFoliagePeriodWeight(_OilSkyPeriod);
+#if defined(OIL_MOBILE_PERF)
+        periodW = periodW >= 0.5h ? 1.0h : 0.0h;
+#endif
+        half3 bakedN = (half3)SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, config.baseUV).rgb;
+        if (periodW >= 0.999h)
+        {
+            half3 bb = OilTreeCrossBillboardShade(
+                albedo, bakedN, (half)_NormalStrength, surface, config.fragment.screenUV);
+#if defined(OIL_MOBILE_PERF)
+            bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush);
+#else
+            bb = OilWeaveTint(bb, input.positionWS.xz * 0.15);
+            bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush, input.positionWS);
+#endif
+            return half4(bb, alpha);
+        }
+
+        half3 litN = OilTreeBillboardLitNormal(bakedN, (half)_NormalStrength);
+        surface.normal = (float3)litN;
+        surface.interpolatedNormal = (float3)litN;
+#if !defined(OIL_MOBILE_PERF)
+        foliageFlagFrag = (float)periodW;
+#endif
+    }
+#endif
 
     // Foliage weight 0..1 (billboard SkipDay follows period; near leaves stay 0/1).
     // Steady 0/1 = single path; mid values lerp foliage↔NPR across the 2s dial blend.

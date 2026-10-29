@@ -85,7 +85,8 @@ namespace CustomSRP.Editor
                 android, Il2CppCompilerConfiguration.Release);
             PlayerSettings.SetManagedStrippingLevel(android, ManagedStrippingLevel.High);
             PlayerSettings.gcIncremental = true;
-            PlayerSettings.stripEngineCode = true;
+            // Keep TerrainLayer for AssetBundle IslandTerrain (class ID 1953259897).
+            PlayerSettings.stripEngineCode = false;
             PlayerSettings.SetGraphicsAPIs(
                 BuildTarget.Android,
                 new[] { GraphicsDeviceType.Vulkan, GraphicsDeviceType.OpenGLES3 });

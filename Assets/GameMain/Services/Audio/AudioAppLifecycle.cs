@@ -11,10 +11,11 @@ namespace Game
     /// 回前台（以及玩家点一下游戏场景）都应该把音乐和音效拉回来。
     /// </para>
     /// <para>
-    /// 恢复分三层：
+    /// 恢复分三层（仅当用户暂停、系统打断、或禁止后台播放时才走）：
     /// 1. 引擎层（<see cref="WanosEngine.RestoreForeground"/>）：解 mute + 重推音量 RTPC。
     /// 2. 平台层：Android 同步前后台态 + 抢回 AudioFocus（原生内部必要时 reset + 重播）。
     /// 3. 业务层：音乐续播 / 必要时重起当前曲目；环境声 / 天气 / 雨水强制重起。
+    /// 后台一直在播时不走这三层，避免 Unmute / Resume / 重起把还在响的声音掐一下。
     /// </para>
     /// </summary>
     public sealed class AudioAppLifecycle : MonoBehaviour
@@ -23,6 +24,11 @@ namespace Game
 
         /// <summary>回到前台后需要跑一次恢复。</summary>
         static bool _needsRestore;
+
+        /// <summary>最近一次系统前后台。启动出声前用来避免人已经切到别的播放器还 unmute。</summary>
+        static bool _inBackground;
+
+        public static bool IsInBackground => _inBackground;
 
         public static void EnsureExists()
         {
@@ -36,6 +42,7 @@ namespace Game
         public static void ResetSession()
         {
             _needsRestore = false;
+            _inBackground = false;
         }
 
         /// <summary>
@@ -65,6 +72,7 @@ namespace Game
 
         void OnApplicationPause(bool paused)
         {
+            _inBackground = paused;
             if (paused)
             {
                 EnterBackground();
@@ -80,8 +88,10 @@ namespace Game
             // 真机：焦点回来时若已武装恢复则跑一次。
             // Editor 不挂此回调——HostView 点 Console/Inspector 会疯狂 OnFocus，
             // 不能当「回前台」；Editor 靠 pause + 场景点击兜底。
-            if (focused)
-                LeaveBackground("app-focus-gain");
+            if (!focused)
+                return;
+            _inBackground = false;
+            LeaveBackground("app-focus-gain");
         }
 #endif
 
@@ -129,7 +139,24 @@ namespace Game
                 return;
             }
 
-            _needsRestore = false;
+            // 先对账原生切歌 / 暂停，再决定要不要动正在响的声音。
+            // 后台一直在播时 Unmute、Resume_Music、重起环境声都会把当前声掐一下。
+            BackgroundTransportSync.ResyncFromNative();
+            if (CanKeepAudibleAcrossLifecycle())
+            {
+                _needsRestore = false;
+                BoluoAndroidEngineNative.NotifyAppLifecycle(
+                    false, BackgroundPlayPolicyCallback.GetBackgroundPlayDisable());
+                // 后台续播时系统负一屏已经让给对方。回来必须按播放中重推，暂停态推送不会把卡片拉回来。
+                NowPlayingService.PublishPlayingForced();
+                Log.Info($"[AudioAppLifecycle] foreground keep audible ({reason})");
+                return;
+            }
+
+            // 先告诉原生「回到前台」，再解 mute。
+            // 否则 Android 仍认为在后台，启动期未出过声会被拒绝，声音和负一屏都补不回来。
+            BoluoAndroidEngineNative.NotifyAppLifecycle(
+                false, BackgroundPlayPolicyCallback.GetBackgroundPlayDisable());
 
             // 0. 先清暂停意图：负一屏后台 pause 会把原生 userPaused=true，
             //    ReclaimFocusOnForeground / restoreAudible* 见此旗会直接 skip。
@@ -144,17 +171,22 @@ namespace Game
                 WanosEngine.EnablePlayback("app-foreground");
 
             // 2. 引擎层：解 mute + 重推音量 + 清打断标记。
-            WanosEngine.RestoreForeground(reason);
+            // 人还没真正回到前台时解 mute 会被拒绝，latch 留着，下次再试。
+            if (!WanosEngine.RestoreForeground(reason))
+            {
+                _needsRestore = true;
+                // 声音可以等下一次前台信号，负一屏不能等：人已经回到波萝，卡片要先出来。
+                NowPlayingService.PublishPlayingForced();
+                Log.Info($"[AudioAppLifecycle] foreground restore deferred ({reason})");
+                return;
+            }
 
-            // 3. 平台层：同步原生前后台态 + 抢回 AudioFocus（原生必要时 reset + 重播）。
-            BoluoAndroidEngineNative.NotifyAppLifecycle(
-                false, BackgroundPlayPolicyCallback.GetBackgroundPlayDisable());
+            _needsRestore = false;
+
+            // 3. 平台层：抢回 AudioFocus（原生必要时 reset + 重播）。前后台态已在解 mute 前同步。
             BoluoAndroidEngineNative.ReclaimFocusOnForeground();
 
-            // 3.5 平台层对账：后台负一屏可能由原生切过歌 → 采用原生的当前曲，
-            // 否则岛内 UI 与「下一曲」都会错位（原生切走的曲 C# 不知道）。
-            // 暂停态只用于 AdoptTrack；清暂停意图已在步骤 0，这里再盖一次防止 Resync 写回。
-            BackgroundTransportSync.ResyncFromNative();
+            // 暂停态已在进入本方法时 Resync；清暂停意图后再盖一次，防止原生旗写回。
             NowPlayingService.NoteUserPaused(false);
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
@@ -166,11 +198,28 @@ namespace Game
             // 5. 业务层：环境声 / 天气 / 雨水强制重起。
             IslandAudioSession.Instance?.RestoreContentAudio(reason);
 
-            // 6. 负一屏状态刷新：暂停也算「被打断」，恢复后不再是手动暂停态。
+            // 6. 负一屏：必须按「播放中」推。启动期没出过卡时，暂停态推送不会拉起媒体会话，卡片就没了。
             NowPlayingService.NoteUserPaused(false);
-            NowPlayingService.PublishFromPlaylist();
+            NowPlayingService.PublishPlayingForced();
 
             Log.Info($"[AudioAppLifecycle] foreground restore done ({reason})");
+        }
+
+        /// <summary>
+        /// 后台续播且没有被系统打断、用户也没暂停：回前台不要碰引擎。
+        /// 播放设备状态在 Unity pause/resume 间会短暂离开 Started，不能拿它当「已经停了」。
+        /// </summary>
+        static bool CanKeepAudibleAcrossLifecycle()
+        {
+            if (BackgroundPlayPolicyCallback.GetBackgroundPlayDisable())
+                return false;
+            if (NowPlayingService.UserManuallyPaused)
+                return false;
+            if (WanosEngine.IsInterrupted)
+                return false;
+            if (!WanosEngine.IsPlaybackEnabled)
+                return false;
+            return true;
         }
     }
 }

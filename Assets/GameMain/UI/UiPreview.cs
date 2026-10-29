@@ -103,7 +103,30 @@ namespace Game
             tree.style.bottom = 0;
             page.Add(tree);
             Dress(slot.Title, tree);
+            if (IsDownloadDialog(slot.Title))
+                card.Insert(1, MakeClickStatus(tree));
             return card;
+        }
+
+        static bool IsDownloadDialog(string title)
+        {
+            return title == "申请下载"
+                || title == "下载进度"
+                || title == "蜂窝下载"
+                || title == "存储不足"
+                || title == "无网络";
+        }
+
+        static Label MakeClickStatus(VisualElement tree)
+        {
+            var status = new Label("点按钮试命中");
+            status.style.fontSize = 16;
+            status.style.color = new Color(0.55f, 0.9f, 0.62f, 1f);
+            status.style.marginBottom = 8;
+            status.style.unityTextAlign = TextAnchor.MiddleCenter;
+            status.style.whiteSpace = WhiteSpace.Normal;
+            WireDownloadClicks(tree, status);
+            return status;
         }
 
         void Dress(string title, VisualElement tree)
@@ -145,12 +168,102 @@ namespace Game
                     "散步", "旅行", "工作", "驾车", "学习", "清晨", "午后", "夜晚"
                 });
             }
+            else if (IsDownloadDialog(title))
+            {
+                DressDownload(title, tree);
+            }
             else if (title == "Preset")
             {
                 FillPresetRow(tree, presetItem,
                     "清晨起床", "独自旅行", "午后放松", "委屈泛滥", "专注工作",
                     "放空发呆", "灵感唤醒", "假日躺平", "学习冲刺", "准备入睡");
             }
+        }
+
+        static void DressDownload(string title, VisualElement tree)
+        {
+            // 与 GameFormLogic.EnableStagePicking 相同：stage 默认 Ignore，不改的话按钮点不中。
+            tree.Query(className: "game-form-stage").ForEach(stage =>
+                stage.pickingMode = PickingMode.Position);
+            tree.Query(className: "notice-card").ForEach(card =>
+                card.pickingMode = PickingMode.Position);
+            VisualElement dialog = tree.Q("dialog");
+            if (dialog != null)
+                dialog.pickingMode = PickingMode.Position;
+
+            var presenter = new NoticeCardPresenter();
+            presenter.Bind(tree);
+            presenter.Apply(DownloadContent(title));
+            if (title == "下载进度")
+                presenter.SetProgress(7.66f, 66f, 862f);
+        }
+
+        static NoticeCardContent DownloadContent(string title)
+        {
+            if (title == "下载进度")
+            {
+                return new NoticeCardContent
+                {
+                    Title = "场景资源加载中...",
+                    ShowBody = false,
+                    Icon = NoticeCardIcon.Downloading,
+                    PrimaryLabel = "我知道了",
+                    ShowSecondary = false,
+                    ShowProgress = true,
+                };
+            }
+
+            DownloadDialogCopy.DialogCopy copy = title switch
+            {
+                "蜂窝下载" => DownloadDialogCopy.Mobile("500"),
+                "存储不足" => DownloadDialogCopy.Storage("600"),
+                "无网络" => DownloadDialogCopy.Offline(),
+                _ => DownloadDialogCopy.Request("128"),
+            };
+            NoticeCardIcon icon = title switch
+            {
+                "蜂窝下载" => NoticeCardIcon.Cellular,
+                "存储不足" => NoticeCardIcon.Tip,
+                "无网络" => NoticeCardIcon.Tip,
+                _ => NoticeCardIcon.NeedDownload,
+            };
+            return new NoticeCardContent
+            {
+                Title = copy.Title,
+                Body = copy.Body,
+                Icon = icon,
+                PrimaryLabel = copy.PrimaryLabel,
+                SecondaryLabel = copy.SecondaryLabel,
+                ShowSecondary = copy.ShowSecondary,
+            };
+        }
+
+        static void WireDownloadClicks(VisualElement tree, Label status)
+        {
+            WireClick(tree, "primary", status);
+            WireClick(tree, "secondary", status);
+        }
+
+        static void WireClick(VisualElement tree, string elementName, Label status)
+        {
+            VisualElement element = tree.Q(elementName);
+            if (element == null)
+                return;
+
+            if (element is Button button)
+                button.clickable = null;
+            element.pickingMode = PickingMode.Position;
+            element.focusable = false;
+            element.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button > 0)
+                    return;
+                Label text = element.Q<Label>();
+                string shown = text != null ? text.text : elementName;
+                status.text = "点到：" + shown;
+                Debug.Log("[UiPreview] " + elementName + " " + shown);
+                evt.StopImmediatePropagation();
+            }, TrickleDown.TrickleDown);
         }
 
         static void FillList(VisualElement tree, string listName, float itemHeight, System.Collections.IList labels)

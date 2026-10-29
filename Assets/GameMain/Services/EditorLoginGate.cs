@@ -22,7 +22,7 @@ namespace Game
             }
         }
 
-        /// <summary>Prefs 中已有游客 userToken（上次游客登录未主动退出）。</summary>
+        /// <summary>本进程内存里的游客票。游客不落盘，下次 Play 不会从 Prefs 恢复。</summary>
         public static bool HasGuestSession
         {
             get

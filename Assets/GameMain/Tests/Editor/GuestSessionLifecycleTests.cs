@@ -83,6 +83,9 @@ namespace Game.Tests
             SeedDeviceToken("device_tok_keep");
 
             GuestSession.ApplyUserSession(token1, userId1, isGuest: true, saveLocal: false);
+            Assert.IsFalse(PlayerPrefs.HasKey("Boluo.UserToken"));
+            Assert.IsFalse(PlayerPrefs.HasKey("Boluo.UserId"));
+            Assert.AreEqual(0, PlayerPrefs.GetInt("Boluo.IsGuest", 0));
             Assert.IsTrue(GuestSession.IsLoggedIn);
             Assert.IsTrue(GuestSession.IsGuest);
             Assert.AreEqual(token1, GuestSession.UserToken);
@@ -127,6 +130,29 @@ namespace Game.Tests
             Assert.AreEqual(jwt, GuestSession.UserToken);
             Assert.AreEqual(userId, GuestSession.UserId);
             Assert.IsTrue(GuestSession.IsGuest);
+        }
+
+        [Test]
+        public void HybridGuestShape_SaveLocalOff_DoesNotPersistAccount()
+        {
+            // 真机 blob 不报 isGuest，游客只靠 saveLocal=0。这种票同样不能落盘。
+            GuestSession.ApplyUserSession("hybrid_guest_jwt", "hybrid_guest", isGuest: false, saveLocal: false);
+            Assert.IsTrue(GuestSession.IsLoggedIn);
+            Assert.IsFalse(PlayerPrefs.HasKey("Boluo.UserToken"));
+            Assert.IsFalse(PlayerPrefs.HasKey("Boluo.UserId"));
+            BoluoSession.LoadFromPrefs();
+            Assert.AreEqual("hybrid_guest_jwt", GuestSession.UserToken);
+            Assert.AreEqual("hybrid_guest", GuestSession.UserId);
+        }
+
+        [Test]
+        public void FormalAccount_SaveLocalOn_PersistsToken()
+        {
+            GuestSession.ApplyUserSession("formal_jwt", "formal_u", isGuest: false, saveLocal: true);
+            Assert.AreEqual("formal_jwt", PlayerPrefs.GetString("Boluo.UserToken", ""));
+            Assert.AreEqual("formal_u", PlayerPrefs.GetString("Boluo.UserId", ""));
+            Assert.AreEqual(1, PlayerPrefs.GetInt("Boluo.SaveLocal", 0));
+            Assert.AreEqual(0, PlayerPrefs.GetInt("Boluo.IsGuest", 0));
         }
 
         [Test]

@@ -10,8 +10,9 @@ using UnityEngine.Rendering;
 namespace CustomSRP.Editor
 {
     /// <summary>
-    /// Lit-bake LOD0 near trees into existing single-mat billboard albedo atlases.
-    /// Noon sun, ambient=0, fog off. Does not modify .mat / .shader / mesh / normal.
+    /// Bake LOD0 near-tree albedo (no lighting) into single-mat billboard atlases,
+    /// and fit the Y-card quad onto that ortho frame so the impostor sits on the
+    /// same bounds as the near mesh. Does not modify .shader / normals.
     /// </summary>
     public static class BakeTreeBillboardFromLod0
     {
@@ -31,6 +32,7 @@ namespace CustomSRP.Editor
         static readonly int OilPeriodAmbientId = Shader.PropertyToID("_OilPeriodAmbient");
         static readonly int OilSkyPeriodId = Shader.PropertyToID("_OilSkyPeriod");
         static readonly int OilSkySunDirId = Shader.PropertyToID("_OilSkySunDir");
+        const string AlbedoCaptureKeyword = "OIL_BILLBOARD_ALBEDO_CAPTURE";
 
         const string BackupRel = "_scratch/billboard_albedo_backup_noon";
         const string BakeFlagRelPath = "Temp/bake_tree_billboard_noon.flag";
@@ -56,7 +58,7 @@ namespace CustomSRP.Editor
             try { File.Delete(flag); } catch { return; }
 
             _flagBakeQueued = true;
-            Debug.Log("[BakeTreeBillboardFromLod0] Flag detected — baking noon lit atlases");
+            Debug.Log("[BakeTreeBillboardFromLod0] Flag detected — baking albedo atlases");
             try
             {
                 ExecuteMethodEntry();
@@ -67,7 +69,7 @@ namespace CustomSRP.Editor
             }
         }
 
-        [MenuItem("Window/Game/Bake Tree Billboards From LOD0 (Noon Lit)")]
+        [MenuItem("Window/Game/Bake Tree Billboards From LOD0 (Albedo)")]
         public static void BakeAllMenu()
         {
             int ok = BakeAll(out string report);
@@ -97,6 +99,9 @@ namespace CustomSRP.Editor
 
             int cachedMip = QualitySettings.globalTextureMipmapLimit;
             QualitySettings.globalTextureMipmapLimit = 0;
+            // Include-only edits do not always invalidate the parent shader cache.
+            AssetDatabase.ImportAsset(
+                "Assets/CustomSRP/Shaders/OilNPR.shader", ImportAssetOptions.ForceUpdate);
 
             using (var env = new BakeEnvironmentScope())
             {
@@ -105,7 +110,7 @@ namespace CustomSRP.Editor
                     string path = paths[i];
                     string name = Path.GetFileNameWithoutExtension(path);
                     EditorUtility.DisplayProgressBar(
-                        "Bake Tree Billboards (Noon Lit)",
+                        "Bake Tree Billboards (Albedo)",
                         name,
                         (i + 1f) / paths.Count);
 
@@ -251,6 +256,8 @@ namespace CustomSRP.Editor
                 if (!TryBounds(sample, out Bounds bounds) || bounds.size.sqrMagnitude < 1e-6f)
                     return false;
 
+                FitBillboardQuadToBakeFrame(sample, bounds);
+
                 float horiz = Mathf.Max(bounds.size.x, bounds.size.z);
                 float vert = Mathf.Max(0.01f, bounds.size.y);
                 quadSize = new Vector2(Mathf.Max(0.01f, horiz * FramePadding), vert * FramePadding);
@@ -328,6 +335,10 @@ namespace CustomSRP.Editor
                             keep.Add(lods[0].renderers[i]);
                     }
                 }
+
+                // Otherwise the ortho camera's screen height picks LOD_Billboard and
+                // the bake photographs the old atlas instead of the near mesh.
+                lod.enabled = false;
             }
 
             var renderers = sample.GetComponentsInChildren<Renderer>(true);
@@ -384,6 +395,66 @@ namespace CustomSRP.Editor
             }
 
             return any;
+        }
+
+        /// <summary>
+        /// Place the Y-card on the same ortho frame the atlas was shot with.
+        /// UV.x is inside the left frame (0..0.5 of a 2-frame atlas). Card stays on Z=0
+        /// and the bounds box is a yaw cylinder so the facing quad is not culled.
+        /// </summary>
+        static void FitBillboardQuadToBakeFrame(GameObject sample, Bounds bounds)
+        {
+            Transform bb = null;
+            var transforms = sample.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < transforms.Length; i++)
+            {
+                if (transforms[i].name == "LOD_Billboard")
+                {
+                    bb = transforms[i];
+                    break;
+                }
+            }
+
+            if (bb == null)
+                return;
+            var filter = bb.GetComponent<MeshFilter>();
+            if (filter == null || filter.sharedMesh == null)
+                return;
+
+            Mesh mesh = filter.sharedMesh;
+            Vector2[] uv = mesh.uv;
+            Vector3[] verts = mesh.vertices;
+            if (uv == null || verts == null || uv.Length == 0 || uv.Length != verts.Length)
+                return;
+
+            const float pad = FramePadding;
+            Vector3 size = bounds.size;
+            float horiz = Mathf.Max(size.x, size.z);
+            float vert = Mathf.Max(0.01f, size.y);
+            float frame = Mathf.Max(horiz * pad, vert * pad);
+            float viewMinX = -frame * 0.5f;
+            float viewMinY = bounds.center.y - frame * 0.5f;
+
+            float minY = float.PositiveInfinity;
+            float maxY = float.NegativeInfinity;
+            float radius = 0f;
+            for (int i = 0; i < verts.Length; i++)
+            {
+                float fracU = uv[i].x * 2f;
+                float fracV = uv[i].y;
+                float x = viewMinX + fracU * frame;
+                float y = viewMinY + fracV * frame;
+                verts[i] = new Vector3(x, y, 0f);
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+                radius = Mathf.Max(radius, Mathf.Abs(x));
+            }
+
+            mesh.vertices = verts;
+            mesh.bounds = new Bounds(
+                new Vector3(0f, (minY + maxY) * 0.5f, 0f),
+                new Vector3(radius * 2f, Mathf.Max(0.01f, maxY - minY), radius * 2f));
+            EditorUtility.SetDirty(mesh);
         }
 
         static void SetLayerRecursive(Transform t, int layer)
@@ -590,6 +661,7 @@ namespace CustomSRP.Editor
             readonly Vector4 _prevPeriodAmbient;
             readonly float _prevSkyPeriod;
             readonly Vector4 _prevSunDir;
+            readonly bool _prevAlbedoCapture;
             readonly GameObject _lightGo;
 
             public BakeEnvironmentScope()
@@ -603,6 +675,7 @@ namespace CustomSRP.Editor
                 _prevPeriodAmbient = Shader.GetGlobalVector(OilPeriodAmbientId);
                 _prevSkyPeriod = Shader.GetGlobalFloat(OilSkyPeriodId);
                 _prevSunDir = Shader.GetGlobalVector(OilSkySunDirId);
+                _prevAlbedoCapture = Shader.IsKeywordEnabled(AlbedoCaptureKeyword);
 
                 RenderSettings.ambientMode = AmbientMode.Flat;
                 RenderSettings.ambientLight = Color.black;
@@ -611,13 +684,13 @@ namespace CustomSRP.Editor
                 Shader.SetGlobalFloat(CustomFogEnabledId, 0f);
                 Shader.SetGlobalFloat(OilAtmosphereFogAmountId, 0f);
                 Shader.SetGlobalVector(OilPeriodAmbientId, Vector4.zero);
-                // Noon = period 1 (day).
                 Shader.SetGlobalFloat(OilSkyPeriodId, 1f);
 
                 Vector3 sunDir = OilSkyboxTime.SunDirectionFromDayT(12f / 24f);
                 if (sunDir.sqrMagnitude < 1e-8f)
                     sunDir = new Vector3(0.2f, 0.9f, 0.2f).normalized;
                 Shader.SetGlobalVector(OilSkySunDirId, sunDir);
+                Shader.EnableKeyword(AlbedoCaptureKeyword);
 
                 _lightGo = new GameObject("NoonBbBakeLight") { hideFlags = HideFlags.HideAndDontSave };
                 var light = _lightGo.AddComponent<Light>();
@@ -643,6 +716,10 @@ namespace CustomSRP.Editor
                 Shader.SetGlobalVector(OilPeriodAmbientId, _prevPeriodAmbient);
                 Shader.SetGlobalFloat(OilSkyPeriodId, _prevSkyPeriod);
                 Shader.SetGlobalVector(OilSkySunDirId, _prevSunDir);
+                if (_prevAlbedoCapture)
+                    Shader.EnableKeyword(AlbedoCaptureKeyword);
+                else
+                    Shader.DisableKeyword(AlbedoCaptureKeyword);
             }
         }
     }

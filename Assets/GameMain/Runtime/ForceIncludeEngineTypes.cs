@@ -4,18 +4,29 @@ namespace Game
 {
     /// <summary>
     /// Island world (Terrain etc.) is loaded from YooAsset, not present in Launch.unity.
-    /// Strip Engine Code would drop those native types — keep static refs so IL2CPP keeps them.
+    /// Strip Engine Code drops native types that only appear in AssetBundles — keep static
+    /// refs and a Resources TerrainLayer so IL2CPP / engine stripper retain them.
     /// </summary>
     static class ForceIncludeEngineTypes
     {
+        // Resources path: Assets/GameMain/Resources/EngineKeepAlive/KeepTerrainLayer.terrainlayer
+        const string KeepTerrainLayerResource = "EngineKeepAlive/KeepTerrainLayer";
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Touch()
         {
-            // Terrain module (IslandTerrain prefab)
+            // Terrain module (IslandTerrain prefab / TerrainData layers)
             _ = typeof(Terrain);
             _ = typeof(TerrainCollider);
             _ = typeof(TerrainData);
             _ = typeof(TerrainLayer);
+
+            // typeof alone is not enough for TerrainLayer (class ID 1953259897) under
+            // Strip Engine Code + AssetBundles. Loading a Resources TerrainLayer forces
+            // the native type into the player.
+            TerrainLayer keep = Resources.Load<TerrainLayer>(KeepTerrainLayerResource);
+            if (keep != null)
+                _ = keep.diffuseTexture;
 
             // Common environment types that may only appear in streamed prefabs
             _ = typeof(LODGroup);

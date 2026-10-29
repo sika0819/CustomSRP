@@ -2,8 +2,7 @@
     <Style src="../GameFormShared.uss" />
     <ui:Template name="NoticeCard" src="../../Components/NoticeCard.uxml" />
     <ui:VisualElement name="root" class="game-form-backdrop">
-        <ui:VisualElement name="stage" class="game-form-stage">
-            <ui:Instance template="NoticeCard" name="dialog" style="position: absolute; left: 96px; top: 1359px; width: 933px; height: 957px;" />
-        </ui:VisualElement>
+        <ui:VisualElement name="stage" class="game-form-stage" />
+        <ui:Instance template="NoticeCard" name="dialog" class="game-form-notice-dialog game-form-notice-dialog--progress" />
     </ui:VisualElement>
 </ui:UXML>

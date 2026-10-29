@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
+using UnityEngine;
 using UnityEngine.Profiling;
 using UnityGameFramework.Runtime;
 
@@ -47,8 +49,33 @@ namespace Game
             Count,
         }
 
-        /// <summary>true：进岛时下面的模块全部关闭，等命令再打开。</summary>
-        public static bool Enabled = false;
+        public const string FlagFileName = "boluo_leak_probe";
+
+        /// <summary>
+        /// true：进岛时下面的模块全部关闭，等命令再打开。
+        /// 真机：<c>persistentDataPath/boluo_leak_probe</c>。
+        /// </summary>
+#if BOLUO_LEAK_PROBE
+        static bool _enabledDefault = true;
+#else
+        static bool _enabledDefault = false;
+#endif
+        static bool? _enabledCache;
+
+        public static bool Enabled
+        {
+            get
+            {
+                if (_enabledCache.HasValue)
+                    return _enabledCache.Value;
+                bool on = _enabledDefault || FlagExists();
+                _enabledCache = on;
+                if (on)
+                    Log.Info("[LeakProbe] enabled via flag/default");
+                return on;
+            }
+            set => _enabledCache = value;
+        }
 
         public static event Action<Module, bool> Changed;
 
@@ -74,6 +101,37 @@ namespace Game
         {
             Array.Clear(On, 0, On.Length);
             UnknownCategories.Clear();
+            _enabledCache = null;
+        }
+
+        static bool FlagExists()
+        {
+            try
+            {
+                string persistent = Path.Combine(Application.persistentDataPath, FlagFileName);
+                if (File.Exists(persistent))
+                    return true;
+#if UNITY_ANDROID && !UNITY_EDITOR
+                using (var env = new AndroidJavaClass("android.os.Environment"))
+                using (var dir = env.CallStatic<AndroidJavaObject>("getExternalStorageDirectory"))
+                {
+                    string root = dir != null ? dir.Call<string>("getAbsolutePath") : null;
+                    if (!string.IsNullOrEmpty(root))
+                    {
+                        string external = Path.Combine(
+                            root, "Android/data", Application.identifier, "files", FlagFileName);
+                        if (File.Exists(external))
+                            return true;
+                    }
+                }
+#endif
+            }
+            catch (Exception)
+            {
+                // ignore
+            }
+
+            return false;
         }
 
         public static bool Allow(Module module)

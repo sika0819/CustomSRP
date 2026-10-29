@@ -131,6 +131,41 @@ namespace Game
             Log.Info("[NowPlaying] ArmSession");
         }
 
+        /// <summary>
+        /// 进岛当下就出负一屏，不等 bank / 引擎 / 揭罩。
+        /// 人已经不在前台则不出，避免占住抖音 / QQ 的卡片。
+        /// </summary>
+        public static void ShowCardIfForeground()
+        {
+            if (AudioAppLifecycle.IsInBackground)
+            {
+                Log.Info("[NowPlaying] ShowCardIfForeground skipped — unity background");
+                return;
+            }
+
+            if (BackgroundPlayPolicyCallback.GetBackgroundPlayDisable())
+            {
+                Log.Info("[NowPlaying] ShowCardIfForeground skipped — background play disabled");
+                return;
+            }
+
+            bool wasArmed = _armed;
+            ArmSession();
+            bool nativeForeground = BoluoAudioSessionNative.AllowUnmuteNow()
+                && BoluoAndroidEngineNative.AllowUnmuteNow();
+            if (!nativeForeground)
+            {
+                // Arm 的首刷会写成暂停并 setActive。人已经切走时把这次占位拆掉。
+                if (!wasArmed)
+                    ClearCard();
+                Log.Info("[NowPlaying] ShowCardIfForeground skipped — not foreground owner");
+                return;
+            }
+
+            PublishPlayingForced();
+            Log.Info("[NowPlaying] ShowCardIfForeground");
+        }
+
         static void EnsurePlatformSession()
         {
 #if UNITY_IOS && !UNITY_EDITOR
@@ -138,7 +173,7 @@ namespace Game
                 BoluoMusicPlayerIOS.Instance.InitializeAfterLogin();
 #elif UNITY_ANDROID && !UNITY_EDITOR
             var android = BoluoMusicPlayerAndroid.EnsureExists();
-            android?.InitializeAfterLogin();
+            android?.InitializeAfterLogin(AudioAppLifecycle.IsInBackground);
 #endif
         }
 

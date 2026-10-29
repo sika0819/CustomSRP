@@ -72,8 +72,7 @@ namespace Game
                 new UserSession { token = token ?? "", userId = nextId },
                 isGuest,
                 saveLocal);
-            PlayerPrefs.SetInt(IsGuestKey, isGuest ? 1 : 0);
-            PlayerPrefs.Save();
+            // 游客不写 Boluo.IsGuest。正式号的磁盘标记由 BoluoSession 负责。
         }
 
         public static void ApplyLocalEditorGuest()
@@ -120,11 +119,6 @@ namespace Game
         public static void SyncFromBoluo()
         {
             BoluoSession.LoadFromPrefs();
-            if (!string.IsNullOrEmpty(BoluoSession.UserToken))
-            {
-                PlayerPrefs.SetInt(IsGuestKey, BoluoSession.IsGuest ? 1 : 0);
-                PlayerPrefs.Save();
-            }
         }
     }
 }

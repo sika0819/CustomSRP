@@ -17,6 +17,31 @@
     picking-mode: Ignore;
 }
 
+/* Download NoticeCard dialogs — center of the full-screen root, not the
+   design stage. translate % is the element's own size, so the shorter
+   progress card stays centered without a second margin.
+   This class must sit on the template instance itself. .notice-card is
+   absolute and stretches to its parent; a sizeless TemplateContainer
+   between them collapses the card, so panel.png disappears while the
+   icon and labels (they have their own pixel size) stay visible. */
+.game-form-notice-dialog {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 933px;
+    height: 1083px;
+    margin-left: 0;
+    margin-top: 0;
+    margin-right: 0;
+    margin-bottom: 0;
+    translate: -50% -50%;
+    flex-grow: 0;
+}
+
+.game-form-notice-dialog--progress {
+    height: 957px;
+}
+
 /* Full-screen hit target behind sheet chrome; tap dismisses the popup. */
 .game-form-backdrop {
     position: absolute;

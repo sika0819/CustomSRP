@@ -128,6 +128,8 @@ namespace Game
             _worldRetryLogAt = 0f;
             Log.Info(
                 $"[ProcedureIsland] enter #{enter} reclaimBusy={IslandLeaveAssetReclaim.Ensure() is { IsBusy: true }}");
+            // 负一屏不等音频加载。人在前台就先出「波萝」卡片，曲名等播放列表就绪再刷。
+            NowPlayingService.ShowCardIfForeground();
             if (enter > 1)
                 IslandLeaveAssetReclaim.LogFootprint("enter" + enter);
             IslandLeaveAssetReclaim.LogScudoStats("enter" + enter);
@@ -557,7 +559,17 @@ namespace Game
         void ActivateIslandScene()
         {
             GameEntry.Scene.SetSceneOrder(SceneAssets.Island, 0);
+            // 第一次进岛根本来就是激活的，只补打开场景里默认关掉的根。
+            // 二次进岛禁止 SetActive(true)，也禁止 Relink 的 SetParent：
+            // 实测主线程死在 FindActiveTransformWithPath，链表在打开根之后成环，
+            // 重挂修的是 Transform 父子，不是这条活动根链表。
+            if (EnterCount <= 1)
+                ActivateIslandSceneRoots();
+            else
+                Log.Info("[ProcedureIsland] reentry keep roots active");
             GameEntry.Scene.RefreshMainCamera();
+            if (IslandJoystickCamera.Current != null)
+                IslandJoystickCamera.Current.enabled = true;
             GameEntry.BindIslandServices();
             _sceneReady = true;
             _phase = Phase.Services;
@@ -585,8 +597,7 @@ namespace Game
             }
 
             PendingDownloadIntent.Clear();
-            GameEntry.Presets?.AbortTransition();
-            PresetService.Instance?.AbortWeatherHold();
+            (PresetService.Instance ?? GameEntry.Presets)?.ClearPlaybackForAccountSwitch();
             if (IslandJoystickCamera.Current != null)
             {
                 IslandJoystickCamera.Current.ForceUnlockLocomotion();
@@ -602,44 +613,74 @@ namespace Game
 
             // 卸岛空窗仍有罩，但档位是下一次登录，不是岛内 0.70。
             BootLoadingService.Show("登录中", BootLoadingService.LoginStart);
-            // 海洋、草地、LUT 还在，订阅者才能拆 GPU 对象。随后再拆实例并放开句柄。
-            IslandGpuReclaim.Begin();
-            if (GameEntry.World != null)
-            {
-                Log.Info("[ProcedureIsland] release world before unload");
-                GameEntry.World.Release();
-            }
+            // 不拆世界、不卸场景。再 Instantiate 会把活动链表走成环，二次进岛主线程不再回来。
+            // 实例保持第一次进岛时的激活状态。流送先闩住，再进岛按新出生点恢复距离检查，不整表 Relink。
 
             IslandPlayerPosSave.ResetSession();
             IslandAudioSession.Instance?.Shutdown();
             // StopEngine 只停 DSP，bank 的原生缓冲还占着 scudo 的 64KB 档。
             // 再进岛铺草时这档分配失败，进程被杀掉。Unload 拆掉引擎，下一趟 GuestLogin 会重新 Load。
             WanosAudio.WanosEngine.Unload("ProcedureIsland.Leave");
-            MonoBehaviour host = GameEntry.Base;
-            if (host == null)
+            // 不再 SetActive(false)。关掉再打开会把 Instantiate 留下的 next
+            // 重新插进 Unity 的活动根链表。FindActiveTransformWithPath 顺着
+            // node->next 走到哨兵，成环后 PlayerLoop 里的 UnitySendMessage 不再返回。
+            // 场景和根都保持第一次进岛时的激活状态，登录页由宿主把 Unity 视图 GONE。
+            EnvItemStreamerLite.HoldStream();
+            Log.Info("[ProcedureIsland] leave keep scene roots active");
+            if (_owner != null)
             {
-                ReleaseIslandObjectPools();
-                if (GameEntry.Scene != null && GameEntry.Scene.SceneIsLoading(SceneAssets.Island))
-                    return;
-                StartUnload();
+                IslandEntryLog.Ok("island", "backToGuest", "kept=1");
+                ChangeState<ProcedureGuestLogin>(_owner);
+            }
+        }
+
+        static void DeactivateIslandSceneRoots()
+        {
+            Scene scene = UnityIslandScene();
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                Log.Info("[ProcedureIsland] island roots inactive skipped (scene not loaded)");
                 return;
             }
 
-            _leaveUnloadRoutine = host.StartCoroutine(ReleasePoolsThenUnload());
+            GameObject[] roots = scene.GetRootGameObjects();
+            int changed = 0;
+            for (int i = 0; i < roots.Length; i++)
+            {
+                GameObject root = roots[i];
+                if (root == null || !root.activeSelf)
+                    continue;
+                root.SetActive(false);
+                changed++;
+            }
+
+            Log.Info(
+                "[ProcedureIsland] island roots inactive n=" + roots.Length + " off=" + changed);
         }
 
-        /// <summary>
-        /// UIManager 在下一帧才把 Close 收进池。放掉未使用对象后再卸场景。
-        /// 场景还在加载时先放池，等加载成功回调再卸。
-        /// </summary>
-        IEnumerator ReleasePoolsThenUnload()
+        static void ActivateIslandSceneRoots()
         {
-            yield return null;
-            _leaveUnloadRoutine = null;
-            ReleaseIslandObjectPools();
-            if (GameEntry.Scene != null && GameEntry.Scene.SceneIsLoading(SceneAssets.Island))
-                yield break;
-            StartUnload();
+            Scene scene = UnityIslandScene();
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                Log.Info("[ProcedureIsland] island roots active skipped (scene not loaded)");
+                return;
+            }
+
+            GameObject[] roots = scene.GetRootGameObjects();
+            Log.Info("[ProcedureIsland] island roots reactivate begin n=" + roots.Length);
+            int changed = 0;
+            for (int i = 0; i < roots.Length; i++)
+            {
+                GameObject root = roots[i];
+                if (root == null || root.activeSelf)
+                    continue;
+                root.SetActive(true);
+                changed++;
+            }
+
+            Log.Info(
+                "[ProcedureIsland] island roots active n=" + roots.Length + " on=" + changed);
         }
 
         void ReleaseIslandObjectPools()
@@ -718,6 +759,8 @@ namespace Game
                         AccountPasswordLoginThrottle.ClearAll();
                     BoluoGameSave.Load();
                     DownloadedUnplayedManager.EnsureLoaded();
+                    // 播放态跟着账号桶，不沿用上一趟留在岛上的 CurrentId。
+                    (PresetService.Instance ?? GameEntry.Presets)?.RestorePlaybackFromAccount();
                     // 有存档则恢复天气/时段；否则跟墙钟并写入首份快照。
                     GameEntry.Weather?.RestoreOrApplyLocalClock();
                     GameEntry.Music?.ApplySavedVolumes();
@@ -952,7 +995,8 @@ namespace Game
 
             // 先放行触摸，再淡出罩。二次进岛 Prefill 抢主线程时，揭罩前 warmup 会把「即将进入」拖成几十秒。
             // 淡出前不要关 Loading。Close 会拆掉罩，接着再打开就会整页闪一次。
-            EnvStreamingConfig.BeginPostUncoverQuiet();
+            // 只放渲染。流送留到草地和 extras 结束，避免和淡出抢同一帧。
+            EnvItemStreamerLite.ReleaseRenderHold();
             UnlockLocomotionAfterUncover(closeLoadingCover: false);
             const float fadeSec = 0.35f;
             BootLoadingService.FadeHide(fadeSec);
@@ -1048,28 +1092,45 @@ namespace Game
             if (gen != _uncoverGeneration)
                 return;
 
+            // 先 Arm 再出声：iOS 会话切到 Playback、Android 开闸，丢焦监听在 unmute 之前就位。
+            // 否则启动期切到抖音 / QQ 音乐时引擎已经在响，但还没有焦点监听，声音不会停。
             sw.Restart();
-            WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover");
+            NowPlayingService.ArmSession();
+            Log.Info("[Hitch] audio ArmSession ms=" + sw.ElapsedMilliseconds);
+            if (gen != _uncoverGeneration)
+                return;
+
+            sw.Restart();
+            // 加载期间人已经切走，或对方播放器在前台：不要 unmute。
+            // 回前台由 AudioAppLifecycle 再拉起来。谁在前台谁播。
+            bool allowAudible = !AudioAppLifecycle.IsInBackground
+                && WanosAudio.BoluoAudioSessionNative.AllowUnmuteNow()
+                && WanosAudio.BoluoAndroidEngineNative.TryArmFocusBeforeAudible();
+            if (allowAudible)
+                WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover");
+            else
+            {
+                // 记成打断：回波萝走完整恢复，解 mute 并补负一屏。
+                // 不记的话回前台会当成「后台一直在播」直接跳过。
+                WanosAudio.WanosEngine.KeepSilent("startup-no-audio-focus");
+                WanosAudio.WanosEngine.MarkInterrupted("startup-no-audio-focus");
+            }
             GameEntry.Music?.ApplySavedVolumes();
-            Log.Info("[Hitch] audio Unmute+volumes ms=" + sw.ElapsedMilliseconds);
+            Log.Info("[Hitch] audio Unmute+volumes ms=" + sw.ElapsedMilliseconds
+                + " allowAudible=" + allowAudible);
             if (gen != _uncoverGeneration)
                 return;
 
             sw.Restart();
             IslandAudioSession.Instance?.StartAfterUncover();
             Log.Info("[Hitch] audio interaction ms=" + sw.ElapsedMilliseconds);
-            // 一出声就推负一屏：须先显式 Arm（PublishPlayingForced 不再自动 Arm，避免退登拆除后
-            // 残留回调重开闸拉 FGS → ForegroundServiceDidNotStartInTimeException）。
             if (gen != _uncoverGeneration)
                 return;
             sw.Restart();
-            NowPlayingService.ArmSession();
-            Log.Info("[Hitch] audio ArmSession ms=" + sw.ElapsedMilliseconds);
-            if (gen != _uncoverGeneration)
-                return;
-            sw.Restart();
-            NowPlayingService.PublishPlayingForced();
-            Log.Info("[Hitch] audio PublishPlayingForced ms=" + sw.ElapsedMilliseconds);
+            if (allowAudible)
+                NowPlayingService.PublishPlayingForced();
+            Log.Info("[Hitch] audio PublishPlayingForced ms=" + sw.ElapsedMilliseconds
+                + " allowAudible=" + allowAudible);
             BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();
         }
 

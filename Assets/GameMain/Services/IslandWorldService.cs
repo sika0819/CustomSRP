@@ -47,9 +47,22 @@ namespace Game
         public bool IsLoaded => _loaded;
 
         /// <summary>
-        /// 近场（地形 / 海 / 地图物件）已铺完。草和后续流送仍可在 <see cref="Load"/> 里继续。
+        /// 近场（地形 / 海 / Prefill）已铺完。草、氛围 extras、流送按揭罩结束后的顺序在 <see cref="Load"/> 里继续。
         /// </summary>
         public bool IsNearReady { get; private set; }
+
+        /// <summary>Prefill 空等一帧之后抬近场就绪，不必等氛围 extras。</summary>
+        public void NotifyPrefillNearReady()
+        {
+            if (IsNearReady)
+                return;
+            // LeakProbe 无地形时也要能揭罩；正式路径要有地形。
+            if (IslandLeakProbe.Enabled || _terrainInstance != null)
+            {
+                IsNearReady = true;
+                Log.Info("[IslandWorld] near ready after prefill");
+            }
+        }
 
         /// <summary>本轮 Load 已结束且近场没铺上。Procedure 用来停止空等。</summary>
         public bool LoadFailed { get; private set; }
@@ -133,6 +146,9 @@ namespace Game
         public IEnumerator Load(System.Action<float, string> reportProgress)
         {
             LoadFailed = false;
+            // 退登 Release 会闩上；再进岛要能再 Release。
+            _released = false;
+            EnvItemStreamerLite.ClearPrefillAbort();
             if (_loaded)
             {
                 if (!IsNearReady && _terrainInstance != null)
@@ -143,8 +159,14 @@ namespace Game
                         "[IslandWorld] marked loaded but terrain/ocean missing — release and retry");
                     Release();
                     LoadFailed = true;
+                    yield break;
                 }
 
+                // 退登 HoldStream 后，树还停在上一处焦点周围。
+                // 先按本账号重贴出生点（游客默认点 / 正式账号分桶缓存），再同步补附近流送物体。
+                if (IslandJoystickCamera.Current != null)
+                    IslandPlayerPosSave.ReplantAfterTerrainReady(IslandJoystickCamera.Current);
+                EnvItemStreamerLite.ResumePositionStream();
                 yield break;
             }
 
@@ -189,9 +211,36 @@ namespace Game
                 Log.Info("[LeakProbe] inland OFF");
             }
 
-            reportProgress?.Invoke(0.80f, "正在铺装环境...");
-            yield return SpawnMapItems(reportProgress);
+            if (IslandStageGate.SkipMapItems)
+            {
+                reportProgress?.Invoke(0.80f, "跳过地图摆放…");
+                Log.Info("[IslandWorld] MapItem skipped (stage gate)");
+            }
+            else
+            {
+                reportProgress?.Invoke(0.80f, "正在铺装环境...");
+                yield return SpawnMapItems(reportProgress);
+            }
+
             IsNearReady = probe || _terrainInstance != null;
+
+            // 罩淡出结束再铺草，再 extras，最后才放流送。
+            // 渲染闩还关着时也不铺：二次进岛不能和放渲染叠在同一帧。
+            // 离岛 / 超时若已 ReleasePrefillHold，不要死等淡出。
+            float waitCover = Time.realtimeSinceStartup;
+            while (!EnvItemStreamerLite.PrefillAbortReleased
+                   && (EnvItemStreamerLite.PrefillSuppressRender
+                       || BootLoadingService.IsHiding
+                       || BootLoadingService.IsVisible)
+                   && Time.realtimeSinceStartup - waitCover < 45f)
+                yield return null;
+            if (!EnvItemStreamerLite.PrefillAbortReleased
+                && (EnvItemStreamerLite.PrefillSuppressRender
+                    || BootLoadingService.IsHiding
+                    || BootLoadingService.IsVisible))
+                Log.Warning("[IslandWorld] grass wait: cover still up after 45s");
+
+            yield return null;
 
             IslandGrassService grass = GameEntry.Grass ?? IslandGrassService.Ensure();
             if (IslandLeakProbe.Allow(IslandLeakProbe.Module.Grass))
@@ -203,6 +252,11 @@ namespace Game
             {
                 Log.Info("[LeakProbe] grass OFF");
             }
+
+            if (_mapItemSpawner != null)
+                yield return _mapItemSpawner.SpawnDeferredExtras();
+
+            EnvItemStreamerLite.AllowStream();
 
             // 水体最近点改成运行期直接从场景采样（见 WaterSurfaceProbe），
             // 不再加载任何烘焙的水域资源。
@@ -231,6 +285,26 @@ namespace Game
         int _oceanGate;
 
         public void Release() => Release(destroyObjects: true);
+
+        /// <summary>
+        /// 退登卸场景：停流送、丢掉字段，句柄留到卸场景成功。
+        /// 不 <c>DestroyImmediate</c>。提前拆层级再卸场景会把下一轮 Instantiate 的兄弟链留坏。
+        /// </summary>
+        public void ReleaseForSceneUnload()
+        {
+            if (_released)
+                return;
+
+            if (_mapItemSpawner != null)
+            {
+                _mapItemSpawner.DetachForSceneUnload();
+                _mapItemSpawner = null;
+            }
+
+            _mapItemRoot = null;
+            Log.Info("[IslandWorld] detach for scene unload");
+            Release(destroyObjects: false);
+        }
 
         void Release(bool destroyObjects)
         {
@@ -686,7 +760,8 @@ namespace Game
             if (!owner)
                 return;
 
-            // 流程离岛已在场景还在时 Release(true)。这里只兜没走 BeginLeave 的销毁：不拆实例，句柄留到卸场景成功。
+            // 流程离岛已走 ReleaseForSceneUnload，_released 为真，这里直接返回。
+            // 没走 BeginLeave 的销毁才进 Release(false)：不拆实例，句柄留到卸场景成功。
             Release(destroyObjects: false);
             OnInlandWaterReady = null;
         }

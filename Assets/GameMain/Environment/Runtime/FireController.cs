@@ -31,7 +31,6 @@ namespace Game
         [SerializeField] float lightMaxIntensity = 6.5f;
         [SerializeField] float lightRange = 14f;
         [SerializeField] Color lightColor = new Color(1f, 0.42f, 0.08f, 1f);
-        [SerializeField] bool crossedCards = true;
         [SerializeField] bool billboardY = true;
 
         readonly List<Light> _lights = new List<Light>(2);
@@ -251,19 +250,11 @@ namespace Game
             }
 
             EnsureCard(_flameRoot, "FireCard0", Quaternion.identity, mat);
-            if (crossedCards)
-                EnsureCard(_flameRoot, "FireCard1", Quaternion.Euler(0f, 90f, 0f), mat);
-            else
-            {
-                Transform extra = _flameRoot.Find("FireCard1");
-                if (extra != null)
-                    DestroyGo(extra.gameObject);
-            }
 
             for (int i = _flameRoot.childCount - 1; i >= 0; i--)
             {
                 Transform child = _flameRoot.GetChild(i);
-                if (child.name == "FireCard0" || child.name == "FireCard1")
+                if (child.name == "FireCard0")
                     continue;
                 DestroyGo(child.gameObject);
             }

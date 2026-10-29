@@ -14,11 +14,26 @@ namespace Game
     /// 不加载缺失的 BanksChecker 预制体。
     /// </summary>
     [DisallowMultipleComponent]
+    [DefaultExecutionOrder(10000)]
     public sealed class SceneBankGateSpawner : MonoBehaviour
     {
         readonly List<SceneBankGate> _gates = new List<SceneBankGate>(8);
         int _life = 1;
         bool _busy;
+        bool _ownsCatalog;
+        SceneBankGateCatalog _ownedCatalog;
+        bool _banksExpanded;
+        SceneBankGate _downloadGate;
+        int _progressTicket;
+        bool _progressOpen;
+        bool _moveLocked;
+        bool _unlockMoveAfterExit;
+
+        /// <summary>贴墙时胶囊中心可能落在 Trigger 壳外的余量。</summary>
+        const float BodyProbeSlopMeters = 0.75f;
+
+        /// <summary>森林盒子半长约 288 米，一次要能从区域中心推到触发区外。</summary>
+        const float MaxExitMeters = 400f;
 
 #if UNITY_EDITOR
         /// <summary>
@@ -52,6 +67,16 @@ namespace Game
         {
             _life++;
             _busy = false;
+            _downloadGate = null;
+            _progressTicket = 0;
+            _progressOpen = false;
+            _unlockMoveAfterExit = false;
+            SetDownloadMoveLock(false);
+            _banksExpanded = false;
+            if (_ownsCatalog && _ownedCatalog != null)
+                Destroy(_ownedCatalog);
+            _ownedCatalog = null;
+            _ownsCatalog = false;
             ClearChildren();
 #if UNITY_EDITOR
             EditorSimFinished.Clear();
@@ -75,6 +100,14 @@ namespace Game
                     SceneAssets.SceneBankGateCatalogAssetPath);
             }
 #endif
+            if (catalog == null)
+            {
+                catalog = SceneBankGateCatalog.CreateBuiltin();
+                _ownedCatalog = catalog;
+                _ownsCatalog = true;
+                Log.Warning(
+                    "[SceneBankGate] SceneBankGateCatalog missing from package — using builtin zones");
+            }
 
             var used = new HashSet<int>();
             int mapRows = 0;
@@ -134,11 +167,19 @@ namespace Game
             TryCreateEditorProbe();
 #endif
 
+            EnsurePresetBanks();
+            RefreshBlocked();
+
             int blocked = 0;
             for (int i = 0; i < _gates.Count; i++)
             {
-                if (_gates[i] != null && _gates[i].IsBlocked)
-                    blocked++;
+                SceneBankGate gate = _gates[i];
+                if (gate == null || !gate.IsBlocked)
+                    continue;
+                blocked++;
+                Log.Info(
+                    "[SceneBankGate] blocked " + gate.name +
+                    " banks=" + string.Join(",", gate.BankNames));
             }
 
             Log.Info(
@@ -199,23 +240,48 @@ namespace Game
             go.transform.localEulerAngles = rotation;
             go.transform.localScale = Vector3.one;
 
-            string[] banks = CopyBanks(bankNames);
+            string[] zoneBanks = CopyBanks(bankNames);
+            string[] banks = ExpandZoneBanks(zoneBanks, CurrentPresets());
             bool blocked = HasBankNames(banks) && !BanksSatisfied(banks);
             SceneBankGate gate = go.AddComponent<SceneBankGate>();
-            gate.Setup(index, objectName, banks, size, radius, shape, blocked);
+            gate.Setup(index, objectName, zoneBanks, size, radius, shape, blocked);
+            gate.SetGuardedBanks(banks);
             _gates.Add(gate);
         }
 
-        void Update()
+        void LateUpdate()
         {
             if (_gates.Count == 0)
                 return;
 
+            EnsurePresetBanks();
             RefreshBlocked();
             SamplePlayerInside();
-            if (_busy || HudOverlayGate.HasPopup())
-                return;
+            if (!HudOverlayGate.HasPopup())
+            {
+                if (_busy)
+                    TryReopenActiveProgress();
+                else
+                    TryBeginPrompt();
+            }
 
+            if (_moveLocked)
+                IslandJoystickCamera.Current?.SetDownloadMoveLock(true);
+
+            bool stillInside = RetreatFromGate();
+            if (_unlockMoveAfterExit && !stillInside && !_progressOpen)
+            {
+                _unlockMoveAfterExit = false;
+                SetDownloadMoveLock(false);
+            }
+
+            // 推出后再采样。锁已经解开、人在区外时清掉弹窗锁，下次走进去才能再触发。
+            if (!stillInside)
+                SamplePlayerInside();
+        }
+
+        void TryBeginPrompt()
+        {
             for (int i = 0; i < _gates.Count; i++)
             {
                 SceneBankGate gate = _gates[i];
@@ -227,15 +293,64 @@ namespace Game
             }
         }
 
+        /// <summary>
+        /// 这次下载还在跑、进度条已被关掉时，再次走进同一扇门只把进度条打开。
+        /// 不另起一次下载。其它未下完的门只会被推出，不并行第二段下载。
+        /// </summary>
+        void TryReopenActiveProgress()
+        {
+            SceneBankGate gate = _downloadGate;
+            if (gate == null || !gate.IsBlocked || !gate.PlayerInside || gate.PromptLatched)
+                return;
+            if (_progressOpen || _progressTicket <= 0 || UiDialogService.IsProgressRetired(_progressTicket))
+                return;
+            if (UiDialogService.IsProgressOpen(_progressTicket))
+                return;
+
+            if (!UiDialogService.ReopenDownloadProgress(_progressTicket, OnProgressDismissed))
+                return;
+
+            gate.PromptLatched = true;
+            _progressOpen = true;
+            _unlockMoveAfterExit = false;
+            SetDownloadMoveLock(true);
+        }
+
+        /// <summary>
+        /// 区域环境音可能已在首包 / Critical 里，预设曲子还没下。
+        /// 门要守到「引用了这块区域 bank 的预设」整包就绪，否则走进去不弹窗。
+        /// </summary>
+        void EnsurePresetBanks()
+        {
+            if (_banksExpanded)
+                return;
+            IslandPresetAsset[] presets = CurrentPresets();
+            if (presets == null || presets.Length == 0)
+                return;
+
+            _banksExpanded = true;
+            for (int i = 0; i < _gates.Count; i++)
+            {
+                SceneBankGate gate = _gates[i];
+                if (gate == null)
+                    continue;
+                gate.SetGuardedBanks(ExpandZoneBanks(gate.ZoneBanks, presets));
+            }
+        }
+
         void RefreshBlocked()
         {
             for (int i = 0; i < _gates.Count; i++)
             {
                 SceneBankGate gate = _gates[i];
-                if (gate == null || !gate.IsBlocked)
+                if (gate == null)
                     continue;
-                if (BanksSatisfied(gate.BankNames))
-                    gate.SetBlocked(false);
+                bool blocked = HasBankNames(gate.BankNames) && !BanksSatisfied(gate.BankNames);
+                // 下完的那一帧要先把人推出触发区，不能先拆掉碰撞，否则推距是 0。
+                if (_busy && gate == _downloadGate && HasBankNames(gate.BankNames))
+                    blocked = true;
+                if (gate.IsBlocked != blocked)
+                    gate.SetBlocked(blocked);
             }
         }
 
@@ -249,6 +364,8 @@ namespace Game
                 return;
             }
 
+            _unlockMoveAfterExit = false;
+            SetDownloadMoveLock(true);
             RetreatFromGate();
 
             string size = FormatResourceSize(gate.BankNames);
@@ -256,7 +373,15 @@ namespace Game
             UiDialogService.ShowRequestDownload(
                 size,
                 () => OnRequestDownloadConfirmed(gate),
-                RetreatFromGate);
+                EndPromptChain);
+        }
+
+        /// <summary>返回、无网、存储不足、只等 Wi-Fi：链结束。人先出区，再还移动。</summary>
+        void EndPromptChain()
+        {
+            if (_busy)
+                return;
+            _unlockMoveAfterExit = true;
         }
 
         /// <summary>申请窗「立即下载」：无网 → 存储 → 流量 → 进度。</summary>
@@ -270,15 +395,65 @@ namespace Game
                     banks,
                     onAllowAfterMobile: () => BeginDownload(gate),
                     onWifiOnly: null,
-                    onBlockedRetreat: RetreatFromGate))
+                    onBlockedRetreat: EndPromptChain))
                 return;
 
             BeginDownload(gate);
         }
 
-        static void RetreatFromGate()
+        /// <summary>人还在未下完的门里就推到触发区外。已经在外面时不打断走路。</summary>
+        bool RetreatFromGate()
         {
-            IslandJoystickCamera.Current?.StepBack(1.25f);
+            IslandJoystickCamera cam = IslandJoystickCamera.Current;
+            if (cam == null)
+                return false;
+
+            const int MaxPasses = 4;
+            bool pushed = false;
+            for (int pass = 0; pass < MaxPasses; pass++)
+            {
+                Vector3 eye = cam.transform.position;
+                Vector3 foot = eye - Vector3.up * Mathf.Max(0.5f, cam.EyeHeight);
+                Vector3 push = Vector3.zero;
+                for (int i = 0; i < _gates.Count; i++)
+                {
+                    SceneBankGate gate = _gates[i];
+                    if (gate == null || !gate.IsBlocked)
+                        continue;
+                    Vector3 step = gate.HorizontalExitPush(eye, foot, BodyProbeSlopMeters);
+                    if (step.sqrMagnitude > push.sqrMagnitude)
+                        push = step;
+                }
+
+                if (push.sqrMagnitude < 1e-6f)
+                    return false;
+                if (!pushed)
+                {
+                    pushed = true;
+                    IslandMainForm.Current?.CancelLocomotion();
+                    LocomotionInput.ClearAll();
+                }
+
+                if (push.magnitude > MaxExitMeters)
+                    push = push.normalized * MaxExitMeters;
+                cam.StepHorizontal(push);
+            }
+
+            return StillInsideBlocked(cam);
+        }
+
+        bool StillInsideBlocked(IslandJoystickCamera cam)
+        {
+            Vector3 eye = cam.transform.position;
+            Vector3 foot = eye - Vector3.up * Mathf.Max(0.5f, cam.EyeHeight);
+            for (int i = 0; i < _gates.Count; i++)
+            {
+                SceneBankGate gate = _gates[i];
+                if (gate != null && gate.IsBlocked && gate.ContainsBody(eye, foot, BodyProbeSlopMeters))
+                    return true;
+            }
+
+            return false;
         }
 
         void SamplePlayerInside()
@@ -293,12 +468,18 @@ namespace Game
                 foot = eye - Vector3.up * Mathf.Max(0.5f, cam.EyeHeight);
             }
 
+            // 进度窗已关、没有别的弹窗时，人在门外就清锁。移动锁还在也要清：
+            // 人已经被推出区外，锁却留着，再走进去不会出进度条。
+            // 人还在门里时这里不会清（SetSampledInside 只在门外清），关窗这一帧不会立刻再弹。
+            bool clearLatch = !HudOverlayGate.HasPopup() && !_progressOpen;
             for (int i = 0; i < _gates.Count; i++)
             {
                 SceneBankGate gate = _gates[i];
                 if (gate == null)
                     continue;
-                gate.SetSampledInside(hasBody && gate.ContainsBody(eye, foot));
+                gate.SetSampledInside(
+                    hasBody && gate.ContainsBody(eye, foot, BodyProbeSlopMeters),
+                    clearLatch);
             }
         }
 
@@ -336,15 +517,30 @@ namespace Game
             if (_busy || gate == null)
                 return;
             _busy = true;
+            _downloadGate = gate;
+            _progressOpen = true;
+            _unlockMoveAfterExit = false;
+            SetDownloadMoveLock(true);
             int life = _life;
             RunDownload(gate, life).Forget();
         }
 
+        /// <summary>玩家关掉进度条。下载继续。人先出区，再还移动。</summary>
+        void OnProgressDismissed()
+        {
+            _progressOpen = false;
+            if (!_busy)
+                return;
+            _unlockMoveAfterExit = true;
+        }
+
         async UniTaskVoid RunDownload(SceneBankGate gate, int life)
         {
-            int ticket = UiDialogService.OpenDownloadProgress();
+            int ticket = 0;
             try
             {
+                ticket = UiDialogService.OpenDownloadProgress(OnProgressDismissed);
+                _progressTicket = ticket;
 #if UNITY_EDITOR
                 if (EditorSimulateSlowDownload)
                 {
@@ -369,7 +565,6 @@ namespace Game
                     return;
 
                 PushDownloadProgress(ticket, gate.BankNames);
-                RefreshBlocked();
                 if (!BanksSatisfied(gate.BankNames))
                     UiDialogService.ShowToast("下载失败");
             }
@@ -381,10 +576,29 @@ namespace Game
             }
             finally
             {
-                UiDialogService.CloseDownloadProgress(ticket);
                 if (life == _life && this != null)
-                    _busy = false;
+                    FinishDownload(ticket);
+                else if (ticket > 0)
+                    UiDialogService.CloseDownloadProgress(ticket);
             }
+        }
+
+        /// <summary>
+        /// 先按仍挡住的门把人推出触发区，再取消阻挡并关进度条。
+        /// 主动关窗不走玩家的 OnCancel。
+        /// </summary>
+        void FinishDownload(int ticket)
+        {
+            RetreatFromGate();
+            _busy = false;
+            _downloadGate = null;
+            _progressTicket = 0;
+            _progressOpen = false;
+            _unlockMoveAfterExit = false;
+            RefreshBlocked();
+            if (ticket > 0)
+                UiDialogService.CloseDownloadProgress(ticket);
+            SetDownloadMoveLock(false);
         }
 
 #if UNITY_EDITOR
@@ -421,10 +635,26 @@ namespace Game
         }
 #endif
 
+        void SetDownloadMoveLock(bool locked)
+        {
+            _moveLocked = locked;
+            IslandJoystickCamera.Current?.SetDownloadMoveLock(locked);
+            if (!locked)
+                return;
+            IslandMainForm.Current?.CancelLocomotion();
+            LocomotionInput.ClearAll();
+        }
+
         void OnDestroy()
         {
             _life++;
+            _unlockMoveAfterExit = false;
+            SetDownloadMoveLock(false);
             _gates.Clear();
+            if (_ownsCatalog && _ownedCatalog != null)
+                Destroy(_ownedCatalog);
+            _ownedCatalog = null;
+            _ownsCatalog = false;
         }
 
         void ClearChildren()
@@ -432,6 +662,80 @@ namespace Game
             _gates.Clear();
             for (int i = transform.childCount - 1; i >= 0; i--)
                 Destroy(transform.GetChild(i).gameObject);
+        }
+
+        static IslandPresetAsset[] CurrentPresets()
+        {
+            PresetService presets = PresetService.Instance;
+            return presets != null ? presets.Presets : null;
+        }
+
+        /// <summary>
+        /// 区域 bank 加上所有「BankNames 里点了这块区域」的预设整包。
+        /// 只和区域 bank 求交，避免曲子名互相把别的预设也卷进来。
+        /// </summary>
+        public static string[] ExpandZoneBanks(string[] zoneBanks, IslandPresetAsset[] presets)
+        {
+            if (!HasBankNames(zoneBanks))
+                return Array.Empty<string>();
+
+            var list = new List<string>(8);
+            AddUnique(list, zoneBanks);
+            if (presets == null)
+                return list.ToArray();
+
+            for (int p = 0; p < presets.Length; p++)
+            {
+                IslandPresetAsset preset = presets[p];
+                string[] banks = preset != null ? preset.BankNames : null;
+                if (!Intersects(banks, zoneBanks))
+                    continue;
+                AddUnique(list, banks);
+            }
+
+            return list.ToArray();
+        }
+
+        static bool Intersects(string[] banks, string[] zoneBanks)
+        {
+            if (banks == null || zoneBanks == null)
+                return false;
+            for (int i = 0; i < banks.Length; i++)
+            {
+                if (string.IsNullOrEmpty(banks[i]))
+                    continue;
+                for (int j = 0; j < zoneBanks.Length; j++)
+                {
+                    if (string.Equals(banks[i], zoneBanks[j], StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        static void AddUnique(List<string> list, string[] banks)
+        {
+            if (banks == null)
+                return;
+            for (int i = 0; i < banks.Length; i++)
+            {
+                string name = banks[i];
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                bool found = false;
+                for (int j = 0; j < list.Count; j++)
+                {
+                    if (string.Equals(list[j], name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                    list.Add(name);
+            }
         }
 
         static bool HasBankNames(string[] banks)

@@ -21,6 +21,14 @@ namespace Game
 
         protected override bool CloseWhenAnyButtonClicked => false;
         protected override bool SlidesUpFromBottom => false;
+        protected override bool CloseOnBackdropClick => true;
+        protected override bool PinDocumentOrder => true;
+
+        protected override void OnBackdropDismiss()
+        {
+            _userData?.OnConfirm?.Invoke();
+            CloseSelf();
+        }
 
         public override void OnOpen(object userData)
         {

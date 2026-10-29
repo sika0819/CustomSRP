@@ -101,6 +101,12 @@ namespace CustomSRP.Editor
                 m.DisableKeyword("_INTERNAL_EDGE_ON");
                 if (m.HasProperty("_InternalEdge"))
                     m.SetFloat("_InternalEdge", 0f);
+                // Local keyword selects the billboard variant. The float alone stays on the shared OilNPR variant.
+                bool yBillboard = m.HasProperty("_OilYBillboard") && m.GetFloat("_OilYBillboard") > 0.5f;
+                if (yBillboard)
+                    m.EnableKeyword("OIL_Y_BILLBOARD");
+                else
+                    m.DisableKeyword("OIL_Y_BILLBOARD");
             }
         }
 

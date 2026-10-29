@@ -16,6 +16,11 @@ namespace Game.Editor
 
         static readonly string[] FormNames =
         {
+            "申请下载",
+            "下载进度",
+            "蜂窝下载",
+            "存储不足",
+            "无网络",
             "Loading",
             "Island Main",
             "Weather",
@@ -27,6 +32,11 @@ namespace Game.Editor
 
         static readonly string[] FormFiles =
         {
+            "Download/RequestDownloadForm",
+            "Download/DownloadProgressForm",
+            "Download/MobileDataConfirmForm",
+            "Download/InsufficientStorageForm",
+            "Download/NoNetworkForm",
             "LoadingForm",
             "IslandMainForm",
             "WeatherForm",

@@ -60,7 +60,7 @@ namespace WanosAudio
             UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(gameObject, launch);
         }
 
-        public void InitializeAfterLogin()
+        public void InitializeAfterLogin(bool inBackground = false)
         {
             ArtworkDefault = "WanosAudio/Artwork/boluo.png";
 
@@ -69,7 +69,8 @@ namespace WanosAudio
             BoluoAndroidEngineNative.SetPlaybackActive(true);
 
             bool bgDisable = BackgroundPlayPolicyCallback.GetBackgroundPlayDisable();
-            BoluoAndroidEngineNative.NotifyAppLifecycle(false, bgDisable);
+            // 加载中途已进后台时不能谎报前台，否则随后抢焦会在抖音 / QQ 音乐之上出声。
+            BoluoAndroidEngineNative.NotifyAppLifecycle(inBackground, bgDisable);
 
             if (sIsInitialized)
                 return;
@@ -132,6 +133,10 @@ namespace WanosAudio
             if (string.IsNullOrEmpty(artworkPath))
                 artworkPath = ArtworkDefault ?? "";
             BoluoAndroidEngineNative.UpdateNowPlayingInfo(title, artworkPath, isPlaying);
+            if (isPlaying)
+                BoluoAndroidEngineNative.NoteForegroundCardPublished();
+            else
+                BoluoAndroidEngineNative.NoteForegroundCardCleared();
         }
 
         public void ClearNowPlaying()

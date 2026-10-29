@@ -398,7 +398,12 @@ namespace CustomSRP
                 cmd.ClearRenderTarget(true, true, new Color(0.09f, 0.07f, 0.05f, 1f));
                 context.ExecuteCommandBuffer(cmd);
                 context.DrawUIOverlay(camera);
+                bool logSubmit = EnvItemStreamerLite.TakeTailCoverSubmitLog();
+                if (logSubmit)
+                    Log.Info("[EnvItemStreamerLite] prefill cover submit");
                 context.Submit();
+                if (logSubmit)
+                    Log.Info("[EnvItemStreamerLite] prefill cover submit done");
             }
             finally
             {

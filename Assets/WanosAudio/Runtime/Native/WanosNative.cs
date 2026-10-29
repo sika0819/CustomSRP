@@ -1,3 +1,9 @@
+// 编辑器在 Mac 上始终加载 macOS bundle（即使当前构建目标是 Android/iOS）。
+// 播放器：iOS 与 Mac 同为 Apple libc++ 布局；Android NDK 的成员偏移不同，在下面分开。
+#if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || (UNITY_IOS && !UNITY_EDITOR) || (UNITY_ANDROID && !UNITY_EDITOR)
+#define WANOS_JOIN_MIXER
+#endif
+
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -70,7 +76,20 @@ namespace WanosAudio
         [DllImport("libWanosAudioMac.dylib", CallingConvention = CallingConvention.Cdecl)]
         static extern int WanosDSP_IsEngineRunning();
 
-        // WIAEngine 6000 bundle：IAE 首字段是 Impl*，Impl+0x10 是 WanosAudioDSP*。
+#endif
+
+#if WANOS_JOIN_MIXER
+        // NDK libc++ 的 WanosAudioDSP 比 Apple libc++ 更紧：运行标志 +0x68，std::thread +0x70。
+        // Apple（Mac bundle / iOS）：运行标志 +0x80，std::thread +0x88。IsProcessRunning 是相邻的下一个字节，不能拿来判断线程。
+#if UNITY_ANDROID && !UNITY_EDITOR
+        const int DspThreadRunningOffset = 0x68;
+        const int DspThreadIdOffset = 0x70;
+#else
+        const int DspThreadRunningOffset = 0x80;
+        const int DspThreadIdOffset = 0x88;
+#endif
+
+        // IAE 首字段是 Impl*，Impl+0x10 是 WanosAudioDSP*（三端一致）。
         // StopDspTread 会 join 混音线程；StartProcess 会拆掉 DSP，这里只重启线程。
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true,
             EntryPoint = "_ZN3IAE22InteractiveAudioEngine16GetCurrentEngineEv")]
@@ -529,7 +548,8 @@ namespace WanosAudio
 
         /// <summary>
         /// LoadBank / UnloadBank 会改正在被混音的组图。
-        /// DSP 线程在 AudioGroupInst::getDataInternal 里读到半截节点就是 SIGSEGV（编辑器直接退出）。
+        /// DSP 线程在 BlendGroupInst::getDataInternal 里 setState → DealUnifiedBasicAction 时
+        /// 读到已释放节点就是 SIGSEGV（编辑器直接退出）。
         /// 先 join 混音线程，改完再 StartDspTread。不要走 StartProcess，那会拆掉 DSP。
         /// </summary>
         void RunWithMixerJoined(Action body)
@@ -537,7 +557,7 @@ namespace WanosAudio
             if (body == null)
                 return;
 
-#if !UNITY_OSX
+#if !WANOS_JOIN_MIXER
             body();
             return;
 #else
@@ -549,10 +569,9 @@ namespace WanosAudio
                 dsp = TryGetMixer();
                 if (dsp != IntPtr.Zero)
                 {
-                    // StopDspTread 看的是 +0x80 的运行标志，不是 IsProcessRunning 的 +0x81。
                     try
                     {
-                        restart = Marshal.ReadByte(dsp, 0x80) != 0;
+                        restart = Marshal.ReadByte(dsp, DspThreadRunningOffset) != 0;
                     }
                     catch (Exception e)
                     {
@@ -574,7 +593,7 @@ namespace WanosAudio
                     {
                         StopDspThread(dsp);
                         // join 之后 std::thread id 必须是 0。非 0 再 StartDspTread 会 std::terminate。
-                        if (Marshal.ReadInt64(dsp, 0x88) != 0)
+                        if (Marshal.ReadInt64(dsp, DspThreadIdOffset) != 0)
                         {
                             Debug.LogError($"[{LogTag}] mixer thread still live after join — skip restart");
                             restart = false;
@@ -611,7 +630,7 @@ namespace WanosAudio
 #endif
         }
 
-#if UNITY_OSX
+#if WANOS_JOIN_MIXER
         static IntPtr TryGetMixer()
         {
             try

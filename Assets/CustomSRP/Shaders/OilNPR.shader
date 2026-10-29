@@ -1,3 +1,4 @@
+// Y billboard albedo capture: _OilBillboardAlbedoCapture in OilNPRInput.hlsl.
 Shader "CustomSRP/OilNPR"
 {
     Properties
@@ -76,6 +77,14 @@ Shader "CustomSRP/OilNPR"
             #pragma multi_compile_local _ _CLIPPING
             #pragma multi_compile_local _ _RECEIVE_SHADOWS
             #pragma multi_compile _ OIL_MOBILE_PERF
+            // 片树专用变体。shader_feature 在 Yoo/AB 材质上会被剥掉，跟 _CLIPPING 一样必须进包。
+            // 近景材质不开这个关键字，编译结果不含片树法线采样和昼夜双光照。
+            #pragma multi_compile_local _ OIL_Y_BILLBOARD
+            // Editor bake only. Player shaders do not compile this variant.
+            // OilNPRShaderStripper still drops it if a player compile sees the keyword.
+#if UNITY_EDITOR
+            #pragma multi_compile _ OIL_BILLBOARD_ALBEDO_CAPTURE
+#endif
             #pragma multi_compile_instancing
             #pragma vertex OilNPRPassVertex
             #pragma fragment OilNPRPassFragment

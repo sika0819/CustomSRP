@@ -15,7 +15,8 @@ namespace Game
         [Header("Locomotion")]
         public float MoveSpeed = 9f;
         public float StickYawSpeed = 70f;
-        public float Pitch = 12f;
+        /// <summary>行走俯仰。平视 0°；预设站定时另有俯仰，开走后插值回这里。</summary>
+        public float Pitch = 0f;
         /// <summary>
         /// Eye above ground while walking. Preset <c>PlayerHeight</c> is the Boluo capsule
         /// height (center at the origin), not this offset.
@@ -55,6 +56,8 @@ namespace Game
         const float GroundNormalMinY = 0.45f;
         /// <summary>脚底低于海平面超过此值视为走进海里（允许湿沙滩浅滩）。</summary>
         const float OceanBelowSurfaceBan = 0.25f;
+        /// <summary>眼睛离地形矩形边的最小内缩，避免胶囊探出高度图踩上海面碰撞。</summary>
+        const float TerrainEdgeMargin = 0.75f;
         /// <summary>河面水平距离 / 竖直容差（米）。</summary>
         const float RiverBanRadiusXZ = 5f;
         const float RiverBanRadiusY = 4f;
@@ -70,15 +73,32 @@ namespace Game
         public float YawDegrees => _yaw;
 
         CharacterController _cc;
+        EnvMeshColliderLod _colliderLod;
+        const float ColliderRefreshMinRadius = 48f;
 
         Vector2 _smoothedMove;
         float _speedRatio;
         float _yaw;
+        bool _downloadMoveLock;
         float _verticalSpeed;
 
         /// <summary>Inspector-authored <see cref="EyeHeight"/>. Cached on first OnEnable so a
         /// preset that bumps EyeHeight for StayBehind gets reverted to this when walking starts.</summary>
         float _defaultEyeHeight = -1f;
+
+        bool _pitchRestoring;
+        float _pitchFrom;
+        float _pitchTo;
+        float _pitchElapsed;
+        float _pitchDuration;
+
+        bool _walkRectCached;
+        EntityId _walkRectTerrainId;
+        float _walkRectInsetRequest = -1f;
+        float _walkRectMinX;
+        float _walkRectMaxX;
+        float _walkRectMinZ;
+        float _walkRectMaxZ;
 
         // Capsule shape last applied to the CC; -1 forces reapply on next EnsureBody.
         float _appliedEyeHeight = -1f;
@@ -120,6 +140,8 @@ namespace Game
         Vector3 _pushFrom;
         Vector3 _pushTo;
         float _pushT;
+        /// <summary>推镜开始时眼睛离地高度。整段前推都保持这个空隙，不收成行走眼高。</summary>
+        float _pushClearance;
 
         /// <summary>眼睛。胶囊在下一帧按这个坐标新建，避免启用旧胶囊时弹回。</summary>
         Vector3 _lockedEye;
@@ -138,6 +160,8 @@ namespace Game
             if (_defaultEyeHeight < 0f)
                 _defaultEyeHeight = EyeHeight;
             AdoptSceneLook();
+            if (_colliderLod == null)
+                _colliderLod = FindAnyObjectByType<EnvMeshColliderLod>();
             EnsureBody();
             ApplyRenderScale(false);
         }
@@ -149,13 +173,10 @@ namespace Game
         void AdoptSceneLook()
         {
             Vector3 e = transform.eulerAngles;
-            float pitch = e.x > 180f ? e.x - 360f : e.x;
             float yaw = e.y > 180f ? e.y - 360f : e.y;
-            if (Mathf.Abs(pitch) <= 0.01f && Mathf.Abs(yaw) <= 0.01f)
+            if (Mathf.Abs(yaw) <= 0.01f)
                 return;
             _yaw = yaw;
-            if (pitch >= -85f && pitch <= 85f)
-                Pitch = pitch;
         }
 
         void OnDisable()
@@ -180,6 +201,7 @@ namespace Game
             if (pitchDegrees > 180f)
                 pitchDegrees -= 360f;
             Pitch = Mathf.Clamp(pitchDegrees, -85f, 85f);
+            _pitchRestoring = false;
         }
 
         /// <summary>揭罩前锁住当前眼睛位置和朝向。</summary>
@@ -211,14 +233,34 @@ namespace Game
             EnsureBody();
         }
 
+        /// <summary>
+        /// 下载弹窗或进度条期间停住平移。视角仍走 <see cref="ConsumeLookInput"/>。
+        /// </summary>
+        public void SetDownloadMoveLock(bool locked)
+        {
+            _downloadMoveLock = locked;
+            if (!locked)
+                return;
+            HaltHorizontalMotion();
+        }
+
         /// <summary>沿水平朝向后退，离开挡住路的区域门。</summary>
         public void StepBack(float meters)
         {
             if (meters <= 0f)
                 return;
             Vector3 back = Quaternion.Euler(0f, _yaw, 0f) * Vector3.back;
+            StepHorizontal(back * meters);
+        }
+
+        /// <summary>沿给定水平位移离开区域门。Y 会被丢掉。</summary>
+        public void StepHorizontal(Vector3 worldDelta)
+        {
+            worldDelta.y = 0f;
+            if (worldDelta.sqrMagnitude < 1e-8f)
+                return;
             Vector3 foot = transform.position - Vector3.up * EyeHeight;
-            Teleport(foot + back * meters, _yaw);
+            Teleport(foot + worldDelta, _yaw);
         }
 
         /// <summary>脚落到 <paramref name="worldPos"/> 的地面上，眼睛抬到行走高度。出生和读档用。</summary>
@@ -231,6 +273,16 @@ namespace Game
             EnsureBody();
             Vector3 ground = SampleGround(worldPos);
             SetPose(ground + Vector3.up * EyeHeight, Quaternion.Euler(Pitch, _yaw, 0f));
+            // 立刻打开落点附近 MeshCollider，避免走路穿大石。
+            RefreshNearbyColliders();
+        }
+
+        void RefreshNearbyColliders()
+        {
+            if (_colliderLod == null)
+                _colliderLod = FindAnyObjectByType<EnvMeshColliderLod>();
+            float radius = Mathf.Max(ColliderRefreshMinRadius, EnvStreamingConfig.MeshColliderEnableRadius);
+            _colliderLod?.ForceRefreshNear(transform.position, radius);
         }
 
         /// <summary>
@@ -242,6 +294,7 @@ namespace Game
             if (pitchDegrees > 180f)
                 pitchDegrees -= 360f;
             Pitch = Mathf.Clamp(pitchDegrees, -85f, 85f);
+            _pitchRestoring = false;
             _verticalSpeed = 0f;
             _heightTransitioning = false;
             _smoothedMove = Vector2.zero;
@@ -301,7 +354,10 @@ namespace Game
             return ground;
         }
 
-        /// <summary>沿当前朝向前推一段。不读预设。已锁定时调用会重新进入推镜。</summary>
+        /// <summary>
+        /// 沿当前朝向前推一段。离地高度保持推镜开始时的空隙，不收成行走眼高。
+        /// 已锁定时调用会重新进入推镜。
+        /// </summary>
         public void BeginPush()
         {
             _drive = EyeDrive.Push;
@@ -311,10 +367,10 @@ namespace Game
                 _cc.enabled = false;
             _pushFrom = transform.position;
             _pushT = 0f;
+            _pushClearance = ClearanceAboveGround(_pushFrom);
             Vector3 forward = Quaternion.Euler(0f, _yaw, 0f) * Vector3.forward;
             Vector3 near = _pushFrom + forward * PushMeters;
-            Vector3 ground = SampleGround(near);
-            _pushTo = new Vector3(near.x, ground.y + EyeHeight, near.z);
+            _pushTo = EyeAtClearance(near, _pushClearance);
         }
 
         /// <summary>推镜插值。锁定之后调用无效，避免盖掉瞬移。</summary>
@@ -325,7 +381,7 @@ namespace Game
             t01 = Mathf.Clamp01(t01);
             _pushT = t01;
             Vector3 pos = Vector3.Lerp(_pushFrom, _pushTo, t01);
-            SetPose(pos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
+            SetPose(EyeAtClearance(pos, _pushClearance), Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
         }
 
         /// <summary>推镜途中顺朝向再挪一点。锁定之后调用无效。</summary>
@@ -338,7 +394,27 @@ namespace Game
             _pushFrom += delta;
             _pushTo += delta;
             Vector3 pos = Vector3.Lerp(_pushFrom, _pushTo, _pushT);
-            SetPose(pos, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
+            SetPose(EyeAtClearance(pos, _pushClearance), Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: true);
+        }
+
+        /// <summary>采不到地面时退回行走眼高，避免把空隙算成 0 后贴地。</summary>
+        float ClearanceAboveGround(Vector3 eye)
+        {
+            if (!TryGroundUnder(eye, out Vector3 ground))
+                return EyeHeight;
+            float clearance = eye.y - ground.y;
+            if (clearance < 0.05f)
+                return EyeHeight;
+            return clearance;
+        }
+
+        /// <summary>水平位置照旧，高度改成该点地面加上推镜开始时的离地空隙。</summary>
+        Vector3 EyeAtClearance(Vector3 eye, float clearance)
+        {
+            if (!TryGroundUnder(eye, out Vector3 ground))
+                return eye;
+            eye.y = ground.y + clearance;
+            return eye;
         }
 
         /// <summary>
@@ -380,6 +456,7 @@ namespace Game
 
             DropStaleBody(eye);
             _drive = EyeDrive.Locomotion;
+            BeginWalkPitchRestore();
 
             Vector3 ground = SampleGround(eye);
             float startY = eye.y;
@@ -472,6 +549,7 @@ namespace Game
             EnsureBody();
             ApplyRenderScale(walking);
             TickHeightTransition(dt);
+            TickPitchRestore(dt);
 
             Vector3 motion = ComputeMotion(dt);
             if (_pinUntilGrounded)
@@ -524,6 +602,12 @@ namespace Game
 
         void ConsumeMoveInput(float dt)
         {
+            if (_downloadMoveLock || HudOverlayGate.BlocksLocomotion())
+            {
+                HaltHorizontalMotion();
+                return;
+            }
+
             // speedRatio defaults to 0 unless input arrived this frame.
             _speedRatio = 0f;
             Vector2 want = Vector2.zero;
@@ -533,6 +617,13 @@ namespace Game
                 _speedRatio = Mathf.Clamp01(speed);
             }
             _smoothedMove = Vector2.MoveTowards(_smoothedMove, want, InputSmooth * dt);
+        }
+
+        void HaltHorizontalMotion()
+        {
+            _smoothedMove = Vector2.zero;
+            _speedRatio = 0f;
+            LocomotionInput.ClearAll();
         }
 
         bool IsWalking => Mathf.Abs(_smoothedMove.y) > WalkRenderScaleThreshold;
@@ -558,6 +649,46 @@ namespace Game
         }
 
         // ─── Height transition ────────────────────────────────────────────────────
+
+        /// <summary>开走后把预设俯仰插值回行走俯仰 0°，时长跟高度过渡一致。</summary>
+        void BeginWalkPitchRestore()
+        {
+            const float target = 0f;
+            if (Mathf.Abs(Mathf.DeltaAngle(Pitch, target)) <= 0.05f)
+            {
+                Pitch = target;
+                _pitchRestoring = false;
+                return;
+            }
+
+            if (HeightTransitionDuration <= 0f)
+            {
+                Pitch = target;
+                _pitchRestoring = false;
+                return;
+            }
+
+            _pitchRestoring = true;
+            _pitchFrom = Pitch;
+            _pitchTo = target;
+            _pitchElapsed = 0f;
+            _pitchDuration = HeightTransitionDuration;
+        }
+
+        void TickPitchRestore(float dt)
+        {
+            if (!_pitchRestoring)
+                return;
+
+            _pitchElapsed += dt;
+            float t = _pitchDuration <= 0f ? 1f : Mathf.Clamp01(_pitchElapsed / _pitchDuration);
+            Pitch = Mathf.LerpAngle(_pitchFrom, _pitchTo, t);
+            if (t < 1f)
+                return;
+
+            Pitch = _pitchTo;
+            _pitchRestoring = false;
+        }
 
         void StartHeightTransition(float from, float to)
         {
@@ -649,10 +780,34 @@ namespace Game
 
         void MoveBody(Vector3 motion)
         {
+            motion = ClampMotionToTerrain(motion);
             if (_cc != null && _cc.enabled)
                 MoveViaCharacterController(motion);
             else
                 MoveFreeCam(motion);
+        }
+
+        /// <summary>本帧水平位移不许离开地形矩形，避免一步踩上海面。</summary>
+        Vector3 ClampMotionToTerrain(Vector3 motion)
+        {
+            if (!TryGetTerrainWalkRect(out float minX, out float maxX, out float minZ, out float maxZ))
+                return motion;
+
+            Vector3 eye = transform.position;
+            bool outside = eye.x < minX || eye.x > maxX || eye.z < minZ || eye.z > maxZ;
+            if (outside)
+            {
+                // 已经在地形外：本帧不走，交给 ApplyIslandTerrainLimit 拉回岸边。
+                motion.x = 0f;
+                motion.z = 0f;
+                return motion;
+            }
+
+            float x = Mathf.Clamp(eye.x + motion.x, minX, maxX);
+            float z = Mathf.Clamp(eye.z + motion.z, minZ, maxZ);
+            motion.x = x - eye.x;
+            motion.z = z - eye.z;
+            return motion;
         }
 
         void MoveViaCharacterController(Vector3 motion)
@@ -680,6 +835,7 @@ namespace Game
             }
 
             ApplyWaterWalkBan(before);
+            ApplyIslandTerrainLimit();
         }
 
         void MoveFreeCam(Vector3 motion)
@@ -689,6 +845,7 @@ namespace Game
             if (Mathf.Abs(motion.x) + Mathf.Abs(motion.z) <= 1e-4f)
             {
                 transform.position = pos;
+                ApplyIslandTerrainLimit();
                 return;
             }
 
@@ -705,6 +862,89 @@ namespace Game
             }
             transform.position = pos;
             ApplyWaterWalkBan(before);
+            ApplyIslandTerrainLimit();
+        }
+
+        /// <summary>
+        /// 水平位置锁在地形矩形内。高度图外面是海面碰撞，走出去就踩着海面走远、回不来。
+        /// </summary>
+        void ApplyIslandTerrainLimit()
+        {
+            if (!TryGetTerrainWalkRect(out float minX, out float maxX, out float minZ, out float maxZ))
+                return;
+
+            Vector3 eye = transform.position;
+            float x = Mathf.Clamp(eye.x, minX, maxX);
+            float z = Mathf.Clamp(eye.z, minZ, maxZ);
+            if (Mathf.Abs(x - eye.x) <= 1e-3f && Mathf.Abs(z - eye.z) <= 1e-3f)
+                return;
+
+            eye.x = x;
+            eye.z = z;
+            if (!_heightTransitioning)
+            {
+                Vector3 ground = SampleGround(eye);
+                eye.y = ground.y + EyeHeight;
+                if (_verticalSpeed < 0f)
+                    _verticalSpeed = -GroundStickSpeed;
+            }
+
+            bool ccOn = _cc != null && _cc.enabled;
+            if (ccOn)
+                _cc.enabled = false;
+            transform.position = eye;
+            Physics.SyncTransforms();
+            if (ccOn)
+                _cc.enabled = true;
+        }
+
+        bool TryGetTerrainWalkRect(out float minX, out float maxX, out float minZ, out float maxZ)
+        {
+            minX = maxX = minZ = maxZ = 0f;
+            Terrain terrain = IslandSceneComponent.Active != null
+                ? IslandSceneComponent.Active.Terrain
+                : null;
+            if (terrain == null || terrain.terrainData == null)
+                return false;
+
+            float insetRequest = TerrainEdgeMargin;
+            if (_cc != null && _cc.enabled)
+                insetRequest = Mathf.Max(insetRequest, _cc.radius + _cc.skinWidth);
+
+            EntityId terrainId = terrain.GetEntityId();
+            if (_walkRectCached
+                && _walkRectTerrainId == terrainId
+                && Mathf.Abs(_walkRectInsetRequest - insetRequest) <= 1e-4f)
+            {
+                minX = _walkRectMinX;
+                maxX = _walkRectMaxX;
+                minZ = _walkRectMinZ;
+                maxZ = _walkRectMaxZ;
+                return maxX > minX && maxZ > minZ;
+            }
+
+            Vector3 size = terrain.terrainData.size;
+            if (size.x <= 1f || size.z <= 1f)
+                return false;
+
+            float inset = Mathf.Min(insetRequest, size.x * 0.5f - 0.05f, size.z * 0.5f - 0.05f);
+            if (inset < 0f)
+                inset = 0f;
+
+            Vector3 origin = terrain.transform.position;
+            minX = origin.x + inset;
+            maxX = origin.x + size.x - inset;
+            minZ = origin.z + inset;
+            maxZ = origin.z + size.z - inset;
+
+            _walkRectCached = true;
+            _walkRectTerrainId = terrainId;
+            _walkRectInsetRequest = insetRequest;
+            _walkRectMinX = minX;
+            _walkRectMaxX = maxX;
+            _walkRectMinZ = minZ;
+            _walkRectMaxZ = maxZ;
+            return maxX > minX && maxZ > minZ;
         }
 
         // ─── Pose / sampling ───────────────────────────────────────────────────────

@@ -57,6 +57,11 @@ final class WanosAudioFocusManager {
     private static final long RECLAIM_DEBOUNCE_MS = 400L;
     /** 进后台后仅在此窗口内忽略 LOSS_TRANSIENT（CWPA-44）；超时视为 B 站等真竞争。 */
     private static final long BACKGROUND_TRANSIENT_SUPPRESS_WINDOW_MS = 800L;
+    /**
+     * 前后台边沿：回前台会先把 appInBackground 清掉，紧接着的焦点抖动不再满足「已在后台」。
+     * 边沿内无 competing、非通话则不 mute，避免切回来停一下。
+     */
+    private static final long LIFECYCLE_EDGE_SUPPRESS_MS = 1500L;
     /** 对齐 C# AndroidForegroundCompetingResumeDebounceMs：一起启动 / 切视频间隙防尾音。 */
     private static final long FOREGROUND_COMPETING_RESUME_DEBOUNCE_MS = 2000L;
     /** 对齐 C# AndroidBackgroundSilenceConfirmMs / iOS 30s 后台静默确认。 */
@@ -102,11 +107,20 @@ final class WanosAudioFocusManager {
          */
         boolean shouldSuppressTransientPauseInBackground();
 
+        /**
+         * 允许后台续播且用户未暂停。与是否已经记成后台无关，
+         * 供前后台边沿（回前台标志已清、焦点抖动还在）跳过 mute。
+         */
+        boolean allowsUninterruptedBackgroundPlayback();
+
         /** 申请焦点失败。 */
         void onFocusRequestFailed();
 
         /** App 是否在后台（CAN_DUCK 升级抢占用）。 */
         boolean isAppInBackground();
+
+        /** 进岛占位卡还没真正出声时，对方媒体已在播：收起播放态。 */
+        void onStartupCardYield();
 
         /**
          * 后台续播且自身 MEDIA/GAME 轨已从 mixer 消失：立刻无爬坡重开 AAudio。
@@ -144,6 +158,8 @@ final class WanosAudioFocusManager {
     private boolean playbackCallbackRegistered;
     /** 进后台时刻，用于 TRANSIENT 抖动窗口（对齐 policy 800ms）。 */
     private long backgroundEnteredElapsedMs;
+    /** 最近一次前后台标志翻转，用于回前台边沿的焦点抖动。 */
+    private long lastLifecycleEdgeElapsedMs;
     private boolean lastObservedBackground;
     /** 本轮曾见其它 UID 的 MEDIA/GAME；停播后须静默确认再 unmute（防 B 站暂停尾音）。 */
     private boolean competingEpisodeSawMedia;
@@ -184,6 +200,13 @@ final class WanosAudioFocusManager {
 
     boolean hasAudioFocus() {
         return hasFocus;
+    }
+
+    /** 其它 App 的媒体正在出声（抖音 / QQ 音乐 / B 站）。 */
+    boolean hasForeignMedia() {
+        synchronized (focusLock) {
+            return isCompetingMediaPlaybackActive(getAudioManager());
+        }
     }
 
     boolean isPendingResume() {
@@ -599,6 +622,10 @@ final class WanosAudioFocusManager {
                     // 后台或对方 MEDIA 出声 → 抢占。前台无 competing 仍 duck（导航/短信）。
                     boolean preempt = callback.isAppInBackground() || competing;
                     long t0 = SystemClock.elapsedRealtime();
+                    if (!competing && shouldIgnoreLifecycleFlickerLocked()) {
+                        Log.i(TAG, "LOSS_TRANSIENT_CAN_DUCK suppressed (lifecycle edge)");
+                        break;
+                    }
                     if (preempt) {
                         Log.i(TAG, "LOSS_TRANSIENT_CAN_DUCK -> preempt bg="
                                 + callback.isAppInBackground() + " competing=" + competing);
@@ -638,9 +665,12 @@ final class WanosAudioFocusManager {
                         }
                         break;
                     }
-                    boolean suppress = callback.shouldSuppressTransientPauseInBackground()
-                            && !competing
-                            && bgAge < BACKGROUND_TRANSIENT_SUPPRESS_WINDOW_MS;
+                    boolean suppress = !competing
+                            && !isInVoiceCallLocked(getAudioManager())
+                            && callback.allowsUninterruptedBackgroundPlayback()
+                            && (isLifecycleEdgeLocked()
+                            || (callback.isAppInBackground()
+                            && bgAge < BACKGROUND_TRANSIENT_SUPPRESS_WINDOW_MS));
                     if (suppress) {
                         Log.i(TAG, "LOSS_TRANSIENT suppressed (bg flicker window age="
                                 + bgAge + "ms)");
@@ -676,10 +706,28 @@ final class WanosAudioFocusManager {
 
     private void noteBackgroundStateLocked() {
         boolean bg = callback.isAppInBackground();
-        if (bg && !lastObservedBackground) {
-            backgroundEnteredElapsedMs = SystemClock.elapsedRealtime();
+        if (bg != lastObservedBackground) {
+            long now = SystemClock.elapsedRealtime();
+            lastLifecycleEdgeElapsedMs = now;
+            if (bg) {
+                backgroundEnteredElapsedMs = now;
+            }
         }
         lastObservedBackground = bg;
+    }
+
+    /** 前后台标志刚翻转。调用前须已 {@link #noteBackgroundStateLocked()}。电话另判。 */
+    private boolean isLifecycleEdgeLocked() {
+        if (lastLifecycleEdgeElapsedMs == 0L) {
+            return false;
+        }
+        return SystemClock.elapsedRealtime() - lastLifecycleEdgeElapsedMs < LIFECYCLE_EDGE_SUPPRESS_MS;
+    }
+
+    private boolean shouldIgnoreLifecycleFlickerLocked() {
+        return callback.allowsUninterruptedBackgroundPlayback()
+                && isLifecycleEdgeLocked()
+                && !isInVoiceCallLocked(getAudioManager());
     }
 
     /**
@@ -690,8 +738,12 @@ final class WanosAudioFocusManager {
      */
     private void applyCompetingPreemptLocked(String reason, boolean competingLongUi,
                                             boolean startPoll) {
-        if (callback.shouldSuppressTransientPauseInBackground()) {
-            Log.i(TAG, "[CWPA-audio] " + reason + " skip mute (keep playing bg)");
+        // 后台续播只忽略「没有外来音源」的自扰（HOME 焦点抖动 / 自身轨误报）。
+        // AUDIOFOCUS_LOSS 与已确认的外来 MEDIA 必须停：切到抖音 / QQ 音乐时不能继续出声。
+        boolean hardLoss = "AUDIOFOCUS_LOSS".equals(reason);
+        boolean foreign = isCompetingMediaPlaybackActive(getAudioManager());
+        if (!hardLoss && !foreign && callback.shouldSuppressTransientPauseInBackground()) {
+            Log.i(TAG, "[CWPA-audio] " + reason + " skip mute (keep playing bg, no foreign)");
             return;
         }
         hasFocus = false;
@@ -722,10 +774,8 @@ final class WanosAudioFocusManager {
 
     /** 瞬时丢焦暂停：不放弃本地焦点记账以外的轮询（等系统 GAIN）。 */
     private void applyTransientPauseLocked() {
-        if (callback.shouldSuppressTransientPauseInBackground()) {
-            Log.i(TAG, "[CWPA-audio] TRANSIENT skip mute (keep playing bg)");
-            return;
-        }
+        // 800ms 无 competing 的后台抖动已在 onAudioFocusChange 里丢掉。
+        // 能进到这里的是真 TRANSIENT（来电 / 抖音 / QQ 音乐），后台续播也要停。
         markReopenLocked(BoluoAudioStutterProbe.REOPEN_TRANSIENT);
         if (callback.isEnginePlaying()) {
             pendingResume = true;
@@ -736,6 +786,13 @@ final class WanosAudioFocusManager {
             ducked = false;
         }
         callback.onFocusPauseUi(false);
+    }
+
+    /** 尚未持焦时也注册 PlaybackCallback，启动期切到其它播放器能被看到。 */
+    void ensurePlaybackMonitor() {
+        synchronized (focusLock) {
+            ensurePlaybackCallbackLocked(getAudioManager());
+        }
     }
 
     private void ensurePlaybackCallbackLocked(AudioManager am) {
@@ -786,6 +843,8 @@ final class WanosAudioFocusManager {
                 if (callback.isEnginePlaying()) {
                     Log.i(TAG, "[CWPA-66] playbackCallback preempt competing media");
                     applyCompetingPreemptLocked("PLAYBACK_CONFIG_COMPETING", true, true);
+                } else {
+                    callback.onStartupCardYield();
                 }
             } else {
                 boolean selfGone = scanSelfPlaybackGoneLocked(am);

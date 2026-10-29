@@ -1,5 +1,6 @@
 package com.wanos.app.health;
 
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -66,6 +67,14 @@ public class WanosMusicPlayerNative {
     private volatile long foregroundResumeGeneration = 0;
     /** Unity OnApplicationPause 同步：App 是否在后台。 */
     private volatile boolean appInBackground = false;
+    /** Unity 已明确回到前台。进程 importance 滞后时仍按前台处理，避免回波萝被拒绝出声。 */
+    private volatile boolean unityClaimsForeground = false;
+    /** Unity 已直接解 mute。启动期 PlaybackState 尚未 Started 时，丢焦也要能停。 */
+    private volatile boolean unityMarkedAudible = false;
+    /** 曾在真正前台出过声。启动期（false）人已经切走则禁止再解 mute。 */
+    private volatile boolean startupAudibleCommitted = false;
+    /** 进岛已推过播放中占位卡。切走且还没真正出声时要收起，别占负一屏。 */
+    private volatile boolean foregroundCardPublished = false;
     /** 与 iOS backgroundPlayDisable 对齐：true 时后台应静音。 */
     private volatile boolean backgroundPlayDisabled = false;
     private long lastReclaimAttemptElapsedMs = 0L;
@@ -178,20 +187,13 @@ public class WanosMusicPlayerNative {
             new WanosAudioFocusManager(new WanosAudioFocusManager.Callback() {
                 @Override
                 public void onFocusPause() {
-                    // 后台续播：创维常把自身 MEDIA 锚点/WIA 报成 competing，禁止自 mute。
-                    if (shouldSuppressTransientPauseInBackground()) {
-                        Log.i(TAG, "[CWPA-audio] focus_pause skipped (keep playing bg)");
-                        return;
-                    }
+                    // 调用方已确认是真丢焦 / 外来音源。后台续播不能再吞掉：
+                    // 切到抖音、QQ 音乐时必须停，否则启动期出声会一直叠播。
                     applyGuardedSystemMute("focus_pause");
                 }
 
                 @Override
                 public void onFocusPauseUi(boolean competingLong) {
-                    if (shouldSuppressTransientPauseInBackground()) {
-                        Log.i(TAG, "[CWPA-audio] focus_pause UI skipped (keep playing bg)");
-                        return;
-                    }
                     mainHandler.post(() -> {
                         try {
                             String method = competingLong ? "OnCompetingAudioMuted" : "OnSystemAudioMuted";
@@ -250,7 +252,13 @@ public class WanosMusicPlayerNative {
                 @Override
                 public boolean isEnginePlaying() {
                     // 用户主动暂停时视为「不在播」，避免丢焦后自动恢复覆盖用户的暂停意图。
-                    return WIAEngineJNI.getPlaybackState() == PlaybackState_Started && !shouldStop && !userPaused;
+                    // 启动期 PlaybackState 可能还没到 Started，但 Unity 已经解 mute：也算在响。
+                    if (shouldStop || userPaused) {
+                        return false;
+                    }
+                    return WIAEngineJNI.getPlaybackState() == PlaybackState_Started
+                            || !musicEngineMuted
+                            || unityMarkedAudible;
                 }
 
                 @Override
@@ -259,8 +267,18 @@ public class WanosMusicPlayerNative {
                 }
 
                 @Override
+                public boolean allowsUninterruptedBackgroundPlayback() {
+                    return !backgroundPlayDisabled && !userPaused && !shouldStop;
+                }
+
+                @Override
                 public boolean isAppInBackground() {
-                    return appInBackground;
+                    return effectivelyInBackground();
+                }
+
+                @Override
+                public void onStartupCardYield() {
+                    yieldStartupPlaceholderCard();
                 }
 
                 @Override
@@ -448,9 +466,11 @@ public class WanosMusicPlayerNative {
      */
     public void notifyAppLifecycle(boolean inBackground, boolean backgroundPlayDisabled) {
         this.appInBackground = inBackground;
+        this.unityClaimsForeground = !inBackground;
         this.backgroundPlayDisabled = backgroundPlayDisabled;
         if (inBackground) {
             foregroundResumeGeneration++;
+            yieldStartupPlaceholderCard();
             BoluoAudioStutterProbe.onEnterBackground();
             Log.i(TAG, "notifyAppLifecycle background gen=" + foregroundResumeGeneration
                     + " backgroundPlayDisabled=" + backgroundPlayDisabled
@@ -465,7 +485,31 @@ public class WanosMusicPlayerNative {
             Log.i(TAG, "notifyAppLifecycle foreground backgroundPlayDisabled="
                     + backgroundPlayDisabled
                     + " trace=" + BoluoAudioStutterProbe.traceId());
+            // 对齐 iOS becomeActive：宿主壳里 Unity 焦点回调不一定到，负一屏必须在原生回前台时重推。
+            // 切走后系统把卡片给了抖音 / QQ，暂停态推送不会把 MediaStyle 拉回来。
+            reassertNowPlayingOnForeground();
         }
+    }
+
+    /**
+     * 回到前台时按「播放中」重推负一屏。
+     * CustomSRP 的 Java playlist 是空的，不能走 {@link #updateNowPlayingForCurrentTrack}（那条会直接 return）。
+     */
+    private void reassertNowPlayingOnForeground() {
+        if (userPaused || shouldStop || backgroundPlayDisabled) {
+            Log.i(TAG, "reassertNowPlaying skip userPaused=" + userPaused
+                    + " shouldStop=" + shouldStop
+                    + " bgDisable=" + backgroundPlayDisabled);
+            return;
+        }
+        if (!WIAEngineJNI.isPlaybackActive()) {
+            Log.i(TAG, "reassertNowPlaying skip: playback inactive");
+            return;
+        }
+        Log.i(TAG, "reassertNowPlaying foreground");
+        updateTransportNowPlaying(true);
+        foregroundCardPublished = true;
+        audioFocusManager.ensurePlaybackMonitor();
     }
 
     /**
@@ -504,24 +548,16 @@ public class WanosMusicPlayerNative {
         }
         startMediaPlaybackForegroundService();
         cancelDeferredMusicBankUnload();
-        // 默认关：与改前一样强制 unmute。C 打开后已出声不再 setMute(false)。
-        if (crackleFixCSkipRedundantUnmute && !musicEngineMuted) {
-            crackleProbe("restoreAudible.skipSetMute", "flagC alreadyAudible", false);
-        } else {
+        // CustomSRP 起播走 Unity PostEvent，currentInstanceId 常为 0；
+        // Unity pause 还会让 getPlaybackState 短暂离开 Started。
+        // 这两条都会让旧逻辑每次 HOME 都 Resume_ALL，把正在响的曲子打成 Ended、雨声断一下。
+        // 续播中禁止 Resume_ALL。真死机由 keepPlaying 看门狗 L0/L1 补，不在切后台这一下重开。
+        if (musicEngineMuted) {
             musicEngineMuted = false;
             probeSetMute(false);
-        }
-        // 实例还在且引擎 Started：禁止 Resume_ALL。快切前后台每次都发会把当前曲打成 Ended。
-        if (hasLiveMusicInstance()
-                && WIAEngineJNI.getPlaybackState() == PlaybackState_Started) {
             Log.i(TAG, "restoreAudibleAfterUnityPause keep playing (unmute only, skip Resume_ALL)");
         } else {
-            try {
-                WIAEngineJNI.postEvent(0, "Resume_ALL");
-            } catch (Exception e) {
-                Log.w(TAG, "Resume_ALL afterUnityPause keep playing: " + e.getMessage());
-            }
-            Log.i(TAG, "restoreAudibleAfterUnityPause keep playing (unmute+Resume_ALL + MEDIA anchor)");
+            Log.i(TAG, "restoreAudibleAfterUnityPause keep playing (already audible, skip mute/Resume_ALL)");
         }
         armKeepPlayingAliveWatch();
         crackleProbe("restoreAudible.exit", "branch=keepPlaying", false);
@@ -611,6 +647,8 @@ public class WanosMusicPlayerNative {
                     + " shouldStop=" + shouldStop);
             return;
         }
+        // 抢焦点可能因已持焦 / debounce 直接返回，卡片仍要重推。
+        reassertNowPlayingOnForeground();
         // 后台续播：禁止 reclaim→Reset。HOME 期间误调会把自己拆静音。
         if (shouldSuppressTransientPauseInBackground()) {
             Log.i(TAG, "reclaimFocusOnForeground skip: keep playing in background");
@@ -741,10 +779,174 @@ public class WanosMusicPlayerNative {
         }
         audioFocusManager.abandonFocus();
         stopMediaPlaybackForegroundService();
+        unityMarkedAudible = false;
+        startupAudibleCommitted = false;
+        foregroundCardPublished = false;
         WIAEngineJNI.setPlaybackActive(false);
         Log.i(TAG, "teardownForLogout");
         Log.i(TAG, "[Hitch] teardownForLogout ms=" + (SystemClock.elapsedRealtime() - t0)
                 + " thread=" + Thread.currentThread().getName());
+    }
+
+    /**
+     * 揭罩出声前同步申请 {@code AUDIOFOCUS_GAIN} 并注册监听。
+     * 已在后台，或焦点被拒：保持 mute，禁止和抖音 / QQ 音乐叠播。
+     *
+     * @return true 可以 unmute
+     */
+    public boolean armFocusBeforeAudible() {
+        if (!WIAEngineJNI.isPlaybackActive()) {
+            WIAEngineJNI.setPlaybackActive(true);
+        }
+        if (!isProcessInForeground()) {
+            appInBackground = true;
+            unityClaimsForeground = false;
+        }
+        if (appInBackground) {
+            Log.i(TAG, "armFocusBeforeAudible: already background — stay muted");
+            audioFocusManager.ensurePlaybackMonitor();
+            musicEngineMuted = true;
+            probeSetMute(true);
+            return false;
+        }
+        boolean granted = audioFocusManager.requestFocusBlocking(true);
+        if (!granted) {
+            Log.w(TAG, "armFocusBeforeAudible: focus denied — stay muted");
+            musicEngineMuted = true;
+            probeSetMute(true);
+            return false;
+        }
+        Log.i(TAG, "armFocusBeforeAudible: focus granted");
+        return true;
+    }
+
+    /**
+     * C# 已把负一屏写成播放中。顺手挂上对方播放器监听，启动期切走能收卡。
+     */
+    public void noteForegroundCardPublished() {
+        foregroundCardPublished = true;
+        audioFocusManager.ensurePlaybackMonitor();
+        Log.i(TAG, "noteForegroundCardPublished");
+    }
+
+    /** 暂停或清卡：占位旗标放下，避免之后切后台又把卡片建回来。 */
+    public void noteForegroundCardCleared() {
+        foregroundCardPublished = false;
+    }
+
+    /**
+     * 占位卡还没在前台出过声：人已经不在前台，或对方媒体已经在播，就改成暂停并停 FGS。
+     * 真正出过声之后的后台续播不走这里。
+     */
+    private void yieldStartupPlaceholderCard() {
+        if (!foregroundCardPublished || startupAudibleCommitted || userPaused) {
+            return;
+        }
+        if (!effectivelyInBackground() && isProcessInForeground()) {
+            return;
+        }
+        foregroundCardPublished = false;
+        Log.i(TAG, "yieldStartupPlaceholderCard");
+        updateTransportNowPlaying(false);
+        stopMediaPlaybackForegroundService();
+    }
+
+    /**
+     * 谁在前台谁播。启动期进程已不在前台，或对方媒体正在出声：禁止解 mute。
+     */
+    public boolean allowUnmuteNow() {
+        // Unity 已说回到前台：即使进程 importance 还没翻过来，也允许出声、出负一屏。
+        if (!effectivelyInBackground()) {
+            return true;
+        }
+        boolean foreign = audioFocusManager.hasForeignMedia();
+        if (!startupAudibleCommitted || foreign) {
+            Log.i(TAG, "allowUnmuteNow deny committed=" + startupAudibleCommitted
+                    + " foreign=" + foreign);
+            audioFocusManager.ensurePlaybackMonitor();
+            musicEngineMuted = true;
+            unityMarkedAudible = false;
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Unity 还没收到 pause 时，用进程 importance 判定已经切走。
+     * Unity 明确回到前台后，不再被滞后的 importance 钉在后台。
+     */
+    private boolean effectivelyInBackground() {
+        if (unityClaimsForeground && !appInBackground) {
+            return false;
+        }
+        if (appInBackground) {
+            return true;
+        }
+        return !isProcessInForeground();
+    }
+
+    /** Unity 确认已经出声，且当时进程在前台，才算启动期结束。 */
+    public void noteUnityAudible() {
+        unityMarkedAudible = true;
+        musicEngineMuted = false;
+        if (isProcessInForeground() || (unityClaimsForeground && !appInBackground)) {
+            startupAudibleCommitted = true;
+        }
+    }
+
+    public void noteUnitySilent() {
+        unityMarkedAudible = false;
+        musicEngineMuted = true;
+    }
+
+    /**
+     * 进程是否还在前台。读不到时退回 Unity 的 pause 旗，避免误把前台当成后台。
+     */
+    private boolean isProcessInForeground() {
+        Boolean queried = queryProcessForeground();
+        if (queried == null) {
+            return !appInBackground;
+        }
+        return queried;
+    }
+
+    private Boolean queryProcessForeground() {
+        try {
+            Context ctx = null;
+            try {
+                Object app = Class.forName("android.app.ActivityThread")
+                        .getMethod("currentApplication")
+                        .invoke(null);
+                if (app instanceof Context) {
+                    ctx = (Context) app;
+                }
+            } catch (Exception ignored) {
+                ctx = null;
+            }
+            if (ctx == null) {
+                return null;
+            }
+            ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am == null) {
+                return null;
+            }
+            List<ActivityManager.RunningAppProcessInfo> procs = am.getRunningAppProcesses();
+            if (procs == null) {
+                return null;
+            }
+            int pid = android.os.Process.myPid();
+            for (ActivityManager.RunningAppProcessInfo info : procs) {
+                if (info != null && info.pid == pid) {
+                    int importance = info.importance;
+                    return importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+                            || importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE;
+                }
+            }
+            return null;
+        } catch (Throwable t) {
+            Log.d(TAG, "queryProcessForeground: " + t.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -759,6 +961,13 @@ public class WanosMusicPlayerNative {
     public void ensureAudibleForUnityPlayback() {
         if (!WIAEngineJNI.isPlaybackActive()) {
             Log.w(TAG, "ensureAudibleForUnityPlayback skipped: playback inactive (logout teardown)");
+            return;
+        }
+        if (!allowUnmuteNow()) {
+            Log.i(TAG, "ensureAudibleForUnityPlayback denied — foreground app owns audio");
+            musicEngineMuted = true;
+            unityMarkedAudible = false;
+            probeSetMute(true);
             return;
         }
         userPaused = false;

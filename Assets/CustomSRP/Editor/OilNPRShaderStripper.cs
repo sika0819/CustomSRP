@@ -25,6 +25,14 @@ namespace CustomSRP.Editor
                 return;
             }
 
+            // Albedo capture is an editor bake variant. Never ship it.
+            var albedoCapture = new ShaderKeyword(shader, "OIL_BILLBOARD_ALBEDO_CAPTURE");
+            for (int i = data.Count - 1; i >= 0; i--)
+            {
+                if (data[i].shaderKeywordSet.IsEnabled(albedoCapture))
+                    data.RemoveAt(i);
+            }
+
             BuildTarget target = EditorUserBuildSettings.activeBuildTarget;
             if (target != BuildTarget.Android && target != BuildTarget.iOS)
             {

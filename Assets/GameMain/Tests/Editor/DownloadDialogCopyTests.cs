@@ -23,11 +23,12 @@ namespace Game.Tests
         public void Progress_DocNumbers_SentenceMatchesParts()
         {
             DownloadDialogCopy.ProgressCopy copy = DownloadDialogCopy.Progress(66f, 862f, 5f);
+            Assert.AreEqual("正在为你下载资源：", copy.Prefix);
             Assert.AreEqual("正在为你下载资源：66MB/862MB  速度5MB/秒", copy.Sentence);
             Assert.AreEqual("66", copy.Downloaded);
             Assert.AreEqual("MB/862MB  速度5MB/秒", copy.SizeDetail);
             Assert.AreEqual(
-                "正在为你下载资源：" + copy.Downloaded + copy.SizeDetail,
+                copy.Prefix + copy.Downloaded + copy.SizeDetail,
                 copy.Sentence);
             // 剩余 796MB / 5MB/s ≈ 159s → 剩余3m
             Assert.AreEqual("剩余3m", copy.Eta);
@@ -147,7 +148,7 @@ namespace Game.Tests
             DownloadDialogCopy.ProgressCopy expected = DownloadDialogCopy.Progress(66f, 862f, -1f);
             Assert.AreEqual("场景资源加载中...", title.text);
             Assert.AreEqual("我知道了", primary.Q<Label>("primaryLabel").text);
-            Assert.AreEqual(expected.Sentence, sentence.text);
+            Assert.AreEqual(expected.Prefix, sentence.text);
             Assert.AreEqual(expected.Eta, eta.text);
             Assert.AreEqual(expected.Downloaded, downloaded.text);
             Assert.AreEqual(expected.SizeDetail, sizeDetail.text);

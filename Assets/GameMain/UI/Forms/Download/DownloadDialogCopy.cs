@@ -18,6 +18,7 @@ namespace Game
 
         public sealed class ProgressCopy
         {
+            public string Prefix;
             public string Sentence;
             public string Eta;
             public string Downloaded;
@@ -74,8 +75,8 @@ namespace Game
         }
 
         /// <summary>
-        /// 进度三截 + 整句。速度用 0.##；未知速度不写速度段；完成显示「完成」；
-        /// 超过 60 秒用「剩余Nm」，封顶 60。
+        /// 前缀 + 已下载数字 + 体积/速度，拼成整句。速度用 0.##；未知速度不写速度段；
+        /// 完成显示「完成」；超过 60 秒用「剩余Nm」，封顶 60。
         /// </summary>
         public static ProgressCopy Progress(
             float downloadedMb,
@@ -90,26 +91,32 @@ namespace Game
                 ? speedMbps.ToString("0.##", CultureInfo.InvariantCulture)
                 : string.Empty;
 
+            const string Lead = "正在为你下载资源：";
+            string prefix;
             string sizeDetail;
             string sentence;
             if (total <= 0)
             {
+                prefix = string.Empty;
                 sizeDetail = string.Empty;
                 sentence = string.Empty;
             }
             else if (hasSpeed)
             {
+                prefix = Lead;
                 sizeDetail = $"MB/{total}MB  速度{speedText}MB/秒";
-                sentence = $"正在为你下载资源：{downloaded}MB/{total}MB  速度{speedText}MB/秒";
+                sentence = prefix + downloaded + sizeDetail;
             }
             else
             {
+                prefix = Lead;
                 sizeDetail = $"MB/{total}MB";
-                sentence = $"正在为你下载资源：{downloaded}MB/{total}MB";
+                sentence = prefix + downloaded + sizeDetail;
             }
 
             return new ProgressCopy
             {
+                Prefix = prefix,
                 Sentence = sentence,
                 Eta = FormatEta(downloadedMb, totalMb, speedMbps, completed),
                 Downloaded = downloaded.ToString(),

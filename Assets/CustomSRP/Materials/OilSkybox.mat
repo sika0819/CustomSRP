@@ -46,7 +46,7 @@ Material:
     - _BrushRelief: 1
     - _BrushScale: 8
     - _BrushStrength: 0.593
-    - _Period: 1
+    - _Period: 3
     - _StarDensity: 2
     - _StarSize: 1.5
     m_Colors: []

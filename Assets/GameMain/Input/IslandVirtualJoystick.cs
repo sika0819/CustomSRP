@@ -30,6 +30,11 @@ namespace Game
         Vector2 _origin;
         Vector2 _offset;
         int _pointerId = -1;
+        /// <summary>
+        /// 第二根手指按下后停掉摇杆，直到手指全部离开。
+        /// 剩下的那根不能中途接手，否则松手后会沿原方向一直走。
+        /// </summary>
+        bool _multiTouchGate;
         // Press on empty space is armed but invisible until it leaves the dead zone.
         // Showing the knob on PointerDown made the first HUD tap flash and miss.
         int _armPointerId = -1;
@@ -111,12 +116,21 @@ namespace Game
 
         public void TickFrame(bool allowBegin)
         {
-            if (_armPointerId >= 0 && (!allowBegin || !IsPointerHeld(_armPointerId)))
+            ApplyModalHit(!allowBegin);
+            RefreshMultiTouchGate();
+            if (_multiTouchGate || !allowBegin)
+            {
+                if (_active || _armPointerId >= 0)
+                    EndAndRelease();
+                return;
+            }
+
+            if (_armPointerId >= 0 && !IsPointerHeld(_armPointerId))
                 ClearArm();
 
             // 松手事件偶发不到（拖动中改层级 / 捕获被抢走）。手指已经不在，先清掉，
             // 否则下一次按下会因为 _active 被直接丢掉。
-            if (_active && (!allowBegin || !IsPointerHeld(_pointerId)))
+            if (_active && !IsPointerHeld(_pointerId))
                 EndAndRelease();
         }
 
@@ -142,8 +156,27 @@ namespace Game
 
         public void ForceEnd() => EndAndRelease();
 
-        public bool OwnsPointer(int fingerId) =>
-            _active && _pointerId == fingerId;
+        /// <summary>
+        /// 弹窗或原生页挡住走路时，只让命中层不参与拾取。主界面根保持原样。
+        /// 命中层钉在子树最底，空白处的按下才会落到这里。
+        /// </summary>
+        public void ApplyModalHit(bool blocked)
+        {
+            if (_hit != null && _hit.parent != null && _hit.parent.IndexOf(_hit) != 0)
+                _hit.parent.Insert(0, _hit);
+
+            PickingMode mode = blocked ? PickingMode.Ignore : PickingMode.Position;
+            if (_hit != null && _hit.pickingMode != mode)
+                _hit.pickingMode = mode;
+            // 旧逻辑会把主界面根改成 Ignore，关掉弹窗后根可能一直吃不到点击。
+            if (_host != null && _host.pickingMode != PickingMode.Position)
+                _host.pickingMode = PickingMode.Position;
+        }
+
+        public bool OwnsPointer(int fingerOrPointerId) =>
+            _active && fingerOrPointerId >= 0 && (
+                _pointerId == fingerOrPointerId
+                || _pointerId == fingerOrPointerId + PointerId.touchPointerIdBase);
 
         void Build(VisualElement formRoot)
         {
@@ -262,19 +295,24 @@ namespace Game
 
         void OnDown(PointerDownEvent evt)
         {
-            if (evt.button > 0 || IgnoreCompatibilityMouse(evt.pointerId))
+            if (evt.button > 0)
                 return;
+
+            // 命中层在弹窗打开时是 Ignore，正常不会进到这里。
+            // 若仍接到按下，不要重发、不要停掉，免得把弹窗那一次点击吃掉。
             if (HudOverlayGate.BlocksLocomotion())
                 return;
 
-            // 命中层在 HUD 上面或拾取还没热好时，第一次按下会打到全屏层。
-            // 转给底下的图标，避免摇杆圆点闪一下、点击要再来一次。
-            if (TryForwardHudPress(evt))
+            if (IgnoreCompatibilityMouse(evt.pointerId))
+                return;
+            if (BlockedByMultiTouch())
             {
-                evt.StopPropagation();
+                if (_active || _armPointerId >= 0)
+                    EndAndRelease();
                 return;
             }
 
+            // 点在 HUD 上时这次按下不该由摇杆起手。不转发，让控件自己接。
             if (!CanArm(evt.position))
                 return;
 
@@ -286,7 +324,7 @@ namespace Game
                 EndAndRelease();
             }
 
-            // 空白处仍是按下就出圆点。HUD 上的点已经在上面转走了，不会闪在图标上。
+            // 空白处按下就出圆点。HUD 在命中层上面，点图标不会进到这里。
             Begin(evt.pointerId, evt.position);
             evt.StopPropagation();
         }
@@ -295,6 +333,12 @@ namespace Game
         {
             if (IgnoreCompatibilityMouse(evt.pointerId))
                 return;
+            if (BlockedByMultiTouch())
+            {
+                if (_active || _armPointerId >= 0)
+                    EndAndRelease();
+                return;
+            }
 
             if (_armPointerId >= 0 && evt.pointerId == _armPointerId)
             {
@@ -423,31 +467,6 @@ namespace Game
             ShowAt(_origin, Vector2.zero);
         }
 
-        bool TryForwardHudPress(PointerDownEvent evt)
-        {
-            VisualElement picked = PickUnder(evt.position);
-            if (picked == null || IsOurs(picked) || !IsHudControl(picked))
-                return false;
-
-            PickingMode mode = _hit.pickingMode;
-            _hit.pickingMode = PickingMode.Ignore;
-            try
-            {
-                using (PointerDownEvent forwarded = PointerDownEvent.GetPooled(evt))
-                {
-                    forwarded.target = picked;
-                    picked.SendEvent(forwarded);
-                }
-            }
-            finally
-            {
-                if (_hit != null)
-                    _hit.pickingMode = mode;
-            }
-
-            return true;
-        }
-
         bool CanArm(Vector2 panelPosition)
         {
             VisualElement picked = PickUnder(panelPosition);
@@ -470,18 +489,39 @@ namespace Game
         static bool IgnoreCompatibilityMouse(int pointerId) =>
             pointerId == PointerId.mousePointerId && Input.touchCount > 0;
 
+        void RefreshMultiTouchGate()
+        {
+            if (Input.touchCount >= 2)
+                _multiTouchGate = true;
+            else if (Input.touchCount == 0)
+                _multiTouchGate = false;
+        }
+
+        bool BlockedByMultiTouch()
+        {
+            RefreshMultiTouchGate();
+            return _multiTouchGate;
+        }
+
         static bool IsPointerHeld(int pointerId)
         {
+            if (pointerId < 0)
+                return false;
+
             if (Input.touchCount > 0)
             {
-                // UITK 触摸 pointerId = fingerId + touchPointerIdBase。两种都认，避免映射差一帧就把拖动掐掉。
+                // 兼容鼠标不是手指。屏幕上已经有触摸时，不要让它把摇杆续上。
+                if (pointerId == PointerId.mousePointerId)
+                    return false;
+
                 for (int i = 0; i < Input.touchCount; i++)
                 {
                     Touch touch = Input.GetTouch(i);
                     if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
                         continue;
-                    if (touch.fingerId == pointerId
-                        || touch.fingerId + PointerId.touchPointerIdBase == pointerId)
+                    // 只认 UITK id（fingerId + base）。
+                    // fingerId == pointerId 会串号：finger 0 的 pointer 是 1，正好等于 finger 1。
+                    if (touch.fingerId + PointerId.touchPointerIdBase == pointerId)
                         return true;
                 }
 

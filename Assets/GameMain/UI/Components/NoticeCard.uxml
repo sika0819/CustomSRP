@@ -5,12 +5,14 @@
         <ui:Label name="title" class="notice-card__title" text="正在使用蜂窝数据" />
         <ui:Label name="body" class="notice-card__body" text="需要下载约 500MB 音频资源，当前使用移动数据，下载可能产生流量费用。" />
         <ui:VisualElement name="progress" class="notice-card__progress">
-            <ui:Label name="sentence" class="notice-card__sentence" text="" />
-            <ui:Label name="eta" class="notice-card__eta" text="剩余--" />
-            <ui:VisualElement name="progress-track" class="notice-card__progress-track">
-                <ui:VisualElement name="progress-fill" class="notice-card__progress-fill" />
+            <ui:VisualElement name="bar-row" class="notice-card__bar-row">
+                <ui:VisualElement name="progress-track" class="notice-card__progress-track">
+                    <ui:VisualElement name="progress-fill" class="notice-card__progress-fill" />
+                </ui:VisualElement>
+                <ui:Label name="eta" class="notice-card__eta" text="剩余--" />
             </ui:VisualElement>
             <ui:VisualElement name="size-row" class="notice-card__size-row">
+                <ui:Label name="sentence" class="notice-card__sentence" text="正在为你下载资源：" />
                 <ui:Label name="downloaded" class="notice-card__downloaded" text="0" />
                 <ui:Label name="size-detail" class="notice-card__size-detail" text="" />
             </ui:VisualElement>

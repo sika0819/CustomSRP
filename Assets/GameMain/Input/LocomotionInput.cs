@@ -33,11 +33,16 @@ namespace Game
             _pending = false;
         }
 
+        public static void ClearLook()
+        {
+            _look = default;
+            _lookPending = false;
+        }
+
         public static void ClearAll()
         {
             Clear();
-            _look = default;
-            _lookPending = false;
+            ClearLook();
         }
 
         public static bool ConsumeLook(out Vector2 pixelDelta)

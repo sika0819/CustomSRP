@@ -18,14 +18,23 @@ namespace Game
 
         protected override bool CloseWhenAnyButtonClicked => false;
         protected override bool SlidesUpFromBottom => false;
+        protected override bool CloseOnBackdropClick => true;
+        protected override bool PinDocumentOrder => true;
+
+        protected override void OnBackdropDismiss()
+        {
+            _userData?.OnCancel?.Invoke();
+            CloseSelf();
+        }
 
         public override void OnOpen(object userData)
         {
             base.OnOpen(userData);
             _userData = userData as UserData;
             int ticket = _userData != null ? _userData.Ticket : 0;
-            if (UiDialogService.IsProgressRetired(ticket))
+            if (UiDialogService.IsProgressRetired(ticket) || UiDialogService.IsProgressOpen(ticket))
             {
+                // 票据已结束，或同一张进度窗还开着：关掉这张重复的，不要走 OnCancel。
                 if (Root != null)
                     Root.schedule.Execute(Dismiss);
                 return;

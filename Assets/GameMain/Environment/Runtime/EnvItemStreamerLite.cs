@@ -25,6 +25,29 @@ namespace Game
         /// <summary>Lightweight single-card billboard (optionally native-batched).</summary>
         const byte TierBillboard = 1;
 
+        /// <summary>
+        /// 克隆先挂在这里。活动物体的 GameObject 侵入式链表在 Instantiate 时会被原样拷走，
+        /// 再进岛时 FindActiveTransformWithPath 顺着 next 走不出去。这个节点保持不激活，克隆就不会进那条链表。
+        /// </summary>
+        static Transform _inactiveSpawnParent;
+        static Transform _relinkAnchor;
+        static bool _blockFreshInstantiate;
+
+        /// <summary>
+        /// 运行时克隆出来的根。退岛时先摘到不激活容器，再进岛只靠 SetParent 挂回。
+        /// 不能靠父节点 SetActive(true) 把它们插回活动链表，那会沿 Instantiate 拷来的 next 接成环。
+        /// </summary>
+        static readonly List<Transform> _tracked = new List<Transform>(512);
+        static readonly Dictionary<int, Transform> _trackedParent = new Dictionary<int, Transform>(512);
+
+        struct ShelteredSpawn
+        {
+            public Vector3 Pos;
+            public GameObject Go;
+        }
+
+        static readonly List<ShelteredSpawn> Shelter = new List<ShelteredSpawn>(256);
+
         struct Item
         {
             public Vector3 Pos;
@@ -63,13 +86,21 @@ namespace Game
         readonly HashSet<int> _despawnQueued = new HashSet<int>();
 
         Transform _focus;
+        EnvMeshColliderLod _colliderLod;
         EnvNativeInstancing _native;
         readonly Stopwatch _sliceSw = new Stopwatch();
         int _sliceFrame = -1;
         bool _running;
         bool _spawnBacklog;
         bool _prefillActive;
+        /// <summary>退登后再进岛。流送改走同步加载，避免卡在上一次 <c>Handle.IsDone</c> 上。</summary>
+        bool _syncLoads;
+        /// <summary>正在跑的 <see cref="StreamLoop"/> 条数。停协程不会走收尾，重开前要清零。</summary>
+        int _streamLoopCount;
         readonly PrefillFrameGate _prefillGate = new PrefillFrameGate();
+        bool _logTailLate;
+        static bool _logTailCoverSubmit;
+        readonly List<Transform> _parkedParents = new List<Transform>(32);
         bool _released;
         int _evalCursor;
         int _spawnedCount;
@@ -88,9 +119,11 @@ namespace Game
             List<MapItemData> data,
             Dictionary<string, Transform> categoryParents,
             Transform mapItemRoot,
-            Transform focus)
+            Transform focus,
+            EnvMeshColliderLod colliderLod)
         {
             _focus = focus;
+            _colliderLod = colliderLod;
             EnvStreamingConfig.ApplyMobileTierDefaults();
 #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (EnvStreamingConfig.NativeInstancingEnabled)
@@ -158,7 +191,7 @@ namespace Game
             _running = true;
             // StartCoroutine 会立刻跑到第一次 yield。先闩住，避免这一拍发出 LoadAssetAsync，
             // 再和紧接着的铺装 LoadAssetSync 叠在同一个包上。离岛后再进时，下一帧读
-            // Handle.IsDone 不再返回，宿主就等不到 Notify(2)。PrefillAroundFocus 结束时松闩。
+            // Handle.IsDone 不再返回，宿主就等不到 Notify(2)。流送闩留到 AllowStream。
             _prefillActive = true;
             StartCoroutine(StreamLoop());
             Log.Info(
@@ -169,6 +202,12 @@ namespace Game
         /// <summary>铺装时跳过世界几何。摄像机仍画加载界面，避免 Game 视图报没有摄像机。</summary>
         public static bool PrefillSuppressRender { get; private set; }
 
+        /// <summary>
+        /// 离岛、超时、强制揭罩把渲染闩和流送闩一起打开。
+        /// <see cref="IslandWorldService"/> 见到此标记就不再死等淡出。
+        /// </summary>
+        public static bool PrefillAbortReleased { get; private set; }
+
         /// <summary>退登、场景还在时立刻拆掉 (YBillboard)，贴图引用才能在卸包前归零。</summary>
         public static void ReleaseBillboardsImmediate()
         {
@@ -177,14 +216,254 @@ namespace Game
             Current.DestroyBillboardsNow();
         }
 
-        public static void ReleasePrefillHold()
+        /// <summary>新一轮进岛清掉上一轮强制揭罩留下的中止标记。</summary>
+        public static void ClearPrefillAbort()
+        {
+            PrefillAbortReleased = false;
+        }
+
+        /// <summary>只允许画世界。流送仍停，直到 <see cref="AllowStream"/>。</summary>
+        public static void ReleaseRenderHold()
         {
             PrefillSuppressRender = false;
-            if (Current != null)
+        }
+
+        /// <summary>
+        /// 二次进岛 SetActive(true) 之后调用。把已生成实例经不激活容器重挂回原父节点，
+        /// 打断 Instantiate 留下的兄弟环，本帧结束前完成。
+        /// </summary>
+        public static void RepairSpawnedSiblingLinks()
+        {
+            if (Current == null)
             {
-                Current._prefillActive = false;
-                Current._prefillGate.End();
+                Log.Info("[EnvItemStreamerLite] repair links skipped (no streamer)");
+                return;
             }
+
+            Current.RelinkSpawned();
+        }
+
+        /// <summary>退登后场景还在。重新激活根节点时不要再 Instantiate。</summary>
+        public static void HoldStream()
+        {
+            if (Current != null)
+                Current._prefillActive = true;
+        }
+
+        /// <summary>
+        /// 退登后再进岛。相机已按本账号出生点就位。
+        /// 停掉可能卡在异步句柄上的旧循环，按当前焦点同步补上附近物体，再恢复距离检查。
+        /// 不 Relink 已有实例。
+        /// </summary>
+        public static void ResumePositionStream()
+        {
+            if (Current == null || Current._released)
+                return;
+            Current.ResumeAtCurrentPose();
+        }
+
+        void ResumeAtCurrentPose()
+        {
+            IslandJoystickCamera joy = IslandJoystickCamera.Current;
+            if (joy != null)
+                _focus = joy.transform;
+
+            // 旧 StreamLoop 可能正停在 LoadPrefab 的 WaitUntilDone 里。
+            // 退登后再读 Handle.IsDone 经常不返回，后面的生成全部排不上。
+            _prefillActive = true;
+            _syncLoads = true;
+            _running = true;
+            _streamLoopCount = 0;
+            StopAllCoroutines();
+            _spawnQueue.Clear();
+            _despawnQueue.Clear();
+            _spawnQueued.Clear();
+            _despawnQueued.Clear();
+            _spawnBacklog = false;
+            _loadingLocations.Clear();
+            _evalCursor = 0;
+            CollectFinishedInflight();
+
+            int filled = FillAroundFocusSync();
+            AllowStream();
+            if (!enabled && gameObject.activeInHierarchy)
+                enabled = true;
+            if (isActiveAndEnabled)
+                StartCoroutine(StreamLoop());
+            else
+                Log.Warning("[EnvItemStreamerLite] resume stream loop skipped (inactive)");
+
+            Vector3 p = _focus != null ? _focus.position : Vector3.zero;
+            Log.Info(
+                "[EnvItemStreamerLite] resume position stream focus=" + p.ToString("F1")
+                + " filled=" + filled
+                + " spawned=" + _spawnedCount
+                + " items=" + _items.Count
+                + " inflight=" + _inflightHandles.Count
+                + " blockInstantiate=" + _blockFreshInstantiate);
+        }
+
+        /// <summary>
+        /// 按铺装半径把焦点附近还没生成的点补上。只用缓存，或在没有未完成异步句柄时同步加载。
+        /// 有未完成句柄时不去 LoadAssetSync，避免和卡死的 LoadFromFile 叠在同一个包上。
+        /// </summary>
+        int FillAroundFocusSync()
+        {
+            if (_focus == null)
+                return 0;
+
+            Vector3 p = _focus.position;
+            var near = new List<int>(512);
+            for (int i = 0; i < _items.Count; i++)
+            {
+                Item item = _items[i];
+                if (!IslandLeakProbe.AllowCategory(item.Category))
+                    continue;
+                if (item.State == StateVisible && item.Go != null)
+                    continue;
+                float dx = item.Pos.x - p.x;
+                float dz = item.Pos.z - p.z;
+                float distSq = dx * dx + dz * dz;
+                float show = EnvStreamingConfig.GetPrefillShowDistance(item.Category, item.ShowDist);
+                if (show < 1e20f && distSq > show * show)
+                    continue;
+                if (EnvStreamingConfig.ShouldThinFarTree(item.Category, distSq, i))
+                    continue;
+                near.Add(i);
+            }
+
+            near.Sort((a, b) =>
+            {
+                float dax = _items[a].Pos.x - p.x;
+                float daz = _items[a].Pos.z - p.z;
+                float dbx = _items[b].Pos.x - p.x;
+                float dbz = _items[b].Pos.z - p.z;
+                return (dax * dax + daz * daz).CompareTo(dbx * dbx + dbz * dbz);
+            });
+
+            int filled = 0;
+            for (int k = 0; k < near.Count; k++)
+            {
+                int idx = near[k];
+                Item item = _items[idx];
+                if (item.State == StateVisible && item.Go != null)
+                    continue;
+
+                if (Shelter.Count > 0 || _blockFreshInstantiate)
+                {
+                    GameObject kept = TakeSheltered(item.Pos);
+                    if (kept != null)
+                    {
+                        FinalizeSpawned(idx, kept, null, TierFull);
+                        filled++;
+                    }
+
+                    continue;
+                }
+
+                if (!TryPrefabImmediate(item.Location, item.EditorPath, "resume", out GameObject prefab))
+                    continue;
+
+                byte tier = ResolveSpawnTier(item, DistSqXZ(item.Pos, p));
+                var spawned = CreateInstanceForTier(item, prefab, tier);
+                if (spawned.Go == null)
+                    continue;
+                FinalizeSpawned(idx, spawned.Go, prefab, spawned.Tier);
+                filled++;
+            }
+
+            return filled;
+        }
+
+        /// <summary>
+        /// 二次进岛后切预设。相机已落到新预设点，虹膜黑场很短，
+        /// 按帧流送补不上。在揭开前按当前焦点再同步铺一层。
+        /// </summary>
+        public static void CatchUpAtFocus()
+        {
+            if (Current == null || Current._released)
+                return;
+            if (ProcedureIsland.EnterCount <= 1 && !Current._syncLoads)
+                return;
+            Current.CatchUpNow();
+        }
+
+        void CatchUpNow()
+        {
+            IslandJoystickCamera joy = IslandJoystickCamera.Current;
+            if (joy != null)
+                _focus = joy.transform;
+            if (_focus == null)
+                return;
+
+            _syncLoads = true;
+            CollectFinishedInflight();
+            int filled = FillAroundFocusSync();
+            if (_prefillActive)
+                AllowStream();
+            if (_running && _streamLoopCount <= 0 && isActiveAndEnabled)
+                StartCoroutine(StreamLoop());
+
+            if (_colliderLod != null)
+            {
+                float colRadius = Mathf.Max(48f, EnvStreamingConfig.MeshColliderEnableRadius);
+                _colliderLod.ForceRefreshNear(_focus.position, colRadius);
+            }
+
+            Vector3 p = _focus.position;
+            Log.Info(
+                "[EnvItemStreamerLite] preset catchup focus=" + p.ToString("F1")
+                + " filled=" + filled
+                + " spawned=" + _spawnedCount
+                + " inflight=" + _inflightHandles.Count);
+        }
+
+        /// <summary>缓存命中，或没有未完成异步句柄时同步取出预制体。</summary>
+        bool TryPrefabImmediate(string location, string editorPath, string phase, out GameObject prefab)
+        {
+            prefab = null;
+            if (!string.IsNullOrEmpty(location)
+                && _prefabCache.TryGetValue(location, out prefab)
+                && prefab != null)
+                return true;
+
+            prefab = null;
+            if (_inflightHandles.Count > 0)
+                return false;
+
+            prefab = LoadPrefabNow(location, editorPath, phase);
+            return prefab != null;
+        }
+
+        void CollectFinishedInflight()
+        {
+            for (int i = _inflightHandles.Count - 1; i >= 0; i--)
+            {
+                AssetHandle handle = _inflightHandles[i];
+                if (handle != null && !handle.IsDone)
+                    continue;
+                _inflightHandles.RemoveAt(i);
+                if (handle != null)
+                    GameEntry.ReleaseLeaveHandle(handle);
+            }
+        }
+
+        /// <summary>草地和 extras 都结束后才让流送循环开始评估。</summary>
+        public static void AllowStream()
+        {
+            if (Current != null)
+                Current._prefillActive = false;
+            EnvStreamingConfig.BeginPostUncoverSpawnThrottle();
+        }
+
+        /// <summary>离岛、超时、强制揭罩：两把闩一起开，避免草地永远等淡出。</summary>
+        public static void ReleasePrefillHold()
+        {
+            PrefillAbortReleased = true;
+            ReleaseRenderHold();
+            AllowStream();
+            if (Current != null)
+                Current._prefillGate.End();
         }
 
         public IEnumerator PrefillAroundFocus(float progressMin, float progressMax, System.Action<float, string> report)
@@ -203,19 +482,56 @@ namespace Game
             // 加载条也画不出来。世界几何由 CameraRenderer 在此标志下跳过。
             PrefillSuppressRender = true;
             _prefillGate.Begin();
+            bool bodyOk = false;
             try
             {
                 PrefillBody(progressMin, progressMax, report);
+                bodyOk = true;
             }
             finally
             {
-                _prefillActive = false;
-                PrefillSuppressRender = false;
-                _prefillGate.End();
+                // 渲染闩留到揭罩 ReleaseRenderHold，流送闩留到 AllowStream。
+                // 二次进岛若在 Relink 当帧放渲染，CameraRenderer 走兄弟链会卡死主线程。
+                // 监视留到 yield 之后：卡死窗口是空等的这一帧，不能在这里 End。
+                if (!bodyOk)
+                    _prefillGate.End();
             }
 
-            Log.Info("[EnvItemStreamerLite] prefill tail end");
+            if (!bodyOk)
+                yield break;
+
+            // Relink 已在 yield 之前做完。先空一帧：这一帧能回来，说明玩家循环走过了干净的兄弟链。
+            // 这一帧不抬近场，渲染和流送都继续停。
+            // done 用一个铺装计数到不了的值，墙钟才从这一拍重新计。
+            _prefillGate.Mark(5, int.MaxValue);
+            _logTailLate = true;
+            _logTailCoverSubmit = true;
+            // 这里不再 SetActive(false/true) 分类父节点。
+            // 二次进岛时父节点 SetActive(true) 会把已经摘干净的实例再插进活动链表，下一帧 Find 成环。
+            // 实例只经过 RepairSiblingLink 的 SetParent 激活一次。
+            Log.Info("[EnvItemStreamerLite] prefill tail end hold=stream+render settle");
+            yield return null;
+            Log.Info("[EnvItemStreamerLite] prefill settled");
+            _prefillGate.End();
+            GameEntry.World?.NotifyPrefillNearReady();
             yield break;
+        }
+
+        /// <summary>铺装尾帧的 CoverOnly Submit 只打一次，用来区分卡在提交还是更早。</summary>
+        public static bool TakeTailCoverSubmitLog()
+        {
+            if (!_logTailCoverSubmit)
+                return false;
+            _logTailCoverSubmit = false;
+            return true;
+        }
+
+        void LateUpdate()
+        {
+            if (!_logTailLate)
+                return;
+            _logTailLate = false;
+            Log.Info("[EnvItemStreamerLite] prefill tail late");
         }
 
         void PrefillBody(float progressMin, float progressMax, System.Action<float, string> report)
@@ -265,6 +581,15 @@ namespace Game
                 if (item.State == StateVisible && item.Go != null)
                 {
                     skippedVisible++;
+                    done++;
+                    continue;
+                }
+
+                if (Shelter.Count > 0 || _blockFreshInstantiate)
+                {
+                    GameObject kept = TakeSheltered(item.Pos);
+                    if (kept != null)
+                        FinalizeSpawned(idx, kept, null, TierFull);
                     done++;
                     continue;
                 }
@@ -330,6 +655,116 @@ namespace Game
         }
 
         /// <summary>
+        /// 克隆先落在不激活容器上，再挂到分类父节点。
+        /// 不能经 SetParent(null)：那会把节点插进当前场景根的活动链表，二次进岛成环。
+        /// 绿树、椰树、松树、灌木、石头以及其余 LOD 预制体都走这里，不按分类过滤。
+        /// </summary>
+        internal static void AttachSpawned(GameObject go, Transform parent, int index, bool billboard)
+        {
+            if (go == null)
+                return;
+            RepairSiblingLink(go.transform, parent);
+            go.name = billboard ? "env" + index + "#bb" : "env" + index;
+        }
+
+        void ShelterSpawnedForReentry()
+        {
+            int n = 0;
+            for (int i = 0; i < _items.Count; i++)
+            {
+                Item item = _items[i];
+                if (item.Go == null)
+                    continue;
+                RepairSiblingLink(item.Go.transform, null);
+                Shelter.Add(new ShelteredSpawn { Pos = item.Pos, Go = item.Go });
+                item.Go = null;
+                item.State = StateHidden;
+                _items[i] = item;
+                n++;
+            }
+
+            if (n > 0)
+                _blockFreshInstantiate = true;
+            Log.Info("[EnvItemStreamerLite] sheltered for reentry n=" + n);
+        }
+
+        static GameObject TakeSheltered(Vector3 pos)
+        {
+            for (int i = 0; i < Shelter.Count; i++)
+            {
+                GameObject go = Shelter[i].Go;
+                if (go == null)
+                {
+                    Shelter.RemoveAt(i);
+                    i--;
+                    continue;
+                }
+
+                Vector3 d = Shelter[i].Pos - pos;
+                d.y = 0f;
+                if (d.sqrMagnitude > 0.25f)
+                    continue;
+                Shelter.RemoveAt(i);
+                return go;
+            }
+
+            return null;
+        }
+
+        static Transform InactiveSpawnParent()
+        {
+            if (_inactiveSpawnParent != null)
+                return _inactiveSpawnParent;
+            var go = new GameObject("env-inactive-spawn");
+            Object.DontDestroyOnLoad(go);
+            go.SetActive(false);
+            _inactiveSpawnParent = go.transform;
+            return _inactiveSpawnParent;
+        }
+
+        int ParkSpawnedParents()
+        {
+            _parkedParents.Clear();
+            for (int i = 0; i < _items.Count; i++)
+            {
+                Transform parent = _items[i].Parent;
+                if (parent == null || !parent.gameObject.activeSelf)
+                    continue;
+                if (_parkedParents.Contains(parent))
+                    continue;
+                _parkedParents.Add(parent);
+                parent.gameObject.SetActive(false);
+            }
+
+            return _parkedParents.Count;
+        }
+
+        void RestoreSpawnedParents()
+        {
+            for (int i = 0; i < _parkedParents.Count; i++)
+            {
+                Transform parent = _parkedParents[i];
+                if (parent != null)
+                    parent.gameObject.SetActive(true);
+            }
+
+            _parkedParents.Clear();
+        }
+
+        internal static void RepairSiblingLink(Transform t, Transform parent)
+        {
+            if (t == null)
+                return;
+            // 先摘到不激活容器，再挂回真父节点。容器不在活动链表里，
+            // 这一来一回会把 Instantiate 拷来的 next 换成一次干净的插入。
+            Transform hold = InactiveSpawnParent();
+            if (t.parent != hold)
+                t.SetParent(hold, false);
+            if (parent != null && parent != hold)
+                t.SetParent(parent, false);
+        }
+
+        /// <summary>
         /// 把已生成实例的名字再写一遍。托管字符串会拷成以 0 结尾的原生缓冲，
         /// 避免下一帧 UnitySendMessage 的 FindActiveTransformWithPath 在未终止名字上 strlen 不返回。
         /// </summary>
@@ -358,11 +793,7 @@ namespace Game
                 GameObject go = _items[i].Go;
                 if (go == null)
                     continue;
-                Transform t = go.transform;
-                Transform parent = _items[i].Parent;
-                t.SetParent(null, false);
-                if (parent != null)
-                    t.SetParent(parent, false);
+                RepairSiblingLink(go.transform, _items[i].Parent);
                 relinked++;
             }
 
@@ -371,8 +802,10 @@ namespace Game
 
         IEnumerator StreamLoop()
         {
+            _streamLoopCount++;
             while (_running)
             {
+                CollectFinishedInflight();
                 if (_focus == null)
                 {
                     Camera cam = Camera.main;
@@ -382,6 +815,7 @@ namespace Game
                     continue;
                 }
 
+                // 流送闩留到 AllowStream。Quiet 只是额外静默，进岛不再靠它错开淡出。
                 if (_prefillActive || EnvStreamingConfig.IsPostUncoverQuiet)
                 {
                     yield return null;
@@ -389,7 +823,7 @@ namespace Game
                 }
 
                 EvaluateQueues();
-                int spawnBudget = EnvStreamingConfig.SpawnPerFrameBudget;
+                int spawnBudget = EnvStreamingConfig.EffectiveSpawnPerFrameBudget;
                 int despawnBudget = EnvStreamingConfig.DespawnPerFrameBudget;
                 float budgetMs = EnvStreamingConfig.FinalizePerFrameBudgetMs;
                 _sliceSw.Restart();
@@ -422,6 +856,8 @@ namespace Game
                 _spawnBacklog = _spawnQueue.Count > 0;
                 yield return null;
             }
+
+            _streamLoopCount = Mathf.Max(0, _streamLoopCount - 1);
         }
 
         int DrainDespawns(int despawnBudget, float budgetMs)
@@ -622,7 +1058,17 @@ namespace Game
                 yield break;
 
             GameObject prefab = null;
-            yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go, "stream");
+            if (_syncLoads)
+            {
+                // 再进岛后异步 IsDone 经常不返回，一条加载会把整个距离循环卡住。
+                if (!TryPrefabImmediate(item.Location, item.EditorPath, "stream", out prefab))
+                    yield break;
+            }
+            else
+            {
+                yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go, "stream");
+            }
+
             if (prefab == null)
                 yield break;
 
@@ -729,8 +1175,15 @@ namespace Game
                 actualTier = TierFull;
             }
 
+            if (_blockFreshInstantiate)
+            {
+                return new SpawnedInstance();
+            }
+
             LogStepBegin("instantiate", item.PrefabName);
-            GameObject go = Object.Instantiate(prefab, item.Parent, false);
+            // 挂到不激活的容器上再克隆。直接 Instantiate 会把源物体的活动链表节点拷进新实例，
+            // 第二次进岛这条链表成环，下一帧 FindActiveTransformWithPath 不再返回。
+            GameObject go = Object.Instantiate(prefab, InactiveSpawnParent(), false);
             LogStepEnd("instantiate", item.PrefabName);
             return new SpawnedInstance
             {
@@ -764,10 +1217,8 @@ namespace Game
             bool isBillboard = tier == TierBillboard
                 && EnvStreamingConfig.IsBigTreeCategory(item.Category);
 
-            instance.name = isBillboard
-                ? index + " " + prefab.name + "#bb"
-                : index + " " + prefab.name;
-            instance.transform.SetParent(item.Parent, false);
+            // 设坐标、SetActive、合批登记之前重接，下一次 yield 才不会踩到兄弟环。
+            AttachSpawned(instance, item.Parent, index, isBillboard);
 
             Vector3 pos = item.Pos;
             LogStepBegin("ground", item.PrefabName);
@@ -812,7 +1263,7 @@ namespace Game
             int proto = -1;
             bool inNative = false;
 #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
-            if (_native != null)
+            if (_native != null && prefab != null)
             {
                 if (isBillboard)
                 {
@@ -861,6 +1312,7 @@ namespace Game
             _items[index] = item;
             _spawnedCount++;
             AddLocationUser(item.Location);
+            _colliderLod?.Register(instance, pos);
         }
 
         /// <summary>
@@ -876,6 +1328,7 @@ namespace Game
             if (item.InNative && _native != null)
                 _native.RemoveInstance(item.Go, item.ProtoIndex);
 #endif
+            _colliderLod?.Unregister(item.Go);
             DestroyYBillboardMaterials(item.Go, destroyImmediate);
             RemoveLocationUser(item.Location);
             if (destroyImmediate)
@@ -1132,6 +1585,30 @@ namespace Game
             onDone?.Invoke(prefab);
         }
 
+        /// <summary>
+        /// 退登卸场景：停协程并清 <see cref="Current"/>，不置 <c>_released</c>。
+        /// <see cref="OnDestroy"/> 还要走 <see cref="Release(bool)"/> 且 <c>destroyObjects</c> 为假，句柄留到卸场景成功。
+        /// </summary>
+        public void DetachForSceneUnload()
+        {
+            if (_released)
+                return;
+            ShelterSpawnedForReentry();
+            _prefillActive = false;
+            PrefillSuppressRender = false;
+            _logTailLate = false;
+            _logTailCoverSubmit = false;
+            _prefillGate.End();
+            _running = false;
+            StopAllCoroutines();
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
+            _native = null;
+#endif
+            if (Current == this)
+                Current = null;
+            Log.Info("[EnvItemStreamerLite] detach for scene unload");
+        }
+
         public void Release() => Release(destroyObjects: true);
 
         void Release(bool destroyObjects)
@@ -1141,6 +1618,8 @@ namespace Game
             _released = true;
             _prefillActive = false;
             PrefillSuppressRender = false;
+            _logTailLate = false;
+            _logTailCoverSubmit = false;
             _prefillGate.End();
             _running = false;
             StopAllCoroutines();

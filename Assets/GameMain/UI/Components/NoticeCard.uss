@@ -73,14 +73,15 @@
     background-image: url("../Textures/LoadingForm/storage-fullstoragepage-icon.png");
 }
 
+/* InGameDownloadView：条在上（左 609×24，右「剩余」），文案在下。 */
 .notice-card__progress {
     display: none;
     position: absolute;
     left: 84px;
-    top: 480px;
+    top: 554px;
     width: 765px;
-    height: 220px;
-    flex-direction: column;
+    height: 126px;
+    overflow: visible;
 }
 
 .notice-card--progress .notice-card__progress {
@@ -95,36 +96,21 @@
     display: none;
 }
 
-.notice-card__sentence {
-    min-height: 48px;
-    margin: 0;
-    padding: 0;
-    -unity-text-align: middle-left;
-    font-size: 36px;
-    color: rgba(0, 0, 0, 1.000);
-    white-space: normal;
-    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
-}
-
-.notice-card__eta {
-    height: 48px;
-    margin: 0;
-    padding: 0;
-    -unity-text-align: middle-left;
-    font-size: 39px;
-    color: rgba(0, 0, 0, 1.000);
-    white-space: nowrap;
-    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
+.notice-card__bar-row {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 765px;
+    height: 54px;
 }
 
 .notice-card__progress-track {
-    position: relative;
+    position: absolute;
+    left: 0;
+    top: 15px;
     width: 609px;
     height: 24px;
-    margin-top: 8px;
-    margin-bottom: 0;
-    margin-left: 0;
-    margin-right: 0;
+    margin: 0;
     overflow: hidden;
     background-image: url("../Textures/NoticeCard/progress-track.png");
     -unity-background-scale-mode: stretch-to-fill;
@@ -135,32 +121,65 @@
     position: absolute;
     left: 0;
     top: 0;
-    width: 100%;
+    width: 5%;
     height: 100%;
     margin: 0;
-    transform-origin: 0% 50%;
-    scale: 0 1;
     background-image: url("../Textures/NoticeCard/progress-fill.png");
     -unity-background-scale-mode: stretch-to-fill;
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
+    -unity-slice-left: 11px;
+    -unity-slice-right: 11px;
+    -unity-slice-top: 0px;
+    -unity-slice-bottom: 0px;
+}
+
+.notice-card__eta {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 156px;
+    height: 54px;
+    margin: 0;
+    padding: 0;
+    -unity-text-align: middle-right;
+    font-size: 36px;
+    color: rgba(0, 0, 0, 1.000);
+    white-space: nowrap;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
 }
 
 .notice-card__size-row {
+    position: absolute;
+    left: 0;
+    top: 78px;
+    width: 765px;
+    height: 48px;
+    margin: 0;
     flex-direction: row;
     align-items: center;
+    overflow: hidden;
+}
+
+.notice-card__sentence {
+    margin: 0;
+    padding: 0;
     height: 48px;
-    margin-top: 12px;
-    margin-bottom: 0;
-    margin-left: 0;
-    margin-right: 0;
+    flex-shrink: 0;
+    -unity-text-align: middle-left;
+    font-size: 30px;
+    color: rgba(135, 135, 145, 1.000);
+    white-space: nowrap;
+    -unity-font: url("../Fonts/pingfangsc-medium.ttf");
 }
 
 .notice-card__downloaded {
     margin: 0;
     padding: 0;
+    height: 48px;
+    flex-shrink: 0;
     -unity-text-align: middle-left;
-    font-size: 39px;
-    color: rgba(0, 0, 0, 1.000);
+    font-size: 30px;
+    color: rgba(0, 163, 117, 1.000);
     white-space: nowrap;
     -unity-font: url("../Fonts/pingfangsc-medium.ttf");
 }
@@ -171,9 +190,11 @@
     margin-right: 0;
     margin-bottom: 0;
     padding: 0;
+    height: 48px;
+    flex-shrink: 0;
     -unity-text-align: middle-left;
-    font-size: 36px;
-    color: rgba(0, 0, 0, 1.000);
+    font-size: 30px;
+    color: rgba(135, 135, 145, 1.000);
     white-space: nowrap;
     -unity-font: url("../Fonts/pingfangsc-medium.ttf");
 }

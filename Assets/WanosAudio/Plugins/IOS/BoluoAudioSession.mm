@@ -168,6 +168,8 @@ static int32_t sHostForeground = 0;
 /// 会话播放总闸。1=Disarmed（登录页禁声）；0=Armed（岛内可播）。
 /// 语义：SilenceForLogout=Disarm；ArmSessionForIslandPlayback=Arm。与 userManuallyPaused 正交。
 static int32_t sLogoutSilenced = 0;
+/// 曾在真正前台解过 mute。启动期（此旗为 0）人已经切走则禁止出声，避免和抖音 / QQ 音乐叠播。
+static int32_t sStartupAudibleCommitted = 0;
 /// Disarm 世代：作废已排队的 RestoreAfterHudReady，避免退登后 0.3s 回调把声拉回。
 static uint64_t sSilenceGeneration = 0;
 /// maintainOutput 同款防抖：连续 2 tick 非 Playback 才纠偏。
@@ -198,6 +200,11 @@ static void BoluoAudioSession_InstallMediaServicesObserver(void) {
 
 /// 替代 Swift maintainOutput：前台 + 非静默时防抖锁回 Playback。
 static void BoluoAudioSession_DriftTick(void) {
+    // 人已经在后台：不要 setActive 把会话从抖音 / QQ 音乐手里抢回来。
+    if ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground) {
+        sDriftTicks = 0;
+        return;
+    }
     if (sHostForeground == 0 || sLogoutSilenced != 0) {
         sDriftTicks = 0;
         return;
@@ -295,6 +302,9 @@ static void BoluoAudioSession_Ctor(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         BoluoAudioSession_BootstrapPlaybackCategory();
         BoluoAudioSession_InstallHostForegroundObservers();
+        // 打断观察者必须早于进岛出声，否则启动期切到抖音时还没人接 Began。
+        extern void BoluoMusicPlayerIOS_EnsureObservers(void);
+        BoluoMusicPlayerIOS_EnsureObservers();
     });
 }
 
@@ -342,6 +352,7 @@ int32_t BoluoAudioSession_IsHostForeground(void) {
 void BoluoAudioSession_SilenceForLogout(void) {
     // Disarm：先关闸再停播。登录页禁声靠本门闩；Interruption Ended 查 IsLogoutSilenced。
     sLogoutSilenced = 1;
+    sStartupAudibleCommitted = 0;
     sSilenceGeneration += 1;
     sBoluoRestoreGate = NO;
     sNeedsDeviceRebuildAfterLogout = YES;
@@ -372,6 +383,36 @@ int32_t BoluoAudioSession_IsLogoutSilenced(void) {
     return sLogoutSilenced;
 }
 
+int32_t BoluoAudioSession_IsStartupAudibleCommitted(void) {
+    return sStartupAudibleCommitted;
+}
+
+void BoluoAudioSession_NoteStartupAudibleCommitted(void) {
+    if ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground) {
+        return;
+    }
+    sStartupAudibleCommitted = 1;
+}
+
+/// 谁在前台谁播。后台且尚未在前台出过声，或对方正在播：禁止 Unity 解 mute。
+int32_t BoluoAudioSession_AllowUnmuteNow(void) {
+    if (sLogoutSilenced != 0) {
+        return 0;
+    }
+    UIApplicationState state = [UIApplication sharedApplication].applicationState;
+    if (state != UIApplicationStateBackground) {
+        return 1;
+    }
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    if ([session isOtherAudioPlaying] || session.secondaryAudioShouldBeSilencedHint) {
+        return 0;
+    }
+    if (sStartupAudibleCommitted == 0) {
+        return 0;
+    }
+    return 1;
+}
+
 /// 会话唯一 Arm：开闸 + 重置播放意图 + LockPlayback；退登后 Rebuild（勿 SyncPlaying，正播交给 DelayPlayMusic）。
 void BoluoAudioSession_ArmSessionForIslandPlayback(void) {
     const BOOL wasDisarmed = (sLogoutSilenced != 0);
@@ -383,9 +424,15 @@ void BoluoAudioSession_ArmSessionForIslandPlayback(void) {
         BoluoAudioSession_Trail(@"ArmSession clear Disarmed");
     }
     sLogoutSilenced = 0;
-    // 进岛必前台：避免 HostForeground 观察者尚未补种时 Resume/DelayPlayMusic 因 fg=0 abort → 游客无声。
-    BoluoAudioSession_SetHostForeground(1);
-    BoluoAudioSession_LockPlaybackNative();
+    UIApplicationState appState = [UIApplication sharedApplication].applicationState;
+    if (appState == UIApplicationStateBackground) {
+        // 加载期间人已经切到别的播放器：不要把前台旗钉回 1，也不要 setActive 把对方顶掉。
+        BoluoAudioSession_Trail(@"ArmSession skip LockPlayback (already background)");
+    } else {
+        // 进岛且仍在前台：避免 HostForeground 观察者尚未补种时 Resume 因 fg=0 abort → 游客无声。
+        BoluoAudioSession_SetHostForeground(1);
+        BoluoAudioSession_LockPlaybackNative();
+    }
 
     // 新岛内会话：清空退登停播意图（含作废慢 Reset 回调）；勿 SyncPlaying（避免首播前闪声）。
     BoluoMusicPlayerIOS_ResetPlaybackIntentForSessionArm();
@@ -393,10 +440,15 @@ void BoluoAudioSession_ArmSessionForIslandPlayback(void) {
     if (sNeedsDeviceRebuildAfterLogout) {
         sNeedsDeviceRebuildAfterLogout = NO;
         sBoluoRestoreGate = NO;
-        AVAudioSession *avSession = [AVAudioSession sharedInstance];
-        NSError *err = nil;
-        [avSession setActive:YES error:&err];
-        // 保持 mute：首声只由 Unity DelayPlayMusic → PlayMusic 后 Unmute，避免此处 Resume_Music 闪一下再被 forceStop。
+        if (appState == UIApplicationStateBackground) {
+            // 后台不要 setActive，否则会把抖音 / QQ 音乐的会话抢走。设备仍重建，但保持 mute。
+            BoluoAudioSession_Trail(@"ArmSession skip Rebuild setActive (background)");
+        } else {
+            AVAudioSession *avSession = [AVAudioSession sharedInstance];
+            NSError *err = nil;
+            [avSession setActive:YES error:&err];
+        }
+        // 保持 mute：首声只由 Unity 解 mute，避免此处 Resume_Music 闪一下再被 forceStop。
         BoluoAudio_RebuildPlaybackDeviceAsync("{\"play_layout\":0,\"device_id\":\"default\"}");
         BoluoAudioSession_Trail(@"ArmSession RebuildPlaybackDevice after logout (stay muted until first PlayMusic)");
     }

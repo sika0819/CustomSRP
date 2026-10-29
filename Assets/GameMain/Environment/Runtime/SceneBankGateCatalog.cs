@@ -16,8 +16,11 @@ namespace Game
         /// <summary>实心墙最薄的一边至少这么厚，避免胶囊一步穿过去。</summary>
         public const float MinThicknessMeters = 2f;
 
-        /// <summary>Trigger 比实心墙每边伸出的距离。人先碰到这层再被墙挡住。</summary>
-        public const float TriggerPaddingMeters = 1.5f;
+        /// <summary>
+        /// Trigger 比实心墙每边伸出的距离。人先碰到这层再被墙挡住。
+        /// 必须大于胶囊半径（约 1.1）加 skin，否则真机贴墙时身体采样点落在壳外，弹窗不出现。
+        /// </summary>
+        public const float TriggerPaddingMeters = 3f;
 
         public SceneBankGateEntry[] Entries = Array.Empty<SceneBankGateEntry>();
 
@@ -33,6 +36,52 @@ namespace Game
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// 真机离线包若还没打进 <c>SceneBankGateCatalog</c>，用这份和资产一致的区域，避免门整扇消失。
+        /// </summary>
+        public static SceneBankGateCatalog CreateBuiltin()
+        {
+            var catalog = CreateInstance<SceneBankGateCatalog>();
+            catalog.Entries = new[]
+            {
+                Entry("Forest", new Vector3(711.71438f, 22.042757f, 556.0592f),
+                    new Vector3(576.52136f, 65.79881f, 127.68161f), SceneBankGateShape.Box, 0f,
+                    "Boluodao_Forest"),
+                Entry("GrassLand", new Vector3(548.9f, 41.3f, 313.9f),
+                    Vector3.zero, SceneBankGateShape.Sphere, 138.2f,
+                    "Boluodao_Grassland"),
+                Entry("Plateau c0", new Vector3(368.8f, 32.9f, 560.4f),
+                    Vector3.zero, SceneBankGateShape.Sphere, 77.62f,
+                    "Boluodao_Plateau"),
+                Entry("Plateau c1", new Vector3(243.2f, 32.9f, 350.6f),
+                    Vector3.zero, SceneBankGateShape.Sphere, 77.62f,
+                    "Boluodao_Plateau"),
+            };
+            return catalog;
+        }
+
+        static SceneBankGateEntry Entry(
+            string objectName,
+            Vector3 position,
+            Vector3 boxSize,
+            SceneBankGateShape shape,
+            float radius,
+            string bank)
+        {
+            return new SceneBankGateEntry
+            {
+                MapItemIndex = -1,
+                ObjectName = objectName,
+                Position = position,
+                Rotation = Vector3.zero,
+                Scale = Vector3.one,
+                BoxSize = boxSize,
+                Shape = shape,
+                Radius = radius,
+                BankNames = new[] { bank },
+            };
         }
 
         /// <summary>

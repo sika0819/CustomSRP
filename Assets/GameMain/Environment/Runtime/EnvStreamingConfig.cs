@@ -89,7 +89,7 @@ namespace Game
 
         /// <summary>
         /// 手机 Native DrawMeshInstanced（Android / iOS）。编辑器默认关；
-        /// 真机仅中档和高档在 <see cref="ApplyMobileTierDefaults"/> 里打开，低档关。
+        /// 真机各档在 <see cref="ApplyMobileTierDefaults"/> 里打开。
         /// 树/石/桥走 <see cref="ShouldForceSkipNativeInstancing"/>（多 MR/多材质）；
         /// 合批只接单 MeshRenderer + 单材质。剥掉 OilNPR INSTANCING_ON 也会整片不可见。
         /// </summary>
@@ -101,7 +101,37 @@ namespace Game
         public static int SpawnPerFrameBudget = 24;
         public static int DespawnPerFrameBudget = 16;
 
-        /// <summary>揭罩后短暂停流送，避免和二次 Prefill 抢主线程把淡出拖长。</summary>
+        /// <summary>揭罩后几秒内压低每帧生成，避免和操作叠在同一段帧上。</summary>
+        const int PostUncoverSpawnBudget = 4;
+        const float PostUncoverSpawnThrottleSeconds = 4f;
+        static float _spawnThrottleUntil;
+
+        public static void BeginPostUncoverSpawnThrottle()
+        {
+#if !UNITY_EDITOR
+            float until = Time.realtimeSinceStartup + PostUncoverSpawnThrottleSeconds;
+            if (until > _spawnThrottleUntil)
+                _spawnThrottleUntil = until;
+#endif
+        }
+
+        public static int EffectiveSpawnPerFrameBudget
+        {
+            get
+            {
+                int budget = SpawnPerFrameBudget;
+#if !UNITY_EDITOR
+                if (Time.realtimeSinceStartup < _spawnThrottleUntil)
+                    budget = Mathf.Min(budget, PostUncoverSpawnBudget);
+#endif
+                return budget;
+            }
+        }
+
+        /// <summary>
+        /// 揭罩后的额外静默。进岛流送改由 <c>EnvItemStreamerLite.AllowStream</c> 放行，
+        /// 不再靠这段墙钟把流送和淡出错开。
+        /// </summary>
         static float _postUncoverQuietUntil;
 
         public static void BeginPostUncoverQuiet(float seconds = 1.2f)
@@ -113,6 +143,15 @@ namespace Game
 
         public static bool IsPostUncoverQuiet =>
             Time.realtimeSinceStartup < _postUncoverQuietUntil;
+
+        /// <summary>
+        /// 近距启用 MeshCollider。须明显大于走路半秒路程，否则高速接近大石时
+        /// 碰撞体尚未打开就会穿进 mesh，再打开也难把 CharacterController 顶出来。
+        /// </summary>
+        public static float MeshColliderEnableRadius = 90f;
+
+        /// <summary>远距关闭 MeshCollider（与 Enable 留滞后）。</summary>
+        public static float MeshColliderDisableRadius = 120f;
 
         /// <summary>
         /// 非 Cliff/Cave/Ramp/Spike/Large 的石头：世界空间最长边 ≥ 此值才补 MeshCollider。
@@ -205,6 +244,15 @@ namespace Game
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// MeshCollider 永不按距离关闭：Mountain 地标 + Cliff/Cave/Ramp/Spike/Large。
+        /// 大石可视距离远大于 collider LOD 半径，关碰撞会直接穿模。
+        /// </summary>
+        public static bool ShouldKeepMeshColliderAlwaysOn(string objectName)
+        {
+            return IsFarFieldLandmark(objectName) || IsLargeRockPrefab(objectName);
         }
 
         public static bool IsLargeRockPrefab(string prefabName)
@@ -551,7 +599,7 @@ namespace Game
             ClutterHideDistance = 40f;
             ClutterShowDistance = 32f;
 
-            // 低档再收一档灌木 / 花 / 杂物。合批关掉后这些走 MeshRenderer，少铺一点省片元。
+            // 低档再收一档灌木 / 花 / 杂物，少铺一点省片元。合批仍然打开。
             if (IslandGraphicsTier.GpuTier == IslandGraphicsTier.Tier.Low)
             {
                 GuanmuHideDistance = 60f;
@@ -569,6 +617,9 @@ namespace Game
             // 帐篷：真机仍须远于 House；配合 prefab LOD 阈值放宽，避免 40–80m 闪没。
             TentLodHideDistance = 200f;
             TentLodShowDistance = 160f;
+            // 真机略收，但仍须大于 MoveSpeed 数帧路程，避免穿进未开碰撞的大石。
+            MeshColliderEnableRadius = 72f;
+            MeshColliderDisableRadius = 96f;
 
             // 格子驻留须盖住树环（Boluo：Ring1 >= TreeRing1）
             Ring1EnterRadius = Mathf.Max(Ring1EnterRadius, TreeRing1EnterRadius);

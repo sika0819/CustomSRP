@@ -11,7 +11,7 @@ namespace Game.Editor
 {
     /// <summary>
     /// Editor-only UITK 登录联调窗（游客 / 手机号）。菜单 <c>GameMain/Boluo/编辑器登录</c>。
-    /// 不进真机包；进 Play 且无已落盘会话（正式/游客）时自动弹出。
+    /// 不进真机包；进 Play 且无已落盘正式会话时自动弹出。游客票不落盘。
     /// 注销确认期：登录 data.isCancel → 游戏内 <see cref="UiDialogService.ShowCancelAccountReminder"/>；
     /// 「退出」清会话；「登录并终止注销」调 loginAndStopCancel 后进岛。
     /// </summary>
@@ -134,7 +134,7 @@ namespace Game.Editor
             root.Add(title);
 
             var hint = new Label(
-                "无会话时 Play 启动链会等本窗口放行。游客/正式账号均落盘 token，主动退出前下次 Play 自动复用。真机包不含此窗。");
+                "无会话时 Play 启动链会等本窗口放行。正式账号落盘 token，主动退出前下次 Play 自动复用。游客不落盘。真机包不含此窗。");
             hint.style.whiteSpace = WhiteSpace.Normal;
             hint.style.marginBottom = 10;
             hint.style.color = new Color(0.55f, 0.55f, 0.55f);
@@ -258,7 +258,7 @@ namespace Game.Editor
 
             var tip = new Label(
                 "游客会话：本地或远端 touristLogin（菜单 Try Remote TouristLogin）。" +
-                "token 落盘可复用；岛内进度仍不落盘（默认出生点）。主动「清空用户会话」/退登后需重新登录。");
+                "游客账号不落盘，本次 Play 内有效；岛内进度也不写。下次 Play 需重新登录。");
             tip.style.whiteSpace = WhiteSpace.Normal;
             tip.style.marginBottom = 8;
             tip.style.color = new Color(0.55f, 0.55f, 0.55f);

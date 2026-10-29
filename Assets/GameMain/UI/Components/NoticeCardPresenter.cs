@@ -29,7 +29,7 @@ namespace Game
     }
 
     /// <summary>
-    /// 绑定一张 <c>NoticeCard</c>。进度条用 scale，文案按 0.1 秒刷新。
+    /// 绑定一张 <c>NoticeCard</c>。进度条按宽度做 9-slice，文案按 0.1 秒刷新。
     /// </summary>
     public sealed class NoticeCardPresenter
     {
@@ -79,9 +79,6 @@ namespace Game
             _eta = root.Q<Label>("eta");
             _downloaded = root.Q<Label>("downloaded");
             _sizeDetail = root.Q<Label>("size-detail");
-
-            if (_fill != null)
-                _fill.style.transformOrigin = new TransformOrigin(Length.Percent(0), Length.Percent(50));
         }
 
         public void Unbind()
@@ -151,7 +148,8 @@ namespace Game
             {
                 float t = percent / 100f;
                 float visual = t >= 1f ? 1f : Mathf.Max(t, MinVisual);
-                _fill.style.scale = new Scale(new Vector2(visual, 1f));
+                // 宽度配合 9-slice，圆角不会被压扁。单条进度，和音量条一样写 width。
+                _fill.style.width = Length.Percent(visual * 100f);
             }
 
             float now = Time.realtimeSinceStartup;
@@ -216,7 +214,7 @@ namespace Game
                 completed);
 
             if (_sentence != null)
-                _sentence.text = copy.Sentence ?? string.Empty;
+                _sentence.text = copy.Prefix ?? string.Empty;
             if (_eta != null)
                 _eta.text = copy.Eta ?? string.Empty;
             if (_downloaded != null)
@@ -261,7 +259,13 @@ namespace Game
 
             Label text = button.Q<Label>(labelName);
             if (text != null)
+            {
                 text.text = string.IsNullOrEmpty(label) ? string.Empty : label;
+                // 字在按钮上面。字自己吃点击时，父按钮的按下收不到。
+                text.pickingMode = PickingMode.Ignore;
+            }
+
+            button.pickingMode = PickingMode.Position;
             button.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
         }
 

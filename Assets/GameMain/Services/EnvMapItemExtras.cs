@@ -145,6 +145,14 @@ namespace Game
 
             for (int i = 0; i < items.Count; i++)
             {
+                // 退登卸场景后不要继续 Instantiate。
+                if (mapItemRoot == null)
+                {
+                    Log.Info("[MapItemExtras] abort — mapItemRoot gone");
+                    onCount?.Invoke(placed);
+                    yield break;
+                }
+
                 MapItemData d = items[i];
                 if (d.Parent == "Common" || d.Parent == "texiao")
                     continue;
@@ -192,7 +200,9 @@ namespace Game
                     && cat != null)
                     parent = cat;
 
-                GameObject instance = Object.Instantiate(prefab, parent, false);
+                // 先无父 Instantiate，再 AttachSpawned 摘挂：二次进岛避免插进旧兄弟环。
+                GameObject instance = Object.Instantiate(prefab);
+                EnvItemStreamerLite.AttachSpawned(instance, parent, placed, false);
                 instance.name = d.PrefabName;
                 instance.transform.position = d.Pos;
                 instance.transform.localEulerAngles = d.Rotation;

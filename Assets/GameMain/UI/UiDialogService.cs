@@ -158,6 +158,39 @@ namespace Game
             return ticket > 0 && ticket <= _retiredThrough;
         }
 
+        public static bool IsProgressOpen(int ticket)
+        {
+            return ticket > 0
+                && _activeProgressForm != null
+                && _activeProgressTicket == ticket;
+        }
+
+        /// <summary>
+        /// 同一票据再开进度窗。不重置进度，不把票据记成结束，也不新开下载。
+        /// 这张已经开着并且还在显示，就什么都不做。
+        /// 引用还在但物体已经关掉时清掉引用，否则再开会被当成重复窗立刻关掉。
+        /// </summary>
+        public static bool ReopenDownloadProgress(int ticket, Action onCancel = null)
+        {
+            if (ticket <= 0 || ticket <= _retiredThrough)
+                return false;
+            if (_activeProgressForm != null && _activeProgressTicket == ticket)
+            {
+                if (_activeProgressForm.isActiveAndEnabled)
+                    return false;
+                _activeProgressForm = null;
+                _activeProgressTicket = 0;
+            }
+
+            var data = new DownloadProgressForm.UserData
+            {
+                OnCancel = onCancel,
+                Ticket = ticket,
+            };
+            UiAssets.OpenDialog(UiAssets.DownloadProgressForm, data);
+            return true;
+        }
+
         public static void AttachProgressForm(DownloadProgressForm form, int ticket)
         {
             _activeProgressForm = form;

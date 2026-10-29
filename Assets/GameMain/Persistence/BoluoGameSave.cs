@@ -60,7 +60,7 @@ namespace Game
             _loaded = true;
             Log.Info(
                 $"[BoluoGameSave] loaded guest={GuestSession.IsGuest} weatherLinkage={_data.weatherLinkage} " +
-                $"healthTip={_data.healthTip} recommend={_data.recommend} " +
+                $"healthTip={_data.healthTip} recommend={_data.recommend} scheme={_data.curSchemeID} " +
                 $"bgm={_data.bgmVolume} voice={_data.voiceVolume} " +
                 $"atm={_data.hasIslandAtmosphere} kind={_data.weatherKind} lv={_data.weatherLevel} " +
                 $"hours={_data.hours:F1} period={_data.period} " +
@@ -156,7 +156,53 @@ namespace Game
         {
             EnsureLoaded();
             _data.recommend = on;
+            if (on)
+                _data.curSchemeID = 0;
             Persist();
+        }
+
+        public static bool Recommend
+        {
+            get
+            {
+                EnsureLoaded();
+                return _data.recommend;
+            }
+        }
+
+        /// <summary>当前账号手动预设 id；智能推荐或未选时为 0。</summary>
+        public static int PresetSchemeId
+        {
+            get
+            {
+                EnsureLoaded();
+                return _data.recommend ? 0 : _data.curSchemeID;
+            }
+        }
+
+        /// <summary>
+        /// 手动套用预设：关掉智能推荐并记下 scheme id（对齐旧 ChangeState(false)+SelectScheme）。
+        /// 无 userId / 未开 saveLocal 时只改内存，退登 ResetSession 会丢掉。
+        /// </summary>
+        public static void CapturePresetScheme(int schemeId)
+        {
+            if (schemeId <= 0)
+                return;
+            EnsureLoaded();
+            _data.recommend = false;
+            _data.curSchemeID = schemeId;
+            Persist();
+        }
+
+        /// <summary>
+        /// 退登 / 热切前：把岛上正在播的预设写入当前账号桶。服务已清掉时不写。
+        /// </summary>
+        public static void FlushPlayingPreset()
+        {
+            PresetService presets = PresetService.Instance ?? GameEntry.Presets;
+            if (presets == null || presets.CurrentId <= 0)
+                return;
+            CapturePresetScheme(presets.CurrentId);
         }
 
         public static void SetMaxHealthLevel(int level, uint dateUnix)

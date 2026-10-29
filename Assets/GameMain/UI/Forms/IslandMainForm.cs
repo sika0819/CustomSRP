@@ -82,6 +82,18 @@ namespace Game
 
         /// <summary>当前打开的主 HUD。关闭时置空，面板不再经静态回调把界面留住。</summary>
         public static IslandMainForm Current { get; private set; }
+
+        /// <summary>弹窗打开或关闭的同一刻改摇杆命中层，不靠下一帧 Tick。</summary>
+        public void SetJoystickModal(bool blocked)
+        {
+            _joystick?.ApplyModalHit(blocked);
+        }
+
+        /// <summary>退人之前停掉摇杆，避免同一帧又走进门里。</summary>
+        public void CancelLocomotion()
+        {
+            _locomotion.ForceEnd();
+        }
         Label _presetLabel;
         IVisualElementScheduledItem _presetLabelHide;
         float _presetLabelAlpha;

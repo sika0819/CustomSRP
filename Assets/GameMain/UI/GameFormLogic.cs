@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Game.Native;
+using GameFramework.UI;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityGameFramework.Runtime;
@@ -42,6 +44,11 @@ namespace Game
         /// </summary>
         protected virtual bool CloseOnBackdropClick => SlidesUpFromBottom;
 
+        /// <summary>
+        /// 下载提示窗要盖住主界面摇杆。只对这几张开：加载罩关闭时改层级会把树又挂回去。
+        /// </summary>
+        protected virtual bool PinDocumentOrder => false;
+
         const float SlideDuration = 0.32f;
         const float SlideDistance = 2436f;
 
@@ -60,15 +67,6 @@ namespace Game
         float _slideY;
         bool _closing;
         bool _hidBottomIcons;
-        // Track whether the pointer-down that *could* trigger backdrop dismiss
-        // started on the backdrop itself. Without this, a press that begins on
-        // panel chrome (a list row, a button, a draggable strip) and ends with
-        // the pointer released on the backdrop would be misread as a backdrop
-        // click and dismiss the popup. We require the down *and* the up to land
-        // on backdrop regions before we close.
-        bool _backdropDownActive;
-        int _backdropDownPointerId = -1;
-
         public override void OnOpen(object userData)
         {
             base.OnOpen(userData);
@@ -77,8 +75,6 @@ namespace Game
             _hidBottomIcons = false;
             _slide?.Pause();
             _slide = null;
-            _backdropDownActive = false;
-            _backdropDownPointerId = -1;
 
             UIDocument document = GetComponent<UIDocument>();
             ScreenLayout.Apply(document);
@@ -116,6 +112,13 @@ namespace Game
                 Root.Query<Button>().ForEach(button =>
                     RegisterClick(button, CloseSelf));
             }
+
+            if (PinDocumentOrder)
+                EnsureDocumentOrder();
+
+            // 打开的这一刻就把摇杆命中层让开，不等下一帧 Tick。
+            if (IsOverlayForm())
+                IslandMainForm.Current?.SetJoystickModal(true);
         }
 
         void EnableStagePicking()
@@ -147,6 +150,8 @@ namespace Game
             _slide = null;
             Root = null;
             base.OnClose(isShutdown, userData);
+            // 关掉的这一刻按「去掉自己」恢复命中层，不等下一帧。
+            IslandMainForm.Current?.SetJoystickModal(JoystickShouldBlock());
         }
 
         public override void OnDepthChanged(int uiGroupDepth, int depthInUIGroup)
@@ -155,6 +160,25 @@ namespace Game
             UIDocument document = GetComponent<UIDocument>();
             if (document != null)
                 document.sortingOrder = uiGroupDepth * 100 + depthInUIGroup;
+            if (PinDocumentOrder)
+                EnsureDocumentOrder();
+        }
+
+        /// <summary>
+        /// 相同 sortingOrder 不会重新插入。先错开再写回，保证这张窗盖住主界面摇杆。
+        /// 不要放进每个界面的 OnOpen：加载罩关闭时改层级会把已经摘掉的树又挂回去。
+        /// </summary>
+        protected void EnsureDocumentOrder()
+        {
+            UIDocument document = GetComponent<UIDocument>();
+            UIForm form = GetComponent<UIForm>();
+            if (document == null || form == null || form.UIGroup == null)
+                return;
+
+            float order = form.UIGroup.Depth * 100f + form.DepthInUIGroup;
+            if (Mathf.Approximately(document.sortingOrder, order))
+                document.sortingOrder = order + 1f;
+            document.sortingOrder = order;
         }
 
         protected void OnClick(string elementName, Action action)
@@ -165,14 +189,12 @@ namespace Game
             RegisterClick(element, action);
         }
 
-        /// <summary>
-        /// Shared dismiss for every bottom-sheet / dialog. Do not reimplement in subclasses.
-        /// </summary>
-        /// <remarks>
-        /// Full-screen <c>game-form-stage</c> uses PickingMode.Ignore, so empty taps often
-        /// resolve to the form root instead of the sibling backdrop. One filtered listener on
-        /// the form root covers root / backdrop / dim "view" layers without closing on chrome.
-        /// </remarks>
+        /// <summary>空白处按下。子类可先跑「返回」再关。</summary>
+        protected virtual void OnBackdropDismiss()
+        {
+            CloseSelf();
+        }
+
         void BindBackdropDismiss()
         {
             VisualElement formRoot = Root.Q("root") ?? Root;
@@ -188,30 +210,27 @@ namespace Game
 
             backdrop.pickingMode = PickingMode.Position;
 
-            foreach (VisualElement child in formRoot.Children())
-            {
-                if (child.ClassListContains("game-form-stage"))
-                    child.pickingMode = PickingMode.Ignore;
-            }
+            // 舞台保持 USS 的 Ignore。点卡片外会落到背后的空白层；
+            // 把舞台改成可点会把卡片上的按下当成点空白关掉。
+            formRoot.Query(className: "notice-card").ForEach(card =>
+                card.pickingMode = PickingMode.Position);
+            VisualElement dialog = formRoot.Q("dialog");
+            if (dialog != null)
+                dialog.pickingMode = PickingMode.Position;
 
-            EventCallback<ClickEvent> dismiss = evt =>
+            // 按下即关。ClickEvent 要等抬起还落在同一块上，真机抬起经常被摇杆丢掉。
+            // 目标就是空白层时才关，卡片和按钮不是这个目标。
+            EventCallback<PointerDownEvent> dismiss = evt =>
             {
-                if (!_backdropDownActive)
-                {
-                    // Press started on panel chrome (a list row, a button, a
-                    // draggable strip) — even if the up landed on the
-                    // backdrop, this is not a backdrop dismiss.
-                    _backdropDownActive = false;
-                    _backdropDownPointerId = -1;
+                if (_closing || evt.button > 0)
                     return;
-                }
-                if (IsBackdropDismissTarget(evt.target as VisualElement, formRoot, backdrop))
-                    CloseSelf();
-                _backdropDownActive = false;
-                _backdropDownPointerId = -1;
+                if (!IsBackdropDismissTarget(evt.target as VisualElement, formRoot, backdrop))
+                    return;
+                OnBackdropDismiss();
+                evt.StopPropagation();
             };
             formRoot.RegisterCallback(dismiss);
-            _clicks.Add((formRoot, dismiss));
+            _trackingCallbacks.Add((formRoot, dismiss));
 
             foreach (VisualElement child in formRoot.Children())
             {
@@ -222,41 +241,8 @@ namespace Game
                     continue;
                 child.pickingMode = PickingMode.Position;
                 child.RegisterCallback(dismiss);
-                _clicks.Add((child, dismiss));
+                _trackingCallbacks.Add((child, dismiss));
             }
-
-            // We need the *pointer-down* origin to gate the dismiss. The
-            // default ClickEvent handler only sees the *up* target, so a
-            // press that starts inside panel chrome (a list row, a button, a
-            // draggable strip) and ends on the backdrop would otherwise be
-            // misread as a backdrop click. Listening on TrickleDown lets us
-            // record the down target before any child handler can StopPropagation.
-            EventCallback<PointerDownEvent> trackDown = evt =>
-            {
-                if (evt.button != 0)
-                {
-                    _backdropDownActive = false;
-                    _backdropDownPointerId = -1;
-                    return;
-                }
-                _backdropDownActive = IsBackdropDismissTarget(
-                    evt.target as VisualElement, formRoot, backdrop);
-                _backdropDownPointerId = _backdropDownActive ? evt.pointerId : -1;
-            };
-            EventCallback<PointerUpEvent> trackUp = evt =>
-            {
-                if (_backdropDownActive
-                    && evt.pointerId != _backdropDownPointerId)
-                {
-                    // Different pointer finished — invalidate the gate so the
-                    // active ClickEvent cannot dismiss.
-                    _backdropDownActive = false;
-                }
-            };
-            formRoot.RegisterCallback(trackDown, TrickleDown.TrickleDown);
-            formRoot.RegisterCallback(trackUp, TrickleDown.TrickleDown);
-            _trackingCallbacks.Add((formRoot, trackDown));
-            _trackingCallbacks.Add((formRoot, trackUp));
         }
 
         /// <summary>
@@ -269,6 +255,10 @@ namespace Game
                 return false;
 
             if (target == formRoot || target == backdrop)
+                return true;
+
+            // 舞台铺满设计画布。点在卡片外会命中舞台本身，不命中它的子节点。
+            if (target.ClassListContains("game-form-stage"))
                 return true;
 
             for (VisualElement n = target; n != null && n != formRoot; n = n.parent)
@@ -288,26 +278,131 @@ namespace Game
             if (element == null || action == null)
                 return;
 
-            // ClickEvent 要等按下和抬起落在同一元素上。启动后第一次点经常被摇杆捕获
-            // 或面板缩放挤掉，看起来闪一下，要点第二次。按下就触发，抬起丢失也算点中。
+            // Button 自带的 Clickable 在冒泡阶段对 PointerDown 调 StopImmediatePropagation。
+            // 后挂的按下回调不会执行，点「立即下载」就是没反应、下一张窗也出不来。
+            // 拿掉 Clickable，并在 TrickleDown 接住，赶在它之前。
+            if (element is Button button)
+                button.clickable = null;
+
+            // 按下就触发。真机会把同一次触摸再发成兼容鼠标，那一次丢掉。
+            // 只记住这一根手指，松开或取消后才能再点。button > 0 才丢掉：
+            // 部分触摸的 button 是 -1，写成 != 0 会把这次按下整段扔掉。
             element.pickingMode = PickingMode.Position;
             element.focusable = false;
+            int activePointer = -1;
+            int firedFrame = -1;
             EventCallback<PointerDownEvent> callback = evt =>
             {
-                if (evt.button != 0)
+                if (evt.button > 0)
                     return;
-                if (evt.pointerId == PointerId.mousePointerId && Input.touchCount > 0)
+                if (activePointer >= 0 && !IsPointerHeld(activePointer))
+                    activePointer = -1;
+                // 同一次触摸会再来一支兼容鼠标。手指还在，或这一帧已经触发过，都丢掉。
+                if (evt.pointerId == PointerId.mousePointerId
+                    && (Input.touchCount > 0 || firedFrame == Time.frameCount))
+                {
+                    evt.StopImmediatePropagation();
                     return;
+                }
+                if (activePointer == evt.pointerId)
+                {
+                    evt.StopImmediatePropagation();
+                    return;
+                }
+                activePointer = evt.pointerId;
+                firedFrame = Time.frameCount;
                 action();
-                evt.StopPropagation();
+                evt.StopImmediatePropagation();
             };
-            element.RegisterCallback(callback);
+            element.RegisterCallback(callback, TrickleDown.TrickleDown);
             _trackingCallbacks.Add((element, callback));
+
+            EventCallback<PointerUpEvent> up = evt =>
+            {
+                if (evt.pointerId == activePointer)
+                    activePointer = -1;
+            };
+            element.RegisterCallback(up);
+            _trackingCallbacks.Add((element, up));
+
+            EventCallback<PointerCancelEvent> cancel = evt =>
+            {
+                if (evt.pointerId == activePointer)
+                    activePointer = -1;
+            };
+            element.RegisterCallback(cancel);
+            _trackingCallbacks.Add((element, cancel));
 
             // 按下已经执行。拦住随后冒泡的 ClickEvent，避免点到按钮又被父级当成点空白处关掉。
             EventCallback<ClickEvent> swallow = evt => evt.StopPropagation();
             element.RegisterCallback(swallow);
             _clicks.Add((element, swallow));
+        }
+
+        static bool IsPointerHeld(int pointerId)
+        {
+            if (pointerId < 0)
+                return false;
+
+            if (Input.touchCount > 0)
+            {
+                if (pointerId == PointerId.mousePointerId)
+                    return false;
+
+                for (int i = 0; i < Input.touchCount; i++)
+                {
+                    Touch touch = Input.GetTouch(i);
+                    if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
+                        continue;
+                    if (touch.fingerId + PointerId.touchPointerIdBase == pointerId)
+                        return true;
+                }
+
+                return false;
+            }
+
+            return pointerId == PointerId.mousePointerId && Input.GetMouseButton(0);
+        }
+
+        bool IsOverlayForm()
+        {
+            UIForm form = GetComponent<UIForm>();
+            if (form == null || form.UIGroup == null)
+                return false;
+            string name = form.UIGroup.Name;
+            return name == "Panel" || name == "Dialog";
+        }
+
+        /// <summary>
+        /// 摇杆命中层是否该让开。关闭过程中本窗可能还挂在组上，先把它从计数里拿掉。
+        /// </summary>
+        bool JoystickShouldBlock()
+        {
+            if (NativeOverlayGate.BlocksLocomotion)
+                return true;
+            if (GameEntry.UI == null)
+                return false;
+
+            int panel = GroupCount("Panel");
+            int dialog = GroupCount("Dialog");
+            UIForm self = GetComponent<UIForm>();
+            if (self != null && GameEntry.UI.HasUIForm(self.SerialId) && self.UIGroup != null)
+            {
+                if (self.UIGroup.Name == "Panel")
+                    panel = Mathf.Max(0, panel - 1);
+                else if (self.UIGroup.Name == "Dialog")
+                    dialog = Mathf.Max(0, dialog - 1);
+            }
+
+            return panel > 0 || dialog > 0;
+        }
+
+        static int GroupCount(string groupName)
+        {
+            if (GameEntry.UI == null)
+                return 0;
+            IUIGroup group = GameEntry.UI.GetUIGroup(groupName);
+            return group != null ? group.UIFormCount : 0;
         }
 
         void ClearClicks()
@@ -329,6 +424,11 @@ namespace Game
                     element.UnregisterCallback(pu, TrickleDown.TrickleDown);
                     element.UnregisterCallback(pu);
                 }
+                else if (cb is EventCallback<PointerCancelEvent> pc)
+                {
+                    element.UnregisterCallback(pc, TrickleDown.TrickleDown);
+                    element.UnregisterCallback(pc);
+                }
             }
             _trackingCallbacks.Clear();
         }
@@ -340,6 +440,7 @@ namespace Game
 
             if (!SlidesUpFromBottom || Root == null)
             {
+                _closing = true;
                 FinishClose();
                 return;
             }

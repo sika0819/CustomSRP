@@ -3,8 +3,8 @@ using UnityEngine;
 namespace Game
 {
     /// <summary>
-    /// 岛屿预设。挂在 Island 场景里，状态跟着场景销毁。
-    /// 退登在卸载前调 AbortTransition，避免 SchemeState 停在切换中。
+    /// 岛屿预设。挂在 Island 场景里。退登不卸场景，播放态不能留在这只服务上。
+    /// 手动预设 id 写入当前账号存档；退登清内存，下次进岛按该账号桶恢复。
     /// </summary>
     public sealed class PresetService : MonoBehaviour
     {
@@ -127,6 +127,7 @@ namespace Game
             IslandAudioSession.Instance?.ClearContent3D();
 
             CurrentId = id;
+            BoluoGameSave.CapturePresetScheme(id);
             GameEntry.Weather?.SetLookKind(preset.LookKind);
             GameEntry.Weather?.SetTimeOfDay(preset.TimeHours);
             GameEntry.Weather?.ClearPanelTransitionLock();
@@ -201,12 +202,43 @@ namespace Game
             float pitch = euler.x > 180f ? euler.x - 360f : euler.x;
             float yaw = euler.y > 180f ? euler.y - 360f : euler.y;
             cam.TeleportEye(eye, yaw, Mathf.Clamp(pitch, -85f, 85f));
+            // 二次进岛的按帧流送补不上这次瞬移。黑场里按落点把附近物体铺上，再揭虹膜。
+            EnvItemStreamerLite.CatchUpAtFocus();
         }
 
-        /// <summary>Interrupt (leave island / form close) — drop switching latch without a stuck busy state.</summary>
+        /// <summary>Interrupt (form close / uncover) — drop switching latch without a stuck busy state.</summary>
         public void AbortTransition()
         {
             SchemeState = CurrentId > 0 ? 2 : 0;
+        }
+
+        /// <summary>
+        /// 退登 / 换账号：清掉本趟播放态。不写盘，账号桶里的 curSchemeID 保留。
+        /// </summary>
+        public void ClearPlaybackForAccountSwitch()
+        {
+            AbortWeatherHold();
+            CurrentId = 0;
+            SchemeState = 0;
+        }
+
+        /// <summary>
+        /// 进岛：按当前账号存档恢复播放态。只改 CurrentId / SchemeState，不传送、不改天气。
+        /// 智能推荐或未选预设则没有任何卡片处于播放中。
+        /// </summary>
+        public void RestorePlaybackFromAccount()
+        {
+            BoluoGameSave.EnsureLoaded();
+            int id = BoluoGameSave.PresetSchemeId;
+            if (id > 0 && GetById(id) != null)
+            {
+                CurrentId = id;
+                SchemeState = 2;
+                return;
+            }
+
+            CurrentId = 0;
+            SchemeState = 0;
         }
 
         public bool IsWeatherHeld { get; private set; }

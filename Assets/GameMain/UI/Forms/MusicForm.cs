@@ -1916,7 +1916,7 @@ namespace Game
             if (PresetBankCatalog.TryGet(bankName, out var remote))
             {
                 IslandPlayerPosSave.PushSaveSuppress();
-                DownloadBankAsync(remote).Forget();
+                DownloadBankAsync(album, track, remote).Forget();
             }
             else
             {
@@ -1930,7 +1930,7 @@ namespace Game
         /// Runs the bank download and guarantees the save-suppress counter is popped exactly once,
         /// even if the download throws before the completion callback fires.
         /// </summary>
-        async UniTaskVoid DownloadBankAsync(BankRemoteInfo remote)
+        async UniTaskVoid DownloadBankAsync(int album, int track, BankRemoteInfo remote)
         {
             try
             {
@@ -1944,7 +1944,9 @@ namespace Game
             catch (Exception e)
             {
                 Log.Warning($"[MusicForm] Bank download failed: {e.Message}");
-                ClearPendingMusic();
+                // 前面几首失败不能清掉最后一首的待播，否则最后一首下完不会切。
+                if (IsPendingTrack(album, track))
+                    ClearPendingMusic();
             }
             finally
             {
@@ -1952,53 +1954,66 @@ namespace Game
             }
         }
 
-        /// <summary>Called when the pending bank download completes (success or failure).</summary>
+        /// <summary>
+        /// 多首一起下时，只有最后一次点击的那首下完才切播。
+        /// 更早完成的回调若也走 PlayIndex，会先 Stop 当前曲，而最后一首的 bank 还没解码，播放就停住。
+        /// </summary>
         void OnBankDownloadDone(BankDownloadItem item)
         {
             // 注意：保存抑制的出栈由 DownloadBankAsync 的 finally 统一负责，这里不要重复 Pop。
             if (item == null || string.IsNullOrEmpty(item.BankName))
             {
-                ClearPendingMusic();
                 _list?.RefreshItems();
                 return;
             }
 
-            bool wasPending = PendingDownloadIntent.IsMusicMatch(
-                _pendingMusic?.album ?? -1,
-                _pendingMusic?.track ?? -1);
-            if (!wasPending && _pendingMusic.HasValue)
+            if (!TryGetPendingBank(out int album, out int track, out string pendingBank)
+                || !string.Equals(pendingBank, item.BankName, StringComparison.OrdinalIgnoreCase))
             {
-                var pending = _pendingMusic.Value;
-                var tracks = MusicCatalog.GetTracks(pending.album);
-                if (pending.track >= 0 && pending.track < tracks.Count)
-                {
-                    string pendingBank = tracks[pending.track].BankName;
-                    wasPending = string.Equals(pendingBank, item.BankName, StringComparison.OrdinalIgnoreCase)
-                        && PendingDownloadIntent.Current == PendingDownloadIntent.Kind.Music;
-                }
+                _list?.RefreshItems();
+                return;
             }
 
-            if (wasPending && PendingDownloadIntent.Current == PendingDownloadIntent.Kind.Music)
+            if (item.State == BankDownloadState.Ready || item.State == BankDownloadState.Skipped)
             {
-                int album = PendingDownloadIntent.MusicAlbum;
-                int track = PendingDownloadIntent.MusicTrack;
-                if (item.State == BankDownloadState.Ready || item.State == BankDownloadState.Skipped)
-                {
-                    // Keep the spinner up until the bank is decoded. PlayIndex stops the
-                    // current song first; posting before decode leaves that stop in place.
-                    int gen = _playAfterDownloadGen;
-                    string guid = !string.IsNullOrEmpty(item.Guid)
-                        ? item.Guid
-                        : MusicCatalog.GetTrack(album, track)?.BankGuid;
-                    PlayDownloadedTrackAsync(gen, album, track, item.BankName, guid).Forget();
-                    _list?.RefreshItems();
-                    return;
-                }
-
-                ClearPendingMusic();
+                // Keep the spinner up until the bank is decoded. PlayIndex stops the
+                // current song first; posting before decode leaves that stop in place.
+                int gen = _playAfterDownloadGen;
+                string guid = !string.IsNullOrEmpty(item.Guid)
+                    ? item.Guid
+                    : MusicCatalog.GetTrack(album, track)?.BankGuid;
+                PlayDownloadedTrackAsync(gen, album, track, pendingBank, guid).Forget();
+                _list?.RefreshItems();
+                return;
             }
 
+            ClearPendingMusic();
             _list?.RefreshItems();
+        }
+
+        bool IsPendingTrack(int album, int track) =>
+            _pendingMusic.HasValue
+            && _pendingMusic.Value.album == album
+            && _pendingMusic.Value.track == track
+            && PendingDownloadIntent.IsMusicMatch(album, track);
+
+        /// <summary>最后一次点击、且意图仍是这首的 bank。前面排队的完成回调对不上。</summary>
+        bool TryGetPendingBank(out int album, out int track, out string bankName)
+        {
+            album = -1;
+            track = -1;
+            bankName = null;
+            if (!_pendingMusic.HasValue
+                || !PendingDownloadIntent.IsMusicMatch(_pendingMusic.Value.album, _pendingMusic.Value.track))
+                return false;
+
+            album = _pendingMusic.Value.album;
+            track = _pendingMusic.Value.track;
+            var tracks = MusicCatalog.GetTracks(album);
+            if (track < 0 || track >= tracks.Count)
+                return false;
+            bankName = tracks[track].BankName;
+            return !string.IsNullOrEmpty(bankName);
         }
 
         bool StillPendingDownload(int gen, int album, int track) =>

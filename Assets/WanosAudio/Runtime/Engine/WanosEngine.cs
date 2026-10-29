@@ -217,6 +217,8 @@ namespace WanosAudio
 
                 if (WanosNative.Instance.IsCreated)
                     WanosNative.Instance.TrySetMute(true);
+                BoluoAudioSessionNative.NoteUnitySilent();
+                BoluoAndroidEngineNative.NoteUnitySilent();
                 Debug.Log($"[{LogTag}] silent ({reason})");
             }
             catch (Exception e)
@@ -225,11 +227,25 @@ namespace WanosAudio
             }
         }
 
-        public static void Unmute(string reason)
+        public static bool Unmute(string reason)
         {
+            // 谁在前台谁播：人还在别的播放器里就保持静音，并记打断，回波萝再拉起来。
+            if (!BoluoAudioSessionNative.AllowUnmuteNow()
+                || !BoluoAndroidEngineNative.AllowUnmuteNow())
+            {
+                KeepSilent("foreground-owns-audio");
+                MarkInterrupted("foreground-owns-audio");
+                Debug.Log($"[{LogTag}] unmute held ({reason}) — foreground app owns audio");
+                return false;
+            }
+
+            // 先记「正在出声」，再解 mute。SetMute 可能泵 RunLoop，中断若在返回前到达也认得到。
+            BoluoAudioSessionNative.NoteUnityAudible();
+            BoluoAndroidEngineNative.NoteUnityAudible();
             if (WanosNative.Instance.IsCreated)
                 WanosNative.Instance.TrySetMute(false);
             Debug.Log($"[{LogTag}] unmute ({reason})");
+            return true;
         }
 
         /// <summary>
@@ -241,7 +257,9 @@ namespace WanosAudio
             if (!WanosNative.Instance.IsCreated)
                 return false;
 
-            Unmute(reason);
+            if (!Unmute(reason))
+                return false;
+
             ReapplyVolumes();
             ClearInterrupted(reason);
             return true;

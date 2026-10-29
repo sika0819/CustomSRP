@@ -23,6 +23,7 @@ namespace Game
         {
             // 必须在清会话票之前落盘：否则 AllowsAccountProgressDisk=false，位置写被门控丢掉。
             IslandPlayerPosSave.TrySaveCurrentAndFlush();
+            BoluoGameSave.FlushPlayingPreset();
             ClearRuntimeAfterLeave("logout");
             GuestSession.Clear();
             Log.Info("[BoluoLogout] session cleared (progress buckets kept)");
@@ -43,8 +44,8 @@ namespace Game
         {
             // 退登后 bank 回调仍可能命中旧 Pending → RequestTransition，二次进岛 iris 钉死行走。
             PendingDownloadIntent.Clear();
-            GameEntry.Presets?.AbortTransition();
-            PresetService.Instance?.AbortWeatherHold();
+            // 岛场景退登不卸载，PresetService 还在。AbortTransition 会把 SchemeState 留在播放中。
+            (PresetService.Instance ?? GameEntry.Presets)?.ClearPlaybackForAccountSwitch();
             IslandJoystickCamera.Current?.ForceUnlockLocomotion();
             NowPlayingService.CleanupAfterLeaveIsland();
             AudioAppLifecycle.ResetSession();
@@ -70,6 +71,7 @@ namespace Game
             BoluoGamePersistence.ClearAccountBoundProgress();
             BoluoGameSave.ResetSession();
             DownloadedUnplayedManager.ResetSession();
+            (PresetService.Instance ?? GameEntry.Presets)?.ClearPlaybackForAccountSwitch();
             GameEntry.Weather?.ClearForAccountSwitch();
             Log.Info($"[BoluoLogout] account local progress cleared ({reason})");
         }
@@ -81,8 +83,11 @@ namespace Game
         {
             IslandPlayerPosSave.UseDefaultPlayerPosNextLoad = false;
             IslandPlayerPosSave.ResetSession();
+            // 热切时会话还是旧 userId，先把正在播的预设写入旧桶，再清内存。
+            BoluoGameSave.FlushPlayingPreset();
             BoluoGameSave.ResetSession();
             DownloadedUnplayedManager.ResetSession();
+            (PresetService.Instance ?? GameEntry.Presets)?.ClearPlaybackForAccountSwitch();
             GameEntry.Weather?.ClearForAccountSwitch();
             Log.Info($"[BoluoLogout] in-memory reset for account switch ({reason})");
         }

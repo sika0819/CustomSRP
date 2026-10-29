@@ -12,7 +12,7 @@ namespace Game
     /// <summary>
     /// Native 初始化 → device/user 换票 → 后台 bank 下载 → 进岛。
     /// 冷启动与退登后再登录：无网弹窗，确认后退出。
-    /// Editor：复用已落盘正式/游客会话，否则等登录窗把票交给宿主；进岛仍等 106 再 Query。
+    /// Editor：复用已落盘正式会话；游客票不落盘，否则等登录窗把票交给宿主。进岛仍等 106 再 Query。
     /// 真机 Hybrid 换票失败停在加载罩，不回落本地游客。
     /// </summary>
     public class ProcedureGuestLogin : ProcedureBase

@@ -122,6 +122,129 @@ namespace WanosAudio
         }
 
         /// <summary>
+        /// 前台可以出声。启动期进程已不在前台，或对方媒体正在播：保持静音。
+        /// </summary>
+        public static bool AllowUnmuteNow()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    if (obj != null)
+                        return obj.Call<bool>("allowUnmuteNow");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] allowUnmuteNow failed: {ex.Message}");
+            }
+            return true;
+#else
+            return true;
+#endif
+        }
+
+        public static void NoteUnityAudible()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("noteUnityAudible");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] noteUnityAudible failed: {ex.Message}");
+            }
+#endif
+        }
+
+        /// <summary>负一屏已写成播放中。原生开始盯对方播放器，切走时收起占位卡。</summary>
+        public static void NoteForegroundCardPublished()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("noteForegroundCardPublished");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] noteForegroundCardPublished failed: {ex.Message}");
+            }
+#endif
+        }
+
+        public static void NoteForegroundCardCleared()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("noteForegroundCardCleared");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] noteForegroundCardCleared failed: {ex.Message}");
+            }
+#endif
+        }
+
+        public static void NoteUnitySilent()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("noteUnitySilent");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] noteUnitySilent failed: {ex.Message}");
+            }
+#endif
+        }
+
+        /// <summary>
+        /// 揭罩出声前同步抢 AudioFocus。已在后台或被拒时保持 mute。
+        /// </summary>
+        public static bool TryArmFocusBeforeAudible()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    if (obj != null)
+                        return obj.Call<bool>("armFocusBeforeAudible");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] armFocusBeforeAudible failed: {ex.Message}");
+            }
+            return true;
+#else
+            return true;
+#endif
+        }
+
+        /// <summary>
         /// Unity PostEvent 起播后补抢 AudioFocus + unmute（对齐旧 nativePlayTrackAt 门禁）。
         /// </summary>
         public static void EnsureAudibleForUnityPlayback()

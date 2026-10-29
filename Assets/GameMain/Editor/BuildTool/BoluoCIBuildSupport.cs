@@ -644,6 +644,15 @@ namespace Game.Editor.BuildTool
                 PlayerSettings.Android.keyaliasPass = config.AndroidKeyPass;
 
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
+            // TerrainLayer (class ID 1953259897) only appears in YooAsset bundles. Strip Engine
+            // Code drops it → Instantiate IslandTerrain fails → no splat textures / collision.
+            // ForceIncludeEngineTypes + Resources keep-alive help, but disable strip for Android
+            // player so streamed TerrainData layers always deserialize.
+            if (PlayerSettings.stripEngineCode)
+            {
+                Debug.Log("[BoluoCI] stripEngineCode=false (keep TerrainLayer for Yoo IslandTerrain)");
+                PlayerSettings.stripEngineCode = false;
+            }
             // 调试符号包（libil2cpp 未裁剪符号 + libunity.sym.so）。不打开 Development Build，
             // 运行时内存布局与正式包一致，只多一份符号化用的符号。
             EditorUserBuildSettings.androidCreateSymbols = AndroidCreateSymbols.Debugging;

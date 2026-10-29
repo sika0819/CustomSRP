@@ -43,6 +43,15 @@ namespace WanosAudio
 
         [DllImport(Lib)]
         private static extern void WanosMusicPlayer_NativeSetPaths(string persistent, string streaming);
+
+        [DllImport(Lib)]
+        private static extern void BoluoMusicPlayerIOS_NoteUnityAudible();
+
+        [DllImport(Lib)]
+        private static extern void BoluoMusicPlayerIOS_NoteUnitySilent();
+
+        [DllImport(Lib)]
+        private static extern int BoluoAudioSession_AllowUnmuteNow();
 #endif
         /// <summary>
         /// 追加音频诊断行。统一过滤字段 <c>[BoluoAudioDbg]</c>（iOS trail 文件 + console；其它平台 Debug.Log）。
@@ -122,6 +131,40 @@ namespace WanosAudio
         {
 #if UNITY_IOS && !UNITY_EDITOR
             BoluoAudioSession_SilenceForLogout();
+#endif
+        }
+
+        /// <summary>
+        /// 前台，或已经在前台出过声且没有别的播放器：可以解 mute。
+        /// 启动期人在后台，或抖音 / QQ 音乐正在播：保持静音。
+        /// </summary>
+        public static bool AllowUnmuteNow()
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            try { return BoluoAudioSession_AllowUnmuteNow() != 0; }
+            catch { return true; }
+#else
+            return true;
+#endif
+        }
+
+        /// <summary>
+        /// Unity 直接 SetMute(false) 后同步桥接「正在出声」，让中断能把启动期的声音停掉。
+        /// </summary>
+        public static void NoteUnityAudible()
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            try { BoluoMusicPlayerIOS_NoteUnityAudible(); }
+            catch { /* 未强链时忽略 */ }
+#endif
+        }
+
+        /// <summary>Unity KeepSilent 后同步桥接「未在出声」，避免把静音启动记成可恢复播放。</summary>
+        public static void NoteUnitySilent()
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            try { BoluoMusicPlayerIOS_NoteUnitySilent(); }
+            catch { /* 未强链时忽略 */ }
 #endif
         }
 

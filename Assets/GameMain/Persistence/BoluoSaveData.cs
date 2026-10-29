@@ -12,6 +12,8 @@ namespace Game
         public bool weatherLinkage;
         public bool healthTip = true;
         public bool recommend = true;
+        /// <summary>手动预设 id（1..10）。智能推荐或未选预设时为 0。跟账号桶走。</summary>
+        public int curSchemeID;
         public int bgmVolume = 80;
         public int voiceVolume = 80;
         public uint maxHealthLevelDate;

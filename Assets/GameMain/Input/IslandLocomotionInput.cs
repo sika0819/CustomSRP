@@ -4,7 +4,7 @@ namespace Game
 {
     /// <summary>
     /// Joystick / WASD → LocomotionInput mailbox.
-    /// Rotation is stick X (and A/D); no right-click look required.
+    /// 移动和转向只认一根手指。第二根手指不转视角，避免两指同时拧、松手后方向粘住。
     /// </summary>
     public sealed class IslandLocomotionInput
     {
@@ -40,8 +40,8 @@ namespace Game
                 return;
             }
 
-            // Mobile: second finger can still nudge look; mouse right-click is not required.
-            TickSecondFingerLook();
+            // 清掉上一帧没被相机吃掉的视角增量，避免停手后还在转。
+            LocomotionInput.ClearLook();
 
             if (_joystick != null
                 && _joystick.IsActive
@@ -65,49 +65,6 @@ namespace Game
 #endif
 
             IsMoveInputActive = false;
-        }
-
-        int _lookPointerId = -1;
-        Vector2 _lastLookPos;
-
-        void TickSecondFingerLook()
-        {
-            if (Input.touchCount < 2)
-            {
-                _lookPointerId = -1;
-                return;
-            }
-
-            for (int i = 0; i < Input.touchCount; i++)
-            {
-                Touch touch = Input.GetTouch(i);
-                if (_joystick != null && _joystick.OwnsPointer(touch.fingerId))
-                    continue;
-
-                if (touch.phase == TouchPhase.Began)
-                {
-                    if (_lookPointerId < 0)
-                    {
-                        _lookPointerId = touch.fingerId;
-                        _lastLookPos = touch.position;
-                    }
-                    continue;
-                }
-
-                if (touch.fingerId != _lookPointerId)
-                    continue;
-
-                if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
-                {
-                    _lookPointerId = -1;
-                    continue;
-                }
-
-                Vector2 delta = touch.position - _lastLookPos;
-                _lastLookPos = touch.position;
-                if (delta.sqrMagnitude > 1e-4f)
-                    LocomotionInput.SetLook(delta);
-            }
         }
     }
 }

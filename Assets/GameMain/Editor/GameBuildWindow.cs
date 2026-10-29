@@ -435,7 +435,8 @@ namespace Game.Editor
                 _developmentBuild ? Il2CppCompilerConfiguration.Debug : Il2CppCompilerConfiguration.Release);
             PlayerSettings.SetManagedStrippingLevel(android, ManagedStrippingLevel.High);
             PlayerSettings.gcIncremental = true;
-            PlayerSettings.stripEngineCode = true;
+            // Keep TerrainLayer (Yoo IslandTerrain). Strip Engine Code drops class 1953259897.
+            PlayerSettings.stripEngineCode = false;
 
             QualitySettings.vSyncCount = 0;
             QualitySettings.antiAliasing = 0;

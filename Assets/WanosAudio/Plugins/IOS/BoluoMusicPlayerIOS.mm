@@ -122,6 +122,9 @@ Result SetPlaybackDevice(const char* playbackInfoJson);
 void SetMute(bool mute);
 int GetPlaybackState(void);
 int32_t BoluoAudioSession_IsLogoutSilenced(void);
+int32_t BoluoAudioSession_AllowUnmuteNow(void);
+int32_t BoluoAudioSession_IsStartupAudibleCommitted(void);
+void BoluoAudioSession_NoteStartupAudibleCommitted(void);
 /// Wanos 引擎对象级增益（与 Unity WIAEngine.cs 的 DllImport 指向同一 C 符号）。
 /// 护栏静音/恢复爬坡在原生同步调用，一个渲染周期内生效，不依赖 Unity SendMessage 异步。
 void SetGameObjAttenuationGain(unsigned long long obj_id, float gain);
@@ -503,6 +506,8 @@ extern void UnitySendMessage(const char* obj, const char* method, const char* ms
 @property (nonatomic, copy)   NSString *cachedArtworkImagePath;
 @property (nonatomic, assign) BOOL isMuted;
 @property (nonatomic, assign) BOOL isPlaying;
+/// 进岛占位：引擎还 mute 时也让负一屏显示播放中。切走且仍 mute 时不占卡片。
+@property (nonatomic, assign) BOOL nowPlayingAdvertisedPlaying;
 @property (nonatomic, assign) BOOL userManuallyPaused;
 @property (nonatomic, assign) BOOL remoteCommandsConfigured;
 /// transient duck escalate 已尝试次数（otherAudio 晚到时重试，防永久停在 0.4）。
@@ -1669,15 +1674,17 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         }
         [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_pollResumeWhenDeviceIdleAfterSystemMute) object:nil];
         self.deviceIdleResumePollCount = 0;
-        if (!self.userManuallyPaused && self.isInitialized) {
+        BOOL engineStartedSafe = NO;
+        if (!BoluoAudio_IsPlaybackDeviceRecoveryInFlight()) {
+            int engineStateEarly = GetPlaybackState();
+            engineStartedSafe = (engineStateEarly == 2 /*Started*/ || engineStateEarly == 3 /*Starting*/)
+                && !sBoluoEngineHardMuted;
+        }
+        // 启动期 isInitialized 仍可能为 NO，但引擎已经在响：切到抖音 / QQ 必须停。
+        if (!self.userManuallyPaused && (self.isInitialized || engineStartedSafe)) {
             // Phase 3：wasAudible = 记账 || 引擎真值（记账漂移时「负一屏没了还在播」仍要静音；
             // 对齐 WasAudibleForSecondarySilenceBegin）。设备恢复 inFlight 时不读
-            // GetPlaybackState（与 Reset 争锁），引擎真值按 NO 计。
-            BOOL engineStartedSafe = NO;
-            if (!BoluoAudio_IsPlaybackDeviceRecoveryInFlight()) {
-                int engineState = GetPlaybackState();
-                engineStartedSafe = (engineState == 2 /*Started*/ || engineState == 3 /*Starting*/);
-            }
+            // GetPlaybackState（与 Reset 争锁），引擎真值按 NO 计。硬 mute 后也不算还在响。
             BOOL wasAudible = self.isPlaying || !self.isMuted || engineStartedSafe;
             BoluoAudioLog(@"[BoluoAudioResume] SilenceSecondaryAudioHint BEGIN wasAudible=%@ engineStartedSafe=%@",
                   wasAudible ? @"YES" : @"NO", engineStartedSafe ? @"YES" : @"NO");
@@ -1944,8 +1951,9 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     BOOL hasResumeIntent = [self shouldAttemptAutoResumeAfterCompetingAudio]
         || self.isMuted
         || (self.isInitialized && self.nowPlayingTitle != nil && !self.userManuallyPaused);
+    // 不看 InterruptionActive：切到 QQ / 抖音后系统经常不发 InterruptionEnded，
+    // 回前台这面旗还挂着，强抢和负一屏都会被挡死。电话中断由 setActive 失败兜住。
     BOOL forceReclaim = !self.userManuallyPaused
-        && self.recoveryPhase != BoluoPlayerRecoveryPhaseInterruptionActive
         && self.isInitialized
         && hasResumeIntent;
     if (forceReclaim) {
@@ -2027,14 +2035,21 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         return;
     }
 
-    // 其它 App 正在出声时不抢 Now Playing / 独占会话。
-    // 回前台 Active：忽略卡住 secondarySilence（与 unmute / keepWaiting 对齐），否则卡片也不回来。
-    if ([self shouldDeferForCompetingOrSecondarySilenceIgnoringStuckSecondaryWhenActive:YES]) {
+    // 人已经回到波萝（Active）：负一屏必须出现，不能因为对方还在播就跳过。
+    // 还在 Inactive / 后台时才避让，避免下拉控制中心就把卡片抢走。
+    BOOL active = [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
+    if (!active
+        && [self shouldDeferForCompetingOrSecondarySilenceIgnoringStuckSecondaryWhenActive:YES]) {
         BoluoAudioLog(@"[BoluoAudioResume] reassertNowPlaying skip: competing/secondary silence");
         [self logAudioResumeSnapshot:@"reassertNowPlaying-skip-otherAudio"];
         return;
     }
 
+    // 启动占位还没真正出声：回前台先按播放中出卡，不等 Unity 揭罩。
+    if (active && !self.userManuallyPaused
+        && BoluoAudioSession_IsStartupAudibleCommitted() == 0) {
+        self.nowPlayingAdvertisedPlaying = YES;
+    }
     // 若其它音源已停，顺带把独占 Playback 会话与音频焦点抢回来（isOtherAudioPlaying 时内部会跳过，不强抢）。
     [self restoreExclusiveAudioSessionForResume:NO];
     // 重新启用并注册远程命令 + 按真实 isMuted 状态刷新 nowPlayingInfo（播放=Rate1/暂停=Rate0）。
@@ -2047,6 +2062,25 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
 - (void)handleAppWillResignActive:(NSNotification *)notification {
     BoluoAudioLog(@"[BoluoAudioResume] UIApplicationWillResignActive");
     [self logAudioResumeSnapshot:@"AppWillResignActive"];
+    // 启动期还没在前台稳定出过声：一切走就停。回前台由 becomeActive / Unity 再拉起。
+    // 已出过声的后台续播不走这里，仍交给中断与真值对账。
+    if (BoluoAudioSession_IsStartupAudibleCommitted() == 0) {
+        // 占位卡片还没真正出声：一切走就收成暂停，别占着抖音 / QQ 的负一屏。
+        self.nowPlayingAdvertisedPlaying = NO;
+        [self updateNowPlayingInfoCenter];
+    }
+    if (BoluoAudioSession_IsStartupAudibleCommitted() == 0 && !self.userManuallyPaused) {
+        BOOL engineHot = NO;
+        if (!BoluoAudio_IsPlaybackDeviceRecoveryInFlight() && !sBoluoEngineHardMuted) {
+            int st = GetPlaybackState();
+            engineHot = (st == 2 || st == 3);
+        }
+        if (engineHot || self.isPlaying || !self.isMuted) {
+            self.wantsResumeAfterRecovery = YES;
+            BoluoAudioLog(@"[BoluoAudioResume] startup resign — mute so foreground app can play");
+            [self guardedSystemMuteWithReason:@"startup_resign" completion:nil];
+        }
+    }
     // 兜底：微信发语音偶现收不到 SilenceSecondary BEGIN / Interruption Began（或记账漂移）
     // → 音乐不静音、负一屏被对方接管却仍出声。Phase 3 起本兜底不再是独立逻辑，
     // 只是真值对账的一个调用点：离开前台 1s 后跑一次对账，自愈条件（非 Active + hint +
@@ -2411,6 +2445,13 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     NSString *reason = self.pendingFocusTruthAuditReason ?: @"?";
     self.pendingFocusTruthAuditReason = nil;
     if (!self.isInitialized) {
+        // 观察者已在，但进岛 Arm 还没到。人已经切走就再等一轮，别把这次对账丢掉。
+        static int sAuditBeforeInitRetries = 0;
+        if (sAuditBeforeInitRetries < 8
+            && [UIApplication sharedApplication].applicationState != UIApplicationStateActive) {
+            sAuditBeforeInitRetries += 1;
+            [self scheduleFocusTruthAuditWithDelay:0.5 reason:@"resign_before_init"];
+        }
         return;
     }
     // 设备恢复窗口：状态由恢复流程收敛，且 GetPlaybackState 会与 Reset 争锁 → 顺延一轮
@@ -2421,18 +2462,26 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         [self scheduleFocusTruthAuditWithReason:deferred];
         return;
     }
+    AVAudioSession *auditSession = [AVAudioSession sharedInstance];
     BOOL notActive = [UIApplication sharedApplication].applicationState != UIApplicationStateActive;
-    BOOL hint = [AVAudioSession sharedInstance].secondaryAudioShouldBeSilencedHint;
+    BOOL hint = auditSession.secondaryAudioShouldBeSilencedHint;
+    BOOL otherAudio = [auditSession isOtherAudioPlaying];
     BOOL flagsAudible = self.isPlaying || !self.isMuted;
     int engineState = GetPlaybackState();
     BOOL engineStarted = (engineState == 2 /*Started*/ || engineState == 3 /*Starting*/);
+    // 启动期记账 isMuted=YES 但未硬 mute：引擎 Started 就是还在响。
+    BOOL engineAudible = engineStarted && !sBoluoEngineHardMuted;
     BoluoAudioFocusStateValue state = self.focusState;
     BOOL requiresSilence = BoluoFocusStateRequiresEngineSilence(state);
 
-    // 自愈方向：系统要求次要音源静音却仍在播（记账可闻；或状态并非静默 episode 而引擎 Started）
-    // → 补竞争静音 episode。静默 episode 内 muted 设备仍 Started 属正常，已豁免（防 yield/UI 风暴）。
-    BOOL shouldHeal = notActive && hint && !self.userManuallyPaused
-        && (flagsAudible || (engineStarted && !requiresSilence));
+    // 自愈方向：离开前台后对方在播（hint 或 otherAudio），引擎却还在响 → 补静音。
+    // 启动期尚未在前台出过声：只要引擎还热就停，不等 otherAudio 翻成 YES。
+    // 静默 episode 内已经硬 mute 的不进这里（engineAudible 为 NO）。
+    BOOL startupOpen = BoluoAudioSession_IsStartupAudibleCommitted() == 0;
+    BOOL foreign = hint || otherAudio;
+    BOOL shouldHeal = notActive && !self.userManuallyPaused
+        && ((foreign && (flagsAudible || engineAudible || (engineStarted && !requiresSilence && hint)))
+            || (startupOpen && engineAudible));
     if (shouldHeal) {
         self.competingEpisodeSawSecondarySilence = YES;
         NSLog(@"[BoluoAudioDbg] evt=truth-audit-heal reason=%@ state=%@ flagsAudible=%d engine=%@",
@@ -2940,15 +2989,21 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     info[MPMediaItemPropertyTitle] = self.nowPlayingTitle ?: @"直播";
     info[MPMediaItemPropertyArtist] = self.nowPlayingArtist ?: @"";
     info[MPMediaItemPropertyAlbumTitle] = self.nowPlayingAlbum ?: @"";
+    // 进岛占位：人还在前台时，引擎 mute 也按播放中出卡。后台且仍 mute 则不占负一屏。
+    BOOL inBackground = [UIApplication sharedApplication].applicationState == UIApplicationStateBackground;
+    BOOL showPlaying = !self.userManuallyPaused && !self.isMuted;
+    if (!showPlaying && self.nowPlayingAdvertisedPlaying && !inBackground) {
+        showPlaying = YES;
+    }
     // PlaybackRate: 0=暂停，1=播放
-    info[MPNowPlayingInfoPropertyPlaybackRate] = @(self.isMuted ? 0.0 : 1.0);
+    info[MPNowPlayingInfoPropertyPlaybackRate] = @(showPlaying ? 1.0 : 0.0);
     // DefaultPlaybackRate: 提供稳定默认速率（公开字段，不需要 entitlement）
     info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = @(1.0);
 
     // ElapsedPlaybackTime：播放时推进，暂停时冻结。
     // 一些系统/平台在控制中心按钮收敛时会参考 ElapsedPlaybackTime，如果永远写 0，可能被系统二次同步覆盖。
     CFTimeInterval now = CACurrentMediaTime();
-    if (!self.isMuted) {
+    if (showPlaying) {
         if (self.nowPlayingLastTick > 0) {
             CFTimeInterval delta = now - self.nowPlayingLastTick;
             if (delta > 0 && delta < 10) {
@@ -2994,9 +3049,9 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     center.nowPlayingInfo = info;
     // iOS 13+ 公开属性。只写 PlaybackRate 时，直播卡片（IsLiveStream）的播放/暂停按钮经常不换图标。
     if (@available(iOS 13.0, *)) {
-        center.playbackState = self.isMuted
-            ? MPNowPlayingPlaybackStatePaused
-            : MPNowPlayingPlaybackStatePlaying;
+        center.playbackState = showPlaying
+            ? MPNowPlayingPlaybackStatePlaying
+            : MPNowPlayingPlaybackStatePaused;
     }
 
     // 与参考实现对齐：不要在这里动态禁用 play/pause。
@@ -3644,8 +3699,8 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     // 不看 interruptionActive：QQ 接管不发 Ended，该 flag 回前台仍挂着（2026-07-23 复发根因）；
     // 电话/闹钟等真中断由系统仲裁——下方 setActive 会因 '!pri' 失败，抢不走对方。
     BOOL isActive = [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
-    BOOL allowForceOverCompeting = forceInterruptOthers && isActive
-        && self.recoveryPhase != BoluoPlayerRecoveryPhaseInterruptionActive;
+    // 前台强抢不看 InterruptionActive。QQ / 抖音不发 Ended 时这面旗会一直挂着，负一屏回不来。
+    BOOL allowForceOverCompeting = forceInterruptOthers && isActive;
     if ([self shouldDeferForCompetingOrSecondarySilence] && !allowForceOverCompeting) {
         BoluoAudioLog(@"[BoluoAudioResume] restoreExclusiveForResume SKIP: competing/secondary silence force=%@",
               forceInterruptOthers ? @"YES" : @"NO");
@@ -3940,6 +3995,10 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         return;
     }
 
+    // 前台占位卡：引擎还没 unmute 也按播放中写 NowPlaying。后台不占。
+    self.nowPlayingAdvertisedPlaying = isPlaying
+        && [UIApplication sharedApplication].applicationState != UIApplicationStateBackground;
+
     // 进岛 Start / OnApplicationFocus 常在 200ms 内连打 SyncExternal(true)；
     // 状态已收敛时直接返回，避免重复 unmute / NowPlaying / 诊断快照叠峰（听感卡顿电流音）。
     if (isPlaying && self.isPlaying && !self.isMuted && !self.userManuallyPaused) {
@@ -4053,17 +4112,28 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
 
     if (type == AVAudioSessionInterruptionTypeBegan) {
         CFTimeInterval beganT0 = CACurrentMediaTime();
-        // AppWasSuspended：系统挂起，不是竞争音源。整段 no-op——不 mute、不标 dirty、
-        // 不设 interruptionActive/pending、不进异步 competing wait。
-        // 旧路径 mute+标脏后回前台 setActive / cmsSetIsPlaying stop→start ~40ms = 电流音/咯噔。
-        // 比历史 2a098805 更严：该 commit 仍会标 dirty；此处真·early return。
+        // AppWasSuspended：人还在前台、也没有别的播放器时整段 no-op（不是抢焦点）。
+        // 启动期已经进后台，或对方正在播：不能 no-op，否则切抖音 / QQ 音乐叠播。
+        // 旧路径对所有挂起都 mute+标脏，回前台 setActive 会咯噔。
         if (BoluoNotificationIsAppWasSuspended(notification)) {
-            CFTimeInterval noopMs = (CACurrentMediaTime() - beganT0) * 1000.0;
-            BoluoAudioLog(@"[BoluoAudioResume] Interruption BEGAN AppWasSuspended no-op");
-            [self reportAudioFocusLossToBLSWithTag:@"audio_focus_loss_began"
-                                            detail:@"reason=AppWasSuspended phase=noop"
-                                        durationMs:noopMs];
-            return;
+            AVAudioSession *suspendedSession = [AVAudioSession sharedInstance];
+            BOOL foreign = [suspendedSession isOtherAudioPlaying]
+                || suspendedSession.secondaryAudioShouldBeSilencedHint;
+            BOOL startup = BoluoAudioSession_IsStartupAudibleCommitted() == 0;
+            BOOL background = [UIApplication sharedApplication].applicationState
+                == UIApplicationStateBackground;
+            // 已在前台出过声、且没有别的播放器：挂起不是抢焦点，保持后台续播。
+            // 启动期人已经离开，或对方已在播：必须继续往下静音，否则切抖音 / QQ 音乐叠播。
+            if (!foreign && !(startup && background)) {
+                CFTimeInterval noopMs = (CACurrentMediaTime() - beganT0) * 1000.0;
+                BoluoAudioLog(@"[BoluoAudioResume] Interruption BEGAN AppWasSuspended no-op");
+                [self reportAudioFocusLossToBLSWithTag:@"audio_focus_loss_began"
+                                                detail:@"reason=AppWasSuspended phase=noop"
+                                            durationMs:noopMs];
+                return;
+            }
+            BoluoAudioLog(@"[BoluoAudioResume] Interruption BEGAN AppWasSuspended continue foreign=%d startup=%d",
+                  foreign ? 1 : 0, startup ? 1 : 0);
         }
 
         // 通知栈内同步压增益（constructor observer 已抢一次；此处再钉一次防漏）。
@@ -4093,6 +4163,12 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         // 设备重建推迟到中断结束后的恢复链（BoluoAudioDeviceRecoveryPolicy.ShouldSkipResetOnInterruptionBegan）。
         BoluoAudioLog(@"[BoluoAudioResume] Interruption Began: skip Reset/setActive:NO (avoid ma_device_stop deadlock with MiniAudio observer)");
 
+        // 启动期记账 isMuted=YES，但 Unity 已直接 SetMute(false)：引擎热着就算还在响。
+        BOOL engineHot = NO;
+        if (!BoluoAudio_IsPlaybackDeviceRecoveryInFlight() && !sBoluoEngineHardMuted) {
+            int engineState = GetPlaybackState();
+            engineHot = (engineState == 2 || engineState == 3);
+        }
         BOOL pendingResumeSnapshot = self.wantsResumeAfterRecovery;
         BOOL alreadyInterrupted = (self.recoveryPhase == BoluoPlayerRecoveryPhaseInterruptionActive);
         if (!alreadyInterrupted) {
@@ -4101,7 +4177,8 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
             if (BoluoAudioSession_IsLogoutSilenced() != 0) {
                 pendingResumeSnapshot = NO;
             } else {
-                pendingResumeSnapshot = (self.isPlaying || !self.isMuted) && !self.userManuallyPaused;
+                BOOL audible = self.isPlaying || !self.isMuted || engineHot;
+                pendingResumeSnapshot = audible && !self.userManuallyPaused;
             }
             self.wantsResumeAfterRecovery = pendingResumeSnapshot;
             BoluoAudioLog(@"[BoluoAudioResume] Interruption BEGAN wantsResumeAfterRecovery=%@",
@@ -4113,7 +4190,7 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         // 1) 避免与 MiniAudio 同栈 ma_device_stop 争锁（Began 已禁 Reset，但 SetMute 仍危险）；
         // 2) 系统 mute 不再 cancel 恢复链（仅用户 Pause 才 cancel）；此处 mute 后直接 schedule RD。
         BOOL preservePending = pendingResumeSnapshot && !self.userManuallyPaused;
-        BOOL needMute = !self.isMuted;
+        BOOL needMute = !self.isMuted || engineHot;
         // 必须用 shouldPrefer（后台一律禁 duck）。旧 shouldUseTransientDuck 忽略后台
         // → 切微信/QQ Began 尚无 otherAudio 时误 duck，满能量硬停/硬 mute = 电流音。
         BOOL canDuck = [self shouldPreferTransientDuckForInterruption:notification
@@ -4148,7 +4225,7 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
             BOOL guardedMuteFirst = !looksLikeRouteDisconnect
                 && strongSelf.wantsResumeAfterRecovery
                 && needMute
-                && !strongSelf.isMuted;
+                && (!strongSelf.isMuted || engineHot);
 
             // 护栏路径禁止立刻满音量 mute；仅 RD 自恢复可直接 mute（设备已停）。
             if (!guardedMuteFirst && needMute && !strongSelf.isMuted) {
@@ -5207,6 +5284,54 @@ void BoluoMusicPlayerIOS_RequestUnmute(int32_t reason) {
 /// 进岛首播：强制解 mute。不走 isOtherAudioPlaying 推迟路径（那条会把 isMuted 钉回 YES）。
 void BoluoMusicPlayerIOS_ApplyFirstPlayUnmute(void) {
     BoluoMusicPlayerIOS_RequestUnmute((int32_t)BoluoUnmuteReasonFirstPlay);
+}
+
+/// Unity 直接 SetMute(false) 不会走 RequestUnmute，桥接 isMuted 会停在初值 YES。
+/// 中断处理只认 isPlaying / !isMuted，不更新的话切到抖音 / QQ 音乐不会真静音。
+void BoluoMusicPlayerIOS_EnsureObservers(void) {
+    (void)[BoluoMusicPlayerIOSBridge sharedInstance];
+}
+
+void BoluoMusicPlayerIOS_NoteUnityAudible(void) {
+    if (BoluoAudioSession_IsLogoutSilenced() != 0) {
+        return;
+    }
+    if (BoluoAudioSession_AllowUnmuteNow() == 0) {
+        BoluoAudioLog(@"[BoluoMusicPlayerIOS] NoteUnityAudible skip — foreground app owns audio");
+        return;
+    }
+    BoluoMusicPlayerIOSBridge *player = [BoluoMusicPlayerIOSBridge sharedInstance];
+    void (^note)(void) = ^{
+        if (player.userManuallyPaused) {
+            return;
+        }
+        player.isMuted = NO;
+        player.isPlaying = YES;
+        BoluoAudioSession_NoteStartupAudibleCommitted();
+        BoluoAudioLog(@"[BoluoMusicPlayerIOS] NoteUnityAudible isMuted=NO isPlaying=YES");
+    };
+    if ([NSThread isMainThread]) {
+        note();
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), note);
+    }
+}
+
+void BoluoMusicPlayerIOS_NoteUnitySilent(void) {
+    BoluoMusicPlayerIOSBridge *player = [BoluoMusicPlayerIOSBridge sharedInstance];
+    void (^note)(void) = ^{
+        if (player.userManuallyPaused) {
+            return;
+        }
+        player.isMuted = YES;
+        player.isPlaying = NO;
+        BoluoAudioLog(@"[BoluoMusicPlayerIOS] NoteUnitySilent isMuted=YES isPlaying=NO");
+    };
+    if ([NSThread isMainThread]) {
+        note();
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), note);
+    }
 }
 
 /// C# 首播重试循环开始前调用：标记「本会话还欠一次首播 unmute」。

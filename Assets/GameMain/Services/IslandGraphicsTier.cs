@@ -54,9 +54,8 @@ namespace Game
             }
         }
 
-        /// <summary>中档和高档才走 Native 合批。低档省实例缓冲和额外顶点。</summary>
-        public static bool AllowsNativeInstancing =>
-            IsMobilePlayer && GpuTier != Tier.Low;
+        /// <summary>真机都走 Native 合批，含低档。编辑器关闭。</summary>
+        public static bool AllowsNativeInstancing => IsMobilePlayer;
 
         static bool IsMobilePlayer
         {

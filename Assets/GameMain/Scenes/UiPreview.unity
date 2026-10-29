@@ -339,6 +339,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Game::Game.UiPreview
   forms:
+  - Title: 申请下载
+    Tree: {fileID: 9197481963319205126, guid: cd000000000000000000000000000020, type: 3}
+  - Title: 下载进度
+    Tree: {fileID: 9197481963319205126, guid: cd000000000000000000000000000022, type: 3}
+  - Title: 蜂窝下载
+    Tree: {fileID: 9197481963319205126, guid: cd000000000000000000000000000024, type: 3}
+  - Title: 存储不足
+    Tree: {fileID: 9197481963319205126, guid: cd000000000000000000000000000026, type: 3}
+  - Title: 无网络
+    Tree: {fileID: 9197481963319205126, guid: cd000000000000000000000000000028, type: 3}
   - Title: Loading
     Tree: {fileID: 9197481963319205126, guid: 10b53460dc2fd4e7bb731e917aacc627, type: 3}
   - Title: Island Main

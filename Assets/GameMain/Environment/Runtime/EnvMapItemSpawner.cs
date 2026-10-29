@@ -27,6 +27,7 @@ namespace Game
         readonly Dictionary<string, GameObject> _fullPrefabCache = new Dictionary<string, GameObject>(192);
 
         EnvItemStreamerLite _streamer;
+        EnvMeshColliderLod _colliderLod;
         Transform _focus;
         bool _started;
         bool _released;
@@ -61,6 +62,12 @@ namespace Game
 
             yield return SceneBankGateSpawner.Build(_categoryParents, _allMapItems);
 
+            // Begin 会把半径平方缓存下来，必须先套真机 72/96，否则用编辑器默认 90/120。
+            EnvStreamingConfig.ApplyMobileTierDefaults();
+            _colliderLod = gameObject.GetComponent<EnvMeshColliderLod>()
+                           ?? gameObject.AddComponent<EnvMeshColliderLod>();
+            _colliderLod.Begin(_focus);
+
             const float fillMin = 0.81f;
             const float fillMax = BootLoadingService.TerrainPrepareMax;
             if (_allMapItems.Count > 0)
@@ -69,7 +76,8 @@ namespace Game
                 {
                     _streamer = gameObject.GetComponent<EnvItemStreamerLite>()
                                 ?? gameObject.AddComponent<EnvItemStreamerLite>();
-                    _streamer.Initialize(_allMapItems, _categoryParents, transform, _focus);
+                    _streamer.Initialize(
+                        _allMapItems, _categoryParents, transform, _focus, _colliderLod);
                     yield return _streamer.PrefillAroundFocus(fillMin, fillMax, reportProgress);
                 }
                 else
@@ -78,18 +86,80 @@ namespace Game
                 }
             }
 
-            reportProgress?.Invoke(fillMax, "正在铺装氛围特效...");
+            // 首铺结束后立刻按焦点打开近处碰撞（不等 RefreshLoop 首拍）。
+            if (_colliderLod != null && _focus != null)
+            {
+                float colRadius = Mathf.Max(48f, EnvStreamingConfig.MeshColliderEnableRadius);
+                _colliderLod.ForceRefreshNear(_focus.position, colRadius);
+            }
+
+            // 近场就绪由 Prefill 空等一帧之后抬。extras 等草地结束再铺，不在这里 Instantiate。
+            IsReady = true;
+            _extrasPending = ShouldSpawnExtras();
+            Log.Info(
+                $"[MapItem] prefill ready items={_allMapItems.Count} spawned={SpawnedCount} " +
+                $"streaming={EnvStreamingConfig.ResolveStreamingEnabled()} extras=deferred");
+            reportProgress?.Invoke(fillMax, "正在进入岛屿...");
+            yield return null;
+            Log.Info("[MapItem] prefill frame resumed");
+        }
+
+        bool _extrasPending;
+        bool _extrasStarted;
+
+        static bool ShouldSpawnExtras()
+        {
+            if (GameEntry.MapItemExtras == null)
+                return false;
+            if (!IslandLeakProbe.Enabled)
+                return true;
+            bool on = IslandLeakProbe.Allow(IslandLeakProbe.Module.FxDay)
+                || IslandLeakProbe.Allow(IslandLeakProbe.Module.FxNight)
+                || IslandLeakProbe.Allow(IslandLeakProbe.Module.Texiao);
+            if (!on)
+                Log.Info("[MapItem] extras skipped (LeakProbe FX off)");
+            return on;
+        }
+
+        /// <summary>揭罩后铺氛围特效。可重入；已铺过或无需铺则立刻结束。</summary>
+        public IEnumerator SpawnDeferredExtras()
+        {
+            if (!_extrasPending || _extrasStarted || _released)
+                yield break;
+            _extrasStarted = true;
+            _extrasPending = false;
             _extrasSpawnedCount = 0;
-            if (GameEntry.MapItemExtras != null)
+            Log.Info("[MapItem] deferred extras begin");
+            if (GameEntry.MapItemExtras != null && !_released && this != null)
             {
                 yield return GameEntry.MapItemExtras.Spawn(
                     transform, _categoryParents, _ownedHandles, n => _extrasSpawnedCount = n);
             }
 
-            IsReady = true;
+            if (_released || this == null)
+            {
+                Log.Info("[MapItem] deferred extras aborted (released)");
+                yield break;
+            }
+
             Log.Info(
                 $"[MapItem] ready items={_allMapItems.Count} spawned={SpawnedCount} " +
                 $"extras={_extrasSpawnedCount} streaming={EnvStreamingConfig.ResolveStreamingEnabled()}");
+        }
+
+        /// <summary>
+        /// 退登卸场景：停流送协程，不拆子节点，也不把 <c>_released</c> 置上。
+        /// <see cref="OnDestroy"/> 还要走 <c>DropCatalog(releaseHandles: false)</c>，句柄留到卸场景成功。
+        /// </summary>
+        public void DetachForSceneUnload()
+        {
+            if (_released)
+                return;
+            if (_streamer != null)
+            {
+                _streamer.DetachForSceneUnload();
+                _streamer = null;
+            }
         }
 
         public void Release()
@@ -150,6 +220,8 @@ namespace Game
             _fullPrefabCache.Clear();
             _fullSpawnedCount = 0;
             _extrasSpawnedCount = 0;
+            _extrasPending = false;
+            _extrasStarted = false;
             IsReady = false;
             _started = false;
         }
@@ -279,8 +351,8 @@ namespace Game
                 if (category != "null" && _categoryParents.TryGetValue(category, out Transform cat))
                     parent = cat;
 
-                GameObject instance = Instantiate(prefab, parent, false);
-                instance.name = i + " " + prefab.name;
+                GameObject instance = Instantiate(prefab);
+                EnvItemStreamerLite.AttachSpawned(instance, parent, i, false);
                 Vector3 pos = d.Pos;
                 EnvGroundFit ground = GameEntry.GroundFit;
                 if (ground != null)
@@ -294,6 +366,7 @@ namespace Game
                 instance.SetActive(d.IsActive);
                 if (EnvStreamingConfig.IsBridgeCategory(category))
                     EnvBridgePillarFit.Ensure(instance);
+                _colliderLod?.Register(instance, pos);
                 _fullSpawnedCount++;
 
                 if (sw.ElapsedMilliseconds >= EnvStreamingConfig.FinalizePerFrameBudgetMs)
