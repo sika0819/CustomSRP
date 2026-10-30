@@ -425,8 +425,8 @@ namespace Game
         void SyncVolumeIcon(bool force = false)
         {
             MusicPlaylist music = GameEntry.Music;
-            float musicVolume = music != null ? Mathf.Clamp01(music.MusicVolume) : 1f;
-            float effectVolume = music != null ? Mathf.Clamp01(music.EffectVolume) : 1f;
+            float musicVolume = music != null ? Mathf.Clamp01(music.MusicVolume) : 0.8f;
+            float effectVolume = music != null ? Mathf.Clamp01(music.EffectVolume) : 0.8f;
             if (!force
                 && Mathf.Approximately(musicVolume, _lastMusicVolume)
                 && Mathf.Approximately(effectVolume, _lastEffectVolume))

@@ -43,6 +43,7 @@ Shader "CustomSRP/OilTerrainGrass"
             #pragma vertex OilTerrainGrassPassVertex
             #pragma fragment OilTerrainGrassPassFragment
             #pragma multi_compile _ OIL_MOBILE_PERF
+            #pragma instancing_options procedural:OilGrassProceduralSetup
             #include "OilTerrainGrassPass.hlsl"
             ENDHLSL
         }

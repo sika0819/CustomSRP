@@ -50,7 +50,7 @@ Material:
     - _DepthVertical: 4
     - _DstBlend: 10
     - _FoamStrength: 1.35
-    - _IntersectionClipping: 0.293
+    - _IntersectionClipping: 0
     - _IntersectionDistortion: 0.12
     - _IntersectionFalloff: 1
     - _IntersectionSpeed: 0.3
@@ -61,7 +61,7 @@ Material:
     - _PremulAlpha: 1
     - _ReflectDistort: 0.35
     - _ReflectSteps: 3
-    - _ReflectStrength: 0.545
+    - _ReflectStrength: 0.8
     - _RefractionStrength: 1
     - _ShadeSteps: 3
     - _ShoreFoamWidth: 8

@@ -9,17 +9,19 @@ using YooAsset;
 namespace Game
 {
     /// <summary>
-    /// 闲置沉浸与切预设揭幕之后，每帧大约 1 毫秒释放已经没人引用的资源。
+    /// 岛上流送期间，以及闲置沉浸与切预设揭幕之后，每帧大约 1 毫秒释放已经没人引用的资源。
     /// 虹膜推镜 / 黑场 / 开镜，以及流送还在生成时，直接让开。流送自己的卸载预算不动。
     /// 本帧已经慢于目标帧时间，就整帧不做。
-    /// 先丢掉空的合批原型，再在这一毫秒里放掉多个预制体句柄，然后只启动一轮按 2 毫秒切片的 Yoo 卸载。
-    /// 不调用 <c>Resources.UnloadUnusedAssets</c>，也不 <c>GC.Collect</c>。
+    /// 先丢掉空的合批原型，再在这一毫秒里放掉多个预制体句柄。
+    /// 放掉之后隔一段没有生成的时间，再请框架切一次 <c>Resources.UnloadUnusedAssets</c>（不 <c>GC.Collect</c>）。
+    /// 闲置回收另外只启动一轮按 2 毫秒切片的 Yoo 卸载。
     /// </summary>
     public sealed class IslandAssetReclaimScheduler : MonoBehaviour
     {
         const long ReclaimTimeSliceMs = 2;
         const long WorkBudgetMs = 1;
         const int YooUnloadLoops = 8;
+        const float ResourceUnloadQuietSeconds = 1.5f;
 
         static readonly Stopwatch Work = new Stopwatch();
         static readonly List<string> BankScratch = new List<string>(32);
@@ -38,6 +40,14 @@ namespace Game
         static float _startedAt;
         static float _quietSince;
         static long _reservedAtStart;
+        static bool _needResourceUnload;
+        static float _resourceUnloadNotBefore;
+
+        /// <summary>进岛流送开始后就挂上，走动中也能放零引用句柄。</summary>
+        public static void EnsureForIsland()
+        {
+            Ensure();
+        }
 
         public static void Begin()
         {
@@ -111,13 +121,15 @@ namespace Game
                 return;
             }
 
-            if (!_wantRun)
+            bool onIsland = EnvItemStreamerLite.Current != null;
+            if (!_wantRun && !onIsland)
                 return;
 
             IslandLeaveAssetReclaim leave = IslandLeaveAssetReclaim.Ensure();
             if (leave != null && leave.IsBusy)
             {
-                Cancel();
+                if (_wantRun)
+                    Cancel();
                 return;
             }
 
@@ -137,7 +149,10 @@ namespace Game
 
             if (_yooPending)
             {
-                StartYooUnload();
+                if (_wantRun)
+                    StartYooUnload();
+                else
+                    _yooPending = false;
                 return;
             }
 
@@ -163,9 +178,21 @@ namespace Game
 
             if (freed)
             {
+                _needResourceUnload = true;
+                if (_resourceUnloadNotBefore <= Time.realtimeSinceStartup)
+                    _resourceUnloadNotBefore = Time.realtimeSinceStartup + ResourceUnloadQuietSeconds;
+            }
+
+            if (_wantRun && freed)
+            {
                 _yooPending = true;
                 return;
             }
+
+            TryResourceUnload();
+
+            if (!_wantRun)
+                return;
 
             if (TryUnloadOneBank())
             {
@@ -191,6 +218,25 @@ namespace Game
 
             _wantRun = false;
             Report("done");
+        }
+
+        static void TryResourceUnload()
+        {
+            if (!_needResourceUnload)
+                return;
+            if (Time.realtimeSinceStartup < _resourceUnloadNotBefore)
+                return;
+            if (_op != null || _yooPending)
+                return;
+
+            ResourceComponent resource = GameEntry.Resource;
+            if (resource == null || resource.UnloadUnusedAssetsBusy)
+                return;
+
+            resource.ForceUnloadUnusedAssets(false);
+            _needResourceUnload = false;
+            _resourceUnloadNotBefore = Time.realtimeSinceStartup + ResourceUnloadQuietSeconds;
+            Log.Info("[IslandAssetReclaim] resources unload");
         }
 
         static void StartYooUnload()

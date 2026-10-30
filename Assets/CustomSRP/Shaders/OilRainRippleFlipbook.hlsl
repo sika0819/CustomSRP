@@ -74,13 +74,11 @@ half3 ApplyRainRippleNormal(half3 normalWS, float3 positionWS)
     float2 xz = positionWS.xz;
 
     float2 n0 = OilRainRippleNormalLayer(xz, time, 1.0, 1.0, float2(0.0, 0.0)).xz;
-    float2 n1 = OilRainRippleNormalLayer(xz, time, 0.37, 0.63, float2(31.7, 11.3)).xz;
-
     float strength = _OilRainRippleParams.z;
     float2 offset = n0 * strength;
-#if defined(OIL_MOBILE_PERF)
-    offset += n1 * strength * 0.5;
-#else
+#if !defined(OIL_MOBILE_PERF)
+    // Desktop: second non-harmonic layer. Mobile keeps one atlas tap (ocean is full-screen).
+    float2 n1 = OilRainRippleNormalLayer(xz, time, 0.37, 0.63, float2(31.7, 11.3)).xz;
     offset += n1 * strength * 0.7;
 #endif
 

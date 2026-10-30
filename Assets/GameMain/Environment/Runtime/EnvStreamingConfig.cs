@@ -180,6 +180,10 @@ namespace Game
         /// <summary>近于此距离重新打开投射。与 <see cref="ShadowCastMaxDist"/> 之间留滞后，避免边界闪烁。</summary>
         public static float ShadowCastRestoreDist = 22f;
 
+        /// <summary>建筑、桥、Common 等原先永不卸的类，真机远距才卸。山头地标仍不卸。</summary>
+        public static float FarResidentShowDistance = float.MaxValue;
+        public static float FarResidentHideDistance = float.MaxValue;
+
         static readonly string[] TreeCategories =
         {
             "Songshu", "Lvshu", "Yeshu", "Guanmu",
@@ -566,14 +570,19 @@ namespace Game
                 return StructuralClutterHideDistance;
             }
 
-            if (IsFarFieldLandmark(prefabName) || IsNeverUnloadCategory(category))
+            if (IsFarFieldLandmark(prefabName))
             {
                 showDistance = float.MaxValue;
                 return float.MaxValue;
             }
 
-            // 大树（松/绿/椰）：Boluo 出 TreeRing1 仍留到 TreeBillboardKeep（标准版 180）。
-            // Lite 无 mesh 降级环，Show/Hide 都映射 keep；120m 外松/绿隔株（stride=6）控 fill。
+            if (IsNeverUnloadCategory(category))
+            {
+                showDistance = FarResidentShowDistance;
+                return FarResidentHideDistance;
+            }
+
+            // 大树（松/绿/椰）：180 米内都在。近处是完整网格，超出 TreeFullMeshMaxDist 换成片树广告牌。
             if (IsTreeCategory(category) && !IsSmallTreeCategory(category))
             {
                 showDistance = TreeBillboardKeepRadius;
@@ -628,6 +637,7 @@ namespace Game
 
         /// <summary>
         /// 真机套 Boluo 标准版（Non4K FillBound）树环：R0=70/90，R1=117/143，keep=180，隔株 stride=6。
+        /// 近树是完整 Prefab，远处是 Prefab 自己的片树，最远留到 Keep 180。
         /// 非树物件仍略收半径保帧。
         /// </summary>
         public static void ApplyMobileTierDefaults()
@@ -639,9 +649,9 @@ namespace Game
             Ring1EnterRadius = 130f;
             Ring1ExitRadius = 160f;
 
-            // 树：片树切入见 PushTreeBillboardLod（×1.5）。
-            // 完整网格要盖住拉远后的 LOD，否则合批代理会比卡片更早贴上来。
-            // ≤240 完整 Prefab+LODGroup；keep 180，180 内已是片树的才换 Native 合批。
+            // 片树切入见 PushTreeBillboardLod（×1.5）。
+            // 完整网格盖住拉远后的 LOD，否则合批代理会比卡片更早贴上来。
+            // ≤240 完整 Prefab；Keep 180，近处是网格，远处是这棵树自己的片树。
             TreeRing0EnterRadius = 70f;
             TreeRing0ExitRadius = 90f;
             TreeRing1EnterRadius = 180f * 0.65f; // ~117
@@ -652,6 +662,9 @@ namespace Game
             FillBoundFarTreeSilhouetteMinDistance = 120f;
             FillBoundFarTreeSilhouetteStride = 6;
             PrefillTreeBoostRadius = 180f;
+
+            FarResidentShowDistance = 180f;
+            FarResidentHideDistance = 240f;
 
             // Boluo FillBoundGuanmu*（标准版不收灌木）
             GuanmuHideDistance = 90f;
@@ -686,6 +699,9 @@ namespace Game
                 ClutterShowDistance = Mathf.Min(ClutterShowDistance, 16f);
                 SmallRockHideDistance = Mathf.Min(SmallRockHideDistance, 48f);
                 SmallRockShowDistance = Mathf.Min(SmallRockShowDistance, 38f);
+                // 与闺蜜机 Quality/CRP shadowDistance=6 对齐，远距 caster 别再占 atlas。
+                ShadowCastMaxDist = Mathf.Min(ShadowCastMaxDist, 6f);
+                ShadowCastRestoreDist = Mathf.Min(ShadowCastRestoreDist, 5f);
             }
             // 栏杆/稻草人：真机勿跟普通 clutter 32m；盖住农场簇与中距观景点。
             StructuralClutterHideDistance = 120f;

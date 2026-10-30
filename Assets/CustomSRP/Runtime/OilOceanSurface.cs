@@ -85,6 +85,8 @@ namespace CustomSRP
                 {
                     IslandSceneComponent.Active?.RegisterSea(this);
                     OilWaterLayers.ApplyTo(gameObject);
+                    // 禁走靠高度图；实心海面盒会把人托上海面狂奔。旧 Yoo 包也可能仍是实心。
+                    EnsureOceanCollidersAreTriggers();
                 }
             }
             finally
@@ -103,6 +105,20 @@ namespace CustomSRP
         }
 
         void OnDestroy() => ReleaseGpuMesh();
+
+        /// <summary>
+        /// 走路禁海只认高度图；海面 Collider 必须是 Trigger，否则 CharacterController 会踩着盒子出海。
+        /// </summary>
+        void EnsureOceanCollidersAreTriggers()
+        {
+            Collider[] cols = GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < cols.Length; i++)
+            {
+                Collider c = cols[i];
+                if (c != null && !c.isTrigger)
+                    c.isTrigger = true;
+            }
+        }
 
         /// <summary>立刻拆掉运行时海面网格。延迟 Destroy 在卸场景时可能被丢掉。</summary>
         public void ReleaseGpuMesh()

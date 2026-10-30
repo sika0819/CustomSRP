@@ -21,7 +21,6 @@ CBUFFER_START(UnityPerMaterial)
     float _Clipping;
     float _ShadeSteps;
     float _Smoothness;
-    float _PaintThickness;
     float _ShadowLift;
     float _ShadeLift;
     float _ShadowWobble;
@@ -29,8 +28,6 @@ CBUFFER_START(UnityPerMaterial)
     // 0=Mesh UV, 1=World, 2=Object — matches Boluo LitStrokeRock / wood mat authoring
     float _WorldTriplanar;
     float _TriplanarTiling;
-    float _OilFoliage;
-    float _OilFoliageSkipDay;
     float _OilCrossBillboard;
     float _OilYBillboard;
     float _NormalStrength;
@@ -47,7 +44,7 @@ float3 _OilGrassWindDir;
 float _OilSkyPeriod;
 #endif
 
-// Billboard SkipDay: foliage weight 1 at dawn/dusk/night, 0 at noon.
+// Y-billboard day/night mix: vegetation lighting at dawn/dusk/night, NPR at noon.
 // Spans the full morning↔noon and noon↔evening arcs so WeatherService's
 // 2s Hours lerp (SmoothStep) drives a continuous blend — not a 0.5 snap.
 float OilFoliagePeriodWeight(float period)
@@ -64,17 +61,6 @@ float OilFoliagePeriodWeight(float period)
         return saturate(period - 1.0);
     // evening / night
     return 1.0;
-}
-
-// Near leaves (skipDay=0): returns material _OilFoliage as 0/1.
-// Billboards (skipDay=1): returns 0..1 period weight for lighting lerp.
-float OilEffectiveFoliageFlag(float foliageFlag, float skipDay)
-{
-    if (foliageFlag < 0.5)
-        return 0.0;
-    if (skipDay < 0.5)
-        return foliageFlag;
-    return OilFoliagePeriodWeight(_OilSkyPeriod);
 }
 
 #include "OilShadowBrush.hlsl"

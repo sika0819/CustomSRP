@@ -24,7 +24,11 @@ import android.util.Log;
 public class WanosMediaPlaybackForegroundService extends Service {
 
     private static final String TAG = "WanosMediaFgs";
-    private static final String CHANNEL_ID = "boluo_media_playback";
+    /**
+     * v2：IMPORTANCE_DEFAULT。旧 channel 是 LOW，系统不允许把已建 channel 重要性上调，
+     * OriginOS 对 LOW 媒体通知常不进负一屏媒体栏（airtimeCount 一直 0）。
+     */
+    private static final String CHANNEL_ID = "boluo_media_playback_v2";
     private static final int NOTIFICATION_ID = 9101;
     public static final String ACTION_START = "com.wanos.app.health.action.MEDIA_FGS_START";
     public static final String ACTION_STOP = "com.wanos.app.health.action.MEDIA_FGS_STOP";
@@ -126,6 +130,11 @@ public class WanosMediaPlaybackForegroundService extends Service {
                 startForeground(NOTIFICATION_ID, notification);
             }
             sRunning = true;
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null && !nm.areNotificationsEnabled()) {
+                Log.w(TAG, "startForeground ok but notifications disabled — "
+                        + "OEM 负一屏可能空白 (POST_NOTIFICATIONS)");
+            }
         } catch (Exception e) {
             // 吞异常后若不 stopSelf，系统仍会因未 startForeground 超时杀进程。
             Log.w(TAG, "startForeground failed: " + e.getMessage());
@@ -167,11 +176,14 @@ public class WanosMediaPlaybackForegroundService extends Service {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm == null) return;
         NotificationChannel ch = new NotificationChannel(
-                CHANNEL_ID, "波萝播放", NotificationManager.IMPORTANCE_LOW);
+                CHANNEL_ID, "波萝播放", NotificationManager.IMPORTANCE_DEFAULT);
         ch.setDescription("后台音频播放");
         ch.setShowBadge(false);
+        ch.setSound(null, null);
+        ch.enableVibration(false);
         ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
         nm.createNotificationChannel(ch);
+        // 旧 LOW channel 留着无害；新通知走 v2。
     }
 
     /**

@@ -58,9 +58,16 @@ namespace Game
         /// <summary>Portrait design width; wider screens scale look down so full-width swipes feel similar.</summary>
         const float RefLookWidth = 1125f;
         const float GroundNormalMinY = 0.45f;
-        /// <summary>脚底低于海平面超过此值视为走进海里（允许湿沙滩浅滩）。</summary>
+        /// <summary>
+        /// 脚底下沉下限相对海平面的容差（防掉进海底）。禁走不靠这个。
+        /// </summary>
         const float OceanBelowSurfaceBan = 0.25f;
-        /// <summary>眼睛离地形矩形边的最小内缩，避免胶囊探出高度图踩上海面碰撞。</summary>
+        /// <summary>
+        /// 高度图须至少高于海平面此值才可走。与 <see cref="AmbienceZoneCatalog.OceanLandClearanceMeters"/> 对齐。
+        /// 旧逻辑用 oceanY-0.25 当湿沙放行，平坦海底≈海平面时整片海湾都能走。
+        /// </summary>
+        const float OceanWalkMinAboveSea = AmbienceZoneCatalog.OceanLandClearanceMeters;
+        /// <summary>眼睛离地形矩形边的最小内缩，避免胶囊探出岛外踩上海面碰撞。</summary>
         const float TerrainEdgeMargin = 0.75f;
         /// <summary>河面水平距离 / 竖直容差（米）。</summary>
         const float RiverBanRadiusXZ = 5f;
@@ -459,7 +466,9 @@ namespace Game
             }
         }
 
-        /// <summary>落点正下方的地面。采到返回 true；失败时 <paramref name="ground"/> 仍是传入点。</summary>
+        /// <summary>
+        /// 落点正下方的地面。优先高度图（不吃树冠/石头）；失败再射线。
+        /// </summary>
         public bool TryGroundUnder(Vector3 worldPos, out Vector3 ground)
         {
             Vector3 snapped = worldPos;
@@ -480,6 +489,8 @@ namespace Game
             for (int i = 0; i < count; i++)
             {
                 if (GroundHits[i].normal.y < GroundNormalMinY)
+                    continue;
+                if (IsWaterSurfaceCollider(GroundHits[i].collider))
                     continue;
                 if (GroundHits[i].point.y >= bestY)
                     continue;
@@ -711,15 +722,14 @@ namespace Game
             IslandLocomotionState.IsWalking = walking;
 
             EnsureBody();
-            // 闺蜜机：摇杆有位移（含纯横向转向）或 look 增量时压到走路档。
-            // 转头时草/阴影重算最重，站立 0.75 扛不住 20 帧；走路档本就是 0.5。
-            // 粘滞 0.8s：连续转头/走停走时不反复 0.75↔0.5 重建中间 RT（实测会闪到 ~10 帧）。
+            // 闺蜜机：摇杆有位移（含纯横向转向）或 look 增量时压到走路档 0.375。
+            // 粘滞 3s：转完/停住后短暂站立仍处树密朝向时，不立刻回到 0.5（不稳站立也要 >20）。
             bool stickTurning = _smoothedMove.sqrMagnitude > WalkRenderScaleThreshold * WalkRenderScaleThreshold;
             bool lowerScale = walking;
             if (BoluoDeviceInfo.IsSkyworthGmjStandard())
             {
                 if (walking || looked || stickTurning)
-                    _gmjWalkScaleHoldUntil = Time.unscaledTime + 0.8f;
+                    _gmjWalkScaleHoldUntil = Time.unscaledTime + 3f;
                 lowerScale = walking || looked || stickTurning
                     || Time.unscaledTime < _gmjWalkScaleHoldUntil;
             }
@@ -1033,6 +1043,7 @@ namespace Game
             }
 
             ApplyWaterWalkBan(before);
+            ClampFootNotBelowOcean();
             ApplyIslandTerrainLimit();
         }
 
@@ -1043,6 +1054,7 @@ namespace Game
             if (Mathf.Abs(motion.x) + Mathf.Abs(motion.z) <= 1e-4f)
             {
                 transform.position = pos;
+                ClampFootNotBelowOcean();
                 ApplyIslandTerrainLimit();
                 return;
             }
@@ -1060,6 +1072,7 @@ namespace Game
             }
             transform.position = pos;
             ApplyWaterWalkBan(before);
+            ClampFootNotBelowOcean();
             ApplyIslandTerrainLimit();
         }
 
@@ -1182,7 +1195,7 @@ namespace Game
             }
         }
 
-        /// <summary>海上（脚底落在海平面下的海底）/ 河里：水平位移回滚。</summary>
+        /// <summary>海上（高度图未过岸线净空）/ 河里：水平位移回滚。</summary>
         void ApplyWaterWalkBan(Vector3 beforeEye)
         {
             if (!BlockWaterWalking)
@@ -1191,9 +1204,41 @@ namespace Game
             Vector3 foot = eye - Vector3.up * EyeHeight;
             if (!IsFootInForbiddenWater(foot))
                 return;
+
+            bool ccOn = _cc != null && _cc.enabled;
+            if (ccOn)
+                _cc.enabled = false;
             eye.x = beforeEye.x;
             eye.z = beforeEye.z;
             transform.position = eye;
+            Physics.SyncTransforms();
+            if (ccOn)
+                _cc.enabled = true;
+        }
+
+        /// <summary>
+        /// 脚底不得沉到海底：最低只允许到海平面 − 浅滩容差（湿沙）。
+        /// 不抬到海平面本身，避免被托上海面盒子后一直走。
+        /// </summary>
+        void ClampFootNotBelowOcean()
+        {
+            if (!TryGetOceanSurfaceY(out float oceanY))
+                return;
+
+            float minFootY = oceanY - OceanBelowSurfaceBan;
+            Vector3 eye = transform.position;
+            float footY = eye.y - EyeHeight;
+            if (footY >= minFootY - 1e-3f)
+                return;
+
+            bool ccOn = _cc != null && _cc.enabled;
+            if (ccOn)
+                _cc.enabled = false;
+            eye.y = minFootY + EyeHeight;
+            transform.position = eye;
+            Physics.SyncTransforms();
+            if (ccOn)
+                _cc.enabled = true;
         }
 
         Vector3 ClampEyeOutOfWater(Vector3 eye)
@@ -1203,23 +1248,34 @@ namespace Game
             Vector3 foot = eye - Vector3.up * EyeHeight;
             if (!IsFootInForbiddenWater(foot))
                 return eye;
-            // 传送落点在海里：抬到海平面以上。河面没有可站立碰撞时保持原位，走路时再由禁行回滚。
-            if (TryGetOceanSurfaceY(out float oceanY) && foot.y < oceanY)
-                return new Vector3(eye.x, oceanY + EyeHeight + 0.5f, eye.z);
+            // 传送落点在海里：抬到可走岸线以上。河面没有可站立碰撞时保持原位，走路时再由禁行回滚。
+            if (TryGetOceanSurfaceY(out float oceanY) && foot.y <= oceanY + OceanWalkMinAboveSea)
+                return new Vector3(eye.x, oceanY + OceanWalkMinAboveSea + EyeHeight + 0.5f, eye.z);
             return eye;
         }
 
         bool IsFootInForbiddenWater(Vector3 foot)
         {
-            // 站立面优先用物理朝上碰撞（码头/桥面）；高度图在桥下是海底，不能当站立面。
             bool hasStand = TryGetHighestStandY(foot, out float standY);
 
-            // 海：站立面（或无碰撞时的高度图）低于海平面 → 海底。
+            // 海：高度图必须明显高于海面；海面盒是 Trigger 不能托人。码头/桥按甲板放行。
             if (TryGetOceanSurfaceY(out float oceanY))
             {
-                float groundY = hasStand ? standY : SampleGround(foot).y;
-                if (groundY < oceanY - OceanBelowSurfaceBan)
-                    return true;
+                const float deckAboveSea = 0.5f;
+                bool onDeckAboveSea = hasStand && standY >= oceanY + deckAboveSea;
+                if (!onDeckAboveSea)
+                {
+                    if (TrySampleHeightmapY(foot, out float terrainY))
+                    {
+                        if (IsOceanTerrainForbidden(terrainY, oceanY))
+                            return true;
+                    }
+                    else if (foot.y <= oceanY + OceanWalkMinAboveSea)
+                    {
+                        // 高度图外仍贴着/低于可走岸线 → 禁行
+                        return true;
+                    }
+                }
             }
 
             // 河：水平近河道且竖直也在河面容差内；已站在桥/码头甲板（明显高于河面）则放行。
@@ -1238,6 +1294,42 @@ namespace Game
                         return false;
                     return true;
                 }
+            }
+
+            return false;
+        }
+
+        /// <summary>高度图未过岸线净空 → 海里（含平坦海底）。甲板例外在调用方处理。</summary>
+        static bool IsOceanTerrainForbidden(float terrainY, float oceanY)
+        {
+            // 与岸线 land 判定对齐：land 须 h > ocean+clearance，故 <= 一律禁。
+            return terrainY <= oceanY + OceanWalkMinAboveSea;
+        }
+
+        /// <summary>岛高度图 Y（只认 TerrainData，不吃海面/石头物理面）。</summary>
+        static bool TrySampleHeightmapY(Vector3 worldPos, out float y)
+        {
+            y = 0f;
+            Terrain terrain = IslandSceneComponent.Active != null
+                ? IslandSceneComponent.Active.Terrain
+                : null;
+            if (terrain != null && terrain.terrainData != null)
+            {
+                Vector3 snapped = worldPos;
+                if (EnvGroundFit.TrySnapY(
+                        ref snapped, terrain.terrainData, terrain.transform.position))
+                {
+                    y = snapped.y;
+                    return true;
+                }
+            }
+
+            Vector3 viaFit = worldPos;
+            EnvGroundFit fit = GameEntry.GroundFit;
+            if (fit != null && fit.TrySnapY(ref viaFit))
+            {
+                y = viaFit.y;
+                return true;
             }
 
             return false;
@@ -1273,17 +1365,30 @@ namespace Game
             return found;
         }
 
-        static bool IsWaterSurfaceCollider(Collider c)
+        static bool IsOceanSurfaceCollider(Collider c)
         {
             if (c == null)
                 return false;
             Transform t = c.transform;
             for (int i = 0; i < 4 && t != null; i++, t = t.parent)
             {
-                string n = t.name;
-                if (n.IndexOf("Ocean", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                if (t.name.IndexOf("Ocean", System.StringComparison.OrdinalIgnoreCase) >= 0)
                     return true;
-                if (n.IndexOf("InlandWater", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            }
+
+            return false;
+        }
+
+        static bool IsWaterSurfaceCollider(Collider c)
+        {
+            if (IsOceanSurfaceCollider(c))
+                return true;
+            if (c == null)
+                return false;
+            Transform t = c.transform;
+            for (int i = 0; i < 4 && t != null; i++, t = t.parent)
+            {
+                if (t.name.IndexOf("InlandWater", System.StringComparison.OrdinalIgnoreCase) >= 0)
                     return true;
             }
 
@@ -1293,6 +1398,15 @@ namespace Game
         static bool TryGetOceanSurfaceY(out float oceanY)
         {
             oceanY = 0f;
+            ISeaLevel sea = IslandSceneComponent.Active != null
+                ? IslandSceneComponent.Active.Sea
+                : null;
+            if (sea != null)
+            {
+                oceanY = sea.Level;
+                return true;
+            }
+
             GameObject ocean = IslandWorldService.Instance != null
                 ? IslandWorldService.Instance.OceanInstance
                 : null;
@@ -1306,6 +1420,14 @@ namespace Game
         {
             // 高度图贴地，不吃树冠/石头。射线先命中树会把切预设的眼睛抬飞。
             TryGroundUnder(worldPos, out Vector3 ground);
+            // 不抬到海平面（否则人站上海面盒）；只托住过深海底到浅滩下限。
+            if (TryGetOceanSurfaceY(out float oceanY))
+            {
+                float minY = oceanY - OceanBelowSurfaceBan;
+                if (ground.y < minY)
+                    ground.y = minY;
+            }
+
             return ground;
         }
 

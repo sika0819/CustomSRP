@@ -65,8 +65,8 @@ namespace CustomSRP
         public const float DawnSunElevationDeg = 7f;
         public const float SleepMoonElevationDeg = 12f;
 
-        /// <summary>Boluo NightDistanceFog #36363C — Canonical night fog (NightCold may differ).</summary>
-        public static readonly Color NightFogColor = new Color(0x36 / 255f, 0x36 / 255f, 0x3C / 255f, 1f);
+        /// <summary>Night distance fog #0A1828 — deep blue-black mist (matches NightCold).</summary>
+        public static readonly Color NightFogColor = new Color(0x0A / 255f, 0x18 / 255f, 0x28 / 255f, 1f);
 
         /// <summary>Active AtmosphereProfile-equivalent look (Boluo Camera_1/5/3/7/8/10).</summary>
         public OilSkyLookId ActiveLookId { get; private set; } = OilSkyLookId.Canonical;
@@ -150,6 +150,12 @@ namespace CustomSRP
         static readonly int OilSkyStarIntensityId = Shader.PropertyToID("_OilSkyStarIntensity");
         static readonly int OilSkyLookReadyId = Shader.PropertyToID("_OilSkyLookReady");
         static readonly int OilSkySunriseId = Shader.PropertyToID("_OilSkySunrise");
+        static readonly int SunTexId = Shader.PropertyToID("_SunTex");
+        static readonly int MoonTexId = Shader.PropertyToID("_MoonTex");
+        static readonly int StarsTexId = Shader.PropertyToID("_StarsTex");
+        static readonly int StarDensityId = Shader.PropertyToID("_StarDensity");
+        static readonly int StarSizeId = Shader.PropertyToID("_StarSize");
+        static readonly int OilWaterCelestialOnId = Shader.PropertyToID("_OilWaterCelestialOn");
 
         static readonly Vector4[] s_zenithBuf = new Vector4[4];
         static readonly Vector4[] s_midBuf = new Vector4[4];
@@ -652,12 +658,14 @@ namespace CustomSRP
         {
             if (IsOilSky(RenderSettings.skybox))
             {
+                PushCelestialTexturesGlobal(RenderSettings.skybox);
                 return;
             }
 
             if (IsOilSky(skyboxMaterial))
             {
                 RenderSettings.skybox = skyboxMaterial;
+                PushCelestialTexturesGlobal(skyboxMaterial);
             }
         }
 
@@ -1220,6 +1228,16 @@ namespace CustomSRP
                 s_clockHours = PeriodToHours(period);
             }
 
+            if (sky != null && IsOilSky(sky))
+            {
+                PushCelestialTexturesGlobal(sky);
+            }
+            else
+            {
+                // Celestial water stamps stay armed; textures arrive on BindSkybox.
+                Shader.SetGlobalFloat(OilWaterCelestialOnId, 1f);
+            }
+
             PushLookGlobals(s_activeLookId);
             // PushLookGlobals arms mirror tracking + InvalidateSky. That is only a
             // pigment seed — OilSkyboxTime.OnEnable has not bound the runtime skybox
@@ -1385,6 +1403,7 @@ namespace CustomSRP
             if (lookMoved || !_fogCanvasPushed)
             {
                 PushFogCanvasGlobal(mat);
+                PushCelestialTexturesGlobal(mat);
                 _fogCanvasPushed = true;
             }
         }
@@ -1398,6 +1417,56 @@ namespace CustomSRP
         {
             Shader.SetGlobalTexture(OilFogCanvasId, null);
             Shader.SetGlobalFloat(OilFogCanvasEnableId, 0f);
+        }
+
+        /// <summary>
+        /// Drop sun/moon/stars globals on leave so UnloadUnusedAssets can reclaim skybox tex.
+        /// </summary>
+        public static void ClearCelestialTexturesGlobal()
+        {
+            Shader.SetGlobalTexture(SunTexId, null);
+            Shader.SetGlobalTexture(MoonTexId, null);
+            Shader.SetGlobalTexture(StarsTexId, null);
+            Shader.SetGlobalFloat(OilWaterCelestialOnId, 0f);
+        }
+
+        /// <summary>
+        /// Water samples these as globals (skybox keeps them on the material).
+        /// All device tiers: celestial water reflection on by default.
+        /// </summary>
+        static void PushCelestialTexturesGlobal(Material mat)
+        {
+            if (mat == null)
+            {
+                return;
+            }
+
+            if (mat.HasProperty(SunTexId))
+            {
+                Shader.SetGlobalTexture(SunTexId, mat.GetTexture(SunTexId));
+            }
+
+            if (mat.HasProperty(MoonTexId))
+            {
+                Shader.SetGlobalTexture(MoonTexId, mat.GetTexture(MoonTexId));
+            }
+
+            if (mat.HasProperty(StarsTexId))
+            {
+                Shader.SetGlobalTexture(StarsTexId, mat.GetTexture(StarsTexId));
+            }
+
+            if (mat.HasProperty(StarDensityId))
+            {
+                Shader.SetGlobalFloat(StarDensityId, mat.GetFloat(StarDensityId));
+            }
+
+            if (mat.HasProperty(StarSizeId))
+            {
+                Shader.SetGlobalFloat(StarSizeId, mat.GetFloat(StarSizeId));
+            }
+
+            Shader.SetGlobalFloat(OilWaterCelestialOnId, 1f);
         }
 
         static void PushFogCanvasGlobal(Material mat)

@@ -42,6 +42,10 @@ Material:
         m_Texture: {fileID: 2800000, guid: a7c8d9e0f1a20314253647586970b1c2, type: 3}
         m_Scale: {x: 0.45, y: 0.45}
         m_Offset: {x: 0, y: 0}
+    - _DistortionMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _MainTex:
         m_Texture: {fileID: 2800000, guid: 4956970238b0c451d9bdb9327c5c07b6, type: 3}
         m_Scale: {x: 1, y: 1}
@@ -56,11 +60,18 @@ Material:
     - _CanvasStrength: 0.1
     - _Clipping: 1
     - _Cull: 0
-    - _Cutoff: 0.35
+    - _Cutoff: 0.5
+    - _Distortion: 0
+    - _DistortionBlend: 1
+    - _DistortionStrength: 0.1
     - _DstBlend: 0
     - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
+    - _FlipbookBlending: 0
     - _InternalEdge: 1
+    - _NearFade: 0
+    - _NearFadeDistance: 1
+    - _NearFadeRange: 1
     - _NormalStrength: 0.85
     - _OilCrossBillboard: 0
     - _OilFoliage: 0
@@ -69,20 +80,24 @@ Material:
     - _PaintThickness: 0.18
     - _ReceiveShadows: 0
     - _ShadeLift: 0.58
-    - _ShadeSteps: 4
+    - _ShadeSteps: 2
     - _ShadowBrushScale: 1.8
     - _ShadowLift: 1.05
     - _ShadowWobble: 0.45
     - _Shadows: 3
     - _Smoothness: 0
+    - _SoftParticles: 0
+    - _SoftParticlesDistance: 0
+    - _SoftParticlesRange: 1
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
     - _TriplanarTiling: 0.25
+    - _VertexColors: 0
     - _WorldTriplanar: 0
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
-    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BaseColor: {r: 0.8801332, g: 1, b: 0.6179246, a: 1}
     - _BottomColor: {r: 0.380392, g: 0.478431, b: 0.34902, a: 1}
     - _Color: {r: 1.112261, g: 1.102125, b: 1.043218, a: 1}
     - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}

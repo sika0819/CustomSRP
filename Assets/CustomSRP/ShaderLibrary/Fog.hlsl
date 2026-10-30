@@ -183,7 +183,7 @@ half OilFogBrush(half materialStroke, half canvasStroke)
 }
 
 // Soft canvas scumble — value grain only. Keep the authored fog hue
-// (dawn ochre / dusk red / night #36363C). No warm/cool tear ridges.
+// (dawn ochre / dusk red / night #0A1828). No warm/cool tear ridges.
 float3 OilFogPigment(float3 fogCol, half stroke, float fogAmt)
 {
     half grain = stroke - 0.5h;

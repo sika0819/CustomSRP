@@ -54,6 +54,7 @@ namespace Game
             EnsureUiGroups();
 #if !UNITY_EDITOR
             Log.Info("[GameEntry] res after Start=" + Screen.width + "x" + Screen.height
+                + " dpi=" + Screen.dpi
                 + " dpiScale=" + QualitySettings.resolutionScalingFixedDPIFactor);
 #endif
         }
@@ -75,6 +76,24 @@ namespace Game
             }
         }
 
+#if !UNITY_EDITOR
+        /// <summary>
+        /// 与 ProjectSettings.targetPixelDensity 保持一致。改其中一处必须改另一处。
+        /// </summary>
+        const float BackbufferTargetDpi = 300f;
+
+        const float BackbufferScale = 0.7f;
+
+        static void ApplyBackbufferScale()
+        {
+            float dpi = Screen.dpi;
+            float factor = BackbufferScale;
+            if (dpi > 1f)
+                factor = BackbufferScale * dpi / BackbufferTargetDpi;
+            QualitySettings.resolutionScalingFixedDPIFactor = factor;
+        }
+#endif
+
         static void ApplyDeviceGraphicsPolicy()
         {
 #if !UNITY_EDITOR
@@ -95,15 +114,23 @@ namespace Game
             // 目标帧按机型：闺蜜机标准 45 / 4K 60，手机 30/45/60。见 IslandCameraSrpSetup。
             Application.targetFrameRate = IslandCameraSrpSetup.DefaultFrameRate;
             QualitySettings.vSyncCount = 0;
-            // Never Screen.SetResolution: 1280×720 locks 16:9, then FullScreenWindow
-            // stretches onto taller phones (20:9) and flattens UI + game view.
-            // Pixel budget = native aspect × DPI scale × CRP render scale.
-            QualitySettings.resolutionScalingFixedDPIFactor = 0.7f;
+            // 不调用 Screen.SetResolution：固定 1280×720 会锁 16:9，再铺到 20:9 上把画面和 UI 拉扁。
+            // Player：Resolution Scaling = Fixed DPI，Target DPI = 300（ProjectSettings.targetPixelDensity）。
+            // scale = min(TargetDPI × factor / Screen.dpi, 1)。factor 按本机 dpi 反算，使背缓冲为原生的 0.7。
+            // 3D 再乘 CRP renderScale（站立 0.5，走路/弹窗/沉浸 0.375）。
+            ApplyBackbufferScale();
             // Very Low asset lodBias=0.3 会把树 prefab 的 screenRelativeHeight(0.12)
             // 片树切入压到 ~20m；拉回 1 与 LOD 作者距离一致（median ~70–90m @fov60）。
             // GI/阴影等仍用 Very Low；仅恢复 LOD 屏占比标定。
             QualitySettings.lodBias = 1f;
             QualitySettings.maximumLODLevel = 0;
+            // 峰值目标 700MB：再丢一级 mip（Very Low 资源已是 1）。近树远树都还在，只是更软。
+            // 流式预算不跟机型档的 256/512，否则 12GB 手机会把贴图重新堆回来。
+            QualitySettings.globalTextureMipmapLimit = 2;
+            QualitySettings.streamingMipmapsActive = true;
+            QualitySettings.streamingMipmapsMemoryBudget = 112f;
+            QualitySettings.streamingMipmapsMaxLevelReduction = 4;
+            Texture.streamingTextureDiscardUnusedMips = true;
             // Keep oil NPR; cut ocean stamps / terrain micro-spec on mobile.
             // Directional hard shadows still sample (see OilNPRLighting).
             Shader.EnableKeyword("OIL_MOBILE_PERF");
@@ -113,8 +140,12 @@ namespace Game
                     ? UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.name
                     : "null")
                 + " res=" + Screen.width + "x" + Screen.height
+                + " dpi=" + Screen.dpi
                 + " dpiScale=" + QualitySettings.resolutionScalingFixedDPIFactor
                 + " lodBias=" + QualitySettings.lodBias
+                + " mipLimit=" + QualitySettings.globalTextureMipmapLimit
+                + " mipStream=" + QualitySettings.streamingMipmapsMemoryBudget
+                + " mipDrop=" + QualitySettings.streamingMipmapsMaxLevelReduction
                 + " targetFPS=" + Application.targetFrameRate
                 + " OIL_MOBILE_PERF");
 #endif

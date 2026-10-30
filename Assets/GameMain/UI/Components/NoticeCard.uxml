@@ -9,7 +9,7 @@
                 <ui:VisualElement name="progress-track" class="notice-card__progress-track">
                     <ui:VisualElement name="progress-fill" class="notice-card__progress-fill" />
                 </ui:VisualElement>
-                <ui:Label name="eta" class="notice-card__eta" text="剩余--" />
+                <ui:Label name="eta" class="notice-card__eta" text="" />
             </ui:VisualElement>
             <ui:VisualElement name="size-row" class="notice-card__size-row">
                 <ui:Label name="sentence" class="notice-card__sentence" text="正在为你下载资源：" />

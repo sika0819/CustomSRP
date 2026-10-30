@@ -60,13 +60,13 @@ half OilVegetationNightAmount(half lightLum)
 
 half3 OilVegMoonChroma()
 {
-    // Night foliage moon: cooler than Camera_1 (0.58,0.68,1) so crowns read slight blue.
-    half3 moon = half3(0.48h, 0.62h, 1.0h);
+    // Night foliage moon: teal-green so crowns match a deep-teal night, not royal blue.
+    half3 moon = half3(0.55h, 0.82h, 0.72h);
     half srcL = max(dot(moon, half3(0.2126h, 0.7152h, 0.0722h)), 1e-3h);
     return moon / srcL;
 }
 
-// How hard to pull ambient toward moon blue. Delayed past dusk; killed by warm oilFill.
+// How hard to pull ambient toward moon teal. Delayed past dusk; killed by warm oilFill.
 half OilVegMoonCoolAmount(half unify, half nightAmt)
 {
     half late = saturate((unify - 0.42h) / 0.58h);

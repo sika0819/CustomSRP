@@ -59,7 +59,7 @@ namespace CustomSRP.Editor
             string fogHex = ColorUtility.ToHtmlStringRGB(fog);
             EditorGUILayout.HelpBox(
                 $"内部 _Period = {period:0.00}（0 黎明 / 1 白天 / 2 黄昏 / 3 夜晚）\n" +
-                $"雾色 = #{fogHex}（夜晚固定 #36363C）· Lighting Fog Density 勿超过 ~0.12（大雾 0.09）\n" +
+                $"雾色 = #{fogHex}（夜晚固定 #0A1828）· Lighting Fog Density 勿超过 ~0.12（大雾 0.09）\n" +
                 "日月方向：Boluo Cozy 轨道（sunDirection=308），不跟随镜头。\n" +
                 "拖动 Time Of Day 会同步天空、环境光、雾色与平行光。\n" +
                 "Brush / Stars 直接改 OilSkybox 材质（或 Lighting → Skybox），本组件不再覆盖。\n" +

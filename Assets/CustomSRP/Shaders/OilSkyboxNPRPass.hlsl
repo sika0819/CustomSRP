@@ -157,13 +157,13 @@ SkyPeriodLook PeriodLookFallback(int index)
     }
     else if (index == 1)
     {
-        // Camera_1 noon @ ctime 32768: zenith #117AFF, horizon #7AA4D4.
-        p.zenith = half3(0.0685h, 0.4793h, 1.0000h);
-        p.mid = half3(0.2739h, 0.5619h, 0.9154h);
-        p.horizon = half3(0.4793h, 0.6445h, 0.8308h);
+        // Canonical noon: slate #4A78B4 / horizon #7E98B4. Intensities unchanged.
+        p.zenith = half3(0.2902h, 0.4706h, 0.7059h);
+        p.mid = half3(0.3758h, 0.5233h, 0.7059h);
+        p.horizon = half3(0.4941h, 0.5961h, 0.7059h);
         p.ground = half3(0.8392h, 0.7686h, 0.7020h);
-        p.sunDisc = float3(1.0000, 0.9804, 0.8235);
-        p.sunGlowColor = float3(1.0000, 0.9804, 0.8235);
+        p.sunDisc = float3(0.9020, 0.9216, 0.9098);
+        p.sunGlowColor = float3(0.9020, 0.9216, 0.9098);
         p.sunSize = 0.055;
         p.sunIntensity = 1.0;
         p.sunGlow = 0.16;
@@ -176,13 +176,13 @@ SkyPeriodLook PeriodLookFallback(int index)
     }
     else if (index == 2)
     {
-        // Match Canonical dusk: indigo zenith + amber horizon (not chalk peach).
-        p.zenith = half3(0.165h, 0.220h, 0.376h);
-        p.mid = half3(0.445h, 0.355h, 0.337h);
-        p.horizon = half3(0.831h, 0.541h, 0.282h);
+        // Match Canonical dusk: #2C3A58 zenith, muted warm horizon #A07858.
+        p.zenith = half3(0.1725h, 0.2275h, 0.3451h);
+        p.mid = half3(0.3636h, 0.3296h, 0.3451h);
+        p.horizon = half3(0.6275h, 0.4706h, 0.3451h);
         p.ground = half3(0.22h, 0.16h, 0.14h);
-        p.sunDisc = float3(1.0000, 0.7843, 0.4157);
-        p.sunGlowColor = float3(1.0000, 0.7843, 0.4157);
+        p.sunDisc = float3(0.7843, 0.7059, 0.6039);
+        p.sunGlowColor = float3(0.7843, 0.7059, 0.6039);
         p.sunSize = 0.08;
         p.sunIntensity = 0.75;
         p.sunGlow = 0.28;
@@ -195,18 +195,19 @@ SkyPeriodLook PeriodLookFallback(int index)
     }
     else
     {
-        p.zenith = half3(0.0118h, 0.0706h, 0.3216h);
-        p.mid = half3(0.0059h, 0.0608h, 0.3118h);
-        p.horizon = half3(0.0000h, 0.0510h, 0.3020h);
-        p.ground = half3(0.0000h, 0.0306h, 0.1812h);
-        p.sunDisc = float3(0.4000, 0.4500, 0.5800);
-        p.sunGlowColor = float3(0.0800, 0.0900, 0.1200);
+        // Canonical night teal. Moon disc stays near-white; intensities unchanged.
+        p.zenith = half3(0.1647h, 0.3216h, 0.3765h);
+        p.mid = half3(0.1219h, 0.2656h, 0.3238h);
+        p.horizon = half3(0.0627h, 0.1882h, 0.2510h);
+        p.ground = half3(0.0314h, 0.0941h, 0.1255h);
+        p.sunDisc = float3(0.3451, 0.5020, 0.5333);
+        p.sunGlowColor = float3(0.0627, 0.1098, 0.1333);
         p.sunSize = 0.05;
         p.sunIntensity = 0.08;
         p.sunGlow = 0.02;
         // Cool-white halo — softer than sun glare.
         p.moonDisc = float3(0.92, 0.94, 0.98);
-        p.moonGlowColor = float3(0.72, 0.80, 0.90);
+        p.moonGlowColor = float3(0.6275, 0.7843, 0.8000);
         p.moonSize = 0.07;
         p.moonIntensity = 0.85;
         p.moonGlow = 0.32;

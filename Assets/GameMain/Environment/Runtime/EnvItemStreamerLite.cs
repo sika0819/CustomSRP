@@ -144,6 +144,7 @@ namespace Game
             _spawnBacklog = false;
             _evalCursor = 0;
             Current = this;
+            IslandAssetReclaimScheduler.EnsureForIsland();
             for (int i = 0; i < data.Count; i++)
             {
                 MapItemData d = data[i];
@@ -805,6 +806,7 @@ namespace Game
             _streamLoopCount++;
             while (_running)
             {
+                IslandAssetReclaimScheduler.EnsureForIsland();
                 CollectFinishedInflight();
                 if (_focus == null)
                 {

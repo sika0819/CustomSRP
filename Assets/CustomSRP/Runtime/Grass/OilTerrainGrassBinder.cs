@@ -104,6 +104,8 @@ namespace CustomSRP
         ComputeBuffer[] _visibleIdFarV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
         ComputeBuffer[] _argsV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
         ComputeBuffer[] _argsFarV = new ComputeBuffer[OilTerrainGrassBladeMesh.TopologyCount];
+        readonly int[] _proceduralCountV = new int[OilTerrainGrassBladeMesh.TopologyCount];
+        readonly int[] _proceduralCountFarV = new int[OilTerrainGrassBladeMesh.TopologyCount];
         int[] _packedV = new int[OilTerrainGrassBladeMesh.TopologyCount];
         Mesh[] _variantMeshes;
         Mesh[] _farVariantMeshes;
@@ -118,8 +120,11 @@ namespace CustomSRP
         bool _bakeLoaded;
         OilTerrainGrassBake.Data _bakeData;
         ComputeBuffer _keepOutGrid;
+        OilTerrainGrassKeepOutBake.Data _keepOutData;
         bool _keepOutEnabled;
         bool _keepOutLoadTried;
+        bool _valhallChecked;
+        bool _forceCpuCullValhall;
         int _keepOutRes;
         float _keepOutOriginX;
         float _keepOutOriginZ;
@@ -431,14 +436,17 @@ namespace CustomSRP
                 return;
 
             var camTf = cam.transform;
+            // 闺蜜机：停稳判定更严，微抖/刚停住也继续复用，避免树密朝向草重算尖刺。
+            bool gmj = Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmjStandard();
+            float settlePosSq = gmj ? 0.01f : 0.04f;
+            float settleAngle = gmj ? 0.35f : 0.75f;
             bool settled = _hasGrassView
-                && (camTf.position - _lastGrassCamPos).sqrMagnitude <= 0.04f
-                && Quaternion.Angle(camTf.rotation, _lastGrassCamRot) <= 0.75f;
-            // 闺蜜机标准版：转头/走动时整段复用上一份草 submit，停稳后再重算。
-            // 不改草密度与清晰度；林间走动时隔帧重算仍会掉到 15 以下。
+                && (camTf.position - _lastGrassCamPos).sqrMagnitude <= settlePosSq
+                && Quaternion.Angle(camTf.rotation, _lastGrassCamRot) <= settleAngle;
+            // 闺蜜机标准版：转头/走动/未完全停稳时整段复用上一份草 submit。
             bool gmjThrottle = !settled
                 && _hasLastGrassSubmit
-                && Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmjStandard();
+                && gmj;
             // DrawMeshInstancedIndirect only scopes the submit when its camera
             // argument is set; leaving it null makes the planar mirror probe
             // re-draw the whole grass window into the reflection RT. Bind the
@@ -925,8 +933,11 @@ namespace CustomSRP
 
                 Matrix4x4 vp = cam.projectionMatrix * cam.worldToCameraMatrix;
                 var renderBound = BuildGrassRenderBound();
-                bool useGpu = cullCompute != null && ResolveCullKernel() >= 0;
+                bool useGpu = WantsGpuGrassCull();
                 float nearMax = FarGrassFullDensityMeters;
+
+                if (!useGpu)
+                    EnsureKeepOutBuffer();
 
                 if (useGpu)
                 {
@@ -949,16 +960,22 @@ namespace CustomSRP
                     if (_variantMats == null || _variantMats[v] == null || _allPosV[v] == null)
                         continue;
 
-                    EnsureGrassArgs(ref _argsV[v]);
-                    EnsureGrassArgs(ref _argsFarV[v]);
+                    if (useGpu || !_forceCpuCullValhall)
+                    {
+                        EnsureGrassArgs(ref _argsV[v]);
+                        EnsureGrassArgs(ref _argsFarV[v]);
+                    }
+
                     EnsureGrassVisible(ref _visibleIdV[v], _packedV[v]);
                     EnsureGrassVisible(ref _visibleIdFarV[v], _packedV[v]);
-                    if (_visibleIdV[v] == null || _argsV[v] == null)
+                    if (_visibleIdV[v] == null)
                         continue;
 
                     BindGrassGlobals(_variantMats[v], v);
                     if (useGpu)
                     {
+                        if (_argsV[v] == null)
+                            continue;
                         int kernel = ResolveCullKernel();
                         BindKeepOutForKernel(kernel);
                         cullCompute.SetBuffer(kernel, AllInstancesPosId, _allPosV[v]);
@@ -1009,9 +1026,12 @@ namespace CustomSRP
                 if (!_loggedDraw)
                 {
                     _loggedDraw = true;
+                    string gpuNote = useGpu
+                        ? "gpu=True"
+                        : $"gpu=False reason=Mali-Valhall name={SystemInfo.graphicsDeviceName} draw=procedural";
                     Log.Info(
                         $"[OilTerrainGrass] draw packed={_packedCount} visJobs={visibleSum} " +
-                        $"cells={_visibleCellIds.Count} gpu={useGpu} dist={maxDrawDistance:F0}");
+                        $"cells={_visibleCellIds.Count} {gpuNote} dist={maxDrawDistance:F0}");
                 }
             }
         }
@@ -1055,12 +1075,13 @@ namespace CustomSRP
 
             ComputeBuffer visibleIds = far ? _visibleIdFarV[variant] : _visibleIdV[variant];
             ComputeBuffer args = far ? _argsFarV[variant] : _argsV[variant];
-            if (visibleIds == null || args == null)
+            if (visibleIds == null || (!_forceCpuCullValhall && args == null))
                 return 0;
 
             _cpuVisibleScratch.Clear();
             Vector3 camPos = cam.transform.position;
             int count = _packedV[variant];
+            bool keepOut = _keepOutEnabled && _keepOutData != null;
             for (int j = 0; j < count; j++)
             {
                 Vector4 inst = _windowPackUpload[variant][j];
@@ -1070,7 +1091,12 @@ namespace CustomSRP
                 float dx = pos.x - camPos.x;
                 float dz = pos.z - camPos.z;
                 float d = Mathf.Sqrt(dx * dx + dz * dz);
-                if (d < minDraw || d > maxDraw)
+                VariantCullLimits(variant, d, maxDraw, out float maxD, out int stride);
+                if (d < minDraw || d > maxD)
+                    continue;
+                if (stride > 1 && (j % stride) != 0)
+                    continue;
+                if (keepOut && OilTerrainGrassKeepOutBake.Contains(_keepOutData, pos.x, pos.z))
                     continue;
                 Vector4 clip = vp * new Vector4(pos.x, pos.y, pos.z, 1f);
                 float w = clip.w;
@@ -1080,12 +1106,16 @@ namespace CustomSRP
                 float aw = Mathf.Max(Mathf.Abs(w), 0.25f);
                 if (Mathf.Abs(clip.x) <= aw * 1.15f + cullR
                     && Mathf.Abs(clip.y) <= aw * 2.15f + cullR
-                    && clip.z <= aw + cullR)
+                    && clip.z <= aw + cullR
+                    && aw <= maxD + cullR)
                     _cpuVisibleScratch.Add((uint)j);
             }
 
             if (_cpuVisibleScratch.Count == 0)
+            {
+                StoreProceduralCount(variant, far, 0);
                 return 0;
+            }
 
             if (far)
                 EnsureGrassVisible(ref _visibleIdFarV[variant], Mathf.Max(_cpuVisibleScratch.Count, 1));
@@ -1094,15 +1124,21 @@ namespace CustomSRP
             visibleIds = far ? _visibleIdFarV[variant] : _visibleIdV[variant];
 
             visibleIds.SetData(_cpuVisibleScratch);
-            ResetGrassArgs(args, mesh);
-            _argsCache[0] = mesh.GetIndexCount(0);
-            _argsCache[1] = (uint)_cpuVisibleScratch.Count;
-            _argsCache[2] = mesh.GetIndexStart(0);
-            _argsCache[3] = mesh.GetBaseVertex(0);
-            _argsCache[4] = 0;
-            args.SetData(_argsCache);
-            DrawIndirect(variant, mesh, renderBound, visibleIds, args);
-            return _cpuVisibleScratch.Count;
+            int visibleCount = _cpuVisibleScratch.Count;
+            StoreProceduralCount(variant, far, visibleCount);
+            if (!_forceCpuCullValhall)
+            {
+                ResetGrassArgs(args, mesh);
+                _argsCache[0] = mesh.GetIndexCount(0);
+                _argsCache[1] = (uint)visibleCount;
+                _argsCache[2] = mesh.GetIndexStart(0);
+                _argsCache[3] = mesh.GetBaseVertex(0);
+                _argsCache[4] = 0;
+                args.SetData(_argsCache);
+            }
+
+            DrawIndirect(variant, mesh, renderBound, visibleIds, args, visibleCount);
+            return visibleCount;
         }
 
         void BindGrassCullOutputs(
@@ -1136,21 +1172,40 @@ namespace CustomSRP
                 ComputeBuffer.CopyCount(visibleIds, args, sizeof(uint));
             }
 
-            DrawIndirect(variant, mesh, renderBound, visibleIds, args);
+            DrawIndirect(variant, mesh, renderBound, visibleIds, args, 0);
+        }
+
+        void StoreProceduralCount(int variant, bool far, int count)
+        {
+            int[] counts = far ? _proceduralCountFarV : _proceduralCountV;
+            if ((uint)variant < (uint)counts.Length)
+                counts[variant] = count;
         }
 
         void DrawIndirect(
             int variant, Mesh mesh, Bounds renderBound,
-            ComputeBuffer visibleIds, ComputeBuffer args)
+            ComputeBuffer visibleIds, ComputeBuffer args, int proceduralCount)
         {
             Material mat = _variantMats[variant];
-            if (mat == null || mesh == null || args == null || visibleIds == null)
+            if (mat == null || mesh == null || visibleIds == null)
                 return;
             if (_grassMpb == null)
                 _grassMpb = new MaterialPropertyBlock();
             _grassMpb.Clear();
             _grassMpb.SetBuffer(AllInstancesPosId, _allPosV[variant]);
             _grassMpb.SetBuffer(VisibleInstanceOnlyTransformId, visibleIds);
+            if (_forceCpuCullValhall)
+            {
+                if (proceduralCount <= 0)
+                    return;
+                Graphics.DrawMeshInstancedProcedural(
+                    mesh, 0, mat, renderBound, proceduralCount,
+                    _grassMpb, ShadowCastingMode.Off, false, 0, _bindDrawCamera);
+                return;
+            }
+
+            if (args == null)
+                return;
             Graphics.DrawMeshInstancedIndirect(
                 mesh, 0, mat, renderBound, args,
                 0, _grassMpb, ShadowCastingMode.Off, false, 0, _bindDrawCamera);
@@ -1165,12 +1220,21 @@ namespace CustomSRP
                 if (_packedV[v] <= 0 || _variantMats == null || _variantMats[v] == null)
                     continue;
                 Mesh nearMesh = ResolveVariantMesh(v, far: false);
-                if (nearMesh != null && _argsV[v] != null && _visibleIdV[v] != null)
-                    DrawIndirect(v, nearMesh, renderBound, _visibleIdV[v], _argsV[v]);
+                if (_forceCpuCullValhall)
+                {
+                    if (nearMesh != null && _visibleIdV[v] != null && _proceduralCountV[v] > 0)
+                        DrawIndirect(v, nearMesh, renderBound, _visibleIdV[v], null, _proceduralCountV[v]);
+                    Mesh farMesh = ResolveVariantMesh(v, far: true);
+                    if (farMesh != null && _visibleIdFarV[v] != null && _proceduralCountFarV[v] > 0)
+                        DrawIndirect(v, farMesh, renderBound, _visibleIdFarV[v], null, _proceduralCountFarV[v]);
+                    continue;
+                }
 
-                Mesh farMesh = ResolveVariantMesh(v, far: true);
-                if (farMesh != null && _argsFarV[v] != null && _visibleIdFarV[v] != null)
-                    DrawIndirect(v, farMesh, renderBound, _visibleIdFarV[v], _argsFarV[v]);
+                if (nearMesh != null && _argsV[v] != null && _visibleIdV[v] != null)
+                    DrawIndirect(v, nearMesh, renderBound, _visibleIdV[v], _argsV[v], 0);
+                Mesh farReplay = ResolveVariantMesh(v, far: true);
+                if (farReplay != null && _argsFarV[v] != null && _visibleIdFarV[v] != null)
+                    DrawIndirect(v, farReplay, renderBound, _visibleIdFarV[v], _argsFarV[v], 0);
             }
         }
 
@@ -1268,6 +1332,78 @@ namespace CustomSRP
         {
             SyncGrassIndirectMode();
             return _useAdd ? _kernelAdd : _kernel;
+        }
+
+        bool WantsGpuGrassCull()
+        {
+            if (cullCompute == null || ResolveCullKernel() < 0)
+                return false;
+            if (!_valhallChecked)
+            {
+                string gpu = SystemInfo.graphicsDeviceName;
+                if (string.IsNullOrEmpty(gpu))
+                    return true;
+                _valhallChecked = true;
+                // 闺蜜机等非 Valhall 仍走 GPU 剔除 + indirect；Valhall 才改 CPU + procedural。
+                _forceCpuCullValhall = IsValhallMaliGpu(gpu);
+            }
+
+            return !_forceCpuCullValhall;
+        }
+
+        static bool IsValhallMaliGpu(string gpu)
+        {
+            if (string.IsNullOrEmpty(gpu))
+                return false;
+            return gpu.IndexOf("Mali-G61", System.StringComparison.Ordinal) >= 0
+                || gpu.IndexOf("Mali-G62", System.StringComparison.Ordinal) >= 0
+                || gpu.IndexOf("Mali-G71", System.StringComparison.Ordinal) >= 0
+                || gpu.IndexOf("Mali-G72", System.StringComparison.Ordinal) >= 0
+                || gpu.IndexOf("Immortalis", System.StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>与 CSMainAdd 同一套株型远裁和远距抽稀，srcId 是该株型 packed 下标。</summary>
+        static void VariantCullLimits(int variant, float d, float maxDraw, out float maxD, out int stride)
+        {
+            stride = 1;
+            if (variant >= 7 && variant <= 10)
+            {
+                maxD = Mathf.Min(maxDraw, 70f);
+                if (d >= 48f)
+                    stride = 2;
+            }
+            else if (variant == 11)
+            {
+                maxD = Mathf.Min(maxDraw, 28f);
+                if (d >= 16f)
+                    stride = 2;
+            }
+            else if (variant == 12)
+            {
+                maxD = Mathf.Min(maxDraw, 95f);
+                if (d >= 55f)
+                    stride = 3;
+                else if (d >= 32f)
+                    stride = 2;
+            }
+            else if (variant == 1 || variant == 3 || variant == 5)
+            {
+                maxD = Mathf.Min(maxDraw, 70f);
+                if (d >= 42f)
+                    stride = 16;
+                else if (d >= 24f)
+                    stride = 8;
+            }
+            else
+            {
+                maxD = maxDraw;
+                if (d >= 110f)
+                    stride = 8;
+                else if (d >= 70f)
+                    stride = 4;
+                else if (d >= 45f)
+                    stride = 2;
+            }
         }
 
         void SyncGrassIndirectMode()
@@ -1728,6 +1864,7 @@ namespace CustomSRP
 
             _keepOutGrid?.Release();
             _keepOutGrid = null;
+            _keepOutData = null;
             _keepOutEnabled = false;
             _keepOutLoadTried = false;
             _gpuReady = false;
@@ -1835,7 +1972,7 @@ namespace CustomSRP
 
         /// <summary>
         /// Metal/Vulkan 要求 kernel 声明的 StructuredBuffer 必须绑定；
-        /// KeepOut 关闭时也要挂一个占位 buffer。
+        /// KeepOut 关闭时也要挂一个占位 buffer。Valhall CPU 路径只读内存 mask。
         /// </summary>
         void EnsureKeepOutBuffer()
         {
@@ -1845,13 +1982,16 @@ namespace CustomSRP
                 TryLoadKeepOutFromResources();
             }
 
-            if (_keepOutGrid != null)
+            if (_forceCpuCullValhall || _keepOutGrid != null)
                 return;
 
             _keepOutGrid = new ComputeBuffer(1, sizeof(uint));
             _keepOutGrid.SetData(new uint[] { 0 });
-            _keepOutEnabled = false;
-            _keepOutRes = 0;
+            if (_keepOutData == null)
+            {
+                _keepOutEnabled = false;
+                _keepOutRes = 0;
+            }
         }
 
         void BindKeepOutForKernel(int kernel)
@@ -1870,6 +2010,21 @@ namespace CustomSRP
             if (!OilTerrainGrassKeepOutBake.TryRead(bytes, out var data) || data.Mask == null)
                 return false;
 
+            _keepOutData = data;
+            _keepOutRes = data.Res;
+            _keepOutOriginX = data.OriginX;
+            _keepOutOriginZ = data.OriginZ;
+            _keepOutCell = data.WorldSize / data.Res;
+            _keepOutEnabled = _keepOutRes > 0 && _keepOutCell > 1e-4f;
+            _keepOutLoadTried = true;
+            if (_forceCpuCullValhall)
+            {
+                Log.Info(
+                    $"[OilTerrainGrass] KeepOut cpu res={_keepOutRes} cell={_keepOutCell:F2} " +
+                    $"enabled={_keepOutEnabled}");
+                return true;
+            }
+
             int len = data.Res * data.Res;
             var upload = new uint[len];
             for (int i = 0; i < len; i++)
@@ -1885,12 +2040,6 @@ namespace CustomSRP
 
             _keepOutGrid = new ComputeBuffer(len, sizeof(uint));
             _keepOutGrid.SetData(upload);
-            _keepOutRes = data.Res;
-            _keepOutOriginX = data.OriginX;
-            _keepOutOriginZ = data.OriginZ;
-            _keepOutCell = data.WorldSize / data.Res;
-            _keepOutEnabled = _keepOutRes > 0 && _keepOutCell > 1e-4f;
-            _keepOutLoadTried = true;
             Log.Info(
                 $"[OilTerrainGrass] KeepOut gpu res={_keepOutRes} cell={_keepOutCell:F2} " +
                 $"enabled={_keepOutEnabled}");

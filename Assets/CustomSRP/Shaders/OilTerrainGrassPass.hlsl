@@ -11,6 +11,8 @@
 StructuredBuffer<float4> _AllInstancesPosWSBuffer;
 StructuredBuffer<uint> _VisibleInstanceOnlyTransformIDBuffer;
 
+void OilGrassProceduralSetup() {}
+
 TEXTURE2D(_GrassTexture);
 SAMPLER(sampler_GrassTexture);
 

@@ -41,10 +41,10 @@ CBUFFER_START(UnityPerMaterial)
     float _ShadeSteps;
 CBUFFER_END
 
-// 海面 Monet 纹理 UV 滚动（世界 XZ / 秒）。Glint V 共用此方向，表观漂向一致。
-#define OCEAN_PAINT_SCROLL float2(0.045, -0.12)
+// 海面 Monet / 日道 Glint 共用世界滚动（向后漂）.
+#define OCEAN_PAINT_SCROLL float2(-0.045, 0.12)
 
-// 对齐河：贴图竖笔（沿 V），采样前 st.yx 转 90° → 海面横笔碎纹。
+// 海面横笔：world XZ；Z 向切片成横纹带（画圆极坐标已撤回）.
 float2 OceanMonetPaintUv(float2 worldXZ, float t, float tileMeters, float bands)
 {
     float tile = max(tileMeters, 80.0);
@@ -56,7 +56,7 @@ float2 OceanMonetPaintUv(float2 worldXZ, float t, float tileMeters, float bands)
     float n = OilValueNoise(float2(zBand * b * 0.37, floor(t * 0.35) * 0.17));
     st.x += (n - 0.5) * _StrokeWarp * 0.1;
     st.y = lerp(st.y, zBand, saturate(_StrokeSlice));
-    return st.yx;
+    return st;
 }
 
 #endif

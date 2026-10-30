@@ -42,6 +42,8 @@ namespace CustomSRP
             EnsureInit();
             if (_hasOverride)
                 return _overrideEnabled;
+            if (!IslandGraphicsTier.AllowsOilFilter)
+                return false;
             return settings != null && settings.OilFilter.enabled;
         }
 

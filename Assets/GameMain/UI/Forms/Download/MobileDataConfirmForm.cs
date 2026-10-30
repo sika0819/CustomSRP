@@ -51,18 +51,22 @@ namespace Game
 
             OnClick("primary", () =>
             {
-                _userData?.OnAllow?.Invoke();
+                // 先回调再关：Allow 开闸后 Session phase 清空，避免关窗瞬间又叠一张。
+                Action allow = _userData?.OnAllow;
+                allow?.Invoke();
                 CloseSelf();
             });
             OnClick("secondary", () =>
             {
-                _userData?.OnWifiOnly?.Invoke();
+                Action wifiOnly = _userData?.OnWifiOnly;
+                wifiOnly?.Invoke();
                 CloseSelf();
             });
         }
 
         public override void OnClose(bool isShutdown, object userData)
         {
+            DownloadConsentSession.NotifyMobileDialogClosed();
             _card?.Unbind();
             _card = null;
             _userData = null;

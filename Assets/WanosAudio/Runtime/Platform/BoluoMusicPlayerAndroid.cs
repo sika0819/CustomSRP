@@ -1,5 +1,6 @@
 #if UNITY_ANDROID
 using UnityEngine;
+using UnityEngine.Android;
 
 namespace WanosAudio
 {
@@ -12,7 +13,10 @@ namespace WanosAudio
         public static BoluoMusicPlayerAndroid Instance { get; private set; }
         public static string ArtworkDefault = "";
 
+        const string PostNotificationsPermission = "android.permission.POST_NOTIFICATIONS";
+
         static bool sIsInitialized;
+        static bool sPostNotificationsRequested;
 
         /// <summary>NowPlaying 会话是否已开闸（可写 MediaSession）。</summary>
         public static bool IsSessionReady => Instance != null && sIsInitialized;
@@ -72,6 +76,8 @@ namespace WanosAudio
             // 加载中途已进后台时不能谎报前台，否则随后抢焦会在抖音 / QQ 音乐之上出声。
             BoluoAndroidEngineNative.NotifyAppLifecycle(inBackground, bgDisable);
 
+            EnsurePostNotificationsPermission();
+
             if (sIsInitialized)
                 return;
             sIsInitialized = true;
@@ -82,6 +88,58 @@ namespace WanosAudio
                 ClearNowPlaying();
 
             Debug.Log("[BoluoMusicPlayerAndroid] InitializeAfterLogin");
+        }
+
+        /// <summary>
+        /// Android 13+ 必须要通知权限，否则 FGS MediaStyle 被压掉，vivo/华为负一屏空白。
+        /// </summary>
+        static void EnsurePostNotificationsPermission()
+        {
+#if !UNITY_EDITOR
+            if (AndroidSdkInt() < 33)
+                return;
+
+            if (Permission.HasUserAuthorizedPermission(PostNotificationsPermission))
+            {
+                // 权限刚在设置里打开、或冷启动前已被拒又恢复：重刷已在跑的媒体通知。
+                BoluoAndroidEngineNative.RefreshMediaNotification();
+                return;
+            }
+
+            if (sPostNotificationsRequested)
+                return;
+            sPostNotificationsRequested = true;
+
+            var callbacks = new PermissionCallbacks();
+            callbacks.PermissionGranted += name =>
+            {
+                if (name != PostNotificationsPermission)
+                    return;
+                Debug.Log("[BoluoMusicPlayerAndroid] POST_NOTIFICATIONS granted — refresh media notif");
+                BoluoAndroidEngineNative.RefreshMediaNotification();
+            };
+            callbacks.PermissionDenied += name =>
+            {
+                if (name != PostNotificationsPermission)
+                    return;
+                Debug.LogWarning(
+                    "[BoluoMusicPlayerAndroid] POST_NOTIFICATIONS denied — MediaSession 仍在，但 OEM 负一屏可能空白");
+            };
+            Permission.RequestUserPermission(PostNotificationsPermission, callbacks);
+#endif
+        }
+
+        static int AndroidSdkInt()
+        {
+            try
+            {
+                using (var version = new AndroidJavaClass("android.os.Build$VERSION"))
+                    return version.GetStatic<int>("SDK_INT");
+            }
+            catch (System.Exception)
+            {
+                return 0;
+            }
         }
 
         public static void CleanupAfterLogout()
@@ -99,6 +157,7 @@ namespace WanosAudio
             // 先关闸并撤 native 排队推送，再清卡；禁止 MarkUserPaused(false) 把拆除态当成可续播。
             BoluoAndroidEngineNative.TeardownForLogout();
             sIsInitialized = false;
+            sPostNotificationsRequested = false;
             Debug.Log("[BoluoMusicPlayerAndroid] CleanupAfterLogout");
         }
 

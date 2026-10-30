@@ -20,8 +20,12 @@ MusicPlaylist ──> GameEntry.Sound.PlaySound ──> WanosSoundAgentHelper �
 后台（Unity 已被 pause）：
 NowPlayingService.PublishPlan ──> BackgroundTransportSync ──> AndroidBackgroundTransport.SetPlan
 负一屏 播放/暂停/切歌 ──> WanosMusicPlayerNative.handleTransport*InBackground ──> 原生直接 PostEvent
+  └─ 暂停：Pause_Music + Pause_ALL + mute（与到点停播对齐；仅 Pause_ALL 盖不住 3D 音效）
+  └─ 续播：Resume_ALL + Resume_Music + unmute
+前台负一屏/意图暂停 ──> MusicPlaylist.Pause
+  └─ Pause_Music + Pause_ALL + SetContentAudioPaused(true)
 回前台：AudioAppLifecycle.RestoreForegroundAudio
-  └─ ResyncFromNative（AdoptTrack）+ WanosEngine.RestoreForeground + 业务续播
+  └─ ResyncFromNative（AdoptTrack + ApplyNativePausedLatch）+ WanosEngine.RestoreForeground + 业务续播
   触发条件：仅 `_needsRestore`（进过后台）或 `WanosEngine.IsInterrupted`
   （禁止用 PlaybackState!=Started 当常驻条件，否则 Editor 焦点/点击会反复 Stop+Play）
 ```
@@ -284,5 +288,5 @@ WanosEngine.SetVolumeParameter(WanosEngine.FxVolumeParam, ui01);
 | 目录里没有服务器的新专辑 | 本地 JSON 先加载导致服务器数据被忽略 | 已修复（服务器优先） |
 | `Next()` 跳过一首歌 | `PlayIndex` 先推进索引再尝试播放，bank 缺失时不播但索引已变 | 看 `[MusicPlaylist]` 的 bank 缺失日志 |
 | 媒体卡片不更新 | `NowPlayingService` 需要 `IslandWorldReadyEventArgs` 才 `ArmSession()`；首播须 `PublishPlayingForced`（`TryStartTrack` 成功路径） | 确认世界就绪 + `[NowPlaying] PublishPlayingForced`；`!_armed` 时 Publish 只 skip 不清卡 |
-| 听得到歌但负一屏空白 | 旧逻辑 `!_armed` Publish 会 `ClearCard` 拆 Session；CustomSRP Java playlist 空无法补卡 | 看是否误打 `updateNowPlayingInfo: all empty, cleared`；应只有离岛/关后台播放才清 |
+| 听得到歌但负一屏空白 | ① Android 13+ `POST_NOTIFICATIONS` 被拒 → MediaSession 在、FGS MediaStyle 被压掉 ② `installMediaButtonReceiver` 在 `sMediaSession=` 之前调 → NPE 静默失败 → `mediaButtonReceiver=null`（须 BroadcastReceiver） ③ **vivo OriginOS 6 原子随身听/负一屏有音源白名单**：`com.vivo.musicwidgetmix` 只认 QQ/网易云等；标准 MediaSession 进不了负一屏媒体栏（`Last VivoMediaButtonReceiver` 仍挂 QQ）。OriginOS 7 起可在「原子随身听 → 音源应用管理」手动开 ④ 旧逻辑 `!_armed` Publish 会 `ClearCard` | ① 通知权限 ② dumpsys `mediaButtonReceiver=MBR …BoluoMediaButtonReceiver` ③ vivo：白名单/升级 OriginOS7 开音源；创维/华为不走这套白名单 ④ 勿误打 `all empty, cleared` |
 | 远程暂停/播放无效（前台） | `NowPlayingService.Tick()` 依赖 `Native/BoluoNativeBridge` 每帧泵送 | 非原生宿主环境需要自己泵 `Tick()` |

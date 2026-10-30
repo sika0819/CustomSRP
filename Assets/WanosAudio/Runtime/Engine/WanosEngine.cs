@@ -14,9 +14,9 @@ namespace WanosAudio
         static bool _playbackEnabled;
         static bool _eventPostAllowed;
 
-        /// <summary>最后一次要写入的音量（0–1 UI 量纲）。引擎未创建时也会更新，供回前台重推。</summary>
-        static float _lastMusicVolume01 = 1f;
-        static float _lastFxVolume01 = 1f;
+        /// <summary>最后一次要写入的音量（0–1 UI 量纲）。引擎未创建时也会更新，供回前台重推。默认 0.8 对齐 bank / BoluoSaveData。</summary>
+        static float _lastMusicVolume01 = 0.8f;
+        static float _lastFxVolume01 = 0.8f;
 
         /// <summary>该值是否已经写进当前引擎实例。卸载 / 重置会话后清掉，同值才会再写一次。</summary>
         static bool _musicVolumeApplied;
@@ -96,6 +96,8 @@ namespace WanosAudio
             if (!WanosNative.Instance.IsCreated)
                 return;
             bool ok = WanosNative.Instance.StartEngine();
+            // Bank defaults Music_Volume/Fx_Volume to 80; push last UI constants immediately.
+            ReapplyVolumes();
             Debug.Log($"[{LogTag}] StartEngine ({reason ?? "<no-reason>"}) ok={ok}");
         }
 
@@ -149,6 +151,9 @@ namespace WanosAudio
 
                 _playbackEnabled = true;
                 _eventPostAllowed = true;
+
+                // Device (re)open may reset RTPC to bank defaults — re-push cached UI volumes.
+                ReapplyVolumes();
 
                 // On mobile platforms the engine starts muted; on others it's already unmuted.
                 // We don't touch mute here — callers use Unmute()/KeepSilent() explicitly.

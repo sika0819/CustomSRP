@@ -8,8 +8,6 @@ Shader "CustomSRP/OilNPR"
         _Cutoff ("Alpha Cutoff", Range(0, 1)) = 0.5
         [Toggle(_CLIPPING)] _Clipping ("Alpha Clipping", Float) = 0
 
-        _PaintThickness ("Paint Thickness", Range(0, 2)) = 0.18
-
         _ShadeSteps ("Shade Steps", Range(2, 8)) = 4
         [HDR] _SpecColor ("Specular Color", Color) = (0.5, 0.5, 0.5, 1)
         _Smoothness ("Smoothness (Blinn-Phong exponent base)", Range(0, 1)) = 0
@@ -24,10 +22,6 @@ Shader "CustomSRP/OilNPR"
         [Enum(Mesh UV,0,World,1,Object,2)] _WorldTriplanar ("Triplanar", Float) = 0
         _TriplanarTiling ("Triplanar Tiling", Float) = 0.25
 
-        [Toggle] _OilFoliage ("Foliage (ambient × albedo)", Float) = 0
-        // Billboard only: keep _OilFoliage on, but disable the foliage path around noon
-        // (period≈1). Near leaves leave this off so they stay foliage all day.
-        [Toggle] _OilFoliageSkipDay ("Foliage Off At Noon", Float) = 0
         // Runtime-only (EnvTreeBillboardService); not authored on shared mats.
         [HideInInspector] [Toggle] _OilCrossBillboard ("Tree Cross Billboard", Float) = 0
         [HideInInspector] [Toggle] _OilYBillboard ("Tree Y Billboard", Float) = 0

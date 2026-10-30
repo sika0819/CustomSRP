@@ -43,6 +43,11 @@ namespace Game
         public const float OceanMaxPlayerY = 18f;
         /// <summary>海面高度。岸线发射器贴在这层，不跟胖盒中心的 Y。</summary>
         public const float OceanSurfaceY = 5.7f;
+        /// <summary>
+        /// 高于海面这么多才算可走陆地（岸线采样 / 走路禁海共用）。
+        /// 海平面附近平坦海底不再当路。
+        /// </summary>
+        public const float OceanLandClearanceMeters = 0.4f;
         public const float LakeMinPlayerY = 20f;
         public const float LakeMaxPlayerY = 50f;
 
@@ -261,7 +266,7 @@ namespace Game
             float cellZ = size.z / nz;
             int cellCount = nx * nz;
             var land = new bool[cellCount];
-            float landY = OceanSurfaceY + 0.4f;
+            float landY = OceanSurfaceY + OceanLandClearanceMeters;
             for (int ix = 0; ix < nx; ix++)
             {
                 float x = origin.x + (ix + 0.5f) * cellX;

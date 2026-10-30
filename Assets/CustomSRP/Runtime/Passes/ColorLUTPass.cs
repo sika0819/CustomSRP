@@ -60,7 +60,8 @@ namespace CustomSRP
         void ConfigureColorAdjustments(ComputeCommandBuffer buffer, PostFXSettings settings)
         {
             ColorAdjustmentsSettings colorAdjustments = settings.ColorAdjustments;
-            if (!colorAdjustments.enabled)
+            bool active = colorAdjustments.enabled && Game.IslandGraphicsTier.AllowsColorGrading;
+            if (!active)
             {
                 buffer.SetComputeVectorParam(_shader, colorAdjustmentsId, new Vector4(1f, 1f, 0f, 1f));
                 buffer.SetComputeVectorParam(_shader, colorFilterId, Color.white.linear);
@@ -79,8 +80,9 @@ namespace CustomSRP
         void ConfigureWhiteBalance(ComputeCommandBuffer buffer, PostFXSettings settings)
         {
             WhiteBalanceSettings whiteBalance = settings.WhiteBalance;
-            float temperature = whiteBalance.enabled ? whiteBalance.temperature : 0f;
-            float tint = whiteBalance.enabled ? whiteBalance.tint : 0f;
+            bool active = whiteBalance.enabled && Game.IslandGraphicsTier.AllowsColorGrading;
+            float temperature = active ? whiteBalance.temperature : 0f;
+            float tint = active ? whiteBalance.tint : 0f;
             buffer.SetComputeVectorParam(
                 _shader, whiteBalanceId,
                 ColorUtils.ColorBalanceToLMSCoeffs(temperature, tint));
@@ -89,7 +91,8 @@ namespace CustomSRP
         void ConfigureSplitToning(ComputeCommandBuffer buffer, PostFXSettings settings)
         {
             SplitToningSettings splitToning = settings.SplitToning;
-            if (!splitToning.enabled)
+            bool active = splitToning.enabled && Game.IslandGraphicsTier.AllowsSplitToning;
+            if (!active)
             {
                 buffer.SetComputeVectorParam(_shader, splitToningShadowsId, new Vector4(0.5f, 0.5f, 0.5f, 0f));
                 buffer.SetComputeVectorParam(_shader, splitToningHighlightsId, new Vector4(0.5f, 0.5f, 0.5f, 1f));
@@ -154,8 +157,9 @@ namespace CustomSRP
                 hash = hash * 397 ^ (int)mode;
 
                 ColorAdjustmentsSettings ca = settings.ColorAdjustments;
-                hash = hash * 397 ^ (ca.enabled ? 1 : 0);
-                if (ca.enabled)
+                bool caOn = ca.enabled && Game.IslandGraphicsTier.AllowsColorGrading;
+                hash = hash * 397 ^ (caOn ? 1 : 0);
+                if (caOn)
                 {
                     hash = hash * 397 ^ ca.postExposure.GetHashCode();
                     hash = hash * 397 ^ ca.contrast.GetHashCode();
@@ -165,16 +169,18 @@ namespace CustomSRP
                 }
 
                 WhiteBalanceSettings wb = settings.WhiteBalance;
-                hash = hash * 397 ^ (wb.enabled ? 1 : 0);
-                if (wb.enabled)
+                bool wbOn = wb.enabled && Game.IslandGraphicsTier.AllowsColorGrading;
+                hash = hash * 397 ^ (wbOn ? 1 : 0);
+                if (wbOn)
                 {
                     hash = hash * 397 ^ wb.temperature.GetHashCode();
                     hash = hash * 397 ^ wb.tint.GetHashCode();
                 }
 
                 SplitToningSettings st = settings.SplitToning;
-                hash = hash * 397 ^ (st.enabled ? 1 : 0);
-                if (st.enabled)
+                bool stOn = st.enabled && Game.IslandGraphicsTier.AllowsSplitToning;
+                hash = hash * 397 ^ (stOn ? 1 : 0);
+                if (stOn)
                 {
                     hash = hash * 397 ^ st.shadows.GetHashCode();
                     hash = hash * 397 ^ st.highlights.GetHashCode();

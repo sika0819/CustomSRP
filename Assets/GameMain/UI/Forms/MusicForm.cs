@@ -87,8 +87,8 @@ namespace Game
         bool _revealGate;
         float _ignoreProgrammaticUntil;
 
-        // ListView disables touch-drag scrolling (m_TouchDraggingAllowed=false).
-        // Drive vertical scrollOffset ourselves — same pattern as PresetForm.
+        // UITK ListView/ScrollView still runs built-in touch pan (Unity 6). Own it
+        // via TrickleDown + scrollOffset so content moves 1:1 with the finger.
         const float ListDragSlop = 8f;
         int _listPointerId = -1;
         bool _listPointerDown;
@@ -124,6 +124,8 @@ namespace Game
         /// <summary>True between PointerDown and the matching PointerUp so we don't snap on click.</summary>
         bool _pointerDownInStrip;
         int _dragPointerId = -1;
+        /// <summary>Last highlight slot while dragging; skip strip refresh until it changes.</summary>
+        int _albumDragHighlightSlot = -1;
         const float DragActivationPixels = 6f;
         IVisualElementScheduledItem _albumSnapSchedule;
 
@@ -814,11 +816,15 @@ namespace Game
             _pointerDownInStrip = true;
             _isDragging = false;
             _dragPointerId = evt.pointerId;
-            _dragStartX = evt.position.x;
-            _dragStartY = evt.position.y;
+            // Local to the strip viewport so translate X matches finger 1:1
+            // even if ancestors carry a translate (sheet slide / bottom offset).
+            Vector2 local = _albumContainer.WorldToLocal(evt.position);
+            _dragStartX = local.x;
+            _dragStartY = local.y;
             _dragStartLeft = _albumContent != null
                 ? ReadAlbumContentLeft()
                 : TargetLeftForAlbum(_centerAlbum, MusicCatalog.AlbumCount);
+            _albumDragHighlightSlot = -1;
             // Do NOT CapturePointer here — capturing on every Down steals
             // subsequent list clicks/scrolls if Up is missed. Capture only
             // after the drag threshold is crossed (see Move).
@@ -828,7 +834,7 @@ namespace Game
         {
             if (!_pointerDownInStrip || evt.pointerId != _dragPointerId)
                 return;
-            if (_albumContent == null)
+            if (_albumContent == null || _albumContainer == null)
                 return;
             // Button released without Up (e.g. alt-tab) — abort so hover can't keep dragging.
             if ((evt.pressedButtons & 1) == 0)
@@ -837,13 +843,20 @@ namespace Game
                 return;
             }
 
-            float dx = evt.position.x - _dragStartX;
-            float dy = evt.position.y - _dragStartY;
+            Vector2 local = _albumContainer.WorldToLocal(evt.position);
+            float dx = local.x - _dragStartX;
+            float dy = local.y - _dragStartY;
 
             if (!_isDragging)
             {
                 if (Mathf.Abs(dx) < DragActivationPixels && Mathf.Abs(dy) < DragActivationPixels)
                     return;
+                // Prefer horizontal; a mostly-vertical flick is for the track list below.
+                if (Mathf.Abs(dy) > Mathf.Abs(dx) * 1.5f)
+                {
+                    EndAlbumPointerGesture(commit: false);
+                    return;
+                }
                 _isDragging = true;
                 // Capture only once drag is real so PointerUp still arrives if
                 // the cursor leaves the strip — without blocking the track list
@@ -851,17 +864,22 @@ namespace Game
                 _albumContainer.CapturePointer(evt.pointerId);
             }
 
-            if (Mathf.Abs(dy) > Mathf.Abs(dx) * 1.5f)
-                return;
-
+            // Once horizontal drag is locked, keep tracking X even if Y drifts —
+            // aborting mid-drag made the strip feel stuck / not 1:1 with the finger.
             int albumCount = MusicCatalog.AlbumCount;
             float nextLeft = _dragStartLeft + dx;
             NormalizeAlbumLoop(ref nextLeft, albumCount);
             _dragStartLeft = nextLeft - dx;
             SetAlbumOffsetX(nextLeft);
 
-            // Visual highlight only — do NOT commit album / rebuild track list until Up.
-            RefreshAlbumStrip();
+            // Highlight only when the centred slot changes — full strip refresh
+            // every move regenerated text and hitch'd behind the finger.
+            int highlight = SlotIndexFromLeft(nextLeft);
+            if (highlight != _albumDragHighlightSlot)
+            {
+                _albumDragHighlightSlot = highlight;
+                RefreshAlbumStrip();
+            }
         }
 
         void OnAlbumPointerUp(PointerUpEvent evt)
@@ -1064,6 +1082,9 @@ namespace Game
             _scrollView.verticalScrollerVisibility = ScrollerVisibility.AlwaysVisible;
             _scrollView.mode = ScrollViewMode.Vertical;
             _scrollView.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
+            // No coast / rubber-band — finger lift leaves content where it is.
+            _scrollView.scrollDecelerationRate = 0f;
+            _scrollView.elasticity = 0f;
             _vScroller = _scrollView.verticalScroller;
             if (_vScroller == null)
                 return;
@@ -1098,11 +1119,12 @@ namespace Game
         {
             if (_list == null)
                 return;
-            // Listen on ListView so empty viewport chrome still receives the gesture.
-            _list.RegisterCallback<PointerDownEvent>(OnListPointerDown);
-            _list.RegisterCallback<PointerMoveEvent>(OnListPointerMove);
-            _list.RegisterCallback<PointerUpEvent>(OnListPointerUp);
-            _list.RegisterCallback<PointerCancelEvent>(OnListPointerCancel);
+            // TrickleDown on ListView runs before ScrollView's contentContainer touch
+            // pan — BubbleUp was too late (ScrollView StopPropagation ate the move).
+            _list.RegisterCallback<PointerDownEvent>(OnListPointerDown, TrickleDown.TrickleDown);
+            _list.RegisterCallback<PointerMoveEvent>(OnListPointerMove, TrickleDown.TrickleDown);
+            _list.RegisterCallback<PointerUpEvent>(OnListPointerUp, TrickleDown.TrickleDown);
+            _list.RegisterCallback<PointerCancelEvent>(OnListPointerCancel, TrickleDown.TrickleDown);
             _list.RegisterCallback<PointerCaptureOutEvent>(OnListPointerCaptureOut);
         }
 
@@ -1111,10 +1133,10 @@ namespace Game
             EndListPointerGesture(commitScroll: false);
             if (_list == null)
                 return;
-            _list.UnregisterCallback<PointerDownEvent>(OnListPointerDown);
-            _list.UnregisterCallback<PointerMoveEvent>(OnListPointerMove);
-            _list.UnregisterCallback<PointerUpEvent>(OnListPointerUp);
-            _list.UnregisterCallback<PointerCancelEvent>(OnListPointerCancel);
+            _list.UnregisterCallback<PointerDownEvent>(OnListPointerDown, TrickleDown.TrickleDown);
+            _list.UnregisterCallback<PointerMoveEvent>(OnListPointerMove, TrickleDown.TrickleDown);
+            _list.UnregisterCallback<PointerUpEvent>(OnListPointerUp, TrickleDown.TrickleDown);
+            _list.UnregisterCallback<PointerCancelEvent>(OnListPointerCancel, TrickleDown.TrickleDown);
             _list.UnregisterCallback<PointerCaptureOutEvent>(OnListPointerCaptureOut);
         }
 
@@ -1144,17 +1166,18 @@ namespace Game
             _listDragging = false;
             _listCaptured = false;
             _listPointerId = evt.pointerId;
-            _listDragStartY = evt.position.y;
+            // Local to the list viewport so scrollOffset tracks the finger 1:1.
+            _listDragStartY = _list.WorldToLocal(evt.position).y;
             _listScrollStartY = _scrollView.scrollOffset.y;
             _suppressTrackClick = false;
         }
 
         void OnListPointerMove(PointerMoveEvent evt)
         {
-            if (!_listPointerDown || evt.pointerId != _listPointerId || _scrollView == null)
+            if (!_listPointerDown || evt.pointerId != _listPointerId || _scrollView == null || _list == null)
                 return;
 
-            float dy = evt.position.y - _listDragStartY;
+            float dy = _list.WorldToLocal(evt.position).y - _listDragStartY;
             if (!_listDragging && Mathf.Abs(dy) >= ListDragSlop)
             {
                 _listDragging = true;
@@ -1173,7 +1196,7 @@ namespace Game
             float next = Mathf.Clamp(_listScrollStartY - dy, 0f, max);
             _scrollView.scrollOffset = new Vector2(_scrollView.scrollOffset.x, next);
             NotifyScrollbarUserInput(bypassProgrammaticCooldown: true);
-            evt.StopPropagation();
+            evt.StopImmediatePropagation();
         }
 
         void OnListPointerUp(PointerUpEvent evt)
@@ -1888,18 +1911,17 @@ namespace Game
             string bankName = tracks[track].BankName;
             string[] banks = { bankName };
 
-            if (!DownloadNetworkGate.TryPassDownloadGates(
-                    banks,
-                    onAllowAfterMobile: () => DoDownload(album, track, bankName),
-                    onWifiOnly: () =>
+            DownloadConsentSession.EnsureReady(
+                banks,
+                onReady: () => DoDownload(album, track, bankName),
+                new DownloadUiOptions
+                {
+                    OnCancel = () =>
                     {
                         ClearPendingMusic();
                         _list?.schedule.Execute(() => _list?.RefreshItems());
                     },
-                    onBlockedRetreat: null))
-                return;
-
-            DoDownload(album, track, bankName);
+                });
         }
 
         void DoDownload(int album, int track, string bankName)

@@ -17,7 +17,7 @@ namespace CustomSRP
         [Tooltip("Off: no fog. Environment: Lighting window Fog. Custom: the fields below.")]
         public Source source = Source.Environment;
 
-        [Tooltip("Fog color follows OilSkyboxTime TOD fog table (night = #36363C, not main light).")]
+        [Tooltip("Fog color follows OilSkyboxTime TOD fog table (night = #0A1828, not main light).")]
         [FormerlySerializedAs("matchSkyHorizon")]
         public bool matchMainLight = true;
 
@@ -75,7 +75,7 @@ namespace CustomSRP
             Vector4 color;
             if (matchTodFog && TryTodFogColor(out Color fogColor))
             {
-                // OilSkyboxTime authors sRGB anchors (#36363C night); upload linear for the fog pass.
+                // OilSkyboxTime authors sRGB anchors (#0A1828 night); upload linear for the fog pass.
                 Color linear = fogColor.linear;
                 color = new Vector4(linear.r, linear.g, linear.b, 1f);
             }
@@ -107,7 +107,7 @@ namespace CustomSRP
                 return true;
             }
 
-            // ApplyFogColor keeps Environment fog on the same TOD table (night = #36363C).
+            // ApplyFogColor keeps Environment fog on the same TOD table (night = #0A1828).
             if (RenderSettings.fog)
             {
                 fogColor = RenderSettings.fogColor;

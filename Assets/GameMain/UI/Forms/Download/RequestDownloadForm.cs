@@ -51,18 +51,22 @@ namespace Game
 
             OnClick("primary", () =>
             {
-                _userData?.OnDownload?.Invoke();
+                // 先关再回调：同帧 Open 下一张时 Dialog 组更稳。
+                Action download = _userData?.OnDownload;
                 CloseSelf();
+                download?.Invoke();
             });
             OnClick("secondary", () =>
             {
-                _userData?.OnReturn?.Invoke();
+                Action ret = _userData?.OnReturn;
                 CloseSelf();
+                ret?.Invoke();
             });
         }
 
         public override void OnClose(bool isShutdown, object userData)
         {
+            DownloadConsentSession.NotifyRequestDialogClosed();
             _card?.Unbind();
             _card = null;
             _userData = null;

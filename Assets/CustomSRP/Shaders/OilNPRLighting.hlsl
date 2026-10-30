@@ -327,7 +327,7 @@ half3 OilNPRLightingEx(
 #endif
 }
 
-// Boluo EnvFoliage: shared OilVegetationDirect + local other lights.
+// Vegetation path: shared OilVegetationDirect + local other lights (billboards).
 half3 OilFoliageLighting(Surface surfaceWS, half3 albedo, half shadeSteps, float2 screenUV)
 {
     half3 N = normalize((half3)surfaceWS.normal);
@@ -337,28 +337,11 @@ half3 OilFoliageLighting(Surface surfaceWS, half3 albedo, half shadeSteps, float
     half lightLum = 0.0h;
     if (GetDirectionalLightCount() > 0)
     {
-        // Same SkipDay gate as OilNPRLighting. Keyword _RECEIVE_SHADOWS is not
-        // enough: Unity reserializes leaf mats back to receive-on, and the
-        // near/far mesh LOD pop is the cascade fade, not the billboard tier.
-        bool skipCascade = false;
-#if defined(CUSTOM_OIL_NPR_INPUT_INCLUDED)
-        skipCascade = _OilFoliageSkipDay > 0.5;
-#endif
-        if (skipCascade)
-        {
-            DirectionalLightData data = _DirectionalLightData[0];
-            lightColor = (half3)data.color.rgb;
-            L = (half3)data.directionAndMask.xyz;
-            att = 1.0h;
-        }
-        else
-        {
-            ShadowData shadowData = GetShadowData(surfaceWS);
-            Light light = GetDirectionalLight(0, surfaceWS, shadowData);
-            lightColor = (half3)light.color;
-            L = (half3)light.direction;
-            att = (half)light.attenuation;
-        }
+        ShadowData shadowData = GetShadowData(surfaceWS);
+        Light light = GetDirectionalLight(0, surfaceWS, shadowData);
+        lightColor = (half3)light.color;
+        L = (half3)light.direction;
+        att = (half)light.attenuation;
         lightLum = OilVegMainLightLuma(lightColor);
     }
 
@@ -416,19 +399,10 @@ half3 OilNPRLighting(
     float2 screenUV)
 {
     half3 ambient = OilNPRAmbient(surfaceWS);
-    // Tree-leaf mats keep _OilFoliageSkipDay. Noon falls through to this NPR
-    // path; sampling cascades here makes near LOD leaves receive and far LOD
-    // leaves (outside shadow distance) not. Cast stays on ShadowCaster.
-    // Mesh grass leaves SkipDay at 0 and still receives.
-    half forced = -1.0h;
-#if defined(CUSTOM_OIL_NPR_INPUT_INCLUDED)
-    if (_OilFoliageSkipDay > 0.5)
-        forced = 1.0h;
-#endif
     return OilNPRLightingEx(
         surfaceWS, albedo, ambient, specularColor,
         specularThreshold, shadeSteps, paintRim,
-        brush, shadowWobble, forced, quantize, smoothness, screenUV);
+        brush, shadowWobble, -1.0h, quantize, smoothness, screenUV);
 }
 
 #endif

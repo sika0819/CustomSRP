@@ -96,6 +96,7 @@ namespace CustomSRP
         {
             OilRainStreakQuad.ReleaseForLeave();
             OilSkyboxTime.ClearFogCanvasGlobal();
+            OilSkyboxTime.ClearCelestialTexturesGlobal();
             OilCloudLayer.ReleaseSharedMeshes();
             OilTerrainGrassBinder.ReleaseStubs();
         }

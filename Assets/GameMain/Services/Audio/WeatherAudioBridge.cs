@@ -57,6 +57,11 @@ namespace Game
         /// <summary>Rain_Medium blend clip min. 小雨 is 30, so values below this are small-only.</summary>
         const float LightRainExclusiveMax = 32f;
 
+        /// <summary>
+        /// Bank blend / 起声门槛：0 档 <c>Play_Rain</c>/<c>Play_Wind</c> 不起声，之后只抬 RTPC 也补不回来。
+        /// </summary>
+        const float MinArmRtpc = 1f;
+
         public void Start()
         {
             if (_started)
@@ -185,42 +190,46 @@ namespace Game
             float wind = 0f;
             float rain = 0f;
             float foggy = 0f;
+            float windTarget = 0f;
+            float rainTarget = 0f;
             bool wantWind = false;
             bool wantRain = false;
 
             if (weather != null && !(PresetService.Instance != null && PresetService.Instance.IsWeatherHeld))
             {
+                // Boluo WeatherAudioSubscriber：按目标 Kind/Level 立刻 Enable；
+                // RTPC 可 2s 淡入。切勿用 lerp 近 0 判定 want —— 0 档 Post 不起声。
+                float intensity = weather.Level <= 0 ? 0f : Mathf.Clamp(weather.Level, 0, 3) * 30f;
+                switch (weather.Kind)
+                {
+                    case IslandWeatherKind.Wind:
+                        wantWind = intensity > 0f;
+                        windTarget = intensity;
+                        break;
+                    case IslandWeatherKind.Rain:
+                        wantRain = intensity > 0f;
+                        rainTarget = intensity;
+                        break;
+                    case IslandWeatherKind.Foggy:
+                        foggy = intensity;
+                        break;
+                    case IslandWeatherKind.Cloud:
+                    case IslandWeatherKind.Clear:
+                    default:
+                        break;
+                }
+
                 if (weather.IsWeatherTransitioning)
                 {
-                    // Same 2s blend as fog / rain / wind, so the loop does not pop in at full level.
+                    // Same 2s blend as fog / rain / wind visuals.
                     wind = weather.VisualWind01 * 90f;
                     rain = weather.VisualRainAudio;
                     foggy = weather.VisualFoggyAudio;
-                    wantWind = wind > 0.01f;
-                    wantRain = rain > 0.01f;
                 }
                 else
                 {
-                    // Boluo: RTPC = curWeatherState * 30 (关闭=0, 小=30, 中=60, 大=90).
-                    float intensity = weather.Level <= 0 ? 0f : Mathf.Clamp(weather.Level, 0, 3) * 30f;
-                    switch (weather.Kind)
-                    {
-                        case IslandWeatherKind.Wind:
-                            wantWind = intensity > 0f;
-                            wind = intensity;
-                            break;
-                        case IslandWeatherKind.Rain:
-                            wantRain = intensity > 0f;
-                            rain = intensity;
-                            break;
-                        case IslandWeatherKind.Foggy:
-                            foggy = intensity;
-                            break;
-                        case IslandWeatherKind.Cloud:
-                        case IslandWeatherKind.Clear:
-                        default:
-                            break;
-                    }
+                    wind = windTarget;
+                    rain = rainTarget;
                 }
             }
 
@@ -229,12 +238,22 @@ namespace Game
             WriteLogicalRtpc(RainParam, rain, ref _rainLogical, ref _rainWritten);
             WriteLogicalRtpc(FoggyParam, foggy, ref _foggyLogical, ref _foggyWritten);
 
+            float duck = _session.Duck.Level01;
+
             // Retry bank load after a prior miss (banks may land later).
             if (wantWind)
             {
                 _windMissing = false;
-                StartLoop(ref _windPlaying, WanosInteraction.WindObjectId, WindBank, WindPlay,
-                    ref _windBankHeld, ref _windMissing);
+                if (!_windPlaying && windTarget * duck >= MinArmRtpc)
+                {
+                    // 面板插值开头 wind≈0：先按目标档 seed 再 Post，再写回 lerp，音量仍淡入。
+                    bool seeded = SeedArmableRtpcBeforePlay(
+                        WindParam, wind, windTarget, ref _windWritten);
+                    StartLoop(ref _windPlaying, WanosInteraction.WindObjectId, WindBank, WindPlay,
+                        ref _windBankHeld, ref _windMissing);
+                    if (seeded)
+                        RestoreLogicalRtpc(WindParam, wind, ref _windWritten);
+                }
             }
             else
                 StopLoop(ref _windPlaying, WanosInteraction.WindObjectId, WindStop, ref _windBankHeld, WindBank);
@@ -244,7 +263,7 @@ namespace Game
                 // 大雨/中雨已在播时，只把 Rain RTPC 降到 30 不会拉起 Rain_Small
                 // （0 档起声、或小雨那条已经按 loop_times=1 放完，抬/降参数都补不回来）。
                 // 虹膜把 RTPC 乘到 0 时不要在这一帧重起：0 档 Play_Rain 起不来小雨。
-                if (NeedsLightRainRearm(rain) && rain * _session.Duck.Level01 >= 1f)
+                if (NeedsLightRainRearm(rain) && rainTarget * duck >= MinArmRtpc)
                 {
                     Log.Info(
                         $"[WeatherAudio] rearm Play_Rain light rtpc={rain:F1} postedAt={_rainPostedAt:F1}");
@@ -253,11 +272,21 @@ namespace Game
                 }
 
                 _rainMissing = false;
-                bool wasPlaying = _rainPlaying;
-                StartLoop(ref _rainPlaying, WanosInteraction.RainObjectId, RainBank, RainPlay,
-                    ref _rainBankHeld, ref _rainMissing);
-                if (_rainPlaying && !wasPlaying)
-                    _rainPostedAt = rain;
+                if (!_rainPlaying && rainTarget * duck >= MinArmRtpc)
+                {
+                    float rainPostedAt = rain;
+                    // 面板插值开头 rain≈0：先按目标档 seed 再 Post，再写回 lerp，音量仍淡入。
+                    bool seeded = SeedArmableRtpcBeforePlay(
+                        RainParam, rain, rainTarget, ref _rainWritten);
+                    if (seeded)
+                        rainPostedAt = rainTarget;
+                    StartLoop(ref _rainPlaying, WanosInteraction.RainObjectId, RainBank, RainPlay,
+                        ref _rainBankHeld, ref _rainMissing);
+                    if (seeded)
+                        RestoreLogicalRtpc(RainParam, rain, ref _rainWritten);
+                    if (_rainPlaying)
+                        _rainPostedAt = rainPostedAt;
+                }
             }
             else
             {
@@ -266,6 +295,32 @@ namespace Game
             }
 
             _session.Rain.EvaluateNow();
+        }
+
+        /// <summary>
+        /// Post 前若当前 ducked RTPC 不足以起声，先写入目标档位（对齐 Boluo 揭幕「先 RTPC 再 Play」）。
+        /// 返回 true 表示写了 seed（调用方应把 postedAt 记成 target）。
+        /// </summary>
+        bool SeedArmableRtpcBeforePlay(
+            string name,
+            float logical,
+            float targetLogical,
+            ref float writtenField)
+        {
+            float duck = _session.Duck.Level01;
+            if (logical * duck >= MinArmRtpc)
+                return false;
+            if (targetLogical * duck < MinArmRtpc)
+                return false;
+            writtenField = float.NaN;
+            ForceWrite(name, targetLogical, ref writtenField);
+            return true;
+        }
+
+        void RestoreLogicalRtpc(string name, float logical, ref float writtenField)
+        {
+            writtenField = float.NaN;
+            ForceWrite(name, logical, ref writtenField);
         }
 
         bool NeedsLightRainRearm(float rain)

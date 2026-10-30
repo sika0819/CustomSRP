@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 2660837105596759810}
   - component: {fileID: 9096655336762458295}
   - component: {fileID: 7695219914254890505}
-  - component: {fileID: 3346955025011913911}
+  - component: {fileID: 132687481773070153}
   m_Layer: 4
   m_Name: IslandOcean
   m_TagString: Untagged
@@ -109,7 +109,7 @@ MonoBehaviour:
   followCamera: 0
   waveHeight: 0.2
   boundsPadding: 4
---- !u!65 &3346955025011913911
+--- !u!65 &132687481773070153
 BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -124,9 +124,9 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 2500, y: 1, z: 2500}
-  m_Center: {x: 0, y: 0.2, z: 0}
+  m_Size: {x: 2500, y: 0.4, z: 2500}
+  m_Center: {x: 0, y: -0.2, z: 0}

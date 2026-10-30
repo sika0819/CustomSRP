@@ -7,6 +7,9 @@ namespace Game
     /// </summary>
     public static class DownloadDialogCopy
     {
+        /// <summary>岛内无网下载提示（toast，非弹窗）。</summary>
+        public const string OfflineToast = "网络异常";
+
         public sealed class DialogCopy
         {
             public string Title;
@@ -75,7 +78,8 @@ namespace Game
         }
 
         /// <summary>
-        /// 前缀 + 已下载数字 + 体积/速度，拼成整句。速度用 0.##；未知速度不写速度段；
+        /// 前缀 + 已下载数字 + 体积/速度，拼成整句。
+        /// 速度用 0.##，未知时为「速度--MB/秒」；无速度时 Eta 为空（界面保持上次有效剩余，不写「剩余--」）；
         /// 完成显示「完成」；超过 60 秒用「剩余Nm」，封顶 60。
         /// </summary>
         public static ProgressCopy Progress(
@@ -86,10 +90,9 @@ namespace Game
         {
             int downloaded = UnityEngine.Mathf.RoundToInt(UnityEngine.Mathf.Max(0f, downloadedMb));
             int total = UnityEngine.Mathf.RoundToInt(UnityEngine.Mathf.Max(0f, totalMb));
-            bool hasSpeed = speedMbps > 0.001f;
-            string speedText = hasSpeed
+            string speedText = speedMbps > 0.001f
                 ? speedMbps.ToString("0.##", CultureInfo.InvariantCulture)
-                : string.Empty;
+                : "--";
 
             const string Lead = "正在为你下载资源：";
             string prefix;
@@ -101,16 +104,10 @@ namespace Game
                 sizeDetail = string.Empty;
                 sentence = string.Empty;
             }
-            else if (hasSpeed)
-            {
-                prefix = Lead;
-                sizeDetail = $"MB/{total}MB  速度{speedText}MB/秒";
-                sentence = prefix + downloaded + sizeDetail;
-            }
             else
             {
                 prefix = Lead;
-                sizeDetail = $"MB/{total}MB";
+                sizeDetail = $"MB/{total}MB  速度{speedText}MB/秒";
                 sentence = prefix + downloaded + sizeDetail;
             }
 
@@ -132,8 +129,9 @@ namespace Game
         {
             if (completed)
                 return "完成";
+            // 无速度 / 无总量：不返回「剩余--」，由界面保留上次有效文案。
             if (totalMb <= 0.01f || speedMbps <= 0.001f)
-                return "剩余--";
+                return string.Empty;
 
             float remaining = UnityEngine.Mathf.Max(0f, totalMb - downloadedMb);
             float sec = remaining / speedMbps;

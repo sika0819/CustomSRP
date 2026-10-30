@@ -68,7 +68,7 @@ bool OilRiverResolveSun(out float3 L)
     return length(L) > 0.05;
 }
 
-// 相机→太阳只一道：世界侧向映射到贴图中心竖带，禁止 Monet 横向平铺出多列。
+// 日道从太阳倒影落点拉向相机；竖列 Glint，禁止 Monet 横向多列。
 half OilRiverSunGlint(float3 positionWS, half3 normalWS, float t, half stroke)
 {
     float3 L;
@@ -80,24 +80,36 @@ half OilRiverSunGlint(float3 positionWS, half3 normalWS, float t, half stroke)
     float elev = saturate(L.y);
     float2 sunXZ = float2(L.x, L.z);
     float sunLen = length(sunXZ);
-    half lit = saturate(((half)L.y + 0.06h) * 30.0h);
+    half lit = saturate(((half)L.y + 0.12h) * 18.0h);
     half stable = saturate(((half)sunLen - 0.05h) * 20.0h);
     if (lit * stable < 0.001h)
     {
         return 0.0h;
     }
 
-    float2 sunH = sunXZ / max(sunLen, 1e-4);
-    float2 side = float2(-sunH.y, sunH.x);
-    float2 fromCam = positionWS.xz - _WorldSpaceCameraPos.xz;
-    float along = dot(fromCam, sunH);
-    float lat = dot(fromCam, side);
+    float2 footXZ;
+    float pathLen;
+    if (!OilWaterCelestialFoot(L, positionWS.y, footXZ, pathLen))
+    {
+        return 0.0h;
+    }
+
+    float2 toCam = _WorldSpaceCameraPos.xz - footXZ;
+    float2 alongDir = toCam / max(pathLen, 1e-3);
+    float2 side = float2(-alongDir.y, alongDir.x);
+    float2 fromFoot = positionWS.xz - footXZ;
+    float along = dot(fromFoot, alongDir);
+    float lat = dot(fromFoot, side);
     lat += dot(float2(normalWS.x, normalWS.z), side) * 1.8;
-    float halfW = lerp(1.6, 5.5, saturate(along / 100.0));
+    float halfW = lerp(1.8, 6.0, saturate(along / max(pathLen, 1.0)));
     half lane = (half)saturate(1.0 - abs(lat) / max(halfW, 1e-3));
     lane = lane * lane * (3.0h - 2.0h * lane);
-    half near = (half)saturate((along - 1.2) / 10.0);
-    lane *= near * lit * stable * (half)saturate(elev * 2.8 + 0.12);
+    half along01 = (half)saturate(along / max(pathLen, 1e-3));
+    half fromSun = (1.0h - along01 * along01);
+    fromSun *= (half)saturate(1.0 - along / max(pathLen * 0.97, 1.0));
+    half atFoot = (half)saturate(1.0 - length(fromFoot) / max(halfW * 1.8, 3.0));
+    fromSun = max(fromSun, atFoot);
+    lane *= fromSun * lit * stable * (half)saturate(elev * 2.2 + 0.2);
     if (lane < 1e-4h)
     {
         return 0.0h;
@@ -114,7 +126,7 @@ half OilRiverSunGlint(float3 positionWS, half3 normalWS, float t, half stroke)
         _GlintMap, sampler_GlintMap, st + float2(0.0, 0.37)).rgb;
     half3 g = max(g0, g1 * 0.7h);
 #endif
-    half dab = saturate((PaintLuma(g) - 0.12h) * 2.6h);
+    half dab = saturate((PaintLuma(g) - 0.10h) * 2.8h);
     dab *= lerp(0.55h, 1.15h, stroke);
     return dab * lane;
 }
@@ -228,7 +240,10 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
 
     half glint = OilRiverSunGlint(input.positionWS, normalWS, t, stroke);
     glint *= (1.0h - shoreMask * 0.85h);
-    color += (half3)_GlintColor.rgb * glint * (half)_GlintStrength;
+    half3 glintCol = (half3)_GlintColor.rgb;
+    glintCol = lerp(glintCol, half3(0.52h, 0.70h, 0.95h), night * 0.72h);
+    glint *= lerp(1.0h, 0.48h, night);
+    color += glintCol * glint * (half)_GlintStrength;
 
     // 对齐海：雾+倒影之后再画岸沫；钛白偏冷灰，夜晚压暗，避免岸缘一条粉笔白。
     half3 whiteFoam = half3(0.78h, 0.82h, 0.86h);

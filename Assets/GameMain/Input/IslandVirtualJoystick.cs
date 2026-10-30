@@ -514,7 +514,8 @@ namespace Game
                 if (pointerId == PointerId.mousePointerId)
                     return false;
 
-                for (int i = 0; i < Input.touchCount; i++)
+                int touchCount = TouchInputLimit.Count;
+                for (int i = 0; i < touchCount; i++)
                 {
                     Touch touch = Input.GetTouch(i);
                     if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)

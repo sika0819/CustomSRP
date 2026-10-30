@@ -132,11 +132,16 @@ namespace Game
             ApplyButton(_secondary, "secondaryLabel", content.ShowSecondary && !content.ShowProgress, content.SecondaryLabel);
 
             if (content.ShowProgress)
+            {
+                if (_eta != null)
+                    _eta.text = string.Empty;
                 SetProgress(0f, 0f, 0f);
+            }
         }
 
         /// <summary>
-        /// percent 为 0–100。downloadedMb / totalMb 为 0 时只画百分比，剩余时间显示「剩余--」。
+        /// percent 为 0–100。速度始终展示（未知为「速度--MB/秒」）；
+        /// 有速度才更新剩余时间，无速度时保持上次文案、不写「剩余--」。
         /// </summary>
         public void SetProgress(float percent, float downloadedMb, float totalMb)
         {
@@ -153,6 +158,7 @@ namespace Game
             }
 
             float now = Time.realtimeSinceStartup;
+            bool speedSampled = false;
             if (_hasSample)
             {
                 float dt = now - _sampleTime;
@@ -163,6 +169,7 @@ namespace Game
                         _speedMbps = delta / dt;
                     _sampleTime = now;
                     _sampleMb = downloadedMb;
+                    speedSampled = true;
                 }
             }
             else
@@ -177,7 +184,8 @@ namespace Game
             int shownPercent = Mathf.RoundToInt(percent);
             int shownDownloaded = Mathf.RoundToInt(downloadedMb);
             bool changed = shownPercent != _shownPercent || shownDownloaded != _shownDownloaded;
-            if (!completed && !changed && _nextTextTime >= 0f && now < _nextTextTime)
+            // 速度重采样后也要刷新，否则「速度--」会一直卡到下次进度整数变化。
+            if (!completed && !changed && !speedSampled && _nextTextTime >= 0f && now < _nextTextTime)
                 return;
 
             _shownPercent = shownPercent;
@@ -200,10 +208,16 @@ namespace Game
             {
                 if (_sentence != null)
                     _sentence.text = string.Empty;
-                if (_eta != null)
-                    _eta.text = completed ? "完成" : "剩余--";
+                // 无速度/无总量：不覆盖成「剩余--」；完成才写「完成」。
+                if (_eta != null && completed)
+                    _eta.text = "完成";
                 if (_sizeDetail != null)
-                    _sizeDetail.text = $"{Mathf.RoundToInt(percent)}%";
+                {
+                    string speedText = _speedMbps > 0.001f
+                        ? _speedMbps.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+                        : "--";
+                    _sizeDetail.text = $"{Mathf.RoundToInt(percent)}%  速度{speedText}MB/秒";
+                }
                 return;
             }
 
@@ -215,8 +229,9 @@ namespace Game
 
             if (_sentence != null)
                 _sentence.text = copy.Prefix ?? string.Empty;
-            if (_eta != null)
-                _eta.text = copy.Eta ?? string.Empty;
+            // 无速度时 Eta 为空：保持上次有效剩余时间，不显示「剩余--」。
+            if (_eta != null && !string.IsNullOrEmpty(copy.Eta))
+                _eta.text = copy.Eta;
             if (_downloaded != null)
                 _downloaded.text = copy.Downloaded ?? string.Empty;
             if (_sizeDetail != null)
@@ -279,6 +294,7 @@ namespace Game
             _shownPercent = -1;
             _shownDownloaded = -1;
             _downloadedApplied = false;
+            _downloadedShown = false;
         }
     }
 }

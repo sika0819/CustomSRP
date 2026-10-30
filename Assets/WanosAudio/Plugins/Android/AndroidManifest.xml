@@ -3,6 +3,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <!-- Android 13+：拒了通知权限时 MediaSession 仍在，但 FGS MediaStyle 被系统压掉 → 负一屏空白。 -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <application>
     <service
       android:name="com.wanos.app.health.WanosMediaPlaybackForegroundService"
@@ -10,5 +12,14 @@
       android:exported="false"
       android:foregroundServiceType="mediaPlayback"
       android:stopWithTask="false" />
+    <!-- setMediaButtonReceiver 必须是 BroadcastReceiver；Vivo Last VivoMediaButtonReceiver 靠它认卡。 -->
+    <receiver
+      android:name="com.wanos.app.health.BoluoMediaButtonReceiver"
+      android:enabled="true"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MEDIA_BUTTON" />
+      </intent-filter>
+    </receiver>
   </application>
 </manifest>

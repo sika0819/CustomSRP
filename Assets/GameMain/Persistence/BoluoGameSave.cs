@@ -11,6 +11,8 @@ namespace Game
     {
         static BoluoSaveData _data = new BoluoSaveData();
         static bool _loaded;
+        /// <summary>防 Load 重入。迁移写盘若误走 Persist→EnsureLoaded，会 Load↔Persist 栈溢出。</summary>
+        static bool _loading;
 
         public static BoluoSaveData Data
         {
@@ -32,77 +34,118 @@ namespace Game
 
         public static void Load()
         {
-            _data = new BoluoSaveData();
-            string raw = BoluoGamePersistence.LoadBoluoSaveDataRaw();
-            if (!string.IsNullOrEmpty(raw))
+            if (_loading)
+                return;
+
+            _loading = true;
+            try
             {
-                try
+                _data = new BoluoSaveData();
+                string raw = BoluoGamePersistence.LoadBoluoSaveDataRaw();
+                if (!string.IsNullOrEmpty(raw))
                 {
-                    var parsed = JsonUtility.FromJson<BoluoSaveData>(raw);
-                    if (parsed != null)
-                        _data = parsed;
-                }
-                catch (System.Exception ex)
-                {
-                    Log.Warning($"[BoluoGameSave] Load parse failed: {ex.Message}");
-                }
+                    try
+                    {
+                        var parsed = JsonUtility.FromJson<BoluoSaveData>(raw);
+                        if (parsed != null)
+                            _data = parsed;
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Log.Warning($"[BoluoGameSave] Load parse failed: {ex.Message}");
+                    }
 
 #if UNITY_IOS
-                // 旧存档缺字段时反序列化会得到 false，迁移为默认开启
-                if (!raw.Contains("healthTip"))
-                    _data.healthTip = true;
-                if (!raw.Contains("recommend"))
-                    _data.recommend = true;
+                    // 旧存档缺字段时反序列化会得到 false，迁移为默认开启
+                    if (!raw.Contains("healthTip"))
+                        _data.healthTip = true;
+                    if (!raw.Contains("recommend"))
+                        _data.recommend = true;
 #endif
-            }
+                }
 
-            MigrateVolumesFromSettingIfNeeded(raw);
-            _loaded = true;
-            Log.Info(
-                $"[BoluoGameSave] loaded guest={GuestSession.IsGuest} weatherLinkage={_data.weatherLinkage} " +
-                $"healthTip={_data.healthTip} recommend={_data.recommend} scheme={_data.curSchemeID} " +
-                $"bgm={_data.bgmVolume} voice={_data.voiceVolume} " +
-                $"atm={_data.hasIslandAtmosphere} kind={_data.weatherKind} lv={_data.weatherLevel} " +
-                $"hours={_data.hours:F1} period={_data.period} " +
-                $"music={_data.hasMusicTrack} bank={_data.musicBankName}");
+                // 先标记已加载，再迁移写盘：否则 Persist→EnsureLoaded 会在 _loaded==false 时再次进入 Load。
+                _loaded = true;
+                if (MigrateVolumesFromSettingIfNeeded(raw))
+                    WriteDisk();
+
+                Log.Info(
+                    $"[BoluoGameSave] loaded guest={GuestSession.IsGuest} weatherLinkage={_data.weatherLinkage} " +
+                    $"healthTip={_data.healthTip} recommend={_data.recommend} scheme={_data.curSchemeID} " +
+                    $"bgm={_data.bgmVolume} voice={_data.voiceVolume} " +
+                    $"atm={_data.hasIslandAtmosphere} kind={_data.weatherKind} lv={_data.weatherLevel} " +
+                    $"hours={_data.hours:F1} period={_data.period} " +
+                    $"music={_data.hasMusicTrack} bank={_data.musicBankName}");
+            }
+            finally
+            {
+                _loading = false;
+            }
         }
 
-        /// <summary>无主存档时，从既有 Setting 音量键迁移一次。</summary>
-        static void MigrateVolumesFromSettingIfNeeded(string raw)
+        /// <summary>无主存档时，从既有 Setting / PlayerPrefs 音量键迁移一次。返回是否改写了内存。</summary>
+        static bool MigrateVolumesFromSettingIfNeeded(string raw)
         {
             if (!BoluoGamePersistence.AllowsAccountProgressDisk || !string.IsNullOrEmpty(raw))
-                return;
-            if (GameEntry.Setting == null)
-                return;
+                return false;
 
             bool migrated = false;
-            if (GameEntry.Setting.HasSetting(VolumeForm.MusicVolumeKey))
+            if (TryReadVolume01(VolumeForm.MusicVolumeKey, out float music01))
             {
-                _data.bgmVolume = Mathf.RoundToInt(
-                    Mathf.Clamp01(GameEntry.Setting.GetFloat(VolumeForm.MusicVolumeKey, 0.8f)) * 100f);
+                _data.bgmVolume = Mathf.RoundToInt(Mathf.Clamp01(music01) * 100f);
                 migrated = true;
             }
 
-            if (GameEntry.Setting.HasSetting(VolumeForm.EffectVolumeKey))
+            if (TryReadVolume01(VolumeForm.EffectVolumeKey, out float effect01))
             {
-                _data.voiceVolume = Mathf.RoundToInt(
-                    Mathf.Clamp01(GameEntry.Setting.GetFloat(VolumeForm.EffectVolumeKey, 0.8f)) * 100f);
+                _data.voiceVolume = Mathf.RoundToInt(Mathf.Clamp01(effect01) * 100f);
                 migrated = true;
             }
 
-            if (migrated)
-                Persist();
+            return migrated;
+        }
+
+        static bool TryReadVolume01(string key, out float volume01)
+        {
+            volume01 = 0.8f;
+            var setting = GameEntry.Setting;
+            if (setting != null && setting.HasSetting(key))
+            {
+                volume01 = setting.GetFloat(key, 0.8f);
+                return true;
+            }
+
+            // EditMode 单测 / Setting 尚未就绪时，仍可能已有遗留 PlayerPrefs 键（真机崩溃路径同源）。
+            if (PlayerPrefs.HasKey(key))
+            {
+                volume01 = PlayerPrefs.GetFloat(key, 0.8f);
+                return true;
+            }
+
+            return false;
+        }
+
+        static void WriteDisk()
+        {
+            BoluoGamePersistence.PersistBoluoSaveDataRaw(JsonUtility.ToJson(_data));
         }
 
         public static void Persist()
         {
+            if (_loading)
+            {
+                WriteDisk();
+                return;
+            }
+
             EnsureLoaded();
-            BoluoGamePersistence.PersistBoluoSaveDataRaw(JsonUtility.ToJson(_data));
+            WriteDisk();
         }
 
         public static void ResetSession()
         {
             _loaded = false;
+            _loading = false;
             _data = new BoluoSaveData();
         }
 

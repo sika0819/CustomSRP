@@ -20,28 +20,6 @@ namespace Game
             DisableLaunchDirectionalLights();
             TuneLightsForMobileOil();
             TuneTerrainForMobile(terrainInstance);
-            ApplyGmjPerfGuards();
-        }
-
-        /// <summary>
-        /// 闺蜜机标准版：关平面倒影（水面走解析天空）。
-        /// 实时阴影保留。4K 对齐低端机，不走这里。不改 renderScale / 树距离。
-        /// </summary>
-        static void ApplyGmjPerfGuards()
-        {
-#if !UNITY_EDITOR
-            if (!BoluoDeviceInfo.IsSkyworthGmjStandard())
-                return;
-
-            System.Type reflectType = System.Type.GetType(
-                "CustomSRP.OilPlanarReflection, Assembly-CSharp");
-            reflectType?.GetMethod(
-                    "Suppress",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
-                ?.Invoke(null, null);
-
-            Log.Info("[IslandMobileTune] GMJ perf: reflect=off (shadows kept)");
-#endif
         }
 
         public static void DisableLaunchDirectionalLights()
@@ -56,8 +34,8 @@ namespace Game
                 QualitySettings.shadows = ShadowQuality.HardOnly;
             // Shorter than Ultra's 40; matches CRP maxDistance for near contact shadows.
             // 闺蜜机保留实时硬影；略收距离省转头时 caster 提交（仍有近景接触影）。
-            // 林间走动最低 15 / 走转 20：阴影收到 8m（近景接触影保留）。
-            QualitySettings.shadowDistance = BoluoDeviceInfo.IsSkyworthGmjStandard() ? 8f : 26f;
+            // 树密朝向尖刺：阴影收到 6m（近景接触影保留）。
+            QualitySettings.shadowDistance = BoluoDeviceInfo.IsSkyworthGmjStandard() ? 6f : 26f;
             QualitySettings.shadowResolution = ShadowResolution.Low;
 
             IslandSceneComponent scene = IslandSceneComponent.Active;
@@ -116,8 +94,8 @@ namespace Game
             terrain.treeDistance = Mathf.Min(terrain.treeDistance, 60f);
             terrain.treeBillboardDistance = Mathf.Min(terrain.treeBillboardDistance, 16f);
             terrain.treeCrossFadeLength = Mathf.Min(terrain.treeCrossFadeLength, 5f);
-            if (terrain.basemapDistance < 1000f)
-                terrain.basemapDistance = 1000f;
+            // 远处换成一张 basemap，避免整张岛的 splat 常驻。
+            terrain.basemapDistance = 100f;
             // Off: terrain self-shadow caused stripe acne; receive stays on in shader.
             terrain.shadowCastingMode = ShadowCastingMode.Off;
             // 全档保持网格路径。Draw Instanced 会让每个顶点采样高度图，占带宽。

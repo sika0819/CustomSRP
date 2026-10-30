@@ -12,7 +12,7 @@ namespace CustomSRP
         public static readonly Color MorningFog = Hex(0xD1, 0xC7, 0xB8);
         // Deeper mauve — chalk #C4B6C0 milked dusk skyboxes to lavender-white.
         public static readonly Color TwilightFog = Hex(0x7A, 0x68, 0x78);
-        public static readonly Color NightDistanceFog = Hex(0x36, 0x36, 0x3C);
+        public static readonly Color NightDistanceFog = Hex(0x0A, 0x18, 0x28);
 
         static Color Hex(byte r, byte g, byte b) =>
             new Color(r / 255f, g / 255f, b / 255f, 1f);

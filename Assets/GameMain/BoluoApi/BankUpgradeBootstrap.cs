@@ -43,7 +43,6 @@ namespace Game.BoluoApi
         static int _runId;
         static bool _fatal;
         static bool _silentDeferred;
-        static bool _mobilePromptLatched;
         static UniTaskCompletionSource _catalogTcs = new UniTaskCompletionSource();
         static UniTaskCompletionSource _criticalTcs = new UniTaskCompletionSource();
 
@@ -55,12 +54,12 @@ namespace Game.BoluoApi
             _started = false;
             _fatal = false;
             _silentDeferred = false;
-            _mobilePromptLatched = false;
             _catalogTcs = new UniTaskCompletionSource();
             _criticalTcs = new UniTaskCompletionSource();
             AudioEnginePaths.ResetSession();
             PresetBankCatalog.Clear();
             BankDownloader.ResetSession();
+            Game.DownloadConsentSession.ResetForLeaveIsland();
         }
 
         /// <summary>离岛：允许下一次用户票落地后再 Start。不重跑进程级 ResetSession。</summary>
@@ -69,8 +68,8 @@ namespace Game.BoluoApi
             _started = false;
             _runId++;
             _silentDeferred = false;
-            _mobilePromptLatched = false;
             DownloadCellularGate.ResetForNewSession();
+            Game.DownloadConsentSession.ResetForLeaveIsland();
         }
 
         public static void Start(bool loadIntoEngine = false)
@@ -394,26 +393,17 @@ namespace Game.BoluoApi
 
             string size = DownloadNetworkGate.FormatSizeMb(needUpdate);
             Log.Info(
-                $"[BankUpgradeBootstrap] Critical need update count={needUpdate.Count} size={size}MB — show RequestDownload");
-            UiDialogService.ShowRequestDownload(
-                size,
-                () => OnCriticalUpdateConfirmed(needUpdate, loadIntoEngine),
-                onReturn: null);
-        }
-
-        static void OnCriticalUpdateConfirmed(List<string> bankNames, bool loadIntoEngine)
-        {
-            if (bankNames == null || bankNames.Count == 0)
-                return;
-
-            if (!DownloadNetworkGate.TryPassDownloadGates(
-                    bankNames,
-                    onAllowAfterMobile: () => DownloadCriticalUpdates(bankNames, loadIntoEngine).Forget(),
-                    onWifiOnly: null,
-                    onBlockedRetreat: null))
-                return;
-
-            DownloadCriticalUpdates(bankNames, loadIntoEngine).Forget();
+                $"[BankUpgradeBootstrap] Critical need update count={needUpdate.Count} size={size}MB — EnsureReady");
+            List<string> captured = needUpdate;
+            bool load = loadIntoEngine;
+            Game.DownloadConsentSession.EnsureReady(
+                captured,
+                onReady: () => DownloadCriticalUpdates(captured, load).Forget(),
+                new Game.DownloadUiOptions
+                {
+                    ShowRequestFirst = true,
+                    RequestSizeMb = size,
+                });
         }
 
         static async UniTaskVoid DownloadCriticalUpdates(List<string> bankNames, bool loadIntoEngine)
@@ -556,17 +546,14 @@ namespace Game.BoluoApi
 
                 if (DownloadCellularGate.NeedsMobileDataPrompt())
                 {
-                    if (_mobilePromptLatched)
-                        continue;
-                    _mobilePromptLatched = true;
-                    DownloadNetworkGate.TryShowMobileDataPrompt(
-                        pending,
-                        onAllowContinue: () =>
-                        {
-                            _silentDeferred = false;
-                            DownloadRest(loadIntoEngine).Forget();
-                        },
-                        onWifiOnly: () => { _mobilePromptLatched = false; });
+                    // 不抢用户 continue；拒流后 Session 会闩住，避免每秒重弹。
+                    bool load = loadIntoEngine;
+                    Game.DownloadConsentSession.BindReadyIfEmpty(() =>
+                    {
+                        _silentDeferred = false;
+                        DownloadRest(load).Forget();
+                    });
+                    Game.DownloadConsentSession.NotifyNeedCellularConsent(pending);
                     continue;
                 }
 

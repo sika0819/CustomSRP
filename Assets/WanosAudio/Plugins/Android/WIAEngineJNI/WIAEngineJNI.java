@@ -1,5 +1,6 @@
 package com.wanos.app.health;
 
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -194,6 +195,44 @@ public class WIAEngineJNI {
         }
     }
 
+    /**
+     * 通知权限刚放开后重刷 FGS MediaStyle。
+     * 权限关闭期间 startForeground 的通知会被 OEM 压掉，负一屏空白但 MediaSession 仍在。
+     */
+    public static void refreshMediaNotification() {
+        Context ctx = getContext();
+        if (ctx == null) {
+            Log.w(TAG, "refreshMediaNotification: no Context");
+            return;
+        }
+        if (!sPlaybackActive || !sLastIsPlaying) {
+            Log.d(TAG, "refreshMediaNotification skip: inactive or not playing");
+            return;
+        }
+        if (!areNotificationsEnabled(ctx)) {
+            Log.w(TAG, "refreshMediaNotification: notifications still disabled");
+            return;
+        }
+        try {
+            WanosMediaPlaybackForegroundService.notifyNowPlayingChanged(ctx);
+            Log.i(TAG, "refreshMediaNotification ok title=" + getLastTrackTitle());
+        } catch (Throwable t) {
+            Log.w(TAG, "refreshMediaNotification failed: " + t.getMessage());
+        }
+    }
+
+    static boolean areNotificationsEnabled(Context ctx) {
+        if (ctx == null) return false;
+        try {
+            NotificationManager nm =
+                    (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return true;
+            return nm.areNotificationsEnabled();
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
     public static String getLastTrackTitle() {
         return sLastTrackTitle != null ? sLastTrackTitle : "";
     }
@@ -344,23 +383,26 @@ public class WIAEngineJNI {
         return sPausedPositionMs;
     }
 
-    /** Session 未 active / OEM 丢 Callback 时的兜底：媒体键进 FGS 再回传。 */
-    private static void installMediaButtonReceiver(Context ctx) {
+    /**
+     * Session 未 active / OEM 丢 Callback 时的兜底。
+     * 必须 {@link PendingIntent#getBroadcast} 指向 {@link BoluoMediaButtonReceiver}：
+     * getForegroundService 在 Android 12+ 会被框架丢掉 → dumpsys mediaButtonReceiver=null →
+     * Vivo OriginOS「Last VivoMediaButtonReceiver」不认，负一屏媒体栏空白。
+     * 调用方必须传入刚 new 的 session：不可读 sMediaSession（赋值在 install 之后，旧代码会 NPE 静默失败）。
+     */
+    private static void installMediaButtonReceiver(Context ctx, MediaSession session) {
+        if (session == null) return;
         try {
-            Intent i = new Intent(ctx, WanosMediaPlaybackForegroundService.class);
+            Intent i = new Intent(ctx, BoluoMediaButtonReceiver.class);
             i.setAction(Intent.ACTION_MEDIA_BUTTON);
+            i.setPackage(ctx.getPackageName());
             int flags = PendingIntent.FLAG_UPDATE_CURRENT;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 flags |= PendingIntent.FLAG_IMMUTABLE;
             }
-            PendingIntent pi;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                pi = PendingIntent.getForegroundService(ctx, /*requestCode*/ 9102, i, flags);
-            } else {
-                pi = PendingIntent.getService(ctx, 9102, i, flags);
-            }
-            sMediaSession.setMediaButtonReceiver(pi);
-            Log.i(TAG, "MediaSession mediaButtonReceiver installed → FGS");
+            PendingIntent pi = PendingIntent.getBroadcast(ctx, /*requestCode*/ 9102, i, flags);
+            session.setMediaButtonReceiver(pi);
+            Log.i(TAG, "MediaSession mediaButtonReceiver installed → BoluoMediaButtonReceiver");
         } catch (Exception e) {
             Log.w(TAG, "installMediaButtonReceiver failed: " + e.getMessage());
         }
@@ -550,7 +592,7 @@ public class WIAEngineJNI {
                             return super.onMediaButtonEvent(mediaButtonIntent);
                         }
                     }, sSessionCallbackHandler);
-                    installMediaButtonReceiver(ctx);
+                    installMediaButtonReceiver(ctx, session);
                     sMediaSession = session;
                 }
 
@@ -595,6 +637,11 @@ public class WIAEngineJNI {
                 session.setPlaybackState(stateBuilder.build());
 
                 sendNowPlayingBroadcast(ctx, trackName, coverUrl, isPlaying);
+                if (isPlaying && !areNotificationsEnabled(ctx)) {
+                    Log.w(TAG, "updateNowPlayingInfo: notifications disabled — "
+                            + "MediaSession active but OEM 负一屏 may stay blank "
+                            + "(need POST_NOTIFICATIONS)");
+                }
                 // 暂停也要刷已在跑的通知，否则 PlaybackState 已是 PAUSED，
                 // 负一屏按钮仍停在暂停图标。未在跑且已暂停时，notify 自己会跳过
                 // startForegroundService，避免登出切 Login 超时杀进程。

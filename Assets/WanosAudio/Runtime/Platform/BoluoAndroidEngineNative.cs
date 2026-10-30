@@ -26,6 +26,24 @@ namespace WanosAudio
         }
 
         /// <summary>
+        /// 通知权限刚放开后重刷 FGS MediaStyle（权限关闭期间 startForeground 的通知会被系统压掉）。
+        /// </summary>
+        public static void RefreshMediaNotification()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WIAEngineJNIClass))
+                    jc.CallStatic("refreshMediaNotification");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] refreshMediaNotification failed: {ex.Message}");
+            }
+#endif
+        }
+
+        /// <summary>
         /// 播放会话闸。false：拆除期拒绝 NowPlaying / 停 FGS；进岛 Arm 再置 true。
         /// </summary>
         public static void SetPlaybackActive(bool active)

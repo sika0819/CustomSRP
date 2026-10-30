@@ -62,7 +62,7 @@ Material:
     - _PremulAlpha: 1
     - _ReflectStrength: 0.62
     - _ShadeSteps: 3
-    - _ShoreFoamWidth: 3.84
+    - _ShoreFoamWidth: 1.46
     - _SpecularThreshold: 1
     - _SrcBlend: 1
     - _StrokeBands: 20.8

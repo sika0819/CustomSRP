@@ -53,8 +53,11 @@ namespace Game
         /// </summary>
         public event Action TrackChanged;
 
-        public float MusicVolume { get; private set; } = 1f;
-        public float EffectVolume { get; private set; } = 1f;
+        /// <summary>Default matches <see cref="BoluoSaveData.bgmVolume"/> (80).</summary>
+        public float MusicVolume { get; private set; } = 0.8f;
+
+        /// <summary>Default matches <see cref="BoluoSaveData.voiceVolume"/> (80).</summary>
+        public float EffectVolume { get; private set; } = 0.8f;
         public int PlayMode { get; private set; } = MusicPlayMode.Single;
 
         int _musicSerialId = -1;
@@ -203,8 +206,10 @@ namespace Game
         public void ApplySavedVolumes()
         {
             BoluoGameSave.EnsureLoaded();
-            MusicVolume = BoluoGameSave.MusicVolume01;
-            EffectVolume = BoluoGameSave.EffectVolume01;
+            // Setting 键是设备级音量常量（不依赖账号进度盘）；无键时回退主存档。
+            MusicVolume = ResolveVolume01(VolumeForm.MusicVolumeKey, BoluoGameSave.MusicVolume01);
+            EffectVolume = ResolveVolume01(VolumeForm.EffectVolumeKey, BoluoGameSave.EffectVolume01);
+            PersistVolumeConstants();
             PlayMode = LoadPlayMode();
             PushVolumesToEngine();
             ApplyGroupVolumes();
@@ -222,6 +227,34 @@ namespace Game
             EffectVolume = Mathf.Clamp01(value);
             PushVolumesToEngine();
             ApplyGroupVolumes();
+        }
+
+        /// <summary>松手 / 启动：把当前音量写入 Setting 常量（重启还原 UI）。</summary>
+        public void PersistVolumeConstants()
+        {
+            PersistVolumeConstants(MusicVolume, EffectVolume);
+        }
+
+        static float ResolveVolume01(string settingKey, float fallback01)
+        {
+            if (GameEntry.Setting != null && GameEntry.Setting.HasSetting(settingKey))
+                return Mathf.Clamp01(GameEntry.Setting.GetFloat(settingKey, fallback01));
+            return Mathf.Clamp01(fallback01);
+        }
+
+        static void PersistVolumeConstants(float music01, float effect01)
+        {
+            music01 = Mathf.Clamp01(music01);
+            effect01 = Mathf.Clamp01(effect01);
+            if (GameEntry.Setting != null)
+            {
+                GameEntry.Setting.SetFloat(VolumeForm.MusicVolumeKey, music01);
+                GameEntry.Setting.SetFloat(VolumeForm.EffectVolumeKey, effect01);
+                GameEntry.Setting.Save();
+            }
+
+            BoluoGameSave.SetMusicVolume01(music01);
+            BoluoGameSave.SetEffectVolume01(effect01);
         }
 
         public void SetPlayMode(int mode)
@@ -613,7 +646,18 @@ namespace Game
                     Debug.LogWarning($"[MusicPlaylist] Pause_Music failed: {ex.Message}");
                 }
             }
-            // 定时到点 / 用户暂停：音乐与音效一起停（AmbienceZone / Weather / 雨水 ticker）。
+            // 定时到点 / 负一屏 / 用户暂停：音乐与音效一起停。
+            // Pause_Music 停 BGM；Pause_ALL 兜住引擎侧仍在响的环境/天气 voice
+            // （对齐原生 handleTransportInBackground / pauseForTimerEnd）。
+            // SetContentAudioPaused 停 C# 侧 Ambience/Weather/雨水，并禁止 Evaluate 重 Post。
+            try
+            {
+                WanosEngine.PauseAll();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[MusicPlaylist] Pause_ALL failed: {ex.Message}");
+            }
             IsPlaying = false;
             IslandAudioSession.Instance?.SetContentAudioPaused(true);
             // 同步原生 userPaused，否则定时到点后焦点回归/后台续播会把歌又拉起来。
@@ -632,6 +676,16 @@ namespace Game
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
 #endif
+            // 先 Resume_ALL（内容声），再 Resume_Music；曲已 Pause_Music 非 Started，
+            // 不会踩「活实例 + Started 禁 Resume_ALL」那条 Ended 切歌坑。
+            try
+            {
+                WanosEngine.ResumeAll();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[MusicPlaylist] Resume_ALL failed: {ex.Message}");
+            }
             if (_musicSerialId >= 0 && GameEntry.Sound != null)
                 GameEntry.Sound.ResumeSound(_musicSerialId);
             try
@@ -641,7 +695,6 @@ namespace Game
             catch (Exception ex)
             {
                 Debug.LogWarning($"[MusicPlaylist] Resume_Music failed: {ex.Message}");
-                WanosEngine.ResumeAll();
             }
             IsPlaying = CurrentAlbumIndex >= 0 && CurrentTrackIndex >= 0 && !_stoppedByUser;
             WanosEngine.Unmute("music-resume");
@@ -651,6 +704,23 @@ namespace Game
             BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
 #endif
             NowPlayingService.PublishFromPlaylist();
+        }
+
+        /// <summary>
+        /// 后台负一对账：原生已 Pause_Music(+Pause_ALL[/mute])，只闩 C# 播放态与内容声闸，
+        /// 禁止再 Post（避免与原生双发）。Unity 醒着时 Ambience Evaluate 不得重起音效。
+        /// </summary>
+        public void ApplyNativePausedLatch(bool paused)
+        {
+            if (paused)
+            {
+                IsPlaying = false;
+                IslandAudioSession.Instance?.SetContentAudioPaused(true);
+                return;
+            }
+
+            IslandAudioSession.Instance?.SetContentAudioPaused(false);
+            IsPlaying = CurrentAlbumIndex >= 0 && CurrentTrackIndex >= 0 && !_stoppedByUser;
         }
 
         /// <summary>
@@ -666,6 +736,14 @@ namespace Game
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
 #endif
+            try
+            {
+                WanosEngine.ResumeAll();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[MusicPlaylist] Resume_ALL failed: {ex.Message}");
+            }
             IslandAudioSession.Instance?.SetContentAudioPaused(false);
 
             if (!HasRestorableTrack)
@@ -712,8 +790,15 @@ namespace Game
                 return;
             }
 
-            // agent 还在 → 优先走 GF ResumeSound（前台 PauseSound 路径）；
-            // 再补 Resume_Music（后台负一屏原生 Pause_Music 路径）。
+            // agent 还在 → Resume_ALL（负一屏/到点 Pause_ALL）+ GF ResumeSound + Resume_Music。
+            try
+            {
+                WanosEngine.ResumeAll();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[MusicPlaylist] Resume_ALL failed: {ex.Message}");
+            }
             if (GameEntry.Sound != null)
                 GameEntry.Sound.ResumeSound(_musicSerialId);
             try

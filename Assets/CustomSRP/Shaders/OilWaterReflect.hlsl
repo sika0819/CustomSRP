@@ -23,6 +23,8 @@ float4 _OilSkySunParams[4];
 float4 _OilSkyMoonParams[4];
 float _OilSkySunrise;
 
+#include "OilCelestialStamp.hlsl"
+
 half OilWaterNightWeight(float period)
 {
     if (period < 0.0 || period > 4.0)
@@ -72,13 +74,13 @@ void OilWaterPeriodLookFallback(
     }
     else if (index == 1)
     {
-        // Camera_1 noon — keep in sync with OilSkyboxNPRPass PeriodLookFallback.
-        zenith = half3(0.0685h, 0.4793h, 1.0000h);
-        mid = half3(0.2739h, 0.5619h, 0.9154h);
-        horizon = half3(0.4793h, 0.6445h, 0.8308h);
+        // Canonical noon — keep in sync with OilSkyboxNPRPass PeriodLookFallback.
+        zenith = half3(0.2902h, 0.4706h, 0.7059h);
+        mid = half3(0.3758h, 0.5233h, 0.7059h);
+        horizon = half3(0.4941h, 0.5961h, 0.7059h);
         ground = half3(0.8392h, 0.7686h, 0.7020h);
-        sunDisc = half3(1.0000h, 0.9804h, 0.8235h);
-        sunGlow = half3(1.0000h, 0.9804h, 0.8235h);
+        sunDisc = half3(0.9020h, 0.9216h, 0.9098h);
+        sunGlow = half3(0.9020h, 0.9216h, 0.9098h);
         moonDisc = half3(0.0h, 0.0h, 0.0h);
         moonGlow = half3(0.0h, 0.0h, 0.0h);
         sunSize = 0.055h;
@@ -90,12 +92,12 @@ void OilWaterPeriodLookFallback(
     }
     else if (index == 2)
     {
-        zenith = half3(0.2157h, 0.2588h, 0.4314h);
-        mid = half3(0.459h, 0.437h, 0.473h);
-        horizon = half3(0.9098h, 0.7686h, 0.5490h);
+        zenith = half3(0.1725h, 0.2275h, 0.3451h);
+        mid = half3(0.3636h, 0.3296h, 0.3451h);
+        horizon = half3(0.6275h, 0.4706h, 0.3451h);
         ground = half3(0.22h, 0.16h, 0.14h);
-        sunDisc = half3(1.0000h, 0.7843h, 0.4157h);
-        sunGlow = half3(1.0000h, 0.7843h, 0.4157h);
+        sunDisc = half3(0.7843h, 0.7059h, 0.6039h);
+        sunGlow = half3(0.7843h, 0.7059h, 0.6039h);
         moonDisc = half3(0.7000h, 0.7400h, 0.8600h);
         moonGlow = half3(0.3500h, 0.4000h, 0.5800h);
         sunSize = 0.08h;
@@ -107,15 +109,15 @@ void OilWaterPeriodLookFallback(
     }
     else
     {
-        // Night — was the startup blue bug: old path always used day zenith (0.07,0.48,1).
-        zenith = half3(0.0118h, 0.0706h, 0.3216h);
-        mid = half3(0.0059h, 0.0608h, 0.3118h);
-        horizon = half3(0.0000h, 0.0510h, 0.3020h);
-        ground = half3(0.0000h, 0.0306h, 0.1812h);
-        sunDisc = half3(0.4000h, 0.4500h, 0.5800h);
-        sunGlow = half3(0.0800h, 0.0900h, 0.1200h);
-        moonDisc = half3(0.6200h, 0.6800h, 0.8200h);
-        moonGlow = half3(0.2800h, 0.3400h, 0.5200h);
+        // Night teal — keep in sync with OilSkyboxNPRPass PeriodLookFallback.
+        zenith = half3(0.1647h, 0.3216h, 0.3765h);
+        mid = half3(0.1219h, 0.2656h, 0.3238h);
+        horizon = half3(0.0627h, 0.1882h, 0.2510h);
+        ground = half3(0.0314h, 0.0941h, 0.1255h);
+        sunDisc = half3(0.3451h, 0.5020h, 0.5333h);
+        sunGlow = half3(0.0627h, 0.1098h, 0.1333h);
+        moonDisc = half3(0.9098h, 0.9333h, 0.9569h);
+        moonGlow = half3(0.6275h, 0.7843h, 0.8000h);
         sunSize = 0.05h;
         sunIntensity = 0.08h;
         sunGlowAmt = 0.02h;
@@ -222,19 +224,15 @@ half3 OilWaterSkyColor(float y, half stroke, half3 zenith, half3 mid, half3 hori
     return lerp(col, carried, 0.40h);
 }
 
-// 倒影天空：只叠色带，不跟太阳/月亮方向。
-// 太阳光痕只走 OilOceanSunGlint / OilRiverSunGlint（太阳→相机车道）。
-half3 OilWaterAnalyticSky(float3 rayDir, half stroke)
+// 倒影天空色带（锚点已由调用方算好，避免与天体 stamp 重复 OilWaterSkyAnchors）。
+half3 OilWaterAnalyticSkyFromAnchors(
+    float3 rayDir,
+    half stroke,
+    half3 zenith,
+    half3 mid,
+    half3 horizon,
+    half3 ground)
 {
-    half3 zenith, mid, horizon, ground, sunDisc, sunGlow, moonDisc, moonGlow;
-    half sunSize, sunIntensity, sunGlowAmt, moonSize, moonIntensity, moonGlowAmt;
-    OilWaterSkyAnchors(
-        _OilSkyPeriod,
-        zenith, mid, horizon, ground,
-        sunDisc, sunGlow, moonDisc, moonGlow,
-        sunSize, sunIntensity, sunGlowAmt,
-        moonSize, moonIntensity, moonGlowAmt);
-
     half3 sky = OilWaterSkyColor(rayDir.y, stroke, zenith, mid, horizon, ground);
     // 峰值再压一档，避免中午/日出色带把釉面刷成粉笔。
     half peak = max(sky.r, max(sky.g, sky.b));
@@ -286,8 +284,17 @@ half3 ApplyOilWaterReflection(
     // 解析天空仍用偏平法线；UV 扭曲另走 waveN（见下）——混在一起会让 Distort≈noop。
     float3 n = normalize(lerp(float3(0.0, 1.0, 0.0), (float3)normalWS, 0.28));
     float3 rayDir = reflect(-(float3)viewDir, n);
-    // 解析天空：色带 only（无太阳盘）；太阳光痕另走 glint。
-    half3 reflectCol = OilWaterAnalyticSky(rayDir, stroke);
+
+    half3 zenith, mid, horizon, ground, sunDisc, sunGlow, moonDisc, moonGlow;
+    half sunSize, sunIntensity, sunGlowAmt, moonSize, moonIntensity, moonGlowAmt;
+    OilWaterSkyAnchors(
+        _OilSkyPeriod,
+        zenith, mid, horizon, ground,
+        sunDisc, sunGlow, moonDisc, moonGlow,
+        sunSize, sunIntensity, sunGlowAmt,
+        moonSize, moonIntensity, moonGlowAmt);
+    half3 reflectCol = OilWaterAnalyticSkyFromAnchors(
+        rayDir, stroke, zenith, mid, horizon, ground);
 
     // 解析天空略往水体收；过亮压 chalk。平面山体倒影叠在后面，不受 keep 冲掉。
     half3 waterTint = lerp(
@@ -314,6 +321,34 @@ half3 ApplyOilWaterReflection(
 
     // Cap = OilOceanNPR _ReflectDistort Range max。
     half distortAmt = min(max(distort, 0.0h), 0.35h) * lerp(0.55h, 1.0h, inFrame);
+
+    // 日/月：相机→镜面落点对齐天空盘（地平夹 elev，落在有限海面上「正下方」）。
+    {
+        float3 nCel = float3(0.0, 1.0, 0.0);
+        float3 celRay = reflect(-(float3)viewDir, nCel);
+        // 釉量抬亮；尺寸仍由 stamp size 管，不在这里放大。
+        half celGlaze = saturate(lerp(0.62h, 1.0h, fresnel) * inFrame);
+        celGlaze *= lerp(0.92h, 1.0h, stroke);
+        celGlaze *= saturate(openWater);
+        float3 nWave = float3(normalWS.x, 0.0, normalWS.z);
+        half waveBreak = (half)saturate(length(nWave) * 2.4);
+        celGlaze *= lerp(1.0h, 0.88h, waveBreak * lerp(0.2h, 1.0h, distortAmt / 0.35h));
+#if defined(OIL_MOBILE_PERF)
+        float celDist = length(_WorldSpaceCameraPos - positionWS);
+        celGlaze *= (half)saturate((900.0 - celDist) / 420.0);
+#endif
+        [branch]
+        if (celGlaze > 0.02h)
+        {
+            reflectCol = OilWaterStampCelestials(
+                reflectCol, celRay, positionWS,
+                sunDisc, sunGlow, moonDisc, moonGlow,
+                sunSize, sunIntensity, sunGlowAmt,
+                moonSize, moonIntensity, moonGlowAmt,
+                waterTint, celGlaze,
+                normalWS, stroke, distortAmt);
+        }
+    }
 
     if (_OilPlanarReflectOn > 0.5)
     {

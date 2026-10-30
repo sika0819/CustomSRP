@@ -24,6 +24,12 @@ namespace WanosAudio
         static readonly object Gate = new object();
         static readonly HashSet<string> Loaded =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// 已经调用过原生 UnloadBank、但引擎实际还占着的 stem。
+        /// 留在 <see cref="Loaded"/> 里，避免 <c>LoadFromPath</c> 再灌一份。
+        /// </summary>
+        static readonly HashSet<string> NativeHeld =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         static readonly HashSet<string> InFlight =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         static readonly HashSet<string> Failed =
@@ -103,6 +109,7 @@ namespace WanosAudio
             lock (Gate)
             {
                 Loaded.Clear();
+                NativeHeld.Clear();
                 InFlight.Clear();
                 Failed.Clear();
                 Refs.Clear();
@@ -115,6 +122,7 @@ namespace WanosAudio
             lock (Gate)
             {
                 Loaded.Clear();
+                NativeHeld.Clear();
                 InFlight.Clear();
                 Refs.Clear();
                 PendingUnloads.Clear();
@@ -148,6 +156,8 @@ namespace WanosAudio
                     if (InFlight.Contains(stem))
                         continue;
                     if (PendingUnloads.ContainsKey(stem))
+                        continue;
+                    if (NativeHeld.Contains(stem))
                         continue;
                     if (Refs.TryGetValue(stem, out int count) && count > 0)
                         continue;
@@ -371,9 +381,10 @@ namespace WanosAudio
 
             lock (Gate)
             {
-                Loaded.Remove(stem);
                 Refs.Remove(stem);
                 PendingUnloads.Remove(stem);
+                if (Loaded.Contains(stem))
+                    NativeHeld.Add(stem);
             }
             return true;
         }
@@ -398,13 +409,15 @@ namespace WanosAudio
                 if (Refs.TryGetValue(stem, out int n) && n > 0)
                 {
                     Refs[stem] = n + 1;
+                    NativeHeld.Remove(stem);
                     return true;
                 }
 
-                // Refs hit 0 and UnLoad was pending but not fired — still in engine.
+                // 原生没放开时 stem 仍在 Loaded。只把引用加回来，不要再 Load。
                 if (Loaded.Contains(stem))
                 {
                     Refs[stem] = 1;
+                    NativeHeld.Remove(stem);
                     return true;
                 }
             }
@@ -496,7 +509,8 @@ namespace WanosAudio
                     return;
                 }
 
-                Loaded.Remove(stem);
+                if (Loaded.Contains(stem))
+                    NativeHeld.Add(stem);
             }
 
             try

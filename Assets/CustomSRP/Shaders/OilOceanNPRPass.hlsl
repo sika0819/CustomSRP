@@ -47,7 +47,7 @@ bool OilOceanResolveSun(out float3 L)
     return length(L) > 0.05;
 }
 
-// 对齐 OilRiverSunGlint：相机→太阳一道车道 + 竖列 Glint 采样；海面尺度更大、跟天空太阳。
+// 日道：从太阳倒影落点拉向相机（不是从脚边往外长）。
 half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, half foam)
 {
     float3 L;
@@ -59,43 +59,49 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
     float elev = saturate(L.y);
     float2 sunXZ = float2(L.x, L.z);
     float sunLen = length(sunXZ);
-    // 清晨 7°（L.y≈0.12）仍亮；略宽于河的 lit 门。
-    half lit = saturate(((half)L.y + 0.12h) * 14.0h);
+    half lit = saturate(((half)L.y + 0.18h) * 10.0h);
     half stable = saturate(((half)sunLen - 0.02h) * 14.0h);
     if (lit * stable < 0.001h)
     {
         return 0.0h;
     }
 
-    float2 sunH = sunXZ / max(sunLen, 1e-4);
-    float2 side = float2(-sunH.y, sunH.x);
-    float2 fromCam = positionWS.xz - _WorldSpaceCameraPos.xz;
+    float2 footXZ;
+    float pathLen;
+    if (!OilWaterCelestialFoot(L, positionWS.y, footXZ, pathLen))
+    {
+        return 0.0h;
+    }
 
-    // 车道沿相机→太阳（光痕从太阳底下伸出）；V 滚动跟 Monet 纹理，不跟太阳。
-    float along = dot(fromCam, sunH);
-    float lat = dot(fromCam, side);
+    float2 toCam = _WorldSpaceCameraPos.xz - footXZ;
+    float2 alongDir = toCam / max(pathLen, 1e-3);
+    float2 side = float2(-alongDir.y, alongDir.x);
+    float2 fromFoot = positionWS.xz - footXZ;
+    float along = dot(fromFoot, alongDir); // 0 = 太阳落点，pathLen = 相机
+    float lat = dot(fromFoot, side);
     lat += dot(float2(normalWS.x, normalWS.z), side) * 2.4;
 
-    // 海面车道比河宽；_SunPathWidth 仍作窄度（默认 4.5 → ×1.33）。
-    float halfW = lerp(3.5, 16.0, saturate(along / 220.0));
-    halfW *= lerp(1.45, 0.78, elev);
+    float halfW = lerp(4.0, 18.0, saturate(along / max(pathLen, 1.0)));
+    halfW *= lerp(1.55, 0.85, elev);
     halfW *= 6.0 / max(_SunPathWidth, 0.25);
 
     half lane = (half)saturate(1.0 - abs(lat) / max(halfW, 1e-3));
     lane = lane * lane * (3.0h - 2.0h * lane);
-    // 近距起带：黎明略近，避免太阳底下一段空。
-    float nearStart = lerp(1.5, 4.0, elev);
-    float nearRange = lerp(14.0, 28.0, elev);
-    half near = (half)saturate((along - nearStart) / max(nearRange, 1e-3));
-    half elevGate = (half)saturate(elev * 2.2 + 0.28);
-    lane *= near * lit * stable * elevGate;
+    // 从太阳落点起亮，向相机方向衰减；脚边收掉。
+    half along01 = (half)saturate(along / max(pathLen, 1e-3));
+    half fromSun = (1.0h - along01 * along01);
+    fromSun *= (half)saturate(1.0 - along / max(pathLen * 0.97, 1.0));
+    // 落点附近一小团保证日道「顶」在太阳倒影上。
+    half atFoot = (half)saturate(1.0 - length(fromFoot) / max(halfW * 1.8, 4.0));
+    fromSun = max(fromSun, atFoot);
+    half elevGate = (half)saturate(elev * 1.8 + 0.35);
+    lane *= fromSun * lit * stable * elevGate;
     [branch]
     if (lane < 1e-4h)
     {
         return 0.0h;
     }
 
-    // U：侧向进竖列中心；V：与 OceanMonetPaintUv 同向滚动（+t 对齐 st += SCROLL * t）。
     float u = saturate(lat / max(halfW * 2.4, 1e-3) * 0.5 + 0.5);
     float tileM = max(_SunPathWidth * 8.0, 28.0);
     float2 scrollDir = normalize(OCEAN_PAINT_SCROLL);
@@ -103,7 +109,6 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
     float glintSpeed = 0.05 + max(_OilOceanWindStrength, 0.0) * 0.12;
     float v = frac(alongPaint / tileM + t * glintSpeed);
     float2 st = float2(u, v);
-    // LOD（不用隐式导数）让车道外的 [branch] 真能跳过采样。外海大部分像素不在光痕里。
     float dist = length(_WorldSpaceCameraPos - positionWS);
     float glintMip = saturate((dist - 40.0) / 700.0) * 3.0;
 #if defined(OIL_MOBILE_PERF)
@@ -119,11 +124,10 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
         g = max(g0, g1 * 0.7h);
     }
 #endif
-    half dab = saturate((PaintLuma(g) - 0.12h) * 2.6h);
+    half dab = saturate((PaintLuma(g) - 0.10h) * 2.8h);
     dab *= lerp(0.55h, 1.15h, stroke);
     dab *= (1.0h - foam * 0.85h);
-    // 低太阳略加强；远距不灭。
-    dab *= lerp(1.35h, 0.9h, (half)elev);
+    dab *= lerp(1.45h, 0.95h, (half)elev);
     dab *= (half)saturate((4800.0 - dist) / 2800.0);
     return dab * lane * (half)max(_SunPathStrength, 0.0);
 }
@@ -209,8 +213,8 @@ half3 OilOceanBumpNormal(float2 worldXZ, half3 baseN)
     float tile = max(_BumpTile, 20.0);
     float2 tilingA = max(_BumpTiling.xy, float2(0.01, 0.01));
     float2 scrollA = _BumpScroll.xy;
-    // 同 Monet：竖笔贴图经 worldXZ.yx 转横。
-    float2 uvA = (worldXZ.yx / tile) * tilingA + scrollA * _Time.y;
+    // 同 Monet 底纹：world XZ.
+    float2 uvA = (worldXZ / tile) * tilingA + scrollA * _Time.y;
     half3 nA = (half3)DecodeNormal(
         SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvA), _BumpScale);
     // Horizontal sea: tangent ≈ X, bitangent ≈ Z.
@@ -278,7 +282,8 @@ float OilOceanWaterColumn(float surfaceEye, float sceneEye)
     return max(sceneEye - surfaceEye, 0.0);
 }
 
-// 拍岸白沫：峰值落在蓝水浪缘；远处关掉 fwidth，避免 depth 噪声假沫点。
+// 拍岸白沫贴水陆交线（column≈0，海面可见边缘），向深水收到 reach。
+// 远处关掉 fwidth，避免 depth 噪声假沫点。
 half OilOceanDepthFoamRim(
     float surfaceEye, float sceneEye, float foamReachM, float camDist)
 {
@@ -289,25 +294,29 @@ half OilOceanDepthFoamRim(
     }
 
     float reach = max(foamReachM, 0.35);
-    if (column > reach * 2.3)
+    if (column > reach)
     {
         return 0.0h;
     }
 
-    float peak = reach * 0.4;
-    float halfW = reach * 0.48;
-    half band = (half)saturate(1.0 - abs(column - peak) / max(halfW, 1e-3));
-    band = band * band * (3.0h - 2.0h * band);
+    // 交线满强度。峰值若偏进深水，边缘会空出一条没有沫的水带。
+    half band = (half)(1.0 - smoothstep(0.0, reach, column));
 
+#if defined(OIL_MOBILE_PERF)
+    // No ddx/ddy edge — full-screen ocean derivatives are expensive and noisy.
+    half rim = band * 0.85h;
+    rim *= (half)(1.0 - saturate((surfaceEye - sceneEye) * 4.0));
+    return saturate(rim);
+#else
     half nearF = (half)saturate(1.0 - smoothstep(45.0, 140.0, camDist));
     float colEdge = abs(ddx(column)) + abs(ddy(column));
     half edge = (half)saturate(colEdge / max(reach * 0.2, 0.035)) * nearF;
     half rim = band * lerp(0.55h, 1.0h, edge);
 
-    rim *= (half)smoothstep(0.04, peak * 0.55, column);
     rim *= (half)(1.0 - saturate((surfaceEye - sceneEye) * 4.0));
     rim *= lerp(band, 1.0h, nearF);
     return saturate(rim);
+#endif
 }
 
 Varyings OilOceanNPRPassVertex(Attributes input)
@@ -362,7 +371,11 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
 
     float2 paintSt = OceanMonetPaintUv(
         input.worldXZ, t, _PaintTile, _StrokeBands);
+#if defined(OIL_MOBILE_PERF)
+    // Sine + geo normal only — bump atlas is a full-screen sample on open water.
+#else
     normalWS = OilOceanBumpNormal(input.worldXZ, normalWS);
+#endif
     normalWS = ApplyRainRippleNormal(normalWS, input.positionWS);
 
     // 光照仍 flat，避免 cascade 圆影；bump 只喂反射/折射/glint。
@@ -414,7 +427,7 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     glass *= lerp(0.9h, 0.4h, overlook);
     glass = saturate(glass);
 
-    // 静水位 + 略偏深水的沫带：白沫落在蓝浪缘，不落在透视沙滩。
+    // 白沫从水陆交线（海 mesh 可见边缘）起，向深水收。不把峰值偏进水里留空带。
     // 必须用实际画出的浪面眼深。restEyeDepth 与位移后屏幕像素不对齐 → 沫偏到沙滩。
     float surfaceEye = fragment.depth;
     float foamReach = clamp(_ShoreFoamWidth * 0.05, 0.4, 1.6);
@@ -529,8 +542,20 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     color = lerp(color, color * waterTint, tintAmt);
 
     // 对齐河：雾后叠一道太阳光痕（竖列 Glint + 世界车道），再画岸沫。
-    half glint = OilOceanSunGlint(input.positionWS, normalWS, t, stroke, shoreMask);
-    color += (half3)_GlintColor.rgb * glint;
+#if defined(OIL_MOBILE_PERF)
+    // Far ocean: lane early-out still runs ALU; skip past ~1.2km.
+    [branch]
+    if (camDist < 1200.0)
+#endif
+    {
+        half glint = OilOceanSunGlint(input.positionWS, normalWS, t, stroke, shoreMask);
+        // 夜：日道更浅、偏冷青；昼保持材质 _GlintColor。
+        half3 glintCol = (half3)_GlintColor.rgb;
+        half3 coolPath = half3(0.52h, 0.70h, 0.95h);
+        glintCol = lerp(glintCol, coolPath, night * 0.72h);
+        glint *= lerp(1.0h, 0.48h, night);
+        color += glintCol * glint;
+    }
 
     // 钛白岸沫：直接靠向 _FoamColor，避免深蓝紫水体把沫染灰。
     half3 foamCol = (half3)_FoamColor.rgb;

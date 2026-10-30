@@ -1609,24 +1609,15 @@ namespace Game
         }
 
         /// <summary>
-        /// Walk-stop KeepBank for river/ocean/lake/waterfall (doc: 只停播常保留资源；
-        /// 湖瀑互斥同理). Biome/campfire Release with per-kind delay.
-        /// Preset clear uses <paramref name="forceReleaseBank"/>.
+        /// 出区都走 Release → UnloadBank，河海湖瀑不再只停播。
+        /// 原生 UnloadBank 目前卸不掉；<see cref="WanosAudio.WanosBankStore"/> 仍调用卸载，
+        /// 但不把 stem 从 Loaded 去掉，避免再 Load 叠一份。
         /// </summary>
         bool ShouldKeepBankOnWalkStop(AmbienceEmitterSpec spec)
         {
             if (spec == null)
                 return false;
-            switch (spec.Kind)
-            {
-                case AmbienceEmitterKind.River:
-                case AmbienceEmitterKind.Ocean:
-                case AmbienceEmitterKind.Lake:
-                case AmbienceEmitterKind.Waterfall:
-                    return true;
-                default:
-                    return false;
-            }
+            return false;
         }
 
         float UnloadDelaySecondsFor(AmbienceEmitterSpec spec)

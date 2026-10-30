@@ -437,7 +437,7 @@ namespace CustomSRP
             // 云高光 #FBF3E9 — pale cream, keep impasto readable under fog.
             Color cloudHilite = new Color(0.984f, 0.953f, 0.914f);
             body = Color.Lerp(body, cloudHilite, 0.22f * dawn);
-            // Night: lock body to NightFog (#36363C) ink — not lit chalk.
+            // Night: lock body to NightFog (#0A1828) ink — not lit chalk.
             Color nightBody = Color.Lerp(look.mid, OilSkyboxTime.NightFogColor, 0.78f);
             body = Color.Lerp(body, nightBody, night);
             Color sunHighlight = Color.Lerp(look.horizon, cloudHilite, 0.62f);

@@ -43,12 +43,62 @@ namespace Game.Tests
         }
 
         [Test]
-        public void Progress_UnknownSpeed_ShowsDashEta()
+        public void Progress_UnknownSpeed_ShowsDashSpeedAndEmptyEta()
         {
             DownloadDialogCopy.ProgressCopy copy = DownloadDialogCopy.Progress(66f, 862f, -1f);
-            Assert.AreEqual("剩余--", copy.Eta);
-            Assert.AreEqual("正在为你下载资源：66MB/862MB", copy.Sentence);
-            Assert.AreEqual("MB/862MB", copy.SizeDetail);
+            Assert.AreEqual(string.Empty, copy.Eta);
+            Assert.AreEqual("正在为你下载资源：66MB/862MB  速度--MB/秒", copy.Sentence);
+            Assert.AreEqual("MB/862MB  速度--MB/秒", copy.SizeDetail);
+        }
+
+        [Test]
+        public void Presenter_UnknownSpeed_KeepsPreviousEta()
+        {
+            var root = new VisualElement();
+            var card = new VisualElement();
+            card.AddToClassList("notice-card");
+            root.Add(card);
+
+            var title = new Label { name = "title" };
+            var body = new Label { name = "body" };
+            var primary = new Button { name = "primary" };
+            primary.Add(new Label { name = "primaryLabel" });
+            var secondary = new Button { name = "secondary" };
+            secondary.Add(new Label { name = "secondaryLabel" });
+            var fill = new VisualElement { name = "progress-fill" };
+            var sentence = new Label { name = "sentence" };
+            var eta = new Label { name = "eta", text = string.Empty };
+            var downloaded = new Label { name = "downloaded" };
+            var sizeDetail = new Label { name = "size-detail" };
+            card.Add(title);
+            card.Add(body);
+            card.Add(primary);
+            card.Add(secondary);
+            card.Add(fill);
+            card.Add(sentence);
+            card.Add(eta);
+            card.Add(downloaded);
+            card.Add(sizeDetail);
+
+            var presenter = new NoticeCardPresenter();
+            presenter.Bind(root);
+            presenter.Apply(new NoticeCardContent
+            {
+                Title = "场景资源加载中...",
+                ShowBody = false,
+                Icon = NoticeCardIcon.Downloading,
+                PrimaryLabel = "我知道了",
+                ShowSecondary = false,
+                ShowProgress = true,
+            });
+
+            // 模拟已有速度算出的剩余，再丢速度：应保持「剩余4s」，不写成「剩余--」。
+            eta.text = "剩余4s";
+            presenter.SetProgress(7.66f, 66f, 862f);
+            Assert.AreEqual("剩余4s", eta.text);
+            Assert.AreEqual("MB/862MB  速度--MB/秒", sizeDetail.text);
+
+            presenter.Unbind();
         }
 
         [Test]
@@ -101,6 +151,12 @@ namespace Game.Tests
             Assert.IsFalse(copy.Body.EndsWith("。"));
             Assert.AreEqual("我知道了", copy.PrimaryLabel);
             Assert.IsFalse(copy.ShowSecondary);
+        }
+
+        [Test]
+        public void OfflineToast_IsNetworkAnomaly()
+        {
+            Assert.AreEqual("网络异常", DownloadDialogCopy.OfflineToast);
         }
 
         [Test]

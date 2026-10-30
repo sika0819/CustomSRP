@@ -8,7 +8,8 @@ using UnityEngine;
 namespace Game
 {
     /// <summary>
-    /// 下载前门禁：无网 → 存储 → 流量。文案走 <see cref="DownloadDialogCopy"/>。
+    /// 下载门禁纯计算（离线 / 存储 / 体积文案）。
+    /// 弹窗与 continue 由 <see cref="DownloadConsentSession"/> 唯一拥有。
     /// </summary>
     public static class DownloadNetworkGate
     {
@@ -17,18 +18,10 @@ namespace Game
         public static bool NeedsMobileDataPrompt() =>
             DownloadCellularGate.NeedsMobileDataPrompt();
 
-        /// <summary>无网弹层。返回是否已拦截。</summary>
-        public static bool TryShowOffline(Action onConfirm = null)
-        {
-            if (!IsOffline())
-                return false;
-            UiDialogService.ShowNoNetwork(onConfirm);
-            return true;
-        }
+        /// <summary>无网 toast。返回是否已拦截。</summary>
+        public static bool TryShowOffline(Action onConfirm = null) =>
+            DownloadConsentSession.TryShowOfflineCompat(onConfirm);
 
-        /// <summary>
-        /// 空间不足则弹存储窗并阻断。requiredMb 为需预留的 MB 数字文案。
-        /// </summary>
         public static bool TryBlockIfInsufficientStorage(
             long requiredBytes,
             Action onConfirm = null)
@@ -45,50 +38,22 @@ namespace Game
             return true;
         }
 
-        /// <summary>按 bank 名估算待下体积后做存储门禁。</summary>
         public static bool TryBlockIfInsufficientStorage(
             IList<string> bankNames,
-            Action onConfirm = null)
-        {
-            long kb = PendingKilobytes(bankNames);
-            if (kb <= 0)
-                return false;
-            return TryBlockIfInsufficientStorage(kb * 1024L, onConfirm);
-        }
+            Action onConfirm = null) =>
+            DownloadConsentSession.TryBlockStorageCompat(bankNames, onConfirm);
 
-        /// <summary>
-        /// 需要流量窗时弹出。onAllow 在 Priority 之后、开闸之后由门面调用（调用方只写业务续下）。
-        /// 返回是否已拦截（已弹窗）。
-        /// </summary>
+        /// <summary>转发 Session；窗已开时替换 continue。</summary>
         public static bool TryShowMobileDataPrompt(
             IList<string> banksToPrioritize,
             Action onAllowContinue = null,
             Action onWifiOnly = null,
-            string sizeMb = null)
-        {
-            if (!NeedsMobileDataPrompt())
-                return false;
-
-            string size = string.IsNullOrEmpty(sizeMb)
-                ? FormatSizeMb(banksToPrioritize)
-                : sizeMb;
-
-            UiDialogService.ShowMobileDataConfirm(
-                size,
-                () =>
-                {
-                    // iOS 时序：先 Priority，再开闸；禁双 Resume。
-                    BankDownloader.PriorityBanks(banksToPrioritize);
-                    DownloadCellularGate.UserAllowCellularAlways();
-                    onAllowContinue?.Invoke();
-                },
-                () =>
-                {
-                    DownloadCellularGate.UserRequireWifiOnly();
-                    onWifiOnly?.Invoke();
-                });
-            return true;
-        }
+            string sizeMb = null) =>
+            DownloadConsentSession.TryShowMobileCompat(
+                banksToPrioritize,
+                onAllowContinue,
+                onWifiOnly,
+                sizeMb);
 
         public static bool TryShowMobileDataPrompt(
             string bankName,
@@ -101,34 +66,17 @@ namespace Game
             return TryShowMobileDataPrompt(one, onAllowContinue, onWifiOnly);
         }
 
-        /// <summary>
-        /// 完整决策链（无申请窗路径）：无网 → 存储 → 流量。
-        /// 全过则返回 true，调用方开下；任一拦截返回 false。
-        /// </summary>
+        /// <summary>转发 Session。全过 true；拦截 false（窗回调里续）。</summary>
         public static bool TryPassDownloadGates(
             IList<string> bankNames,
             Action onAllowAfterMobile = null,
             Action onWifiOnly = null,
-            Action onBlockedRetreat = null)
-        {
-            if (TryShowOffline(onBlockedRetreat))
-                return false;
-
-            if (TryBlockIfInsufficientStorage(bankNames, onBlockedRetreat))
-                return false;
-
-            if (TryShowMobileDataPrompt(
-                    bankNames,
-                    onAllowAfterMobile,
-                    () =>
-                    {
-                        onWifiOnly?.Invoke();
-                        onBlockedRetreat?.Invoke();
-                    }))
-                return false;
-
-            return true;
-        }
+            Action onBlockedRetreat = null) =>
+            DownloadConsentSession.TryPassGatesCompat(
+                bankNames,
+                onAllowAfterMobile,
+                onWifiOnly,
+                onBlockedRetreat);
 
         public static string FormatSizeMb(IList<string> bankNames)
         {

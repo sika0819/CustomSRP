@@ -855,6 +855,16 @@ namespace Game.BoluoApi
                         continue;
                     }
 
+                    // Wi‑Fi→蜂窝且未开闸：打断活跃槽；弹窗归 DownloadConsentSession（可替换 continue）。
+                    if (DownloadCellularGate.NeedsMobileDataPrompt() && HasBusyWork)
+                    {
+                        if (Actives.Count > 0)
+                            HoldForCellularPolicy();
+                        NotifyCellularConsentNeeded();
+                        await UniTask.Delay(500, DelayType.UnscaledDeltaTime);
+                        continue;
+                    }
+
                     PumpStarts();
                     if (Actives.Count == 0
                         && UserQueue.Count == 0
@@ -918,6 +928,44 @@ namespace Game.BoluoApi
                 }
 
                 RunSlot(entry, kind).Forget();
+            }
+        }
+
+        /// <summary>
+        /// 队列被蜂窝闸拦住：只通知同意会话。不带空回调抢窗，避免丢掉用户 EnsureReady。
+        /// </summary>
+        static void NotifyCellularConsentNeeded()
+        {
+            var names = CollectBusyBankNames();
+            if (names.Count == 0)
+                return;
+            Game.DownloadConsentSession.NotifyNeedCellularConsent(names);
+        }
+
+        static List<string> CollectBusyBankNames()
+        {
+            var names = new List<string>(
+                Actives.Count + UserQueue.Count + StartupQueue.Count + NormalQueue.Count);
+            for (int i = 0; i < Actives.Count; i++)
+            {
+                ActiveSlot slot = Actives[i];
+                if (slot != null && !string.IsNullOrEmpty(slot.BankName))
+                    names.Add(slot.BankName);
+            }
+
+            AppendQueueNames(UserQueue, names);
+            AppendQueueNames(StartupQueue, names);
+            AppendQueueNames(NormalQueue, names);
+            return names;
+        }
+
+        static void AppendQueueNames(List<string> queue, List<string> dest)
+        {
+            for (int i = 0; i < queue.Count; i++)
+            {
+                string name = queue[i];
+                if (!string.IsNullOrEmpty(name))
+                    dest.Add(name);
             }
         }
 

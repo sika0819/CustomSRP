@@ -16,14 +16,13 @@ namespace Game
         const string CrpTypeName = "CustomSRP.CustomRenderPipelineCamera, Assembly-CSharp";
 
         /// <summary>
-        /// 站立 renderScale。手机 0.5；闺蜜机标准版 0.75（清晰度优先，4K 跟手机）。
+        /// 站立 renderScale。手机 0.5；闺蜜机标准版也 0.5（0.75 树密朝向站立不稳会掉到十来帧）。
         /// </summary>
-        public static float DefaultRenderScale =>
-            BoluoDeviceInfo.IsSkyworthGmjStandard() ? 0.75f : 0.5f;
+        public static float DefaultRenderScale => 0.5f;
 
         /// <summary>
         /// 走路略压一档。手机 / 闺蜜机标准版均为 0.375（树密朝向走转要过 20）。
-        /// 起停会重建中间 RT。闺蜜机站立仍 0.75。
+        /// 起停会重建中间 RT。
         /// </summary>
         public static float WalkingRenderScale => 0.375f;
 
@@ -39,9 +38,10 @@ namespace Game
         /// <summary>
         /// 默认目标帧率（判定稳定后缓存）。
         /// 闺蜜机标准版 45、4K 版 60（<see cref="BoluoDeviceInfo.IsSkyworthGmj4K"/>）。
-        /// 其它手机：低 30 / 中 45 / 高 60。iOS 按机型代际（A12 及更早 30，A13/A14 45，A15 起 60）；
+        /// 其它手机：低 30 / 中 45 / 高 60。iOS 按机型代际（A12 及更早 30，A13/A14 45，A15 起 60）。
+        /// iPad Pro 2018/2020（A12X/A12Z，iPad8）按 60；iPad13 里的 A14（Air 4、第十代）按 45，M1 按 60。
         /// Android 按 <see cref="IslandGraphicsTier"/>（弱 GPU 或约 4GB 为低，约 8GB 且 GPU 不弱为高）。
-        /// 与原神、鸣潮的 30·45·60 默认同档；高刷屏默认仍是 60。
+        /// 45 在不能整除的刷新率上收到 30。高刷屏默认仍不超过 60。热状态严重 30 / 危急 15，不把系统降频写回去。
         /// </summary>
         public static int DefaultFrameRate
         {
@@ -85,6 +85,7 @@ namespace Game
         static Component _cachedCrp;
         static object _cachedSettings;
         static int _appliedFrameRate = int.MinValue;
+        static int _loggedPacedFps = int.MinValue;
 
         /// <summary>
         /// Skybox clear flags + CustomRenderPipelineCamera (copy color/depth, mobile scale).
@@ -164,6 +165,7 @@ namespace Game
 
         /// <summary>
         /// 按岛面状态设目标帧率：默认见 <see cref="DefaultFrameRate"/>，沉浸 25。
+        /// 再取热状态上限，并把不能整除刷新率的 45 收到 30。
         /// 原生半层 YieldsGpu 时不抢（overlay 自管 15/1）。
         /// </summary>
         public static void ApplyTargetFrameRate()
@@ -171,10 +173,19 @@ namespace Game
             if (NativeOverlayGate.YieldsGpu)
                 return;
 
-            int fps = IslandIdleImmersive.IsActive ? ImmersiveFrameRate : DefaultFrameRate;
+            int requested = IslandIdleImmersive.IsActive ? ImmersiveFrameRate : DefaultFrameRate;
+            int fps = PaceToRefresh(ApplyThermalCap(requested));
             if (fps == _appliedFrameRate
                 && Application.targetFrameRate == fps)
                 return;
+
+            if (fps != requested && fps != _loggedPacedFps)
+            {
+                _loggedPacedFps = fps;
+                Log.Info(
+                    "[IslandCamera] fps " + requested + " → " + fps
+                    + " refresh=" + CurrentRefreshHz());
+            }
 
             _appliedFrameRate = fps;
             if (GameEntry.Base != null)
@@ -202,14 +213,13 @@ namespace Game
                 return;
 
             Type settingsType = settings.GetType();
-            // 河岸 Depth 拍岸白边需要 _CameraDepthTexture。倒影用烘焙立方体贴图，不拷颜色。
-            // 闺蜜机不用后处理：关深度拷贝，省一次全屏 blit。
-            bool gmj = BoluoDeviceInfo.IsSkyworthGmj();
+            // 海面 / 河岸拍岸沫读 _CameraDepthTexture。平面倒影走反射 RT，不拷颜色。
+            // 低档关后处理时深度拷贝仍开，否则岸沫没有场景深度。
             SetField(settingsType, settings, "copyColor", false);
-            SetField(settingsType, settings, "copyDepth", !gmj);
+            SetField(settingsType, settings, "copyDepth", true);
 
-            // 手机：保留场景已挂的 PostFXSettings。闺蜜机：强制关掉后处理（含 OilFilter）。
-            if (gmj)
+            // 低档 / 闺蜜机标准版：强制关掉后处理。4K 按中档保留；效果由 IslandGraphicsTier.PostFx 门控。
+            if (!IslandGraphicsTier.AllowsPostFx)
             {
                 SetField(settingsType, settings, "postFXSettings", null);
                 SetField(settingsType, settings, "overridePostFX", true);
@@ -330,19 +340,107 @@ namespace Game
             }
 
             if (TryAppleMajor(model, "iPad", out int ipad))
-            {
-                if (ipad >= 13)
-                    return HighFps;
-                if (ipad >= 12)
-                    return MidFps;
-                return LowFps;
-            }
+                return IpadFrameRate(model, ipad);
 
             if (!string.IsNullOrEmpty(model)
                 && model.IndexOf("iPod", StringComparison.Ordinal) >= 0)
                 return LowFps;
 
             return 0;
+        }
+
+        /// <summary>
+        /// iPad 主版本不能当芯片代。iPad8 是 A12X/A12Z Pro；iPad13 里 Air 4 与第十代是 A14，其余是 M1。
+        /// </summary>
+        static int IpadFrameRate(string model, int major)
+        {
+            if (major == 8)
+                return HighFps;
+
+            bool hasMinor = TryAppleMinor(model, "iPad", out int minor);
+            if (major == 13)
+            {
+                if (hasMinor && ((minor >= 1 && minor <= 2) || (minor >= 18 && minor <= 19)))
+                    return MidFps;
+                if (!hasMinor)
+                    return MidFps;
+                return HighFps;
+            }
+
+            if (major >= 14)
+                return HighFps;
+            if (major >= 12)
+                return MidFps;
+            return LowFps;
+        }
+
+        /// <summary>
+        /// Player 的 adjustIOSFPSUsingThermalState 会把目标帧降到 30 / 15。
+        /// 岛内每帧写回目标帧时取同一上限，避免下一帧抬回去。
+        /// </summary>
+        static int ApplyThermalCap(int fps)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            switch (UnityEngine.iOS.Device.thermalState)
+            {
+                case UnityEngine.iOS.ThermalState.Serious:
+                    return Mathf.Min(fps, 30);
+                case UnityEngine.iOS.ThermalState.Critical:
+                    return Mathf.Min(fps, 15);
+            }
+#endif
+            return fps;
+        }
+
+        /// <summary>45 不能整除 60Hz / 120Hz，呈现会一长一短。能被 30 整除时收到 30。90Hz 上 45 保持。</summary>
+        static int PaceToRefresh(int fps)
+        {
+            if (fps != MidFps)
+                return fps;
+
+            int refresh = CurrentRefreshHz();
+            if (refresh < 48 || refresh % MidFps == 0)
+                return fps;
+            if (refresh % LowFps == 0)
+                return LowFps;
+            return fps;
+        }
+
+        static int CurrentRefreshHz()
+        {
+            double hz = Screen.currentResolution.refreshRateRatio.value;
+            if (hz < 30.0 || hz > 240.0)
+                return 0;
+            return (int)Math.Round(hz);
+        }
+
+        static bool TryAppleMinor(string model, string family, out int minor)
+        {
+            minor = 0;
+            if (!TryAppleMajor(model, family, out _))
+                return false;
+
+            int index = model.IndexOf(family, StringComparison.Ordinal);
+            int i = index + family.Length;
+            while (i < model.Length && char.IsDigit(model[i]))
+                i++;
+            if (i >= model.Length || model[i] != ',')
+                return false;
+            i++;
+
+            int value = 0;
+            bool any = false;
+            while (i < model.Length && char.IsDigit(model[i]))
+            {
+                any = true;
+                value = value * 10 + (model[i] - '0');
+                i++;
+            }
+
+            if (!any)
+                return false;
+            minor = value;
+            return true;
         }
 
         static bool TryAppleMajor(string model, string family, out int major)

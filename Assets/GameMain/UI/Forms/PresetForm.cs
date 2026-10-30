@@ -26,7 +26,11 @@ namespace Game
 
         const float ItemWidth = 264f;
         const float ItemGap = 36f;
-        const float ClickSlop = 14f;
+        /// <summary>
+        /// Beat UITK ScrollView's built-in touch threshold (≈10px) so we own the
+        /// gesture and drive scrollOffset 1:1 with the finger.
+        /// </summary>
+        const float ClickSlop = 8f;
         const float TrackWidth = 240f;
         const float ThumbWidth = 63f;
         const float SidePad = 60f;
@@ -110,6 +114,11 @@ namespace Game
             _list.mode = ScrollViewMode.Horizontal;
             _list.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             _list.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            // Own the drag: Clamped + no inertia so content tracks the finger 1:1
+            // and does not coast / rubber-band after we steal capture from UITK.
+            _list.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
+            _list.scrollDecelerationRate = 0f;
+            _list.elasticity = 0f;
             _list.contentContainer.style.flexDirection = FlexDirection.Row;
             _list.contentContainer.style.flexWrap = Wrap.NoWrap;
             _list.contentContainer.style.alignItems = Align.FlexStart;
@@ -742,19 +751,18 @@ namespace Game
             }
 
             ItemBinding captured = item;
-            if (!DownloadNetworkGate.TryPassDownloadGates(
-                    banks,
-                    onAllowAfterMobile: () => StartPresetDownload(captured),
-                    onWifiOnly: () =>
+            DownloadConsentSession.EnsureReady(
+                banks,
+                onReady: () => StartPresetDownload(captured),
+                new DownloadUiOptions
+                {
+                    OnCancel = () =>
                     {
                         if (PendingDownloadIntent.IsPresetMatch(captured.PresetId))
                             PendingDownloadIntent.Clear();
                         ApplyItemState(captured.Index, force: true);
                     },
-                    onBlockedRetreat: null))
-                return;
-
-            StartPresetDownload(item);
+                });
         }
 
         void StartPresetDownload(in ItemBinding item)
@@ -893,7 +901,8 @@ namespace Game
             _dragging = true;
             _moved = false;
             _captured = false;
-            _dragStartX = evt.position.x;
+            // Local to the list so scrollOffset tracks the finger 1:1 under sheet translate.
+            _dragStartX = _list.WorldToLocal(evt.position).x;
             _scrollStartX = _list.scrollOffset.x;
             _pressIndex = FindItemIndexAt(evt.position);
             RevealScrollbar();
@@ -904,7 +913,7 @@ namespace Game
             if (!_dragging || evt.pointerId != _pointerId || _list == null)
                 return;
 
-            float dx = evt.position.x - _dragStartX;
+            float dx = _list.WorldToLocal(evt.position).x - _dragStartX;
             if (!_moved && Mathf.Abs(dx) >= ClickSlop)
             {
                 _moved = true;
@@ -923,7 +932,8 @@ namespace Game
             _list.scrollOffset = new Vector2(next, 0f);
             SyncScrollTrack();
             RevealScrollbar();
-            evt.StopPropagation();
+            // Kill UITK ScrollView's own touch drag (registered on contentContainer).
+            evt.StopImmediatePropagation();
         }
 
         void OnListPointerUp(PointerUpEvent evt)

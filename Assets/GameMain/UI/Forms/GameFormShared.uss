@@ -17,24 +17,25 @@
     picking-mode: Ignore;
 }
 
-/* Download NoticeCard dialogs — center of the full-screen root, not the
-   design stage. translate % is the element's own size, so the shorter
-   progress card stays centered without a second margin.
-   This class must sit on the template instance itself. .notice-card is
-   absolute and stretches to its parent; a sizeless TemplateContainer
-   between them collapses the card, so panel.png disappears while the
-   icon and labels (they have their own pixel size) stay visible. */
+/* Download NoticeCard — Boluo MobileDataInUsePage on the 1125×2436 stage:
+   bottom-center anchor, pivot 0.5, anchoredY 661.5, size 933×1083
+   → card bottom = 661.5 − 1083/2 = 120 above stage bottom.
+   Progress card (957h, anchoredY 598.5) yields the same 120 inset.
+   Must live inside .game-form-stage (not the full-screen root) so Pad Expand
+   keeps the design-canvas position. Class sits on the template instance:
+   .notice-card is absolute and fills its parent; a sizeless TemplateContainer
+   collapses the panel while icon/labels (own pixel size) stay visible. */
 .game-form-notice-dialog {
     position: absolute;
     left: 50%;
-    top: 50%;
+    bottom: 120px;
     width: 933px;
     height: 1083px;
     margin-left: 0;
     margin-top: 0;
     margin-right: 0;
     margin-bottom: 0;
-    translate: -50% -50%;
+    translate: -50% 0;
     flex-grow: 0;
 }
 

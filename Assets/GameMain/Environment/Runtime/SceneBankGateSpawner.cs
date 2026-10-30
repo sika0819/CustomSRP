@@ -77,6 +77,7 @@ namespace Game
             _unlockMoveAfterExit = false;
             _retreatUntil = 0f;
             SetDownloadMoveLock(false);
+            DownloadConsentSession.ResetForLeaveIsland();
             _banksExpanded = false;
             if (_ownsCatalog && _ownedCatalog != null)
                 Destroy(_ownedCatalog);
@@ -271,8 +272,6 @@ namespace Game
             }
 
             IslandJoystickCamera cam = IslandJoystickCamera.Current;
-            if (_moveLocked)
-                cam?.SetDownloadMoveLock(true);
 
             // 相机没走到移动分支时，稍过 1 秒也结束，避免移动锁一直不还。
             if (cam != null
@@ -384,11 +383,18 @@ namespace Game
             BeginPopupRetreat();
 
             string size = FormatResourceSize(gate.BankNames);
-            Log.Info("[SceneBankGate] show download dialog size=" + size + " gate=" + gate.name);
-            UiDialogService.ShowRequestDownload(
-                size,
-                () => OnRequestDownloadConfirmed(gate),
-                EndPromptChain);
+            Log.Info("[SceneBankGate] consent EnsureReady size=" + size + " gate=" + gate.name);
+            SceneBankGate captured = gate;
+            DownloadConsentSession.EnsureReady(
+                gate.BankNames,
+                onReady: () => BeginDownload(captured),
+                new DownloadUiOptions
+                {
+                    LockMoveDuringPrompt = true,
+                    ShowRequestFirst = true,
+                    RequestSizeMb = size,
+                    OnCancel = EndPromptChain,
+                });
         }
 
         /// <summary>返回、无网、存储不足、只等 Wi-Fi：链结束。后退播完再还移动。</summary>
@@ -397,23 +403,6 @@ namespace Game
             if (_busy)
                 return;
             _unlockMoveAfterExit = true;
-        }
-
-        /// <summary>申请窗「立即下载」：无网 → 存储 → 流量 → 进度。</summary>
-        void OnRequestDownloadConfirmed(SceneBankGate gate)
-        {
-            if (gate == null)
-                return;
-
-            string[] banks = gate.BankNames;
-            if (!DownloadNetworkGate.TryPassDownloadGates(
-                    banks,
-                    onAllowAfterMobile: () => BeginDownload(gate),
-                    onWifiOnly: null,
-                    onBlockedRetreat: EndPromptChain))
-                return;
-
-            BeginDownload(gate);
         }
 
         /// <summary>弹窗出现时沿当前朝向，在 1 秒内后退大约 1 米。</summary>
@@ -620,6 +609,8 @@ namespace Game
         void SetDownloadMoveLock(bool locked)
         {
             _moveLocked = locked;
+            if (!locked)
+                DownloadConsentSession.ReleaseSessionMoveLock();
             IslandJoystickCamera.Current?.SetDownloadMoveLock(locked);
             if (!locked)
                 return;
@@ -631,6 +622,7 @@ namespace Game
         {
             _life++;
             _unlockMoveAfterExit = false;
+            DownloadConsentSession.ResetForLeaveIsland();
             SetDownloadMoveLock(false);
             _gates.Clear();
             if (_ownsCatalog && _ownedCatalog != null)

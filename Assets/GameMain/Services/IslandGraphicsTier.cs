@@ -55,6 +55,61 @@ namespace Game
             }
         }
 
+        /// <summary>
+        /// 后处理分档（可与 <see cref="GpuTier"/> 不同）：
+        /// 闺蜜机标准版全关；4K 按中档；其它跟 GpuTier。
+        /// </summary>
+        static Tier PostFxTier
+        {
+            get
+            {
+                if (BoluoDeviceInfo.IsSkyworthGmjStandard())
+                    return Tier.Low;
+                if (BoluoDeviceInfo.IsSkyworthGmj4K())
+                    return Tier.Mid;
+                return GpuTier;
+            }
+        }
+
+        /// <summary>
+        /// 后处理总闸。低档全关；中/高按效果细分（见 AllowsBloom / ColorGrading / OilFilter）。
+        /// </summary>
+        public static bool AllowsPostFx => PostFxTier != Tier.Low;
+
+        /// <summary>Bloom：仅高档。</summary>
+        public static bool AllowsBloom => PostFxTier == Tier.High;
+
+        /// <summary>Color Adjustments + White Balance：中档及以上。</summary>
+        public static bool AllowsColorGrading => PostFxTier >= Tier.Mid;
+
+        /// <summary>Split Toning：仅高档。</summary>
+        public static bool AllowsSplitToning => PostFxTier == Tier.High;
+
+        /// <summary>Oil Filter：中档及以上。</summary>
+        public static bool AllowsOilFilter => PostFxTier >= Tier.Mid;
+
+        /// <summary>
+        /// 纹理流式内存预算（MB）。低 128、中 256、高 512。跟 <see cref="GpuTier"/>。
+        /// </summary>
+        public static float StreamingMemoryBudgetMb
+        {
+            get
+            {
+                switch (GpuTier)
+                {
+                    case Tier.Low:
+                        return 128f;
+                    case Tier.Mid:
+                        return 256f;
+                    default:
+                        return 512f;
+                }
+            }
+        }
+
+        /// <summary>每张纹理最多丢弃的 mip 级数。低档 3，其余 2。</summary>
+        public static int StreamingMaxLevelReduction => GpuTier == Tier.Low ? 3 : 2;
+
         /// <summary>真机都走 Native 合批，含低档。编辑器关闭。</summary>
         public static bool AllowsNativeInstancing => IsMobilePlayer;
 
@@ -121,7 +176,7 @@ namespace Game
             return Tier.Mid;
 #else
             bool weakGpu = IsWeakMobileGpu(SystemInfo.graphicsDeviceName);
-            if (weakGpu || (mem > 0 && mem <= AndroidLowRamMb))
+            if (weakGpu || IsSpreadtrum9863() || (mem > 0 && mem <= AndroidLowRamMb))
                 return Tier.Low;
             if (mem >= AndroidHighRamMb)
                 return Tier.High;
@@ -131,8 +186,8 @@ namespace Game
         }
 
         /// <summary>
-        /// Adreno 619 及以下、Mali-G57 及以下，以及更老的 Mali-T / Mali-4。
-        /// 认不出的名字不降档。
+        /// Adreno 619 及以下、Adreno 710/720（编号更大但弱于 660）、Mali-G57 及以下（含 Mali-G52），以及更老的 Mali-T / Mali-4。
+        /// PowerVR（GE8320 / GE8322 等）一律降档。认不出的名字不降档。
         /// </summary>
         static bool IsWeakMobileGpu(string gpuName)
         {
@@ -140,8 +195,16 @@ namespace Game
                 return false;
 
             if (TryModelNumber(gpuName, "adreno", out int adreno))
-                return adreno > 0 && adreno <= 619;
+            {
+                if (adreno <= 0)
+                    return false;
+                if (adreno <= 619)
+                    return true;
+                // 710 = 骁龙 6 Gen 1，720 = 7s。编号大于 619，性能弱于 660，不能凭数字进高档。
+                return adreno == 710 || adreno == 720;
+            }
 
+            // Mali-G52 落在 G57 这条线上，不单独列型号。
             if (TryModelNumber(gpuName, "mali-g", out int maliG))
                 return maliG > 0 && maliG <= 57;
 
@@ -149,6 +212,30 @@ namespace Game
             if (lower.IndexOf("mali-t", System.StringComparison.Ordinal) >= 0)
                 return true;
             if (lower.IndexOf("mali-4", System.StringComparison.Ordinal) >= 0)
+                return true;
+            if (lower.IndexOf("powervr", System.StringComparison.Ordinal) >= 0)
+                return true;
+            return false;
+        }
+
+        /// <summary>
+        /// 展锐 SP9863A。处理器或 GPU 名含 9863（含 sc9863 / sp9863）或 ums312。
+        /// </summary>
+        static bool IsSpreadtrum9863()
+        {
+            return ContainsSpreadtrum9863(SystemInfo.processorType)
+                || ContainsSpreadtrum9863(SystemInfo.graphicsDeviceName);
+        }
+
+        static bool ContainsSpreadtrum9863(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return false;
+
+            string lower = value.ToLowerInvariant();
+            if (lower.IndexOf("9863", System.StringComparison.Ordinal) >= 0)
+                return true;
+            if (lower.IndexOf("ums312", System.StringComparison.Ordinal) >= 0)
                 return true;
             return false;
         }

@@ -16,12 +16,10 @@ namespace CustomSRP
         /// <summary>
         /// 泄漏对照关着倒影时不建镜像相机、不分配反射 RT。
         /// 打开 <see cref="IslandLeakProbe.Module.Reflect"/> 后下一帧才会建。
-        /// 闺蜜机标准版常关：水面改走解析天空，省一整路 mirror cull/opaque。
-        /// 4K 与低端机一样保留倒影。
+        /// 闺蜜机仍画海面倒影；标准版走路时镜面更新更稀。
         /// </summary>
         public static bool TemporarilyDisabled =>
-            !IslandLeakProbe.Allow(IslandLeakProbe.Module.Reflect)
-            || Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmjStandard();
+            !IslandLeakProbe.Allow(IslandLeakProbe.Module.Reflect);
 
         // Soft oil glaze: tiny RT + shader multi-tap blur (no mips — SRP blit
         // into autoGenerateMips RT leaves higher LODs empty / black).

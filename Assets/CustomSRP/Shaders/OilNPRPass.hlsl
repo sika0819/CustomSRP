@@ -4,20 +4,16 @@
 #include "OilNPRInput.hlsl"
 #include "OilNPRLighting.hlsl"
 
-// 树叶风力偏移函数：使用局部空间偏移，树叶只在原地摇摆不离树干。
-float3 OilFoliageWindDisplace(float3 positionOS, float3 normalOS, float foliageFlag)
+// Billboard wind: object-space sway so cards stay attached to the trunk pivot.
+float3 OilBillboardWindDisplace(float3 positionOS)
 {
-    if (foliageFlag < 0.5)
-        return positionOS;
-
     float wind = _OilGrassWindStrength;
     if (wind < 0.001)
         return positionOS;
 
-    // 轻微摆动：只在局部 XZ 方向做小幅偏移，保持与树干的连接。
     float gust = 0.7 + 0.3 * sin(_Time.y * 1.5 + positionOS.x * 0.06 + positionOS.z * 0.05);
     float sway = sin(_Time.y * 2.0 + positionOS.x * 0.1 + positionOS.z * 0.08) * 0.3;
-    float amp = wind * sway * gust * 0.15; // 偏移量很小，保持与树干连接
+    float amp = wind * sway * gust * 0.15;
     return positionOS + float3(amp, 0.0, amp * 0.5);
 }
 
@@ -53,7 +49,6 @@ Varyings OilNPRPassVertex(Attributes input)
     float keep = 1.0;
     // Metal stage-split: flags must be read in vertex or fragment-only
     // CBUFFER members are stripped while this file is still parsed.
-    float foliageFlag = OilEffectiveFoliageFlag(_OilFoliage, _OilFoliageSkipDay);
     float crossBb = _OilCrossBillboard;
     float yBb = _OilYBillboard;
     if (crossBb > 0.5)
@@ -76,10 +71,9 @@ Varyings OilNPRPassVertex(Attributes input)
         }
     }
 
-    // 风力偏移：树叶在局部空间摇摆，不离树干。
-    if (foliageFlag > 0.5 || crossBb > 0.5 || yBb > 0.5)
+    if (crossBb > 0.5 || yBb > 0.5)
     {
-        positionOS = OilFoliageWindDisplace(positionOS, input.normalOS, foliageFlag);
+        positionOS = OilBillboardWindDisplace(positionOS);
     }
 
     float3 positionWS = TransformObjectToWorld(positionOS);
@@ -90,7 +84,7 @@ Varyings OilNPRPassVertex(Attributes input)
     output.normalWS = normalWS;
     output.normalOS = normalOS;
     output.baseUV = TransformBaseUV(input.baseUV);
-    output.keepCard = keep + foliageFlag * 0.0;
+    output.keepCard = keep;
     return output;
 }
 
@@ -152,12 +146,9 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     half3 normalWS = geometricNormal;
 
 #if defined(OIL_MOBILE_PERF)
-    half paintRim = 0.0h;
     half3 viewDir = half3(0.0h, 0.0h, 1.0h);
 #else
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
-    half ndotV = saturate(dot(normalWS, viewDir));
-    half paintRim = (1.0h - ndotV) * (half)_PaintThickness * 0.5h;
 #endif
 
     Surface surface;
@@ -173,7 +164,6 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     surface.smoothness = (half)_Smoothness;
     surface.fresnelStrength = 0.0;
 #if defined(OIL_MOBILE_PERF)
-    // Foliage returns before the NPR block and never reads this. NPR overwrites it.
     surface.dither = 0.5;
 #else
     surface.dither = InterleavedGradientNoise(config.fragment.positionSS, 0);
@@ -183,10 +173,9 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     half brush = SampleShadowBrush(input.positionWS, config.baseUV);
 
     // Keep material flags live on Metal fragment stage (vertex-only reads get stripped).
-    float foliageFlagFrag = OilEffectiveFoliageFlag(_OilFoliage, _OilFoliageSkipDay);
     float crossBbFrag = _OilCrossBillboard;
 
-    // Far cross-card: same OilFoliageLighting as near leaves (BoluoUnity LitAlbedoObject).
+    // Far cross-card: vegetation lighting (BoluoUnity LitAlbedoObject).
     if (crossBbFrag > 0.5)
     {
 #if !defined(OIL_MOBILE_PERF)
@@ -206,18 +195,19 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         return half4(bb, alpha);
     }
 
+    half yPeriodW = 0.0h;
 #if defined(OIL_Y_BILLBOARD)
-    // 片树专用变体。朝上烘焙法线；晨昏夜走 OilTreeCrossBillboardShade（只跑树叶光照）。
-    // 移动端时段收成 0/1，同一像素不叠 NPR 和树叶光照。过渡 lerp 只留非移动端。
+    // 片树专用变体。朝上烘焙法线；晨昏夜走 OilTreeCrossBillboardShade（植被光照）。
+    // 移动端时段收成 0/1，同一像素不叠 NPR 和植被光照。过渡 lerp 只留非移动端。
     float yBbFrag = _OilYBillboard;
     if (yBbFrag > 0.5)
     {
-        half periodW = (half)OilFoliagePeriodWeight(_OilSkyPeriod);
+        yPeriodW = (half)OilFoliagePeriodWeight(_OilSkyPeriod);
 #if defined(OIL_MOBILE_PERF)
-        periodW = periodW >= 0.5h ? 1.0h : 0.0h;
+        yPeriodW = yPeriodW >= 0.5h ? 1.0h : 0.0h;
 #endif
         half3 bakedN = (half3)SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, config.baseUV).rgb;
-        if (periodW >= 0.999h)
+        if (yPeriodW >= 0.999h)
         {
             half3 bb = OilTreeCrossBillboardShade(
                 albedo, bakedN, (half)_NormalStrength, surface, config.fragment.screenUV);
@@ -233,28 +223,8 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         half3 litN = OilTreeBillboardLitNormal(bakedN, (half)_NormalStrength);
         surface.normal = (float3)litN;
         surface.interpolatedNormal = (float3)litN;
-#if !defined(OIL_MOBILE_PERF)
-        foliageFlagFrag = (float)periodW;
-#endif
     }
 #endif
-
-    // Foliage weight 0..1 (billboard SkipDay follows period; near leaves stay 0/1).
-    // Steady 0/1 = single path; mid values lerp foliage↔NPR across the 2s dial blend.
-    half foliageW = (half)saturate(foliageFlagFrag);
-
-    if (foliageW >= 0.999h)
-    {
-        half3 foliage = OilFoliageLighting(
-            surface, albedo, (half)_ShadeSteps, config.fragment.screenUV);
-#if defined(OIL_MOBILE_PERF)
-        foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush);
-#else
-        foliage = OilWeaveTint(foliage, input.positionWS.xz * 0.15);
-        foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush, input.positionWS);
-#endif
-        return half4(foliage, alpha);
-    }
 
 #if defined(OIL_MOBILE_PERF)
     surface.dither = InterleavedGradientNoise(config.fragment.positionSS, 0);
@@ -284,7 +254,7 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         (half3)_SpecColor.rgb,
         0.0h,
         (half)_ShadeSteps,
-        paintRim,
+        0.0h,
         (half)_ShadowLift,
         (half)_ShadeLift,
         brush,
@@ -296,18 +266,18 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);
 #endif
 
-    if (foliageW > 0.001h)
+#if defined(OIL_Y_BILLBOARD) && !defined(OIL_MOBILE_PERF)
+    // Mid period (2s dial blend): lerp vegetation ↔ NPR.
+    if (yPeriodW > 0.001h)
     {
-        half3 foliage = OilFoliageLighting(
-            surface, albedo, (half)_ShadeSteps, config.fragment.screenUV);
-#if defined(OIL_MOBILE_PERF)
-        foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush);
-#else
+        half3 bakedN = (half3)SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, config.baseUV).rgb;
+        half3 foliage = OilTreeCrossBillboardShade(
+            albedo, bakedN, (half)_NormalStrength, surface, config.fragment.screenUV);
         foliage = OilWeaveTint(foliage, input.positionWS.xz * 0.15);
         foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush, input.positionWS);
-#endif
-        color = lerp(color, foliage, foliageW);
+        color = lerp(color, foliage, yPeriodW);
     }
+#endif
 
     return half4(color, alpha);
 }

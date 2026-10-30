@@ -1003,8 +1003,8 @@ public class WanosMusicPlayerNative {
     /**
      * 定时到点停播（前后台均可）。不依赖 Unity Update 消费 Push。
      * Pause_Music 停 BGM（保留实例便于弹窗「取消/重复」续播）；
-     * Pause_ALL 停环境/天气等音效（对齐负一屏 pause + 产品「到点停音乐和音效」）；
-     * mute + userPaused 防焦点回归/后台续播擅自出声。
+     * Pause_ALL + mute 停环境/天气等音效（与负一屏 bg transport pause 同一套，产品「到点停音乐和音效」）；
+     * userPaused 防焦点回归/后台续播擅自出声。
      */
     public void pauseForTimerEnd() {
         playbackExecutor.execute(() -> {
@@ -2363,8 +2363,11 @@ public class WanosMusicPlayerNative {
         }
         userPaused = pause;
         if (pause) {
-            // 对齐前台 MusicPlaylist.Pause：Pause_Music 停 BGM，再 Pause_ALL 停环境/天气等音效。
-            // 后台 Unity 已 pause，调不到 SetContentAudioPaused，只能原生直接发控制事件。
+            // 对齐 pauseForTimerEnd / 前台 MusicPlaylist.Pause：
+            // Pause_Music 停 BGM，Pause_ALL 停环境/天气；再 mute 兜住 Pause_ALL 盖不住的 3D voice。
+            // 后台 Unity 已 pause，调不到 SetContentAudioPaused，只能原生直接控引擎。
+            musicEngineMuted = true;
+            probeSetMute(true);
             postMusicControlEvent("Pause_Music");
             postMusicControlEvent("Pause_ALL");
         } else {

@@ -173,11 +173,15 @@ namespace Game
             if (!MusicCatalog.TryFindByEventName(eventName, out int albumIdx, out int trackIdx))
             {
                 Log.Warning($"[BackgroundTransportSync] Resync: unknown event={eventName}");
+                // 即便曲名对不上，负一屏暂停也要闩住内容声，避免 Unity 醒后音效自行重起。
+                music.ApplyNativePausedLatch(paused);
                 return;
             }
 
             // 同曲也对账：重挂 voice + Loop/Shuffle Break（等本曲播完再自动下一首）。
             music.AdoptTrack(albumIdx, trackIdx);
+            // AdoptTrack 会把 IsPlaying=true；若原生仍是暂停，立刻闩回，并停内容声闸。
+            music.ApplyNativePausedLatch(paused);
             Log.Info($"[BackgroundTransportSync] Resync adopted album={albumIdx} track={trackIdx} event={eventName} paused={paused}");
 #endif
         }

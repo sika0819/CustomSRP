@@ -175,14 +175,15 @@ namespace Game.Editor
             // —— 决策链 ——
             var chainBox = Box();
             root.Add(chainBox);
-            chainBox.Add(Bold("决策链 TryPassDownloadGates"));
-            chainBox.Add(Hint("无网 → 存储 → 流量。会按当前模拟可达性与闸状态走；流量窗点继续会开闸。"));
+            chainBox.Add(Bold("决策链 DownloadConsentSession.EnsureReady"));
+            chainBox.Add(Hint(
+                "无网 → 存储 → 流量。弹窗与 continue 由 Session 唯一拥有；窗已开时再次 EnsureReady 会替换回调。"));
             _banksField = new TextField("bank 名（逗号分隔，可空）")
             {
                 value = "Music1_1,Ocean_Calm_Quad",
             };
             chainBox.Add(_banksField);
-            chainBox.Add(Btn("跑一遍门禁链", RunGateChain, 32));
+            chainBox.Add(Btn("跑一遍 EnsureReady", RunGateChain, 32));
             chainBox.Add(Btn("强制弹流量窗（绕过 Needs 判定）", () =>
             {
                 if (!RequirePlay()) return;
@@ -218,26 +219,30 @@ namespace Game.Editor
                 return;
 
             List<string> banks = ParseBanks();
-            bool passed = DownloadNetworkGate.TryPassDownloadGates(
+            bool firedSync = false;
+            DownloadConsentSession.EnsureReady(
                 banks,
-                onAllowAfterMobile: () =>
+                onReady: () =>
                 {
+                    firedSync = true;
                     RefreshStatus();
-                    SetStatus("门禁：流量窗继续 → 可开下 banks=" + banks.Count);
+                    SetStatus("EnsureReady → onReady banks=" + banks.Count);
                 },
-                onWifiOnly: () =>
+                new DownloadUiOptions
                 {
-                    RefreshStatus();
-                    SetStatus("门禁：切 Wi‑Fi");
-                },
-                onBlockedRetreat: () => SetStatus("门禁：被无网/存储/拒流量拦截"));
+                    OnCancel = () =>
+                    {
+                        RefreshStatus();
+                        SetStatus("EnsureReady → OnCancel（无网/存储/切 Wi‑Fi）");
+                    },
+                });
 
-            if (passed)
-                SetStatus("门禁全过 → 可直接开下（无流量窗）banks=" + banks.Count);
+            if (firedSync)
+                SetStatus("EnsureReady 同步通过 → onReady banks=" + banks.Count);
             else if (DownloadCellularGate.NeedsMobileDataPrompt())
-                SetStatus("门禁：已弹/应弹流量窗（看 Game 视图）");
+                SetStatus("EnsureReady：流量窗（看 Game 视图；再点可替换 continue）");
             else if (DownloadCellularGate.IsOffline())
-                SetStatus("门禁：无网弹层");
+                SetStatus("EnsureReady：无网 toast「网络异常」");
             RefreshStatus();
         }
 
