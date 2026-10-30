@@ -263,13 +263,16 @@ float4 ApplyColorGradingWithLumaPassFragment(Varyings input) : SV_TARGET
 }
 
 bool _CopyBicubic;
+// 1 = grade+canvas in this pass (no prior FXAA). 0 = already graded before FXAA.
+float _FinalApplyColorGrading;
 
 float4 FinalPassFragmentRescale(Varyings input) : SV_TARGET
 {
     float4 color = _CopyBicubic
         ? GetSourceBicubic(input.screenUV)
         : GetSource(input.screenUV);
-    color.rgb = ApplyCanvasWeave(ApplyColorGradingLUT(color.rgb), input.screenUV);
+    if (_FinalApplyColorGrading != 0.0)
+        color.rgb = ApplyCanvasWeave(ApplyColorGradingLUT(color.rgb), input.screenUV);
     return color;
 }
 

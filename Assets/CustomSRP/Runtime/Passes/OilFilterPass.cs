@@ -83,7 +83,10 @@ namespace CustomSRP
                 buffer.SetGlobalVector(TexelSizeId, new Vector4(1f / w, 1f / h, w, h));
                 buffer.SetGlobalFloat(HasDepthId, _hasDepth ? 1f : 0f);
                 buffer.SetGlobalFloat(RadiusScaleId, ComputeRadiusScale(w, h));
-                buffer.SetGlobalFloat(StrengthId, ComputeStrength(w, h));
+                float authored = _stack.Settings != null
+                    ? Mathf.Clamp(_stack.Settings.OilFilter.strength, 0.05f, 1f)
+                    : 0.45f;
+                buffer.SetGlobalFloat(StrengthId, ComputeStrength(w, h) * authored);
                 if (_hasDepth)
                     buffer.SetGlobalTexture(DepthCopyId, _depth);
 

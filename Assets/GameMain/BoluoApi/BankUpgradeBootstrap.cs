@@ -513,13 +513,13 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 进岛后：仅 Rest 静默待下。蜂窝未开闸 → 叠流量窗；Wi‑Fi / 已开闸 → 开 Rest。
+        /// 进岛后：仅 Rest 静默待下。蜂窝未开闸 / 无网 → 干等（不弹流量窗、不弹存储窗）；
+        /// Wi‑Fi 或用户在区域/预设/音乐点下载并「继续下载」开闸后 → 开 Rest。
         /// Critical 更新只走 <see cref="PromptCriticalUpdateIfNeeded"/>，不进静默队列。
         /// </summary>
         static async UniTaskVoid RunSilentRestPatrol(bool loadIntoEngine, int runId)
         {
             const int maxPasses = 180;
-            bool storagePrompted = false;
             for (int i = 0; i < maxPasses; i++)
             {
                 await UniTask.Delay(1000, DelayType.UnscaledDeltaTime);
@@ -534,29 +534,7 @@ namespace Game.BoluoApi
                     return;
                 }
 
-                if (DownloadCellularGate.IsOffline())
-                    continue;
-
-                if (!storagePrompted
-                    && DownloadNetworkGate.TryBlockIfInsufficientStorage(pending))
-                {
-                    storagePrompted = true;
-                    continue;
-                }
-
-                if (DownloadCellularGate.NeedsMobileDataPrompt())
-                {
-                    // 不抢用户 continue；拒流后 Session 会闩住，避免每秒重弹。
-                    bool load = loadIntoEngine;
-                    Game.DownloadConsentSession.BindReadyIfEmpty(() =>
-                    {
-                        _silentDeferred = false;
-                        DownloadRest(load).Forget();
-                    });
-                    Game.DownloadConsentSession.NotifyNeedCellularConsent(pending);
-                    continue;
-                }
-
+                // 蜂窝未开闸：静默等用户主动 EnsureReady 开闸或回到 Wi‑Fi。禁止叠流量窗。
                 if (!DownloadCellularGate.CanTransmitNow())
                     continue;
 

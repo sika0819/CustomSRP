@@ -242,12 +242,17 @@ namespace CustomSRP
         {
             [Tooltip("Edge wet-oil: fwidth edge + 4 diagonal taps (low cost).")]
             public bool enabled;
+
+            [Tooltip("Blend multiplier on top of resolution-based strength. Keep >0 so the dab stays visible.")]
+            [Range(0.05f, 1f)]
+            public float strength;
         }
 
         [SerializeField]
         OilFilterSettings oilFilter = new OilFilterSettings
         {
-            enabled = false
+            enabled = true,
+            strength = 0.45f
         };
 
         public OilFilterSettings OilFilter => oilFilter;
@@ -324,3 +329,4 @@ namespace CustomSRP
         }
     }
 }
+

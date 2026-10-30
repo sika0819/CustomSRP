@@ -6,38 +6,23 @@ namespace Game.Tests
     public sealed class SceneBankGateTests
     {
         [Test]
-        public void ExpandZoneBanks_AddsPresetPackageThatReferencesZone()
+        public void Setup_BankNamesEqualsZoneBanks_NoPresetExpand()
         {
-            var forest = ScriptableObject.CreateInstance<IslandPresetAsset>();
-            forest.BankNames = new[] { "Music5_3", "Boluodao_Forest" };
-            var beach = ScriptableObject.CreateInstance<IslandPresetAsset>();
-            beach.BankNames = new[] { "Music4_4", "Ocean_Calm_Quad" };
-            var sharedMusic = ScriptableObject.CreateInstance<IslandPresetAsset>();
-            sharedMusic.BankNames = new[] { "Music5_3", "Lake_Quad" };
-
+            SceneBankGate gate = CreateGate(
+                SceneBankGateShape.Box,
+                new Vector3(4f, 4f, 2f),
+                0f,
+                new[] { "Boluodao_Forest" });
             try
             {
-                string[] banks = SceneBankGateSpawner.ExpandZoneBanks(
-                    new[] { "Boluodao_Forest" },
-                    new[] { forest, beach, sharedMusic });
-
-                CollectionAssert.AreEquivalent(
-                    new[] { "Boluodao_Forest", "Music5_3" },
-                    banks);
+                CollectionAssert.AreEqual(gate.ZoneBanks, gate.BankNames);
+                Assert.AreEqual(1, gate.ZoneBanks.Length);
+                Assert.AreEqual("Boluodao_Forest", gate.ZoneBanks[0]);
             }
             finally
             {
-                Object.DestroyImmediate(forest);
-                Object.DestroyImmediate(beach);
-                Object.DestroyImmediate(sharedMusic);
+                Object.DestroyImmediate(gate.gameObject);
             }
-        }
-
-        [Test]
-        public void ExpandZoneBanks_EmptyZone_StaysEmpty()
-        {
-            string[] banks = SceneBankGateSpawner.ExpandZoneBanks(null, null);
-            Assert.AreEqual(0, banks.Length);
         }
 
         [Test]
@@ -110,11 +95,22 @@ namespace Game.Tests
             }
         }
 
-        static SceneBankGate CreateGate(SceneBankGateShape shape, Vector3 boxSize, float radius)
+        static SceneBankGate CreateGate(
+            SceneBankGateShape shape,
+            Vector3 boxSize,
+            float radius,
+            string[] banks = null)
         {
             var go = new GameObject("gate-test");
             var gate = go.AddComponent<SceneBankGate>();
-            gate.Setup(1, "test", new[] { "Bank" }, boxSize, radius, shape, blocked: true);
+            gate.Setup(
+                1,
+                "test",
+                banks ?? new[] { "Bank" },
+                boxSize,
+                radius,
+                shape,
+                blocked: true);
             return gate;
         }
     }

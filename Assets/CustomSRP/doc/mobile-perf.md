@@ -12,7 +12,7 @@
 | 2 | **RenderScale 0.85**（移动端） | -28% 像素 | `CameraRenderer.cs` |
 | 3 | **Bloom maxIterations=2**（移动端） | -0.3 ~ -0.6 ms | `PostFXSettings.cs`, `Passes/BloomPass.cs` |
 | 4 | **Forward+ tile 128**（移动端） | -0.1 ms | `Passes/LightingPass.cs` |
-| 5 | **FXAA 关闭**（移动端） | -0.4 ms | `Passes/PostFXPass.cs` |
+| 5 | FXAA 按 Asset/`allowFXAA`（岛内跟后处理档）；在 buffer 分辨率跑 | ~0.2 ms @0.5 | `Passes/PostFXPass.cs` |
 | 6 | **阴影范围 / 级联 / Atlas 减半**（移动端） | -0.2 ms | `ShadowSettings.cs` (`ClonedForMobile`), `CameraRenderer.cs` |
 | 7 | **Other 阴影 light 数 16 → 8**（移动端） | -0.1 ms | `OtherShadows.cs` |
 | 8 | **ColorLUT 32 → 24**（移动端） | -0.05 ~ -0.1 ms | `Passes/ColorLUTPass.cs` |
@@ -39,8 +39,8 @@
 ### 4. Forward+ tile 128
 `LightingPass.Setup` 移动端 `tileScreenPixelSize` 默认 128。`SetupLights` 计算 tile 数量 ×4 减少；CPU tile 分类下降到 1/4，GPU 端 `Shader` 端 `for` 循环（移动端 `< 32` 灯时）也只 loop 1/4。`Record` 内的 BufferDesc 同样用 128 重算 maxTiles，确保 GPU 端 buffer 不会因 max-tile 变化而炸大。
 
-### 5. FXAA 关
-`PostFXPass.Record` 内 `if (Application.isMobilePlatform) applyFXAA = false`。靠 RenderScale + Bicubic 抗锯齿。移动端 FXAA 全屏 5-tap 一次约 0.4 ms。
+### 5. FXAA
+不再移动端硬关。`fxaa.enabled` ∧ `allowFXAA`（岛内 = `AllowsPostFx`）。路径：Grade → FXAA → Final Rescale（已 grade 时跳过二次 LUT）。0.5 scale 下在半分辨率跑。
 
 ### 6. 阴影范围 / 级联 / Atlas
 `ShadowSettings.ClonedForMobile()` 通过 `MemberwiseClone` 出移动友好版本，cascadeCount=2、atlas ≤ 1024。`CameraRenderer` 移动端把 `maxDistance` 进一步钳到 25 m。`cullingParameters.shadowDistance` 也跟着小；`direction.atlasSize=1024, cascadeCount=2` 算出 4 tile，比 16 tile 省 75% ROP。

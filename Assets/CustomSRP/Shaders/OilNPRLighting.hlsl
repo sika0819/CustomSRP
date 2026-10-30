@@ -245,17 +245,13 @@ half3 OilNPRLightingEx(
     half halfLambert = saturate(dot(N, L) * 0.5h + 0.5h);
     half steps = max(shadeSteps, 2.0h);
     half attSoft = smoothstep(0.05h, 0.55h, attenuation);
-#if defined(TERRAIN_SHADOW_RECEIVER)
-    // Day keeps a 0.22 floor so bands don't chalk. Night moon luma is ~0.03, and that
-    // floor holds full shadow against the lit ground until the cast shape disappears.
+    // Day keeps a ~0.22 floor so bands don't chalk. Night moon luma is ~0.03; a fixed
+    // 0.28 floor (old mesh path) held full litColor inside cast shadows → rocks glowed.
+    // Water with _RECEIVE_SHADOWS=0 keeps attSoft=1, so shadowKeep never applies.
     half keyLum = dot(lightColor, half3(0.2126h, 0.7152h, 0.0722h));
     half dayLit = saturate(keyLum * 2.5h);
     half shadowKeep = lerp(0.02h, 0.22h, dayLit);
     half lit = halfLambert * lerp(shadowKeep, 1.0h, attSoft);
-#else
-    // Ocean / River: no cascade shadow → umbra dead code; shadeLift hardcoded 0.28.
-    half lit = halfLambert * lerp(0.28h, 1.0h, attSoft);
-#endif
     lit += ((half)surfaceWS.dither - 0.5h) * (quantize > 0.001h ? (1.0h / steps) : 0.0h);
     half litCont = saturate(lit);
     lit = QuantizeNdotL(litCont, steps);
@@ -277,16 +273,14 @@ half3 OilNPRLightingEx(
     // Daytime umbra is an absolute pigment. Night moon luma is ~0.03, so that pigment is
     // brighter than the moonlit ground and cast shadows read white. Night uses a cool
     // albedo fill: lit ground stays readable, the cast shape is a darker slice of it.
+    // Same treatment for terrain + mesh receivers (rocks / wood / props).
     half umbraHueMix = 0.4h;
-#if defined(TERRAIN_SHADOW_RECEIVER)
     half3 nightLit = albedo * half3(0.11h, 0.13h, 0.18h) + albedo * lightColor;
     half3 nightUmbra = albedo * half3(0.035h, 0.040h, 0.055h);
     litColor = lerp(nightLit, litColor, dayLit);
     umbraColor = lerp(nightUmbra, umbraColor, dayLit);
     umbraHueMix *= dayLit;
-#endif
-    // Ocean / River: _RECEIVE_SHADOWS=0 → no cascade shadow → umbra never reached.
-    // shadowTint / shadowWarm / shadowLift / shadeLift hardcoded to 0; kept for API compat.
+    // shadowTint / shadowWarm / shadowLift / shadeLift: API compat (call sites still pass).
 #if defined(OIL_MOBILE_PERF)
     // One period pull + campfire warm; skip hue/rim/paintRim/ceil.
     half3 lightHue = lightColor / lightPeak;

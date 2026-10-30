@@ -91,16 +91,6 @@ namespace CustomSRP
                 c.directional.atlasSize = MapSize._1024;
             if ((int)c.other.atlasSize > 1024)
                 c.other.atlasSize = MapSize._1024;
-            // 闺蜜机标准版：保留实时阴影，只把 atlas 收到 256（接触影仍在，块感在 RS0.75 下不明显）。
-            if (Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmjStandard())
-            {
-                c.filterQuality = FilterQuality.Low;
-                c.directional.atlasSize = MapSize._256;
-                c.directional.cascadeCount = 1;
-                c.directional.softCascadeBlend = false;
-                if ((int)c.other.atlasSize > 256)
-                    c.other.atlasSize = MapSize._256;
-            }
             return c;
         }
     }

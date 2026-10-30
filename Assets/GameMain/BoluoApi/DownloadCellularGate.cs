@@ -65,6 +65,7 @@ namespace Game.BoluoApi
         /// <summary>
         /// 流量窗「继续下载」：先由调用方 Priority 入队，再调本方法开闸。
         /// 内部只 EnsureRunner，禁止调用方再 Resume。
+        /// 仅覆盖本用户下载批次；批次结束须 <see cref="RevokeCellularAllow"/>。
         /// </summary>
         public static void UserAllowCellularAlways()
         {
@@ -72,6 +73,19 @@ namespace Game.BoluoApi
             _allowMobile = true;
             Log.Info("[DownloadCellularGate] UserAllowCellularAlways");
             BankDownloader.NotifyTransmitAllowed();
+        }
+
+        /// <summary>
+        /// 用户下载批次结束 / 下次 EnsureReady 前：清开闸，不 Abort 队列。
+        /// 再次点下载若仍蜂窝会重新 NeedsMobileDataPrompt。
+        /// </summary>
+        public static void RevokeCellularAllow()
+        {
+            if (!_allowMobile && _policy == CellularPolicy.WifiOnly)
+                return;
+            _policy = CellularPolicy.WifiOnly;
+            _allowMobile = false;
+            Log.Info("[DownloadCellularGate] RevokeCellularAllow");
         }
 
         /// <summary>

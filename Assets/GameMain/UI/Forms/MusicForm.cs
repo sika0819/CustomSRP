@@ -803,12 +803,46 @@ namespace Game
             _albumContainer.UnregisterCallback<PointerCaptureOutEvent>(OnAlbumPointerCaptureOut);
         }
 
+        /// <summary>
+        /// Device touch also synthesizes compatibility mouse events. Ignore the
+        /// mouse copy while a finger is down so translate stays under the finger.
+        /// </summary>
+        static bool IsPrimaryFingerOrMouse(IPointerEvent evt)
+        {
+            if (evt.pointerType == UnityEngine.UIElements.PointerType.touch || evt.pointerType == UnityEngine.UIElements.PointerType.pen)
+                return true;
+            if (evt.pointerType != UnityEngine.UIElements.PointerType.mouse)
+                return false;
+            return Input.touchCount == 0;
+        }
+
         void OnAlbumPointerDown(PointerDownEvent evt)
         {
             if (_albumContainer == null || !MusicCatalog.IsReady)
                 return;
             if (evt.button != 0)
                 return;
+            if (!IsPrimaryFingerOrMouse(evt))
+                return;
+
+            // Compatibility mouse often wins the race; retarget to the real finger.
+            if (_pointerDownInStrip)
+            {
+                if (_dragPointerId == PointerId.mousePointerId
+                    && evt.pointerType != UnityEngine.UIElements.PointerType.mouse)
+                {
+                    if (_albumContainer.HasPointerCapture(_dragPointerId))
+                        _albumContainer.ReleasePointer(_dragPointerId);
+                    _dragPointerId = evt.pointerId;
+                    _isDragging = false;
+                    _dragStartX = evt.position.x;
+                    _dragStartY = evt.position.y;
+                    _dragStartLeft = _albumContent != null
+                        ? ReadAlbumContentLeft()
+                        : TargetLeftForAlbum(_centerAlbum, MusicCatalog.AlbumCount);
+                }
+                return;
+            }
 
             _albumSnapSchedule?.Pause();
             _albumSnapSchedule = null;
@@ -816,11 +850,9 @@ namespace Game
             _pointerDownInStrip = true;
             _isDragging = false;
             _dragPointerId = evt.pointerId;
-            // Local to the strip viewport so translate X matches finger 1:1
-            // even if ancestors carry a translate (sheet slide / bottom offset).
-            Vector2 local = _albumContainer.WorldToLocal(evt.position);
-            _dragStartX = local.x;
-            _dragStartY = local.y;
+            // Panel coords — same space as style.translate pixels.
+            _dragStartX = evt.position.x;
+            _dragStartY = evt.position.y;
             _dragStartLeft = _albumContent != null
                 ? ReadAlbumContentLeft()
                 : TargetLeftForAlbum(_centerAlbum, MusicCatalog.AlbumCount);
@@ -843,9 +875,8 @@ namespace Game
                 return;
             }
 
-            Vector2 local = _albumContainer.WorldToLocal(evt.position);
-            float dx = local.x - _dragStartX;
-            float dy = local.y - _dragStartY;
+            float dx = evt.position.x - _dragStartX;
+            float dy = evt.position.y - _dragStartY;
 
             if (!_isDragging)
             {
@@ -864,16 +895,14 @@ namespace Game
                 _albumContainer.CapturePointer(evt.pointerId);
             }
 
-            // Once horizontal drag is locked, keep tracking X even if Y drifts —
-            // aborting mid-drag made the strip feel stuck / not 1:1 with the finger.
+            // Once horizontal drag is locked, keep tracking X even if Y drifts.
             int albumCount = MusicCatalog.AlbumCount;
             float nextLeft = _dragStartLeft + dx;
             NormalizeAlbumLoop(ref nextLeft, albumCount);
             _dragStartLeft = nextLeft - dx;
             SetAlbumOffsetX(nextLeft);
 
-            // Highlight only when the centred slot changes — full strip refresh
-            // every move regenerated text and hitch'd behind the finger.
+            // Highlight only when the centred slot changes — avoid per-move text rebuild hitch.
             int highlight = SlotIndexFromLeft(nextLeft);
             if (highlight != _albumDragHighlightSlot)
             {
@@ -1154,20 +1183,39 @@ namespace Game
 
         void OnListPointerDown(PointerDownEvent evt)
         {
-            if (_list == null || _scrollView == null || _listPointerDown)
+            if (_list == null || _scrollView == null)
                 return;
             // Mouse: primary button only. Touch/pen report button 0.
             if (evt.button != 0)
                 return;
+            if (!IsPrimaryFingerOrMouse(evt))
+                return;
             if (IsUnderVerticalScroller(evt.target as VisualElement))
                 return;
+
+            // Compatibility mouse often wins the race; retarget to the real finger.
+            if (_listPointerDown)
+            {
+                if (_listPointerId == PointerId.mousePointerId
+                    && evt.pointerType != UnityEngine.UIElements.PointerType.mouse)
+                {
+                    if (_listCaptured && _list.HasPointerCapture(_listPointerId))
+                        _list.ReleasePointer(_listPointerId);
+                    _listPointerId = evt.pointerId;
+                    _listCaptured = false;
+                    _listDragging = false;
+                    _listDragStartY = evt.position.y;
+                    _listScrollStartY = _scrollView.scrollOffset.y;
+                }
+                return;
+            }
 
             _listPointerDown = true;
             _listDragging = false;
             _listCaptured = false;
             _listPointerId = evt.pointerId;
-            // Local to the list viewport so scrollOffset tracks the finger 1:1.
-            _listDragStartY = _list.WorldToLocal(evt.position).y;
+            // Panel coords — same space as scrollOffset (Unity ScrollView formula).
+            _listDragStartY = evt.position.y;
             _listScrollStartY = _scrollView.scrollOffset.y;
             _suppressTrackClick = false;
         }
@@ -1177,7 +1225,10 @@ namespace Game
             if (!_listPointerDown || evt.pointerId != _listPointerId || _scrollView == null || _list == null)
                 return;
 
-            float dy = _list.WorldToLocal(evt.position).y - _listDragStartY;
+            // Starve ScrollView's built-in touch pan for this press (runs on contentContainer).
+            evt.StopImmediatePropagation();
+
+            float dy = evt.position.y - _listDragStartY;
             if (!_listDragging && Mathf.Abs(dy) >= ListDragSlop)
             {
                 _listDragging = true;
@@ -1192,11 +1243,11 @@ namespace Game
             if (!_listDragging)
                 return;
 
+            // scrollOffset = start − fingerΔ → row under the finger stays under the finger.
             float max = ListScrollMax();
             float next = Mathf.Clamp(_listScrollStartY - dy, 0f, max);
             _scrollView.scrollOffset = new Vector2(_scrollView.scrollOffset.x, next);
             NotifyScrollbarUserInput(bypassProgrammaticCooldown: true);
-            evt.StopImmediatePropagation();
         }
 
         void OnListPointerUp(PointerUpEvent evt)
@@ -1731,10 +1782,8 @@ namespace Game
         // -----------------------------------------------------------------------
 
         /// <summary>
-        /// Determines the UI state for a given track by checking
-        /// local readiness, active downloads, and playback status.
-        /// Matches Boluo <c>InGameYinYueItem</c>: queue Pending shows as NotDownloaded;
-        /// only the actively Downloading bank (or the user-clicked pending row) spins.
+        /// 行状态：盘上 <see cref="BankDownloader.IsLocalReady"/> 优先（已下载未播 / 已听过），
+        /// 未就绪才看队列 Pending/Downloading。无 ProgressEpoch 轮询，靠触发/完成刷列表。
         /// </summary>
         MusicItemUiState DetermineRowState(int album, int track)
         {
@@ -1756,12 +1805,20 @@ namespace Game
 
             string bankName = trackData.BankName;
 
+            // 磁盘优先：已落盘不因 Rest 排队 Pending / 残留 pending 意图显示未下载。
+            if (BankDownloader.IsLocalReady(bankName))
+            {
+                var albumData = MusicCatalog.GetAlbum(album);
+                if (albumData != null && ShouldShowRedDot(albumData.Name, trackData.MusicName))
+                    return MusicItemUiState.Succeeded;
+                return MusicItemUiState.Ready;
+            }
+
             bool userPending = PendingDownloadIntent.IsMusicMatch(album, track)
                 || (_pendingMusic.HasValue
                     && _pendingMusic.Value.album == album
                     && _pendingMusic.Value.track == track);
 
-            // Check active download queue entry.
             if (BankDownloader.TryGetActiveItem(bankName, out var item))
             {
                 switch (item.State)
@@ -1771,27 +1828,14 @@ namespace Game
                     case BankDownloadState.Failed:
                         return MusicItemUiState.Failed;
                     case BankDownloadState.Pending:
-                        // Boluo: queued Pending keeps NotDownloaded chrome; only the
-                        // user-clicked row stays on the spinner until HTTP starts.
                         return userPending
                             ? MusicItemUiState.Downloading
                             : MusicItemUiState.NotDownloaded;
                 }
             }
 
-            // User just tapped download and metadata/queue has not caught up yet.
             if (userPending)
                 return MusicItemUiState.Downloading;
-
-            // Check local bank readiness.
-            if (BankDownloader.IsLocalReady(bankName))
-            {
-                // Has the user already heard this track?
-                var albumData = MusicCatalog.GetAlbum(album);
-                if (albumData != null && ShouldShowRedDot(albumData.Name, trackData.MusicName))
-                    return MusicItemUiState.Succeeded;
-                return MusicItemUiState.Ready;
-            }
 
             return MusicItemUiState.NotDownloaded;
         }
@@ -1910,10 +1954,10 @@ namespace Game
 
             string bankName = tracks[track].BankName;
             string[] banks = { bankName };
+            bool saveSuppressPushed = false;
 
-            DownloadConsentSession.EnsureReady(
+            UserBankDownloadFlow.Start(
                 banks,
-                onReady: () => DoDownload(album, track, bankName),
                 new DownloadUiOptions
                 {
                     OnCancel = () =>
@@ -1921,58 +1965,44 @@ namespace Game
                         ClearPendingMusic();
                         _list?.schedule.Execute(() => _list?.RefreshItems());
                     },
-                });
-        }
+                },
+                onComplete: () =>
+                {
+                    if (saveSuppressPushed)
+                        IslandPlayerPosSave.PopSaveSuppress();
+                },
+                onBanksDone: list =>
+                {
+                    BankDownloadItem item = null;
+                    if (list != null)
+                    {
+                        for (int i = 0; i < list.Count; i++)
+                        {
+                            if (list[i] != null
+                                && string.Equals(
+                                    list[i].BankName,
+                                    bankName,
+                                    StringComparison.OrdinalIgnoreCase))
+                            {
+                                item = list[i];
+                                break;
+                            }
+                        }
+                    }
 
-        void DoDownload(int album, int track, string bankName)
-        {
-            // Shared with PresetForm — mutual overwrite (Boluo PendingDownloadIntent).
-            _playAfterDownloadGen++;
-            _pendingMusic = (album, track);
-            PendingDownloadIntent.SetMusic(album, track);
-            // Next frame: rebinding inside this click would unregister the callback mid-dispatch.
-            _list?.schedule.Execute(() => _list?.RefreshItems());
-
-            // Initiate priority download.
-            if (PresetBankCatalog.TryGet(bankName, out var remote))
-            {
-                IslandPlayerPosSave.PushSaveSuppress();
-                DownloadBankAsync(album, track, remote).Forget();
-            }
-            else
-            {
-                Log.Warning($"[MusicForm] Bank not found in PresetBankCatalog: {bankName}");
-                ClearPendingMusic();
-                _list?.schedule.Execute(() => _list?.RefreshItems());
-            }
-        }
-
-        /// <summary>
-        /// Runs the bank download and guarantees the save-suppress counter is popped exactly once,
-        /// even if the download throws before the completion callback fires.
-        /// </summary>
-        async UniTaskVoid DownloadBankAsync(int album, int track, BankRemoteInfo remote)
-        {
-            try
-            {
-                await BankDownloader.DownloadBank(
-                    remote,
-                    loadIntoEngine: true,
-                    onDone: OnBankDownloadDone,
-                    prioritize: true,
-                    preempt: true);
-            }
-            catch (Exception e)
-            {
-                Log.Warning($"[MusicForm] Bank download failed: {e.Message}");
-                // 前面几首失败不能清掉最后一首的待播，否则最后一首下完不会切。
-                if (IsPendingTrack(album, track))
-                    ClearPendingMusic();
-            }
-            finally
-            {
-                IslandPlayerPosSave.PopSaveSuppress();
-            }
+                    OnBankDownloadDone(item);
+                },
+                onDownloadStarting: () =>
+                {
+                    _playAfterDownloadGen++;
+                    _pendingMusic = (album, track);
+                    PendingDownloadIntent.SetMusic(album, track);
+                    _list?.schedule.Execute(() => _list?.RefreshItems());
+                    IslandPlayerPosSave.PushSaveSuppress();
+                    saveSuppressPushed = true;
+                },
+                prioritize: true,
+                preempt: true);
         }
 
         /// <summary>
@@ -1982,8 +2012,16 @@ namespace Game
         void OnBankDownloadDone(BankDownloadItem item)
         {
             // 注意：保存抑制的出栈由 DownloadBankAsync 的 finally 统一负责，这里不要重复 Pop。
+            // Flow CompleteAlreadyReady 会给空列表 → item=null；盘已齐则按就绪播。
             if (item == null || string.IsNullOrEmpty(item.BankName))
             {
+                if (TryGetPendingBank(out int a0, out int t0, out string pending0)
+                    && BankDownloader.IsLocalReady(pending0))
+                {
+                    BeginPlayAfterDownloadReady(a0, t0, pending0, guidText: null);
+                    return;
+                }
+
                 _list?.RefreshItems();
                 return;
             }
@@ -1997,14 +2035,10 @@ namespace Game
 
             if (item.State == BankDownloadState.Ready || item.State == BankDownloadState.Skipped)
             {
-                // Keep the spinner up until the bank is decoded. PlayIndex stops the
-                // current song first; posting before decode leaves that stop in place.
-                int gen = _playAfterDownloadGen;
                 string guid = !string.IsNullOrEmpty(item.Guid)
                     ? item.Guid
                     : MusicCatalog.GetTrack(album, track)?.BankGuid;
-                PlayDownloadedTrackAsync(gen, album, track, pendingBank, guid).Forget();
-                _list?.RefreshItems();
+                BeginPlayAfterDownloadReady(album, track, pendingBank, guid);
                 return;
             }
 
@@ -2012,11 +2046,12 @@ namespace Game
             _list?.RefreshItems();
         }
 
-        bool IsPendingTrack(int album, int track) =>
-            _pendingMusic.HasValue
-            && _pendingMusic.Value.album == album
-            && _pendingMusic.Value.track == track
-            && PendingDownloadIntent.IsMusicMatch(album, track);
+        void BeginPlayAfterDownloadReady(int album, int track, string bankName, string guidText)
+        {
+            int gen = _playAfterDownloadGen;
+            PlayDownloadedTrackAsync(gen, album, track, bankName, guidText).Forget();
+            _list?.RefreshItems();
+        }
 
         /// <summary>最后一次点击、且意图仍是这首的 bank。前面排队的完成回调对不上。</summary>
         bool TryGetPendingBank(out int album, out int track, out string bankName)

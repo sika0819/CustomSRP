@@ -9,7 +9,8 @@ namespace Game
 {
     /// <summary>
     /// 下载门禁纯计算（离线 / 存储 / 体积文案）。
-    /// 弹窗与 continue 由 <see cref="DownloadConsentSession"/> 唯一拥有。
+    /// 用户下载弹窗请走 <see cref="UserBankDownloadFlow"/> /
+    /// <see cref="DownloadConsentSession.EnsureReady"/>；勿在 Rest 里弹流量窗。
     /// </summary>
     public static class DownloadNetworkGate
     {
@@ -43,7 +44,8 @@ namespace Game
             Action onConfirm = null) =>
             DownloadConsentSession.TryBlockStorageCompat(bankNames, onConfirm);
 
-        /// <summary>转发 Session；窗已开时替换 continue。</summary>
+        /// <summary>仅 Editor 联调窗。玩法请用 <see cref="UserBankDownloadFlow"/>。</summary>
+        [Obsolete("Use UserBankDownloadFlow / DownloadConsentSession.EnsureReady")]
         public static bool TryShowMobileDataPrompt(
             IList<string> banksToPrioritize,
             Action onAllowContinue = null,
@@ -55,6 +57,7 @@ namespace Game
                 onWifiOnly,
                 sizeMb);
 
+        [Obsolete("Use UserBankDownloadFlow / DownloadConsentSession.EnsureReady")]
         public static bool TryShowMobileDataPrompt(
             string bankName,
             Action onAllowContinue = null,
@@ -63,10 +66,12 @@ namespace Game
             string[] one = string.IsNullOrEmpty(bankName)
                 ? Array.Empty<string>()
                 : new[] { bankName };
+#pragma warning disable CS0618
             return TryShowMobileDataPrompt(one, onAllowContinue, onWifiOnly);
+#pragma warning restore CS0618
         }
 
-        /// <summary>转发 Session。全过 true；拦截 false（窗回调里续）。</summary>
+        [Obsolete("Use UserBankDownloadFlow / DownloadConsentSession.EnsureReady")]
         public static bool TryPassDownloadGates(
             IList<string> bankNames,
             Action onAllowAfterMobile = null,

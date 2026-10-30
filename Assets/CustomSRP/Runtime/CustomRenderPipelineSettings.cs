@@ -14,7 +14,7 @@ namespace CustomSRP
             bicubicRescaling = CameraBufferSettings.BicubicRescalingMode.Off,
             fxaa = new CameraBufferSettings.FXAA
             {
-                enabled = true,
+                enabled = false,
                 fixedThreshold = 0.0833f,
                 relativeThreshold = 0.166f,
                 subpixelBlending = 0.75f,

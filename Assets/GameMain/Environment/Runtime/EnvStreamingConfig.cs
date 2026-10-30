@@ -699,9 +699,6 @@ namespace Game
                 ClutterShowDistance = Mathf.Min(ClutterShowDistance, 16f);
                 SmallRockHideDistance = Mathf.Min(SmallRockHideDistance, 48f);
                 SmallRockShowDistance = Mathf.Min(SmallRockShowDistance, 38f);
-                // 与闺蜜机 Quality/CRP shadowDistance=6 对齐，远距 caster 别再占 atlas。
-                ShadowCastMaxDist = Mathf.Min(ShadowCastMaxDist, 6f);
-                ShadowCastRestoreDist = Mathf.Min(ShadowCastRestoreDist, 5f);
             }
             // 栏杆/稻草人：真机勿跟普通 clutter 32m；盖住农场簇与中距观景点。
             StructuralClutterHideDistance = 120f;

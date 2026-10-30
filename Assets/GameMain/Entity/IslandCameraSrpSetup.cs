@@ -16,15 +16,17 @@ namespace Game
         const string CrpTypeName = "CustomSRP.CustomRenderPipelineCamera, Assembly-CSharp";
 
         /// <summary>
-        /// 站立 renderScale。手机 0.5；闺蜜机标准版也 0.5（0.75 树密朝向站立不稳会掉到十来帧）。
+        /// 站立 renderScale。手机 0.5；闺蜜机 0.75（大屏站立糊感太重）。
         /// </summary>
-        public static float DefaultRenderScale => 0.5f;
+        public static float DefaultRenderScale =>
+            BoluoDeviceInfo.IsSkyworthGmj() ? 0.75f : 0.5f;
 
         /// <summary>
-        /// 走路略压一档。手机 / 闺蜜机标准版均为 0.375（树密朝向走转要过 20）。
+        /// 走路略压一档。手机 0.375；闺蜜机 0.5（站立 0.75 的下一档）。
         /// 起停会重建中间 RT。
         /// </summary>
-        public static float WalkingRenderScale => 0.375f;
+        public static float WalkingRenderScale =>
+            BoluoDeviceInfo.IsSkyworthGmj() ? 0.5f : 0.375f;
 
         /// <summary>Unity Panel/Dialog 或原生半层（OverlayPresent）打开时，与沉浸同档。</summary>
         public static float PopupRenderScale => ImmersiveRenderScale;
@@ -32,8 +34,9 @@ namespace Game
         /// <summary>预设面板：手机、闺蜜机标准版、4K 一律 0.375。</summary>
         public const float PresetPanelRenderScale = 0.375f;
 
-        /// <summary>Idle 沉浸（HUD 隐去）。手机与闺蜜机一律 0.375。</summary>
-        public const float ImmersiveRenderScale = 0.375f;
+        /// <summary>Idle 沉浸（HUD 隐去）。手机 0.375；闺蜜机 0.5。</summary>
+        public static float ImmersiveRenderScale =>
+            BoluoDeviceInfo.IsSkyworthGmj() ? 0.5f : 0.375f;
 
         /// <summary>
         /// 默认目标帧率（判定稳定后缓存）。
@@ -218,11 +221,15 @@ namespace Game
             SetField(settingsType, settings, "copyColor", false);
             SetField(settingsType, settings, "copyDepth", true);
 
-            // 低档 / 闺蜜机标准版：强制关掉后处理。4K 按中档保留；效果由 IslandGraphicsTier.PostFx 门控。
-            if (!IslandGraphicsTier.AllowsPostFx)
+            // 低档无湿油时整机关后处理；有湿油则走管线 PostFX（Bloom/调色仍由档位门控）。
+            if (!IslandGraphicsTier.AllowsPostFx && !IslandGraphicsTier.AllowsOilFilter)
             {
                 SetField(settingsType, settings, "postFXSettings", null);
                 SetField(settingsType, settings, "overridePostFX", true);
+            }
+            else if (!IslandGraphicsTier.AllowsPostFx)
+            {
+                SetField(settingsType, settings, "overridePostFX", false);
             }
             else
             {
@@ -233,6 +240,7 @@ namespace Game
             // CameraSettings.RenderScaleMode.Override == 2
             SetField(settingsType, settings, "renderScaleMode", 2);
             SetField(settingsType, settings, "renderScale", DefaultRenderScale);
+            // 全机型关 FXAA。
             SetField(settingsType, settings, "allowFXAA", false);
             SetField(settingsType, settings, "keepAlpha", false);
             SetField(settingsType, settings, "maskLights", false);

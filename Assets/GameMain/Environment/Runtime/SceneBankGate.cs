@@ -9,10 +9,10 @@ namespace Game
     {
         public int MapItemIndex { get; private set; }
 
-        /// <summary>目录里这一扇门自己的 bank（区域环境音）。</summary>
+        /// <summary>目录里这一扇门自己的 bank（区域环境音）。就绪即可开门。</summary>
         public string[] ZoneBanks { get; private set; } = System.Array.Empty<string>();
 
-        /// <summary>实际要下完才开门的名单：区域 bank，加上引用了它们的预设整包。</summary>
+        /// <summary>与 <see cref="ZoneBanks"/> 相同（兼容旧调用）；不再 Expand 预设整包。</summary>
         public string[] BankNames { get; private set; } = System.Array.Empty<string>();
         public bool IsBlocked { get; private set; }
         public bool PlayerInside { get; private set; }

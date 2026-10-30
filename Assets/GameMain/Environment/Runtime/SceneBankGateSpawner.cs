@@ -1,11 +1,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using Cysharp.Threading.Tasks;
 using Game.BoluoApi;
 using UnityEngine;
 using UnityGameFramework.Runtime;
-using YooAsset;
 
 namespace Game
 {
@@ -22,7 +20,6 @@ namespace Game
         bool _busy;
         bool _ownsCatalog;
         SceneBankGateCatalog _ownedCatalog;
-        bool _banksExpanded;
         SceneBankGate _downloadGate;
         int _progressTicket;
         bool _progressOpen;
@@ -78,7 +75,6 @@ namespace Game
             _retreatUntil = 0f;
             SetDownloadMoveLock(false);
             DownloadConsentSession.ResetForLeaveIsland();
-            _banksExpanded = false;
             if (_ownsCatalog && _ownedCatalog != null)
                 Destroy(_ownedCatalog);
             _ownedCatalog = null;
@@ -173,7 +169,6 @@ namespace Game
             TryCreateEditorProbe();
 #endif
 
-            EnsurePresetBanks();
             RefreshBlocked();
 
             int blocked = 0;
@@ -246,12 +241,11 @@ namespace Game
             go.transform.localEulerAngles = rotation;
             go.transform.localScale = Vector3.one;
 
+            // 门只守区域 bank；预设曲子由 PresetForm 另下。同区域 bank 就绪即可进。
             string[] zoneBanks = CopyBanks(bankNames);
-            string[] banks = ExpandZoneBanks(zoneBanks, CurrentPresets());
-            bool blocked = HasBankNames(banks) && !BanksSatisfied(banks);
+            bool blocked = HasBankNames(zoneBanks) && !BanksSatisfied(zoneBanks);
             SceneBankGate gate = go.AddComponent<SceneBankGate>();
             gate.Setup(index, objectName, zoneBanks, size, radius, shape, blocked);
-            gate.SetGuardedBanks(banks);
             _gates.Add(gate);
         }
 
@@ -260,12 +254,11 @@ namespace Game
             if (_gates.Count == 0)
                 return;
 
-            EnsurePresetBanks();
             RefreshBlocked();
             SamplePlayerInside();
             if (!HudOverlayGate.HasPopup())
             {
-                if (_busy)
+                if (_busy || UserBankDownloadFlow.IsBusy)
                     TryReopenActiveProgress();
                 else
                     TryBeginPrompt();
@@ -315,41 +308,23 @@ namespace Game
             SceneBankGate gate = _downloadGate;
             if (gate == null || !gate.IsBlocked || !gate.PlayerInside || gate.PromptLatched)
                 return;
-            if (_progressOpen || _progressTicket <= 0 || UiDialogService.IsProgressRetired(_progressTicket))
+            int ticket = UserBankDownloadFlow.ActiveProgressTicket > 0
+                ? UserBankDownloadFlow.ActiveProgressTicket
+                : _progressTicket;
+            if (_progressOpen || ticket <= 0 || UiDialogService.IsProgressRetired(ticket))
                 return;
-            if (UiDialogService.IsProgressOpen(_progressTicket))
+            if (UiDialogService.IsProgressOpen(ticket))
                 return;
 
-            if (!UiDialogService.ReopenDownloadProgress(_progressTicket, OnProgressDismissed))
+            if (!UiDialogService.ReopenDownloadProgress(ticket, OnProgressDismissed))
                 return;
 
             gate.PromptLatched = true;
             _progressOpen = true;
+            _progressTicket = ticket;
             _unlockMoveAfterExit = false;
             SetDownloadMoveLock(true);
             BeginPopupRetreat();
-        }
-
-        /// <summary>
-        /// 区域环境音可能已在首包 / Critical 里，预设曲子还没下。
-        /// 门要守到「引用了这块区域 bank 的预设」整包就绪，否则走进去不弹窗。
-        /// </summary>
-        void EnsurePresetBanks()
-        {
-            if (_banksExpanded)
-                return;
-            IslandPresetAsset[] presets = CurrentPresets();
-            if (presets == null || presets.Length == 0)
-                return;
-
-            _banksExpanded = true;
-            for (int i = 0; i < _gates.Count; i++)
-            {
-                SceneBankGate gate = _gates[i];
-                if (gate == null)
-                    continue;
-                gate.SetGuardedBanks(ExpandZoneBanks(gate.ZoneBanks, presets));
-            }
         }
 
         void RefreshBlocked()
@@ -359,9 +334,10 @@ namespace Game
                 SceneBankGate gate = _gates[i];
                 if (gate == null)
                     continue;
-                bool blocked = HasBankNames(gate.BankNames) && !BanksSatisfied(gate.BankNames);
+                // 只看区域 bank（ZoneBanks == BankNames）。
+                bool blocked = HasBankNames(gate.ZoneBanks) && !BanksSatisfied(gate.ZoneBanks);
                 // 下完的那一帧要先把人推出触发区，不能先拆掉碰撞，否则推距是 0。
-                if (_busy && gate == _downloadGate && HasBankNames(gate.BankNames))
+                if (_busy && gate == _downloadGate && HasBankNames(gate.ZoneBanks))
                     blocked = true;
                 if (gate.IsBlocked != blocked)
                     gate.SetBlocked(blocked);
@@ -382,26 +358,46 @@ namespace Game
             SetDownloadMoveLock(true);
             BeginPopupRetreat();
 
-            string size = FormatResourceSize(gate.BankNames);
-            Log.Info("[SceneBankGate] consent EnsureReady size=" + size + " gate=" + gate.name);
+            string[] zoneBanks = gate.ZoneBanks;
+            string size = FormatResourceSize(zoneBanks);
+            Log.Info("[SceneBankGate] UserBankDownloadFlow size=" + size + " gate=" + gate.name);
             SceneBankGate captured = gate;
-            DownloadConsentSession.EnsureReady(
-                gate.BankNames,
-                onReady: () => BeginDownload(captured),
+            _busy = true;
+            _downloadGate = captured;
+            _progressOpen = true;
+
+            UserBankDownloadFlow.Start(
+                zoneBanks,
                 new DownloadUiOptions
                 {
                     LockMoveDuringPrompt = true,
                     ShowRequestFirst = true,
                     RequestSizeMb = size,
                     OnCancel = EndPromptChain,
-                });
+                },
+                onComplete: () => FinishDownloadFromFlow(captured),
+                onBanksDone: _ =>
+                {
+                    if (!BanksSatisfied(captured.ZoneBanks))
+                        UiDialogService.ShowToast("下载失败");
+                },
+                onProgressDismissed: OnProgressDismissed,
+                prioritize: true,
+                preempt: true);
         }
 
         /// <summary>返回、无网、存储不足、只等 Wi-Fi：链结束。后退播完再还移动。</summary>
         void EndPromptChain()
         {
-            if (_busy)
-                return;
+            // 同意链取消时 Flow 不会跑 onComplete，这里清掉 BeginPrompt 预置的 busy。
+            if (!UserBankDownloadFlow.IsBusy)
+            {
+                _busy = false;
+                _downloadGate = null;
+                _progressOpen = false;
+                _progressTicket = 0;
+            }
+
             _unlockMoveAfterExit = true;
         }
 
@@ -484,127 +480,29 @@ namespace Game
         }
 #endif
 
-        void BeginDownload(SceneBankGate gate)
-        {
-            if (_busy || gate == null)
-                return;
-            _busy = true;
-            _downloadGate = gate;
-            _progressOpen = true;
-            _unlockMoveAfterExit = false;
-            SetDownloadMoveLock(true);
-            int life = _life;
-            RunDownload(gate, life).Forget();
-        }
-
         /// <summary>玩家关掉进度条。下载继续。后退播完再还移动。</summary>
         void OnProgressDismissed()
         {
             _progressOpen = false;
-            if (!_busy)
+            if (!_busy && !UserBankDownloadFlow.IsBusy)
                 return;
             _unlockMoveAfterExit = true;
         }
 
-        async UniTaskVoid RunDownload(SceneBankGate gate, int life)
+        /// <summary>Flow 已关进度窗并 Revoke；这里只清门状态与移动锁。</summary>
+        void FinishDownloadFromFlow(SceneBankGate gate)
         {
-            int ticket = 0;
-            try
-            {
-                ticket = UiDialogService.OpenDownloadProgress(OnProgressDismissed);
-                _progressTicket = ticket;
-#if UNITY_EDITOR
-                if (EditorSimulateSlowDownload)
-                {
-                    await SimulateEditorProgress(ticket, life, gate.BankNames);
-                    if (life != _life || this == null)
-                        return;
-                }
-#endif
-                List<BankRemoteInfo> remotes = PresetBankCatalog.ResolveRemotes(gate.BankNames);
-                await BankDownloader.DownloadBanks(
-                    remotes,
-                    loadIntoEngine: true,
-                    onItemProgress: _ =>
-                    {
-                        if (life != _life)
-                            return;
-                        PushDownloadProgress(ticket, gate.BankNames);
-                    },
-                    preempt: true);
-
-                if (life != _life || this == null)
-                    return;
-
-                PushDownloadProgress(ticket, gate.BankNames);
-                if (!BanksSatisfied(gate.BankNames))
-                    UiDialogService.ShowToast("下载失败");
-            }
-            catch (Exception e)
-            {
-                Log.Warning("[SceneBankGate] download failed: " + e.Message);
-                if (life == _life && this != null)
-                    UiDialogService.ShowToast("下载失败");
-            }
-            finally
-            {
-                if (life == _life && this != null)
-                    FinishDownload(ticket);
-                else if (ticket > 0)
-                    UiDialogService.CloseDownloadProgress(ticket);
-            }
-        }
-
-        /// <summary>
-        /// 先按仍挡住的门把人推出触发区，再取消阻挡并关进度条。
-        /// 主动关窗不走玩家的 OnCancel。
-        /// </summary>
-        void FinishDownload(int ticket)
-        {
+            if (this == null)
+                return;
             _busy = false;
             _downloadGate = null;
             _progressTicket = 0;
             _progressOpen = false;
             _unlockMoveAfterExit = false;
             RefreshBlocked();
-            if (ticket > 0)
-                UiDialogService.CloseDownloadProgress(ticket);
             SetDownloadMoveLock(false);
+            DownloadConsentSession.ReleaseSessionMoveLock();
         }
-
-#if UNITY_EDITOR
-        async UniTask SimulateEditorProgress(int ticket, int life, string[] banks)
-        {
-            Log.Info("[SceneBankGate] editor simulate unfinished download sec=" + EditorSimulateSeconds);
-            float elapsed = 0f;
-            while (elapsed < EditorSimulateSeconds)
-            {
-                if (life != _life || this == null)
-                    return;
-                elapsed += Time.unscaledDeltaTime;
-                float t = Mathf.Clamp01(elapsed / EditorSimulateSeconds);
-                float shown = t >= 1f ? 100f : Mathf.Min(99f, t * 100f);
-                UiDialogService.SetDownloadProgress(ticket, shown);
-                await UniTask.Yield(PlayerLoopTiming.Update);
-            }
-
-            if (life != _life || this == null)
-                return;
-            MarkEditorSimFinished(banks);
-            UiDialogService.SetDownloadProgress(ticket, 100f);
-        }
-
-        static void MarkEditorSimFinished(string[] banks)
-        {
-            if (banks == null)
-                return;
-            for (int i = 0; i < banks.Length; i++)
-            {
-                if (!string.IsNullOrEmpty(banks[i]))
-                    EditorSimFinished.Add(banks[i]);
-            }
-        }
-#endif
 
         void SetDownloadMoveLock(bool locked)
         {
@@ -636,80 +534,6 @@ namespace Game
             _gates.Clear();
             for (int i = transform.childCount - 1; i >= 0; i--)
                 Destroy(transform.GetChild(i).gameObject);
-        }
-
-        static IslandPresetAsset[] CurrentPresets()
-        {
-            PresetService presets = PresetService.Instance;
-            return presets != null ? presets.Presets : null;
-        }
-
-        /// <summary>
-        /// 区域 bank 加上所有「BankNames 里点了这块区域」的预设整包。
-        /// 只和区域 bank 求交，避免曲子名互相把别的预设也卷进来。
-        /// </summary>
-        public static string[] ExpandZoneBanks(string[] zoneBanks, IslandPresetAsset[] presets)
-        {
-            if (!HasBankNames(zoneBanks))
-                return Array.Empty<string>();
-
-            var list = new List<string>(8);
-            AddUnique(list, zoneBanks);
-            if (presets == null)
-                return list.ToArray();
-
-            for (int p = 0; p < presets.Length; p++)
-            {
-                IslandPresetAsset preset = presets[p];
-                string[] banks = preset != null ? preset.BankNames : null;
-                if (!Intersects(banks, zoneBanks))
-                    continue;
-                AddUnique(list, banks);
-            }
-
-            return list.ToArray();
-        }
-
-        static bool Intersects(string[] banks, string[] zoneBanks)
-        {
-            if (banks == null || zoneBanks == null)
-                return false;
-            for (int i = 0; i < banks.Length; i++)
-            {
-                if (string.IsNullOrEmpty(banks[i]))
-                    continue;
-                for (int j = 0; j < zoneBanks.Length; j++)
-                {
-                    if (string.Equals(banks[i], zoneBanks[j], StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-
-            return false;
-        }
-
-        static void AddUnique(List<string> list, string[] banks)
-        {
-            if (banks == null)
-                return;
-            for (int i = 0; i < banks.Length; i++)
-            {
-                string name = banks[i];
-                if (string.IsNullOrEmpty(name))
-                    continue;
-                bool found = false;
-                for (int j = 0; j < list.Count; j++)
-                {
-                    if (string.Equals(list[j], name, StringComparison.OrdinalIgnoreCase))
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found)
-                    list.Add(name);
-            }
         }
 
         static bool HasBankNames(string[] banks)
@@ -779,51 +603,6 @@ namespace Game
             }
 
             return true;
-        }
-
-        static void PushDownloadProgress(int ticket, string[] banks)
-        {
-            MeasureDownload(banks, out float percent, out float downloadedMb, out float totalMb);
-            UiDialogService.SetDownloadProgress(ticket, percent, downloadedMb, totalMb);
-        }
-
-        static void MeasureDownload(string[] banks, out float percent, out float downloadedMb, out float totalMb)
-        {
-            downloadedMb = 0f;
-            totalMb = 0f;
-            percent = 100f;
-            if (!HasBankNames(banks))
-                return;
-
-            int count = 0;
-            for (int i = 0; i < banks.Length; i++)
-            {
-                string name = banks[i];
-                if (string.IsNullOrEmpty(name))
-                    continue;
-                count++;
-                float weight = 1f;
-                if (PresetBankCatalog.TryGet(name, out BankRemoteInfo remote)
-                    && remote != null
-                    && long.TryParse(remote.size, out long kb)
-                    && kb > 0)
-                    weight = kb / 1024f;
-                totalMb += weight;
-                if (BankReady(name))
-                    downloadedMb += weight;
-                else if (BankDownloader.TryGetActiveItem(name, out BankDownloadItem active) && active != null)
-                    downloadedMb += weight * Mathf.Clamp01(active.Progress);
-            }
-
-            if (count == 0 || totalMb <= 0.01f)
-            {
-                percent = 100f;
-                downloadedMb = 0f;
-                totalMb = 0f;
-                return;
-            }
-
-            percent = Mathf.Clamp01(downloadedMb / totalMb) * 100f;
         }
 
         /// <summary>只回数字（或「若干」），单位由弹窗模板加 MB。</summary>

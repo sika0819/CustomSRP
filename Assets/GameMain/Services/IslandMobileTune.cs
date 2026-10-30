@@ -33,9 +33,8 @@ namespace Game
             if (QualitySettings.shadows == ShadowQuality.Disable)
                 QualitySettings.shadows = ShadowQuality.HardOnly;
             // Shorter than Ultra's 40; matches CRP maxDistance for near contact shadows.
-            // 闺蜜机保留实时硬影；略收距离省转头时 caster 提交（仍有近景接触影）。
-            // 树密朝向尖刺：阴影收到 6m（近景接触影保留）。
-            QualitySettings.shadowDistance = BoluoDeviceInfo.IsSkyworthGmjStandard() ? 6f : 26f;
+            // 闺蜜机与手机同档硬影距离，避免 6m 观感像没影子。
+            QualitySettings.shadowDistance = 26f;
             QualitySettings.shadowResolution = ShadowResolution.Low;
 
             IslandSceneComponent scene = IslandSceneComponent.Active;

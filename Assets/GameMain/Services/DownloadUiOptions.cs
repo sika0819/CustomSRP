@@ -16,5 +16,11 @@ namespace Game
 
         /// <summary>返回 / 切 Wi‑Fi / 存储确认 / 无网后的收尾（如岛门 EndPromptChain）。</summary>
         public Action OnCancel;
+
+        /// <summary>
+        /// 为 true 时跳过「下载进度」弹窗（预设用卡片进度环）。
+        /// 默认 false：区域 / 音乐仍开进度窗。流量窗仍只由蜂窝 <c>NeedsMobileDataPrompt</c> 决定。
+        /// </summary>
+        public bool SuppressProgressDialog;
     }
 }

@@ -8,9 +8,9 @@ using UnityGameFramework.Runtime;
 namespace Game
 {
     /// <summary>
-    /// 下载同意会话：唯一弹窗所有者。
-    /// 再次 <see cref="EnsureReady"/> / <see cref="NotifyNeedCellularConsent"/> 时替换 continue，绝不静默丢回调。
-    /// BankDownloader 只发 <see cref="NotifyNeedCellularConsent"/>，不直接开 UI。
+    /// 下载同意会话：唯一弹窗所有者（经 GameFramework UI Form）。
+    /// 流量窗只由用户主动 <see cref="EnsureReady"/>（区域 / 预设 / 音乐 / Critical 点下载）弹出；
+    /// Rest / RunLoop 的 <see cref="NotifyNeedCellularConsent"/> 只静默记账，绝不开窗。
     /// </summary>
     public static class DownloadConsentSession
     {
@@ -34,8 +34,8 @@ namespace Game
         static bool _declinedCellularUntilWifi;
 
         /// <summary>
-        /// 用户主动下（岛门 / 预设 / 音乐 / Critical）。
-        /// 门禁全过或流量窗「继续」后调用 <paramref name="onReady"/>（只调一次）。
+        /// 用户主动下（岛门 / 预设 / 音乐 / Critical 点下载）。
+        /// 无网 → 存储 → 流量（文案体积按 bank 实算）→ 过闸后 <paramref name="onReady"/>（只调一次）。
         /// </summary>
         public static void EnsureReady(
             IList<string> banks,
@@ -43,6 +43,8 @@ namespace Game
             DownloadUiOptions opts = default)
         {
             _declinedCellularUntilWifi = false;
+            // 每次用户点下载都重新要流量确认（清掉上次批次的 AllowAlways）。
+            DownloadCellularGate.RevokeCellularAllow();
             Capture(banks, onReady, opts.OnCancel, opts.LockMoveDuringPrompt);
 
             if (_lockMove)
@@ -58,8 +60,8 @@ namespace Game
         }
 
         /// <summary>
-        /// 传输层 / Rest 巡检：队列被蜂窝拦住。合并 bank、必要时弹窗；
-        /// 不覆盖已有 continue；用户拒流后不再连弹。
+        /// 传输层 / Rest：蜂窝未开闸时只合并 bank，<b>不开流量窗</b>。
+        /// 进岛静默 Rest、Wi‑Fi→蜂窝打断均走此路径；用户点下载才由 <see cref="EnsureReady"/> 弹窗。
         /// </summary>
         public static void NotifyNeedCellularConsent(IList<string> busyBanks)
         {
@@ -73,14 +75,17 @@ namespace Game
                 return;
 
             MergeBanks(busyBanks);
+            // 有意不 ShowMobileConfirm：流量窗只服务用户主动 EnsureReady。
+        }
 
-            if (_phase == Phase.MobileConfirm || IsMobileConfirmPresent())
-            {
-                _phase = Phase.MobileConfirm;
-                return;
-            }
-
-            ShowMobileConfirm();
+        /// <summary>
+        /// 申请窗点「立即下载」：关窗前先离开 RequestPrompt，
+        /// 避免 OnClose 把 phase 打成 Idle 后 Rest Notify 抢弹流量窗。
+        /// </summary>
+        public static void BeginRequestConfirmed()
+        {
+            if (_phase == Phase.RequestPrompt)
+                _phase = Phase.Checking;
         }
 
         /// <summary>Rest 等：仅在尚无 continue 时挂上，不抢用户 EnsureReady。</summary>
@@ -125,6 +130,9 @@ namespace Game
         public static void EditorInvokeMobileAllow() => OnMobileAllow();
 
         public static void EditorInvokeMobileWifiOnly() => OnMobileWifiOnly();
+
+        /// <summary>单测：模拟申请窗点「立即下载」后的门禁链（跳过 UI）。</summary>
+        public static void EditorInvokeRequestConfirmed() => OnRequestConfirmed();
 
         public static string EditorPhaseName => _phase.ToString();
 
@@ -206,6 +214,10 @@ namespace Game
             return false;
         }
 
+        /// <summary>
+        /// 旧 API / 编辑器预览强制弹流量窗。玩法路径请用 <see cref="EnsureReady"/>，
+        /// 勿在 Rest / RunLoop 里调本方法。
+        /// </summary>
         public static bool TryShowMobileCompat(
             IList<string> banks,
             Action onAllowContinue = null,
@@ -260,7 +272,9 @@ namespace Game
 
         static void ShowRequestPrompt(string sizeMb)
         {
+            // 先占 phase，再收掉可能已开的流量窗（Rest 抢弹），保证用户先看到申请窗。
             _phase = Phase.RequestPrompt;
+            DismissMobileConfirmIfPresent();
             string size = string.IsNullOrEmpty(sizeMb)
                 ? DownloadNetworkGate.FormatSizeMb(_banks)
                 : sizeMb;
@@ -275,7 +289,7 @@ namespace Game
 
         static void OnRequestConfirmed()
         {
-            if (_phase == Phase.RequestPrompt)
+            if (_phase == Phase.RequestPrompt || _phase == Phase.Checking)
                 _phase = Phase.Checking;
             RunGateChecks();
         }
@@ -283,6 +297,13 @@ namespace Game
         static void RunGateChecks()
         {
             _phase = Phase.Checking;
+
+            // 全部已落盘：无需离线/流量窗（音乐/区域下过的同名 bank 切预设直接过）。
+            if (AllBanksLocallyReady(_banks))
+            {
+                FireReady();
+                return;
+            }
 
             if (DownloadCellularGate.IsOffline())
             {
@@ -334,9 +355,11 @@ namespace Game
             FireReady();
         }
 
+        /// <summary>流量窗：体积文案按当前会话 bank 的 PendingKilobytes 实算（经 GF UI Form）。</summary>
         static void ShowMobileConfirm()
         {
             _phase = Phase.MobileConfirm;
+            // 始终按会话 bank 重算，不用写死 500；无 catalog 体积时 FormatSizeMb →「若干」。
             string size = DownloadNetworkGate.FormatSizeMb(_banks);
             Log.Info(
                 "[DownloadConsent] mobile confirm size=" + size + " banks=" + _banks.Count);
@@ -375,6 +398,23 @@ namespace Game
             if (lockMove)
                 ReleaseMoveLock();
             ready?.Invoke();
+        }
+
+        /// <summary>会话 bank 是否均已 <see cref="BankDownloader.IsLocalReady"/>（空列表视为就绪）。</summary>
+        static bool AllBanksLocallyReady(IList<string> banks)
+        {
+            if (banks == null || banks.Count == 0)
+                return true;
+            for (int i = 0; i < banks.Count; i++)
+            {
+                string name = banks[i];
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                if (!BankDownloader.IsLocalReady(name))
+                    return false;
+            }
+
+            return true;
         }
 
         static void OnCancelled()
@@ -421,6 +461,23 @@ namespace Game
             if (GameEntry.UI == null)
                 return false;
             return GameEntry.UI.HasUIForm(UiAssets.MobileDataConfirmForm);
+        }
+
+        static bool IsRequestPromptPresent()
+        {
+            if (GameEntry.UI == null)
+                return false;
+            return GameEntry.UI.HasUIForm(UiAssets.RequestDownloadForm);
+        }
+
+        /// <summary>静默收流量窗（不走「切 Wi‑Fi」）。phase 已非 MobileConfirm 时 OnClose 为 no-op。</summary>
+        static void DismissMobileConfirmIfPresent()
+        {
+            if (GameEntry.UI == null || !IsMobileConfirmPresent())
+                return;
+            var form = GameEntry.UI.GetUIForm(UiAssets.MobileDataConfirmForm);
+            if (form != null)
+                GameEntry.UI.CloseUIForm(form.SerialId);
         }
     }
 }

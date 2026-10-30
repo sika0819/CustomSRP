@@ -127,7 +127,8 @@ namespace CustomSRP.Editor
             buffer.FindPropertyRelative("copyColor").boolValue = false;
             buffer.FindPropertyRelative("copyDepth").boolValue = false;
             buffer.FindPropertyRelative("renderScale").floatValue = 0.75f;
-            buffer.FindPropertyRelative("fxaa").FindPropertyRelative("enabled").boolValue = false;
+            // AA without wet-oil: keep FXAA on at buffer resolution.
+            buffer.FindPropertyRelative("fxaa").FindPropertyRelative("enabled").boolValue = true;
 
             SerializedProperty shadows = settings.FindPropertyRelative("shadows");
             shadows.FindPropertyRelative("filterQuality").enumValueIndex =

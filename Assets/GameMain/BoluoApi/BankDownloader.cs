@@ -298,9 +298,13 @@ namespace Game.BoluoApi
             {
                 if (item.State == BankDownloadState.Ready || item.State == BankDownloadState.Skipped)
                     return true;
-                // 正在 HTTP 拉取才挡；Pending/Failed 仍看磁盘，避免启动队列占用时 UI 显示未下载
+                // Downloading：完整本地文件仍算就绪（UI 已下载）；仅残缺/缺失才 false。
                 if (item.State == BankDownloadState.Downloading)
-                    return false;
+                {
+                    bool probeWhileDl = ProbeLocalSatisfiesCatalog(bankName);
+                    CacheLocalReady(bankName, probeWhileDl);
+                    return probeWhileDl;
+                }
             }
 
             float now = Time.unscaledTime;
@@ -311,6 +315,13 @@ namespace Game.BoluoApi
             }
 
             bool ready = ProbeLocalSatisfiesCatalog(bankName);
+            CacheLocalReady(bankName, ready);
+            return ready;
+        }
+
+        static void CacheLocalReady(string bankName, bool ready)
+        {
+            float now = Time.unscaledTime;
             LocalReadyCache[bankName] = new LocalReadyCacheEntry
             {
                 Ready = ready,
@@ -318,21 +329,33 @@ namespace Game.BoluoApi
                     ? float.PositiveInfinity
                     : now + LocalReadyNegativeTtlSeconds,
             };
-            return ready;
         }
 
-        static bool ProbeLocalSatisfiesCatalog(string bankName)
+        /// <summary>
+        /// 盘上是否满足 catalog（供单测 / UI）。半截 persistent .wsbk 会回退其它路径。
+        /// </summary>
+        public static bool ProbeLocalSatisfiesCatalog(string bankName)
         {
+            if (string.IsNullOrEmpty(bankName))
+                return true;
+
             string stem = AudioEnginePaths.StripBankExtension(bankName);
-            string path = Path.Combine(PersistentBankPath, stem + AudioEnginePaths.BankExtension);
-            if (!File.Exists(path))
-                AudioEnginePaths.TryFindLocalBank(bankName, out path);
+            PresetBankCatalog.TryGet(stem, out var remote);
 
-            PresetBankCatalog.TryGet(bankName, out var remote);
+            string primary = Path.Combine(PersistentBankPath, stem + AudioEnginePaths.BankExtension);
+            TryPromoteCompleteTemp(primary, remote);
+            if (PathSatisfiesCatalog(primary, stem, remote))
+                return true;
 
-            // 下载完成写在 .tmp、Move 被打断：size 对齐则提升为正式文件。
-            TryPromoteCompleteTemp(path, remote);
+            // 残缺 .wsbk 挡住好文件时，扫 persistent .wb / Streaming / Legacy。
+            if (TryFindSatisfyingAlternate(stem, remote, primary, out _))
+                return true;
 
+            return false;
+        }
+
+        static bool PathSatisfiesCatalog(string path, string stem, BankRemoteInfo remote)
+        {
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
                 return false;
 
@@ -342,16 +365,14 @@ namespace Game.BoluoApi
                 if (!fi.Exists || fi.Length <= 0)
                     return false;
 
-                // 正式文件已就绪时，残留 .tmp 只删不挡（旧逻辑会导致「本地有了还显示要下」）。
                 string tmpPath = path + ".tmp";
                 if (File.Exists(tmpPath))
                     TryDelete(tmpPath);
 
                 if (remote == null)
                     return true;
-                // 首包版本与 catalog 一致时 UI 也视为已就绪（不必等 MD5）。
                 if (!string.IsNullOrEmpty(remote.version)
-                    && StreamingBankCatalog.IsSameVersionAsStreaming(bankName, remote.version))
+                    && StreamingBankCatalog.IsSameVersionAsStreaming(stem, remote.version))
                     return true;
                 return FileMatchesRemoteSize(fi.Length, remote);
             }
@@ -359,6 +380,51 @@ namespace Game.BoluoApi
             {
                 return false;
             }
+        }
+
+        static bool TryFindSatisfyingAlternate(
+            string stem,
+            BankRemoteInfo remote,
+            string excludePath,
+            out string foundPath)
+        {
+            foundPath = null;
+            string[] dirs =
+            {
+                PersistentBankPath,
+#if !(UNITY_ANDROID && !UNITY_EDITOR)
+                AudioEnginePaths.StreamingBankPath,
+                AudioEnginePaths.LegacyStreamingBankPath,
+#endif
+            };
+            string[] exts =
+            {
+                AudioEnginePaths.BankExtension,
+                AudioEnginePaths.LegacyBankExtension,
+                "",
+            };
+
+            for (int d = 0; d < dirs.Length; d++)
+            {
+                string dir = dirs[d];
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+                    continue;
+                for (int e = 0; e < exts.Length; e++)
+                {
+                    string path = string.IsNullOrEmpty(exts[e])
+                        ? Path.Combine(dir, stem)
+                        : Path.Combine(dir, stem + exts[e]);
+                    if (!string.IsNullOrEmpty(excludePath)
+                        && string.Equals(path, excludePath, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (!PathSatisfiesCatalog(path, stem, remote))
+                        continue;
+                    foundPath = path;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -855,7 +921,7 @@ namespace Game.BoluoApi
                         continue;
                     }
 
-                    // Wi‑Fi→蜂窝且未开闸：打断活跃槽；弹窗归 DownloadConsentSession（可替换 continue）。
+                    // Wi‑Fi→蜂窝且未开闸：打断活跃槽，静默等 Wi‑Fi / 用户点下载开闸。不开流量窗。
                     if (DownloadCellularGate.NeedsMobileDataPrompt() && HasBusyWork)
                     {
                         if (Actives.Count > 0)
@@ -932,7 +998,7 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 队列被蜂窝闸拦住：只通知同意会话。不带空回调抢窗，避免丢掉用户 EnsureReady。
+        /// 队列被蜂窝闸拦住：只静默记账。流量窗只由用户 EnsureReady 打开。
         /// </summary>
         static void NotifyCellularConsentNeeded()
         {

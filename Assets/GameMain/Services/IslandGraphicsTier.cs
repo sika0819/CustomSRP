@@ -72,7 +72,7 @@ namespace Game
         }
 
         /// <summary>
-        /// 后处理总闸。低档全关；中/高按效果细分（见 AllowsBloom / ColorGrading / OilFilter）。
+        /// 后处理总闸（Bloom / 调色等）。低档关；湿油另走 <see cref="AllowsOilFilter"/>。
         /// </summary>
         public static bool AllowsPostFx => PostFxTier != Tier.Low;
 
@@ -85,8 +85,8 @@ namespace Game
         /// <summary>Split Toning：仅高档。</summary>
         public static bool AllowsSplitToning => PostFxTier == Tier.High;
 
-        /// <summary>Oil Filter：中档及以上。</summary>
-        public static bool AllowsOilFilter => PostFxTier >= Tier.Mid;
+        /// <summary>边缘湿油：全机型开；强度由 PostFXSettings.OilFilter.strength 压弱。</summary>
+        public static bool AllowsOilFilter => true;
 
         /// <summary>
         /// 纹理流式内存预算（MB）。低 128、中 256、高 512。跟 <see cref="GpuTier"/>。

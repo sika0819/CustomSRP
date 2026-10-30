@@ -349,7 +349,7 @@ MonoBehaviour:
     maskLights: 1
     renderScaleMode: 2
     renderScale: 0.5
-    allowFXAA: 0
+    allowFXAA: 1
     ignoreFog: 0
     keepAlpha: 0
 --- !u!1 &2089181186

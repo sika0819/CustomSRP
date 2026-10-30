@@ -51,6 +51,9 @@ namespace Game
 
             OnClick("primary", () =>
             {
+                // 先离开 RequestPrompt，再关窗：避免 OnClose 把 phase 打成 Idle，
+                // Rest Notify 在「关窗→OnDownload」之间抢弹蜂窝窗。
+                DownloadConsentSession.BeginRequestConfirmed();
                 // 先关再回调：同帧 Open 下一张时 Dialog 组更稳。
                 Action download = _userData?.OnDownload;
                 CloseSelf();

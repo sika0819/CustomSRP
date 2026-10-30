@@ -153,8 +153,6 @@ namespace Game
         float _appliedRenderScale = -1f;
         float _authoredVerticalFov = -1f;
         float _lastAspectForFov = -1f;
-        /// <summary>闺蜜机走路档 renderScale 粘滞截止时间，避免 0.75↔0.5 来回切重建 RT 掉帧。</summary>
-        float _gmjWalkScaleHoldUntil = -1f;
 
         // Camera-Y lerp from current height to ground+EyeHeight (used by walking / preset release).
         bool _heightTransitioning;
@@ -722,17 +720,11 @@ namespace Game
             IslandLocomotionState.IsWalking = walking;
 
             EnsureBody();
-            // 闺蜜机：摇杆有位移（含纯横向转向）或 look 增量时压到走路档 0.375。
-            // 粘滞 3s：转完/停住后短暂站立仍处树密朝向时，不立刻回到 0.5（不稳站立也要 >20）。
+            // 闺蜜机：摇杆有位移（含纯横向转向）或 look 增量时压到走路档 0.5；一停立刻回 0.75。
             bool stickTurning = _smoothedMove.sqrMagnitude > WalkRenderScaleThreshold * WalkRenderScaleThreshold;
             bool lowerScale = walking;
             if (BoluoDeviceInfo.IsSkyworthGmjStandard())
-            {
-                if (walking || looked || stickTurning)
-                    _gmjWalkScaleHoldUntil = Time.unscaledTime + 3f;
-                lowerScale = walking || looked || stickTurning
-                    || Time.unscaledTime < _gmjWalkScaleHoldUntil;
-            }
+                lowerScale = walking || looked || stickTurning;
             ApplyRenderScale(lowerScale);
             TickHeightTransition(dt);
             TickPitchRestore(dt);

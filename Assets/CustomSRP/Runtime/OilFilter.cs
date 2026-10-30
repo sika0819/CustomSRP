@@ -35,6 +35,9 @@ namespace CustomSRP
 
         public static bool IsEnabled(PostFXSettings settings)
         {
+            if (!IslandGraphicsTier.AllowsOilFilter)
+                return false;
+
             // B6: walking on mobile skips the full-screen oil edge pass.
             if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)
                 return false;
@@ -42,8 +45,6 @@ namespace CustomSRP
             EnsureInit();
             if (_hasOverride)
                 return _overrideEnabled;
-            if (!IslandGraphicsTier.AllowsOilFilter)
-                return false;
             return settings != null && settings.OilFilter.enabled;
         }
 

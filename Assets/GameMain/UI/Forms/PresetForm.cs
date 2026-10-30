@@ -388,25 +388,23 @@ namespace Game
             int schemeState = GameEntry.Presets != null ? GameEntry.Presets.SchemeState : 0;
             bool busy = BankDownloader.HasBusyWork;
             bool hasUser = _userTriggered.Count > 0;
+            bool idsChanged = currentId != _lastSeenCurrentId
+                || schemeState != _lastSeenSchemeState;
 
-            if (!force
-                && epoch == _lastProgressEpoch
-                && currentId == _lastSeenCurrentId
-                && schemeState == _lastSeenSchemeState
-                && !hasUser
-                && !busy)
+            // 就绪翻牌只靠 force（下载触发/完成）；100ms tick 只刷进度环 / Playing，不因 epoch 全扫 NotDownloaded。
+            if (force)
             {
+                _lastProgressEpoch = epoch;
+                _lastSeenCurrentId = currentId;
+                _lastSeenSchemeState = schemeState;
+                for (int i = 0; i < _items.Count; i++)
+                    ApplyItemState(i, force: true);
+                SyncPlayingAnimTick();
                 return;
             }
 
-            // Epoch + ids unchanged, no download: only sync Playing chrome for current / was-playing cards.
-            bool playingOnly = !force
-                && epoch == _lastProgressEpoch
-                && !busy
-                && !hasUser;
-
-            // Download active: narrow to cards that can change bank/progress chrome.
-            bool narrowBusy = !force && !playingOnly && (busy || hasUser);
+            if (!busy && !hasUser && !idsChanged)
+                return;
 
             _lastProgressEpoch = epoch;
             _lastSeenCurrentId = currentId;
@@ -414,9 +412,9 @@ namespace Game
 
             for (int i = 0; i < _items.Count; i++)
             {
-                if (playingOnly || narrowBusy)
+                ItemBinding item = _items[i];
+                if (busy || hasUser)
                 {
-                    ItemBinding item = _items[i];
                     bool relevant = !item.HasAppliedState
                         || item.PresetId == currentId
                         || (item.HasAppliedState && item.AppliedState == BankUiState.Playing)
@@ -425,8 +423,15 @@ namespace Game
                     if (!relevant)
                         continue;
                 }
+                else
+                {
+                    // 仅方案/当前预设变化：刷 Playing 相关卡。
+                    if (item.PresetId != currentId
+                        && !(item.HasAppliedState && item.AppliedState == BankUiState.Playing))
+                        continue;
+                }
 
-                ApplyItemState(i, force);
+                ApplyItemState(i, force: false);
             }
 
             SyncPlayingAnimTick();
@@ -751,75 +756,39 @@ namespace Game
             }
 
             ItemBinding captured = item;
-            DownloadConsentSession.EnsureReady(
+            int presetId = captured.PresetId;
+            bool saveSuppressPushed = false;
+
+            UserBankDownloadFlow.Start(
                 banks,
-                onReady: () => StartPresetDownload(captured),
                 new DownloadUiOptions
                 {
+                    // 预设：蜂窝才出流量窗；不开「下载进度」弹窗，进度走卡片环。
+                    SuppressProgressDialog = true,
                     OnCancel = () =>
                     {
-                        if (PendingDownloadIntent.IsPresetMatch(captured.PresetId))
+                        if (PendingDownloadIntent.IsPresetMatch(presetId))
                             PendingDownloadIntent.Clear();
+                        _userTriggered.Remove(presetId);
                         ApplyItemState(captured.Index, force: true);
                     },
-                });
-        }
-
-        void StartPresetDownload(in ItemBinding item)
-        {
-            string[] banks = item.BankNames;
-            if (banks == null || banks.Length == 0)
-            {
-                ApplyReadyPreset(item);
-                return;
-            }
-
-            _userTriggered.Add(item.PresetId);
-            PendingDownloadIntent.SetPreset(item.PresetId);
-            ApplyItemState(item.Index, force: true);
-
-            var remotes = PresetBankCatalog.ResolveRemotes(banks);
-            if (remotes == null || remotes.Count == 0)
-            {
-                Log.Warning($"[PresetForm] No catalog remotes for preset {item.PresetId}");
-                ApplyItemState(item.Index, force: true);
-                return;
-            }
-
-            int presetId = item.PresetId;
-            IslandPlayerPosSave.PushSaveSuppress();
-            DownloadBanksAsync(presetId, remotes).Forget();
-        }
-
-        /// <summary>
-        /// Runs the preset bank download and guarantees the save-suppress counter is popped exactly once,
-        /// even if the download throws before the completion callback fires
-        /// (otherwise the player position would stay permanently unsaved).
-        /// </summary>
-        async UniTaskVoid DownloadBanksAsync(int presetId, List<BankRemoteInfo> remotes)
-        {
-            try
-            {
-                await BankDownloader.DownloadBanks(
-                    remotes,
-                    loadIntoEngine: true,
-                    onComplete: list => OnPresetBanksDone(presetId, list),
-                    prioritize: false,
-                    preempt: true);
-            }
-            catch (Exception e)
-            {
-                Log.Warning($"[PresetForm] Bank download failed: {e.Message}");
-                _userTriggered.Remove(presetId);
-                if (PendingDownloadIntent.IsPresetMatch(presetId))
-                    PendingDownloadIntent.Clear();
-                if (Root != null)
-                    RefreshAllStates();
-            }
-            finally
-            {
-                IslandPlayerPosSave.PopSaveSuppress();
-            }
+                },
+                onComplete: () =>
+                {
+                    if (saveSuppressPushed)
+                        IslandPlayerPosSave.PopSaveSuppress();
+                },
+                onBanksDone: _ => OnPresetBanksDone(presetId, null),
+                onDownloadStarting: () =>
+                {
+                    _userTriggered.Add(presetId);
+                    PendingDownloadIntent.SetPreset(presetId);
+                    RefreshAllStates(force: true);
+                    IslandPlayerPosSave.PushSaveSuppress();
+                    saveSuppressPushed = true;
+                },
+                prioritize: false,
+                preempt: true);
         }
 
         void OnPresetBanksDone(int presetId, IReadOnlyList<BankDownloadItem> _)
@@ -836,7 +805,7 @@ namespace Game
                 if (PendingDownloadIntent.IsPresetMatch(presetId))
                     PendingDownloadIntent.Clear();
                 if (Root != null)
-                    RefreshAllStates();
+                    RefreshAllStates(force: true);
                 return;
             }
 
@@ -846,7 +815,7 @@ namespace Game
             if (!PendingDownloadIntent.IsPresetMatch(presetId))
             {
                 if (Root != null)
-                    RefreshAllStates();
+                    RefreshAllStates(force: true);
                 return;
             }
 
@@ -854,7 +823,7 @@ namespace Game
             if (preset == null)
             {
                 if (Root != null)
-                    RefreshAllStates();
+                    RefreshAllStates(force: true);
                 return;
             }
 
@@ -867,6 +836,8 @@ namespace Game
                         _selected = i;
                 }
 
+                // 关窗前全量刷：同 bank 其它卡立刻变已下载未播。
+                RefreshAllStates(force: true);
                 CloseSelfImmediate();
             }
 
@@ -892,17 +863,49 @@ namespace Game
         // Pointer / scroll
         // -----------------------------------------------------------------------
 
+        /// <summary>
+        /// Device touch also synthesizes compatibility mouse events (pointerId 0).
+        /// Tracking the mouse copy while a finger is down desyncs scroll from the finger.
+        /// </summary>
+        static bool IsPrimaryFingerOrMouse(IPointerEvent evt)
+        {
+            if (evt.pointerType == UnityEngine.UIElements.PointerType.touch || evt.pointerType == UnityEngine.UIElements.PointerType.pen)
+                return true;
+            if (evt.pointerType != UnityEngine.UIElements.PointerType.mouse)
+                return false;
+            return Input.touchCount == 0;
+        }
+
         void OnListPointerDown(PointerDownEvent evt)
         {
-            if (_list == null || _pointerId >= 0)
+            if (_list == null)
                 return;
+            if (!IsPrimaryFingerOrMouse(evt))
+                return;
+
+            // Compatibility mouse often wins the race; retarget to the real finger.
+            if (_pointerId >= 0)
+            {
+                if (_pointerId == PointerId.mousePointerId
+                    && evt.pointerType != UnityEngine.UIElements.PointerType.mouse)
+                {
+                    if (_captured && _list.HasPointerCapture(_pointerId))
+                        _list.ReleasePointer(_pointerId);
+                    _pointerId = evt.pointerId;
+                    _captured = false;
+                    _dragStartX = evt.position.x;
+                    _scrollStartX = _list.scrollOffset.x;
+                    _pressIndex = FindItemIndexAt(evt.position);
+                }
+                return;
+            }
 
             _pointerId = evt.pointerId;
             _dragging = true;
             _moved = false;
             _captured = false;
-            // Local to the list so scrollOffset tracks the finger 1:1 under sheet translate.
-            _dragStartX = _list.WorldToLocal(evt.position).x;
+            // Panel coords — same space as scrollOffset (Unity ScrollView formula).
+            _dragStartX = evt.position.x;
             _scrollStartX = _list.scrollOffset.x;
             _pressIndex = FindItemIndexAt(evt.position);
             RevealScrollbar();
@@ -913,7 +916,10 @@ namespace Game
             if (!_dragging || evt.pointerId != _pointerId || _list == null)
                 return;
 
-            float dx = _list.WorldToLocal(evt.position).x - _dragStartX;
+            // Starve ScrollView's contentContainer touch pan for this press.
+            evt.StopImmediatePropagation();
+
+            float dx = evt.position.x - _dragStartX;
             if (!_moved && Mathf.Abs(dx) >= ClickSlop)
             {
                 _moved = true;
@@ -927,13 +933,12 @@ namespace Game
             if (!_moved)
                 return;
 
+            // scrollOffset = start − fingerΔ → content translate stays under the finger.
             float max = Mathf.Max(0f, ContentWidth() - ViewportWidth());
             float next = Mathf.Clamp(_scrollStartX - dx, 0f, max);
             _list.scrollOffset = new Vector2(next, 0f);
             SyncScrollTrack();
             RevealScrollbar();
-            // Kill UITK ScrollView's own touch drag (registered on contentContainer).
-            evt.StopImmediatePropagation();
         }
 
         void OnListPointerUp(PointerUpEvent evt)

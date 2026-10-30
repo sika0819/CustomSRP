@@ -15,7 +15,8 @@ namespace CustomSRP
         static readonly int
             copyBicubicId = Shader.PropertyToID("_CopyBicubic"),
             fxaaConfigId = Shader.PropertyToID("_FXAAConfig"),
-            canvasGrainId = Shader.PropertyToID("_CanvasGrain");
+            canvasGrainId = Shader.PropertyToID("_CanvasGrain"),
+            finalApplyColorGradingId = Shader.PropertyToID("_FinalApplyColorGrading");
 
         static readonly GlobalKeyword
             fxaaLowKeyword = GlobalKeyword.Create("FXAA_QUALITY_LOW"),
@@ -81,28 +82,8 @@ namespace CustomSRP
                     ? new Vector4(canvas.grain, canvas.weave, canvasCellPx, 0f)
                     : Vector4.zero);
 
-            if (_scaleMode != ScaleMode.None)
-            {
-                buffer.SetGlobalFloat(
-                    copyBicubicId, _scaleMode == ScaleMode.Bicubic ? 1f : 0f);
-                if (_applyFxaa)
-                {
-                    ConfigureFXAA(buffer);
-                    _stack.Draw(
-                        buffer, _colorSource, _scaledResult,
-                        _keepAlpha ? Pass.FXAA : Pass.FXAAWithLuma);
-                    _stack.DrawFinal(
-                        buffer, _scaledResult, _cameraTarget, Pass.FinalRescale);
-                }
-                else
-                {
-                    _stack.DrawFinal(
-                        buffer, _colorSource, _cameraTarget, Pass.FinalRescale);
-                }
-
-                return;
-            }
-
+            // Grade (± luma) → FXAA → optional Final Rescale. Without FXAA, scaled
+            // cameras fold grading into FinalRescale to save a full-screen pass.
             TextureHandle finalSource;
             Pass finalPass;
             if (_applyFxaa)
@@ -120,7 +101,28 @@ namespace CustomSRP
                 finalPass = Pass.ApplyColorGrading;
             }
 
-            _stack.DrawFinal(buffer, finalSource, _cameraTarget, finalPass);
+            if (_scaleMode == ScaleMode.None)
+            {
+                _stack.DrawFinal(buffer, finalSource, _cameraTarget, finalPass);
+                return;
+            }
+
+            buffer.SetGlobalFloat(
+                copyBicubicId, _scaleMode == ScaleMode.Bicubic ? 1f : 0f);
+            if (_applyFxaa)
+            {
+                _stack.Draw(buffer, finalSource, _scaledResult, finalPass);
+                // Already graded before FXAA; rescale must not apply the LUT again.
+                buffer.SetGlobalFloat(finalApplyColorGradingId, 0f);
+                _stack.DrawFinal(
+                    buffer, _scaledResult, _cameraTarget, Pass.FinalRescale);
+            }
+            else
+            {
+                buffer.SetGlobalFloat(finalApplyColorGradingId, 1f);
+                _stack.DrawFinal(
+                    buffer, finalSource, _cameraTarget, Pass.FinalRescale);
+            }
         }
 
         public static TextureHandle Record(
@@ -180,27 +182,21 @@ namespace CustomSRP
             }
 
             bool applyFXAA = stack.BufferSettings.fxaa.enabled;
-            // Mobile: FXAA is expensive on tile GPUs; rely on render-scale + bicubic instead.
-            if (Application.isMobilePlatform)
-                applyFXAA = false;
             pass._applyFxaa = applyFXAA;
-            // Scaled output grades inside FinalRescale. An intermediate is only
-            // needed when FXAA must run before that upscale.
+            // FXAA needs a graded LDR intermediate; with render scale it also needs a
+            // second buffer so FinalRescale can upscale without re-grading.
             if (applyFXAA)
             {
                 var desc = new TextureDesc(stack.BufferSize.x, stack.BufferSize.y)
                 {
                     colorFormat = ColorFormat,
-                    filterMode = FilterMode.Bilinear
+                    filterMode = FilterMode.Bilinear,
+                    name = "Color Grading Result"
                 };
-                if (pass._scaleMode == ScaleMode.None)
+                pass._colorGradingResult = builder.CreateTransientTexture(desc);
+                if (pass._scaleMode != ScaleMode.None)
                 {
-                    desc.name = "Color Grading Result";
-                    pass._colorGradingResult = builder.CreateTransientTexture(desc);
-                }
-                else
-                {
-                    desc.name = "Scaled Result";
+                    desc.name = "FXAA Result";
                     pass._scaledResult = builder.CreateTransientTexture(desc);
                 }
             }
