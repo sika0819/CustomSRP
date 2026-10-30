@@ -43,9 +43,6 @@ namespace Game
 
         const float ScrollbarIdleHideSeconds = 3f;
         const float ScrollbarFadeSeconds = 0.35f;
-        const float ModeTipSeconds = 1.4f;
-        const float ModeTipFadeSeconds = 0.25f;
-
         // -----------------------------------------------------------------------
         // Album strip: measure each name, pack with a fixed edge gap (no ellipsis).
         // -----------------------------------------------------------------------
@@ -145,6 +142,8 @@ namespace Game
         static bool _statusIconsLoaded;
         IVisualElementScheduledItem _downloadSpinSchedule;
         float _downloadSpinDegrees;
+        Action<VisualElement> _downloadSpinIcon;
+        Action<VisualElement> _playingAnimIcon;
         const float DownloadSpinDegreesPerTick = 6f; // ~180°/s @ 33ms
 
         // -----------------------------------------------------------------------
@@ -1002,7 +1001,7 @@ namespace Game
 
         void ShowModeTip(string text)
         {
-            UiTipToast.ShowMessage(text, ModeTipSeconds + ModeTipFadeSeconds);
+            UiTipToast.ShowMessage(text);
         }
 
         // Sprite names for the 3 play modes (yy_danqu / yy_list / yy_suiji).
@@ -2166,12 +2165,15 @@ namespace Game
             if (_list == null)
                 return;
             _downloadSpinDegrees = (_downloadSpinDegrees - DownloadSpinDegreesPerTick) % 360f;
-            _list.Query("downloading").ForEach(icon =>
-            {
-                if (icon.resolvedStyle.display == DisplayStyle.None)
-                    return;
-                icon.style.rotate = new Rotate(Angle.Degrees(_downloadSpinDegrees));
-            });
+            _downloadSpinIcon ??= ApplyDownloadSpinIcon;
+            _list.Query("downloading").ForEach(_downloadSpinIcon);
+        }
+
+        void ApplyDownloadSpinIcon(VisualElement icon)
+        {
+            if (icon == null || icon.resolvedStyle.display == DisplayStyle.None)
+                return;
+            icon.style.rotate = new Rotate(Angle.Degrees(_downloadSpinDegrees));
         }
 
         // -----------------------------------------------------------------------
@@ -2227,12 +2229,15 @@ namespace Game
             _playingFrameIndex = (_playingFrameIndex + 1) % PlayingFrameCount;
 
             // ListView recycles rows — walk visible hierarchy for playinganima slots.
-            _list.Query("playinganima").ForEach(icon =>
-            {
-                if (icon.resolvedStyle.display == DisplayStyle.None)
-                    return;
-                ApplyPlayingFrame(icon, _playingFrameIndex);
-            });
+            _playingAnimIcon ??= ApplyPlayingAnimIcon;
+            _list.Query("playinganima").ForEach(_playingAnimIcon);
+        }
+
+        void ApplyPlayingAnimIcon(VisualElement icon)
+        {
+            if (icon == null || icon.resolvedStyle.display == DisplayStyle.None)
+                return;
+            ApplyPlayingFrame(icon, _playingFrameIndex);
         }
 
         static void ApplyPlayingFrame(VisualElement icon, int frameIndex)

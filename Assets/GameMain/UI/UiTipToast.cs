@@ -21,6 +21,9 @@ namespace Game
         /// <summary>TipWindows prefab default anchored Y (above stage center).</summary>
         public const float DefaultAnchoredY = 472f;
 
+        /// <summary>气泡从出现到完全收起的真实时间。</summary>
+        public const float DefaultSeconds = 3f;
+
         public struct Request
         {
             public string Message;
@@ -39,7 +42,7 @@ namespace Game
         /// </summary>
         public static void ShowMessage(
             string message,
-            float seconds = 1.6f,
+            float seconds = DefaultSeconds,
             float anchoredY = DefaultAnchoredY,
             bool error = false,
             bool aboveLoading = false)

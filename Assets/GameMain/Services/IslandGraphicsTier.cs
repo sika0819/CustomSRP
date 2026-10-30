@@ -5,7 +5,8 @@ namespace Game
 {
     /// <summary>
     /// 进岛画质档。内存阈值按系统上报值（Android 往往只有标称的约八成）。
-    /// GPU 名字只降档，不升档。闺蜜机大屏把高档压回中档，避免满分辨率再加植被。
+    /// GPU 名字只降档，不升档。闺蜜机标准版把高档压回中档。
+    /// 闺蜜机 4K 整档对齐低端机（分辨率另由 renderScale 管）。
     /// </summary>
     public static class IslandGraphicsTier
     {
@@ -34,15 +35,15 @@ namespace Game
 
         /// <summary>
         /// 预设过场：低档跳过退出走动、缩短黑场。编辑器与桌面恒为 false。
-        /// 闺蜜机不因大屏降档而走这条路径。
+        /// 闺蜜机标准版不因大屏走这条路径；4K 与低端机一样走。
         /// </summary>
         public static bool IsLowEnd => IsMobilePlayer && Resolve() == Tier.Low;
 
-        /// <summary>创维闺蜜机：站立满分辨率，GPU 功能不超过中档。</summary>
+        /// <summary>闺蜜机标准版：GPU 功能不超过中档。4K 走低档，不进这里。</summary>
         public static bool BandwidthConservative =>
-            IsMobilePlayer && BoluoDeviceInfo.IsSkyworthGmj();
+            IsMobilePlayer && BoluoDeviceInfo.IsSkyworthGmjStandard();
 
-        /// <summary>合批 / 草地用的档。闺蜜机高档会被压成中档。</summary>
+        /// <summary>合批 / 草地用的档。标准版高档压成中档；4K 在 Resolve 里已是低档。</summary>
         public static Tier GpuTier
         {
             get
@@ -91,7 +92,8 @@ namespace Game
                 + " gpuTier=" + gpu
                 + " mem=" + SystemInfo.systemMemorySize
                 + " gpu=" + SystemInfo.graphicsDeviceName
-                + " gmj=" + BandwidthConservative);
+                + " gmj=" + BandwidthConservative
+                + " gmj4k=" + BoluoDeviceInfo.IsSkyworthGmj4K());
 #else
             _ = raw;
 #endif
@@ -104,6 +106,10 @@ namespace Game
 #else
             if (!Application.isMobilePlatform)
                 return Tier.High;
+
+            // 4K 面板像素多，画质预算对齐低端机；renderScale 在 IslandCameraSrpSetup。
+            if (BoluoDeviceInfo.IsSkyworthGmj4K())
+                return Tier.Low;
 
             int mem = SystemInfo.systemMemorySize;
 

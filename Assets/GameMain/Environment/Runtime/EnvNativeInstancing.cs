@@ -555,8 +555,8 @@ namespace Game
 
         static Camera FrozenCamera()
         {
-            // 地图根保持未激活时 Camera.main 能返回。不要去激活地图节点再找相机。
-            return Camera.main;
+            // 地图根未激活时岛相机仍在。不要去激活地图节点再找相机。
+            return IslandJoystickCamera.ActiveView;
         }
 
         static void FlushBatch(
@@ -599,7 +599,7 @@ namespace Game
             int frame = Time.frameCount;
             if (_cachedCam != null && _cachedCamFrame == frame)
                 return _cachedCam;
-            _cachedCam = Camera.main;
+            _cachedCam = IslandJoystickCamera.ActiveView;
             _cachedCamFrame = frame;
             return _cachedCam;
         }

@@ -7,7 +7,7 @@ using UnityEngine.Rendering.RenderGraphModule;
 namespace CustomSRP
 {
     /// <summary>
-    /// Planar water reflection via a dedicated mirror camera (never touches Camera.main).
+    /// Planar water reflection via a dedicated mirror camera.
     /// Borrowing the main camera moved its transform / type every frame and made
     /// nearby trees, tents, and LOD thrash.
     /// </summary>
@@ -16,9 +16,12 @@ namespace CustomSRP
         /// <summary>
         /// 泄漏对照关着倒影时不建镜像相机、不分配反射 RT。
         /// 打开 <see cref="IslandLeakProbe.Module.Reflect"/> 后下一帧才会建。
+        /// 闺蜜机标准版常关：水面改走解析天空，省一整路 mirror cull/opaque。
+        /// 4K 与低端机一样保留倒影。
         /// </summary>
         public static bool TemporarilyDisabled =>
-            !IslandLeakProbe.Allow(IslandLeakProbe.Module.Reflect);
+            !IslandLeakProbe.Allow(IslandLeakProbe.Module.Reflect)
+            || Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmjStandard();
 
         // Soft oil glaze: tiny RT + shader multi-tap blur (no mips — SRP blit
         // into autoGenerateMips RT leaves higher LODs empty / black).
@@ -33,7 +36,7 @@ namespace CustomSRP
         // so a stale RT immediately reads as slide / shake / "one frame behind".
         // Rules (pose vs previous frame):
         //   any meaningful turn              -> every frame (never throttle yaw/pitch)
-        //   except MirrorTurnGraceFrames     -> walk interval / move rules (scale just changed)
+        //   except MirrorTurnGraceFrames     -> reuse previous RT (render scale just changed)
         //   walking on mobile, little turn   -> every WalkMirrorInterval frames
         //   fast move (standing / desktop)   -> every frame
         //   slow creep, no turn              -> even frames only
@@ -389,8 +392,14 @@ namespace CustomSRP
             }
 
             // Mobile walk, mostly translation: interval reuse (tiny RT hides walk parallax).
+            // 闺蜜机标准版再稀一点：倒影本就糊，少画镜面相机几乎看不出。4K 与手机同间隔。
             if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)
-                return (Time.frameCount % WalkMirrorInterval) == 0;
+            {
+                int interval = Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmjStandard()
+                    ? WalkMirrorInterval + 4
+                    : WalkMirrorInterval;
+                return (Time.frameCount % interval) == 0;
+            }
 
             if (moveSq > SlowMoveThresholdSq)
                 return true;
@@ -491,7 +500,7 @@ namespace CustomSRP
                 return false;
             }
 
-            Camera main = Camera.main;
+            Camera main = IslandJoystickCamera.ActiveView;
             if (main != null && main.isActiveAndEnabled && main.targetTexture == null)
             {
                 return camera == main;

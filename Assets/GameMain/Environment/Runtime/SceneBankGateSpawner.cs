@@ -28,12 +28,16 @@ namespace Game
         bool _progressOpen;
         bool _moveLocked;
         bool _unlockMoveAfterExit;
+        float _retreatUntil;
 
         /// <summary>贴墙时胶囊中心可能落在 Trigger 壳外的余量。</summary>
         const float BodyProbeSlopMeters = 0.75f;
 
-        /// <summary>森林盒子半长约 288 米，一次要能从区域中心推到触发区外。</summary>
-        const float MaxExitMeters = 400f;
+        /// <summary>下载弹窗弹出后，沿朝向后退的距离。</summary>
+        const float PopupRetreatMeters = 1f;
+
+        /// <summary>上面这段后退要在这一秒内走完。</summary>
+        const float PopupRetreatSeconds = 1f;
 
 #if UNITY_EDITOR
         /// <summary>
@@ -71,6 +75,7 @@ namespace Game
             _progressTicket = 0;
             _progressOpen = false;
             _unlockMoveAfterExit = false;
+            _retreatUntil = 0f;
             SetDownloadMoveLock(false);
             _banksExpanded = false;
             if (_ownsCatalog && _ownedCatalog != null)
@@ -265,18 +270,27 @@ namespace Game
                     TryBeginPrompt();
             }
 
+            IslandJoystickCamera cam = IslandJoystickCamera.Current;
             if (_moveLocked)
-                IslandJoystickCamera.Current?.SetDownloadMoveLock(true);
+                cam?.SetDownloadMoveLock(true);
 
-            bool stillInside = RetreatFromGate();
-            if (_unlockMoveAfterExit && !stillInside && !_progressOpen)
+            // 相机没走到移动分支时，稍过 1 秒也结束，避免移动锁一直不还。
+            if (cam != null
+                && cam.IsDownloadRetreatPlaying
+                && _retreatUntil > 0f
+                && Time.time >= _retreatUntil + 0.2f)
+                cam.CancelDownloadRetreat();
+
+            // 弹窗那一下的后退要播完再还移动，避免半秒后又走进去。
+            bool retreatPlaying = cam != null && cam.IsDownloadRetreatPlaying;
+            if (_unlockMoveAfterExit && !retreatPlaying && !_progressOpen)
             {
                 _unlockMoveAfterExit = false;
                 SetDownloadMoveLock(false);
             }
 
-            // 推出后再采样。锁已经解开、人在区外时清掉弹窗锁，下次走进去才能再触发。
-            if (!stillInside)
+            // 人已经在门外时再采样一次，清掉弹窗锁，下次走进去才能再触发。
+            if (cam == null || !StillInsideBlocked(cam))
                 SamplePlayerInside();
         }
 
@@ -295,7 +309,7 @@ namespace Game
 
         /// <summary>
         /// 这次下载还在跑、进度条已被关掉时，再次走进同一扇门只把进度条打开。
-        /// 不另起一次下载。其它未下完的门只会被推出，不并行第二段下载。
+        /// 不另起一次下载。其它未下完的门不并行第二段下载。
         /// </summary>
         void TryReopenActiveProgress()
         {
@@ -314,6 +328,7 @@ namespace Game
             _progressOpen = true;
             _unlockMoveAfterExit = false;
             SetDownloadMoveLock(true);
+            BeginPopupRetreat();
         }
 
         /// <summary>
@@ -366,7 +381,7 @@ namespace Game
 
             _unlockMoveAfterExit = false;
             SetDownloadMoveLock(true);
-            RetreatFromGate();
+            BeginPopupRetreat();
 
             string size = FormatResourceSize(gate.BankNames);
             Log.Info("[SceneBankGate] show download dialog size=" + size + " gate=" + gate.name);
@@ -376,7 +391,7 @@ namespace Game
                 EndPromptChain);
         }
 
-        /// <summary>返回、无网、存储不足、只等 Wi-Fi：链结束。人先出区，再还移动。</summary>
+        /// <summary>返回、无网、存储不足、只等 Wi-Fi：链结束。后退播完再还移动。</summary>
         void EndPromptChain()
         {
             if (_busy)
@@ -401,45 +416,13 @@ namespace Game
             BeginDownload(gate);
         }
 
-        /// <summary>人还在未下完的门里就推到触发区外。已经在外面时不打断走路。</summary>
-        bool RetreatFromGate()
+        /// <summary>弹窗出现时沿当前朝向，在 1 秒内后退大约 1 米。</summary>
+        void BeginPopupRetreat()
         {
-            IslandJoystickCamera cam = IslandJoystickCamera.Current;
-            if (cam == null)
-                return false;
-
-            const int MaxPasses = 4;
-            bool pushed = false;
-            for (int pass = 0; pass < MaxPasses; pass++)
-            {
-                Vector3 eye = cam.transform.position;
-                Vector3 foot = eye - Vector3.up * Mathf.Max(0.5f, cam.EyeHeight);
-                Vector3 push = Vector3.zero;
-                for (int i = 0; i < _gates.Count; i++)
-                {
-                    SceneBankGate gate = _gates[i];
-                    if (gate == null || !gate.IsBlocked)
-                        continue;
-                    Vector3 step = gate.HorizontalExitPush(eye, foot, BodyProbeSlopMeters);
-                    if (step.sqrMagnitude > push.sqrMagnitude)
-                        push = step;
-                }
-
-                if (push.sqrMagnitude < 1e-6f)
-                    return false;
-                if (!pushed)
-                {
-                    pushed = true;
-                    IslandMainForm.Current?.CancelLocomotion();
-                    LocomotionInput.ClearAll();
-                }
-
-                if (push.magnitude > MaxExitMeters)
-                    push = push.normalized * MaxExitMeters;
-                cam.StepHorizontal(push);
-            }
-
-            return StillInsideBlocked(cam);
+            IslandMainForm.Current?.CancelLocomotion();
+            LocomotionInput.ClearAll();
+            _retreatUntil = Time.time + PopupRetreatSeconds;
+            IslandJoystickCamera.Current?.BeginDownloadRetreat(PopupRetreatMeters, PopupRetreatSeconds);
         }
 
         bool StillInsideBlocked(IslandJoystickCamera cam)
@@ -525,7 +508,7 @@ namespace Game
             RunDownload(gate, life).Forget();
         }
 
-        /// <summary>玩家关掉进度条。下载继续。人先出区，再还移动。</summary>
+        /// <summary>玩家关掉进度条。下载继续。后退播完再还移动。</summary>
         void OnProgressDismissed()
         {
             _progressOpen = false;
@@ -589,7 +572,6 @@ namespace Game
         /// </summary>
         void FinishDownload(int ticket)
         {
-            RetreatFromGate();
             _busy = false;
             _downloadGate = null;
             _progressTicket = 0;

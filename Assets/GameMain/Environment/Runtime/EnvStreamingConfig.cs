@@ -38,9 +38,15 @@ namespace Game
         public static float TreeBillboardKeepRadius = 380f;
 
         /// <summary>
+        /// 真机把树 LOD「进片树」的世界距离拉远的倍数（相对作者屏占比、lodBias=1）。
+        /// 闺蜜机 lodBias 0.75 会把同一阈值再拉近，生成时按当前 lodBias 补回。
+        /// </summary>
+        public const float TreeBillboardDistanceScale = 1.5f;
+
+        /// <summary>
         /// 大树完整 Prefab 最远距离；超出后改用 Billboard 代理（Native 合批）。
-        /// 须 ≥ 树 LOD 片树切入距离（prefab screenRelativeHeight≈0.12 × lodBias=1 → ~70–90m），
-        /// 只在 LOD 已进片树后再换成合批代理，避免比 LOD 更早贴脸。
+        /// 须 ≥ 树 LOD 片树切入距离。作者屏占比 0.12/0.2 @lodBias=1、fov60 约 60–100m，
+        /// 真机再乘 <see cref="TreeBillboardDistanceScale"/>。只在 LOD 已进片树后再换合批代理。
         /// </summary>
         public static float TreeFullMeshMaxDist = 160f;
 
@@ -367,6 +373,64 @@ namespace Game
         public static bool IsBigTreeCategory(string category) =>
             IsTreeCategory(category) && !IsSmallTreeCategory(category);
 
+        /// <summary>
+        /// 真机：降低「进片树」前那一档的屏占比，卡片更远才出现。
+        /// 世界距离 ∝ lodBias / 屏占比，所以闺蜜机较低的 lodBias 要一并补上。
+        /// </summary>
+        public static void PushTreeBillboardLod(GameObject go)
+        {
+#if UNITY_EDITOR
+            return;
+#else
+            if (go == null || TreeBillboardDistanceScale <= 1f)
+                return;
+
+            float bias = Mathf.Max(0.05f, QualitySettings.lodBias);
+            float heightScale = bias / TreeBillboardDistanceScale;
+            LODGroup[] groups = go.GetComponentsInChildren<LODGroup>(true);
+            for (int i = 0; i < groups.Length; i++)
+            {
+                LODGroup group = groups[i];
+                if (group == null)
+                    continue;
+
+                LOD[] lods = group.GetLODs();
+                if (lods == null || lods.Length < 2)
+                    continue;
+
+                int last = lods.Length - 1;
+                // 最后一档是片树（屏占比接近 0）。前一档的阈值决定何时切过去。
+                if (lods[last].screenRelativeTransitionHeight > 0.05f)
+                    continue;
+
+                int gate = last - 1;
+                float scaled = lods[gate].screenRelativeTransitionHeight * heightScale;
+                float floor = lods[last].screenRelativeTransitionHeight + 0.0005f;
+                if (gate > 0)
+                {
+                    float ceil = lods[gate - 1].screenRelativeTransitionHeight - 0.0005f;
+                    if (scaled > ceil)
+                        scaled = ceil;
+                }
+
+                if (scaled < floor)
+                    scaled = floor;
+                if (Mathf.Approximately(scaled, lods[gate].screenRelativeTransitionHeight))
+                    continue;
+
+                LOD gated = lods[gate];
+                gated.screenRelativeTransitionHeight = scaled;
+                lods[gate] = gated;
+
+                Vector3 reference = group.localReferencePoint;
+                float size = group.size;
+                group.SetLODs(lods);
+                group.localReferencePoint = reference;
+                group.size = size;
+            }
+#endif
+        }
+
         /// <summary>距焦点超过 Full 半径 → 应驻留 Billboard 代理（不含迟滞）。</summary>
         public static bool ShouldSpawnAsTreeBillboard(string category, float distSq)
         {
@@ -575,13 +639,15 @@ namespace Game
             Ring1EnterRadius = 130f;
             Ring1ExitRadius = 160f;
 
-            // 树：≤160 完整 Prefab+LODGroup；160–180 片树 Native 合批；120 外 stride6 隔株；keep 180。
+            // 树：片树切入见 PushTreeBillboardLod（×1.5）。
+            // 完整网格要盖住拉远后的 LOD，否则合批代理会比卡片更早贴上来。
+            // ≤240 完整 Prefab+LODGroup；keep 180，180 内已是片树的才换 Native 合批。
             TreeRing0EnterRadius = 70f;
             TreeRing0ExitRadius = 90f;
             TreeRing1EnterRadius = 180f * 0.65f; // ~117
             TreeRing1ExitRadius = 220f * 0.65f;  // ~143
             TreeBillboardKeepRadius = 180f;
-            TreeFullMeshMaxDist = 160f;
+            TreeFullMeshMaxDist = 160f * TreeBillboardDistanceScale;
             TreeFullMeshHysteresis = 12f;
             FillBoundFarTreeSilhouetteMinDistance = 120f;
             FillBoundFarTreeSilhouetteStride = 6;
@@ -608,6 +674,18 @@ namespace Game
                 SmallVegShowDistance = 16f;
                 ClutterHideDistance = 28f;
                 ClutterShowDistance = 22f;
+            }
+            // 闺蜜机标准版：再收中距灌木/小植被/杂物。树远裁与远树 LOD 不改。4K 停在上面的低档。
+            if (IslandGraphicsTier.BandwidthConservative)
+            {
+                GuanmuHideDistance = Mathf.Min(GuanmuHideDistance, 36f);
+                GuanmuShowDistance = Mathf.Min(GuanmuShowDistance, 28f);
+                SmallVegHideDistance = Mathf.Min(SmallVegHideDistance, 12f);
+                SmallVegShowDistance = Mathf.Min(SmallVegShowDistance, 9f);
+                ClutterHideDistance = Mathf.Min(ClutterHideDistance, 22f);
+                ClutterShowDistance = Mathf.Min(ClutterShowDistance, 16f);
+                SmallRockHideDistance = Mathf.Min(SmallRockHideDistance, 48f);
+                SmallRockShowDistance = Mathf.Min(SmallRockShowDistance, 38f);
             }
             // 栏杆/稻草人：真机勿跟普通 clutter 32m；盖住农场簇与中距观景点。
             StructuralClutterHideDistance = 120f;

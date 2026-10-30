@@ -63,8 +63,16 @@ namespace Game
         // can't share _clicks. Track them separately so ClearClicks still
         // unregisters everything on close.
         readonly List<(VisualElement element, Delegate callback)> _trackingCallbacks = new();
-        IVisualElementScheduledItem _slide;
+        // UIDocument 根的 translate 归文档自己（LateUpdate 里 SetTransform / ClearTransform）。
+        // 滑 UXML 页面根，打开那一帧的长卡顿也不能把 0.32s 一次吃完。
+        const float MaxSlideStep = 0.05f;
+        VisualElement _slideTarget;
+        float _slideFrom;
+        float _slideTo;
+        float _slideElapsed;
         float _slideY;
+        bool _slidePlaying;
+        Action _slideComplete;
         bool _closing;
         bool _hidBottomIcons;
         public override void OnOpen(object userData)
@@ -73,8 +81,7 @@ namespace Game
             // Forms are pooled: clear close/slide state from the previous life.
             _closing = false;
             _hidBottomIcons = false;
-            _slide?.Pause();
-            _slide = null;
+            StopSlide();
 
             UIDocument document = GetComponent<UIDocument>();
             ScreenLayout.Apply(document);
@@ -91,13 +98,13 @@ namespace Game
             if (SlidesUpFromBottom)
             {
                 _slideY = SlideDistance;
-                Root.style.translate = new Translate(0, SlideDistance);
-                PlaySlide(0f);
+                BeginSlide(0f, null);
             }
             else
             {
                 _slideY = 0f;
-                Root.style.translate = new Translate(0, 0);
+                _slideTarget = PageRoot();
+                ApplySlideTranslate(0f);
             }
 
             if (CloseOnBackdropClick)
@@ -146,12 +153,18 @@ namespace Game
 
             ScreenLayout.Changed -= OnScreenChanged;
             ClearClicks();
-            _slide?.Pause();
-            _slide = null;
+            StopSlide();
+            _slideTarget = null;
             Root = null;
             base.OnClose(isShutdown, userData);
             // 关掉的这一刻按「去掉自己」恢复命中层，不等下一帧。
             IslandMainForm.Current?.SetJoystickModal(JoystickShouldBlock());
+        }
+
+        public override void OnUpdate(float elapseSeconds, float realElapseSeconds)
+        {
+            base.OnUpdate(elapseSeconds, realElapseSeconds);
+            TickSlide(realElapseSeconds);
         }
 
         public override void OnDepthChanged(int uiGroupDepth, int depthInUIGroup)
@@ -446,7 +459,7 @@ namespace Game
             }
 
             _closing = true;
-            PlaySlide(SlideDistance, FinishClose);
+            BeginSlide(SlideDistance, FinishClose);
         }
 
         /// <summary>Close without the slide animation (e.g. preset teleport veil must cover immediately).</summary>
@@ -455,8 +468,7 @@ namespace Game
             if (_closing)
                 return;
             _closing = true;
-            _slide?.Pause();
-            _slide = null;
+            StopSlide();
             FinishClose();
         }
 
@@ -494,36 +506,67 @@ namespace Game
             });
         }
 
-        void PlaySlide(float targetY, Action onComplete = null)
+        /// <summary>
+        /// UXML 页面根。文档根的 translate 会被 <c>UIDocument</c> 写掉，滑它等于没动画。
+        /// </summary>
+        VisualElement PageRoot()
         {
             if (Root == null)
+                return null;
+            return Root.Q("root") ?? Root;
+        }
+
+        void BeginSlide(float targetY, Action onComplete)
+        {
+            _slideTarget = PageRoot();
+            if (_slideTarget == null)
             {
+                StopSlide();
                 onComplete?.Invoke();
                 return;
             }
 
-            _slide?.Pause();
-            float from = _slideY;
-            float start = Time.unscaledTime;
-            _slide = Root.schedule.Execute(() =>
-            {
-                if (Root == null)
-                {
-                    _slide?.Pause();
-                    onComplete?.Invoke();
-                    return;
-                }
+            _slideFrom = _slideY;
+            _slideTo = targetY;
+            _slideElapsed = 0f;
+            _slidePlaying = true;
+            _slideComplete = onComplete;
+            ApplySlideTranslate(_slideFrom);
+        }
 
-                float t = Mathf.Clamp01((Time.unscaledTime - start) / SlideDuration);
-                float eased = targetY > from ? t * t * t : 1f - Mathf.Pow(1f - t, 3f);
-                _slideY = Mathf.Lerp(from, targetY, eased);
-                Root.style.translate = new Translate(0, _slideY);
-                if (t < 1f)
-                    return;
+        void StopSlide()
+        {
+            _slidePlaying = false;
+            _slideComplete = null;
+        }
 
-                _slide?.Pause();
-                onComplete?.Invoke();
-            }).Every(16);
+        void TickSlide(float realElapseSeconds)
+        {
+            if (!_slidePlaying || _slideTarget == null)
+                return;
+
+            _slideElapsed += Mathf.Min(Mathf.Max(0f, realElapseSeconds), MaxSlideStep);
+            float t = Mathf.Clamp01(_slideElapsed / SlideDuration);
+            // 向下收起 InCubic，向上弹出 OutCubic。对齐 Boluo ShowAnima / HideAnima。
+            float eased = _slideTo > _slideFrom ? t * t * t : 1f - Mathf.Pow(1f - t, 3f);
+            _slideY = Mathf.Lerp(_slideFrom, _slideTo, eased);
+            ApplySlideTranslate(_slideY);
+            if (t < 1f)
+                return;
+
+            Action done = _slideComplete;
+            StopSlide();
+            done?.Invoke();
+        }
+
+        void ApplySlideTranslate(float y)
+        {
+            if (_slideTarget == null)
+                return;
+            if (Mathf.Approximately(y, 0f))
+                _slideTarget.style.translate = StyleKeyword.Null;
+            else
+                _slideTarget.style.translate = new Translate(0, y);
         }
     }
 }

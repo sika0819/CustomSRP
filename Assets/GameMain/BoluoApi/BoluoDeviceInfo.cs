@@ -1,3 +1,4 @@
+using System;
 using Game.Native;
 using UnityEngine;
 
@@ -50,12 +51,136 @@ namespace Game.BoluoApi
 
         /// <summary>
         /// 创维闺蜜机：channel=BOLUOCWGMJ 或 originEnd=boluocwgmj（Editor 可经环境窗口覆盖）。
+        /// 含标准版与 4K；画质分档用 <see cref="IsSkyworthGmjStandard"/> / <see cref="IsSkyworthGmj4K"/>。
         /// </summary>
         public static bool IsSkyworthGmj()
         {
             return string.Equals(GetChannel(), DefaultChannelGmj, System.StringComparison.OrdinalIgnoreCase)
                 || string.Equals(GetOriginEnd(), DefaultOriginEndGmj, System.StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>
+        /// 闺蜜机标准版（SKS30 / SKR30 / L701，以及未知且屏像素不到 4K 的机）。
+        /// 走现有闺蜜机清晰度与减负；4K 不走这条。
+        /// </summary>
+        public static bool IsSkyworthGmjStandard()
+        {
+            return IsSkyworthGmj() && !IsSkyworthGmj4K();
+        }
+
+        /// <summary>
+        /// 闺蜜机 4K（SKS32 / SKR32，或未知机 panel ≥ 600 万像素）。
+        /// 名单在宿主 <c>BoluoDeviceProfile</c>，这里只调 JNI，不复制 MODEL。
+        /// Editor / 非 Android / 类缺失时为 false（当标准版）。
+        /// </summary>
+        public static bool IsSkyworthGmj4K()
+        {
+            if (!IsSkyworthGmj())
+                return false;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_gmj4KCached)
+                return _gmj4K;
+            if (!TryQueryHostUltra4K(out bool ultra, out bool definitive))
+                return false;
+            // Activity 还没出来时只认 MODEL，先不钉死；多问几次仍没有就缓存，避免每帧 JNI。
+            if (definitive || ++_gmj4KAttempts >= 8)
+            {
+                _gmj4K = ultra;
+                _gmj4KCached = true;
+                Debug.Log("[BoluoDeviceInfo] gmj4k=" + ultra);
+            }
+            return ultra;
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>
+        /// 4K / 标准版已经分清。Editor 与非闺蜜机恒为 true。
+        /// Android 要等 Activity，避免未知 4K 在屏尺寸出来前被钉成标准版。
+        /// </summary>
+        public static bool IsSkyworthGmj4KSettled
+        {
+            get
+            {
+                if (!IsSkyworthGmj())
+                    return true;
+#if UNITY_ANDROID && !UNITY_EDITOR
+                return _gmj4KCached;
+#else
+                return true;
+#endif
+            }
+        }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        static bool _gmj4K;
+        static bool _gmj4KCached;
+        static int _gmj4KAttempts;
+
+        /// <summary>
+        /// 有 Activity 时用系统真实屏像素（Unity Screen 可能已被宿主钳过）。
+        /// 没有 Activity 时只认 MODEL：已知 4K 可以定论；未知机先不缓存。
+        /// </summary>
+        static bool TryQueryHostUltra4K(out bool ultra, out bool definitive)
+        {
+            ultra = false;
+            definitive = false;
+            try
+            {
+                using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (var profile = new AndroidJavaClass(
+                    "com.wanos.boluo.basic.device.BoluoDeviceProfile"))
+                {
+                    if (activity == null)
+                    {
+                        // 已知 4K MODEL 不看屏。未知机等 Activity，避免被钉成标准版。
+                        ultra = profile.CallStatic<bool>("isUltra4K");
+                        definitive = ultra;
+                        return true;
+                    }
+
+                    // 签名必须是 Context。按 Activity 实类去配重载会找不到方法。
+                    ultra = CallIsUltra4K(activity);
+                    definitive = true;
+                    return true;
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning(
+                    "[BoluoDeviceInfo] isUltra4K unavailable, treat as standard: " + e.Message);
+                ultra = false;
+                definitive = true;
+                return true;
+            }
+        }
+
+        static bool CallIsUltra4K(AndroidJavaObject activity)
+        {
+            IntPtr clazz = AndroidJNI.FindClass("com/wanos/boluo/basic/device/BoluoDeviceProfile");
+            try
+            {
+                if (clazz == IntPtr.Zero)
+                    throw new InvalidOperationException("BoluoDeviceProfile missing");
+
+                IntPtr method = AndroidJNI.GetStaticMethodID(
+                    clazz, "isUltra4K", "(Landroid/content/Context;)Z");
+                if (method == IntPtr.Zero)
+                    throw new InvalidOperationException("isUltra4K(Context) missing");
+
+                jvalue[] args = new jvalue[1];
+                args[0].l = activity.GetRawObject();
+                return AndroidJNI.CallStaticBooleanMethod(clazz, method, args);
+            }
+            finally
+            {
+                if (clazz != IntPtr.Zero)
+                    AndroidJNI.DeleteLocalRef(clazz);
+            }
+        }
+#endif
 
         /// <summary>把历史错拼归一成服务端正写；其它原样返回。</summary>
         public static string NormalizeChannel(string channel)

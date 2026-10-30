@@ -20,7 +20,7 @@ namespace Game
         NoticeCardPresenter _card;
 
         protected override bool CloseWhenAnyButtonClicked => false;
-        protected override bool SlidesUpFromBottom => false;
+        protected override bool SlidesUpFromBottom => true;
         protected override bool CloseOnBackdropClick => true;
         protected override bool PinDocumentOrder => true;
 

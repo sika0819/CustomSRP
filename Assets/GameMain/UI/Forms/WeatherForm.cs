@@ -13,7 +13,6 @@ namespace Game
         protected override float SheetBottomOffset => 120f;
 
         const float KnobAnimSeconds = 0.5f;
-        const float ToastSeconds = 1.6f;
 
         static readonly float[] LevelMarginLeft = { -403.5f, -184.5f, 37.5f, 259.5f };
         static readonly string[] LevelNames = { "关闭", "小", "中", "大" };
@@ -468,7 +467,7 @@ namespace Game
 
         void ShowToast()
         {
-            UiTipToast.ShowMessage("天气正在改变,稍后再操作", ToastSeconds, anchoredY: 0f);
+            UiTipToast.ShowMessage("天气正在改变,稍后再操作", anchoredY: 0f);
         }
     }
 }

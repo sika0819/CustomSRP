@@ -18,8 +18,9 @@ namespace Game
         NoticeCardPresenter _card;
 
         protected override bool CloseWhenAnyButtonClicked => false;
-        // 尺寸必须写在模板实例上。再套一层盒子时，中间的 TemplateContainer 没有尺寸，绝对定位的卡片会塌成 0，白底 panel 消失，摇杆也被锁住。
-        protected override bool SlidesUpFromBottom => false;
+        // 尺寸必须写在模板实例上。再套一层盒子时，中间的 TemplateContainer 没有尺寸，绝对定位的卡片会塌成 0，白底 panel 消失。
+        // 入场仍整页上滑，不改卡片层级。
+        protected override bool SlidesUpFromBottom => true;
         protected override bool CloseOnBackdropClick => true;
         protected override bool PinDocumentOrder => true;
 

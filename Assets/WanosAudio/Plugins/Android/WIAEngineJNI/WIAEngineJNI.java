@@ -225,6 +225,7 @@ public class WIAEngineJNI {
         sArtKey = null;
         sArtBitmap = null;
         synchronized (sSessionLock) {
+            resetPlaybackClock();
             sLastTrackTitle = "";
             sLastIsPlaying = false;
             sLastArtBitmap = null;
@@ -300,6 +301,47 @@ public class WIAEngineJNI {
             default:
                 return false;
         }
+    }
+
+    /**
+     * 华为负一屏要求点卡片能回到应用。没有 session activity 的会话会被滤掉。
+     */
+    private static void ensureSessionActivity(Context ctx, MediaSession session) {
+        try {
+            Intent launch = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
+            if (launch == null) return;
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                flags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            session.setSessionActivity(PendingIntent.getActivity(ctx, 0, launch, flags));
+        } catch (Exception e) {
+            Log.w(TAG, "setSessionActivity failed: " + e.getMessage());
+        }
+    }
+
+    /** 没有真实进度。播放中从本次播放态累计，暂停时冻住。华为丢弃 position < 0。 */
+    private static long sPlayAnchorElapsed;
+    private static long sPausedPositionMs;
+
+    private static void resetPlaybackClock() {
+        sPlayAnchorElapsed = 0L;
+        sPausedPositionMs = 0L;
+    }
+
+    private static long playbackPositionMs(boolean isPlaying) {
+        long now = SystemClock.elapsedRealtime();
+        if (isPlaying) {
+            if (sPlayAnchorElapsed == 0L) {
+                sPlayAnchorElapsed = now - Math.max(0L, sPausedPositionMs);
+            }
+            return Math.max(0L, now - sPlayAnchorElapsed);
+        }
+        if (sPlayAnchorElapsed != 0L) {
+            sPausedPositionMs = Math.max(0L, now - sPlayAnchorElapsed);
+            sPlayAnchorElapsed = 0L;
+        }
+        return sPausedPositionMs;
     }
 
     /** Session 未 active / OEM 丢 Callback 时的兜底：媒体键进 FGS 再回传。 */
@@ -448,6 +490,7 @@ public class WIAEngineJNI {
                 boolean allEmpty = (trackName == null || trackName.isEmpty())
                         && (coverUrl == null || coverUrl.isEmpty());
                 if (allEmpty) {
+                    resetPlaybackClock();
                     sLastTrackTitle = "";
                     sLastIsPlaying = false;
                     sLastArtBitmap = null;
@@ -515,10 +558,13 @@ public class WIAEngineJNI {
                 sLastTrackTitle = title;
                 sLastIsPlaying = isPlaying;
                 Log.d(TAG, "updateNowPlayingInfoImpl: title=" + title + " isPlaying=" + isPlaying);
+                // 华为负一屏丢掉 duration < 0、artist 为空的会话。没有真实时长就不写 duration。
                 MediaMetadata.Builder metaBuilder = new MediaMetadata.Builder()
                         .putString(MediaMetadata.METADATA_KEY_TITLE, title)
                         .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE, title)
-                        .putLong(MediaMetadata.METADATA_KEY_DURATION, -1);
+                        .putString(MediaMetadata.METADATA_KEY_ARTIST, "波萝")
+                        .putString(MediaMetadata.METADATA_KEY_ALBUM, "波萝")
+                        .putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE, "波萝");
 
                 Bitmap art = artworkForCover(ctx, coverUrl);
                 sLastArtBitmap = art;
@@ -531,9 +577,13 @@ public class WIAEngineJNI {
                 } else {
                     Log.w(TAG, "updateNowPlayingInfo: artwork decode failed coverUrl=" + coverUrl);
                 }
+                // 华为只收录已经 active 的会话。先激活再写 metadata / state，否则第一次推送被丢掉。
+                session.setActive(true);
+                ensureSessionActivity(ctx, session);
                 session.setMetadata(metaBuilder.build());
 
                 // 播放/暂停 + 上一曲/下一曲；paused 时 rate=0，避免 OEM 把播放态图标画反。
+                // position 必须 >= 0：PLAYBACK_POSITION_UNKNOWN(-1) 会被华为媒体中心整段丢弃。
                 int state = isPlaying ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
                 float rate = isPlaying ? 1.0f : 0.0f;
                 long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE
@@ -541,9 +591,8 @@ public class WIAEngineJNI {
                         | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS;
                 PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
                         .setActions(actions)
-                        .setState(state, PlaybackState.PLAYBACK_POSITION_UNKNOWN, rate);
+                        .setState(state, playbackPositionMs(isPlaying), rate);
                 session.setPlaybackState(stateBuilder.build());
-                session.setActive(true);
 
                 sendNowPlayingBroadcast(ctx, trackName, coverUrl, isPlaying);
                 // 暂停也要刷已在跑的通知，否则 PlaybackState 已是 PAUSED，

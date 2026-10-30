@@ -170,7 +170,20 @@ public class WanosMediaPlaybackForegroundService extends Service {
                 CHANNEL_ID, "波萝播放", NotificationManager.IMPORTANCE_LOW);
         ch.setDescription("后台音频播放");
         ch.setShowBadge(false);
+        ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
         nm.createNotificationChannel(ch);
+    }
+
+    /**
+     * 状态栏小图标必须是本包白色剪影。android.R.drawable.ic_media_play 在华为上会被 SystemUI 丢掉，
+     * startForeground 失败后服务 stopSelf，负一屏没有可绑的媒体通知。
+     */
+    private int mediaSmallIcon() {
+        int id = getResources().getIdentifier("ic_stat_boluo_play", "drawable", getPackageName());
+        if (id != 0) return id;
+        int appIcon = getApplicationInfo().icon;
+        if (appIcon != 0) return appIcon;
+        return android.R.drawable.stat_sys_headset;
     }
 
     private Notification buildNotification() {
@@ -193,7 +206,7 @@ public class WanosMediaPlaybackForegroundService extends Service {
         Bitmap art = WIAEngineJNI.getLastArtBitmap();
         b.setContentTitle(title)
                 .setContentText(playing ? "正在播放" : "已暂停")
-                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setSmallIcon(mediaSmallIcon())
                 .setOngoing(true)
                 .setContentIntent(contentPi)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)

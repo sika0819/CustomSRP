@@ -210,8 +210,10 @@ namespace Game
                 return;
 
 #if UNITY_ANDROID || UNITY_IOS
-            // 低档少镂空叶片。中高档与闺蜜机（GpuTier 已压回中档）同一预算，不加满屏草。
-            if (IslandGraphicsTier.GpuTier == IslandGraphicsTier.Tier.Low)
+            // 低档少镂空叶片。闺蜜机标准版再收（不改树）；4K 走下面的低档。
+            if (IslandGraphicsTier.BandwidthConservative)
+                apply.Invoke(binder, new object[] { 800, 12f, 1 });
+            else if (IslandGraphicsTier.GpuTier == IslandGraphicsTier.Tier.Low)
                 apply.Invoke(binder, new object[] { 8000, 48f, 2 });
             else
                 apply.Invoke(binder, new object[] { 24000, 90f, 3 });

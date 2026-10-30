@@ -51,7 +51,7 @@ namespace Game
 
         static void CurrentSize(out int width, out int height)
         {
-            Camera cam = Camera.main;
+            Camera cam = IslandJoystickCamera.ActiveView;
             if (cam != null && cam.pixelWidth > 0 && cam.pixelHeight > 0)
             {
                 width = cam.pixelWidth;

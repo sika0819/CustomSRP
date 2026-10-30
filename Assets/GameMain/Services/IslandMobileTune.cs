@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Game.BoluoApi;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityGameFramework.Runtime;
@@ -11,11 +12,36 @@ namespace Game
         /// <summary>B4：略抬于 Boluo Heavy(12)，少高度网格三角形；河岸仍可读。</summary>
         const float HeavyContentTerrainPixelError = 18f;
 
+        /// <summary>闺蜜机标准版：再抬一点像素误差，远景高度网格略粗，近景几乎看不出。4K 不用。</summary>
+        const float GmjTerrainPixelError = 36f;
+
         public static void ApplyAfterTerrainSpawn(GameObject terrainInstance)
         {
             DisableLaunchDirectionalLights();
             TuneLightsForMobileOil();
             TuneTerrainForMobile(terrainInstance);
+            ApplyGmjPerfGuards();
+        }
+
+        /// <summary>
+        /// 闺蜜机标准版：关平面倒影（水面走解析天空）。
+        /// 实时阴影保留。4K 对齐低端机，不走这里。不改 renderScale / 树距离。
+        /// </summary>
+        static void ApplyGmjPerfGuards()
+        {
+#if !UNITY_EDITOR
+            if (!BoluoDeviceInfo.IsSkyworthGmjStandard())
+                return;
+
+            System.Type reflectType = System.Type.GetType(
+                "CustomSRP.OilPlanarReflection, Assembly-CSharp");
+            reflectType?.GetMethod(
+                    "Suppress",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+                ?.Invoke(null, null);
+
+            Log.Info("[IslandMobileTune] GMJ perf: reflect=off (shadows kept)");
+#endif
         }
 
         public static void DisableLaunchDirectionalLights()
@@ -29,9 +55,9 @@ namespace Game
             if (QualitySettings.shadows == ShadowQuality.Disable)
                 QualitySettings.shadows = ShadowQuality.HardOnly;
             // Shorter than Ultra's 40; matches CRP maxDistance for near contact shadows.
-            // Match CRP maxDistance; slightly longer so near trees paint ground contact.
-            // Match CRP maxDistance; keep contact for near trees without filling atlas with far casters.
-            QualitySettings.shadowDistance = 26f;
+            // 闺蜜机保留实时硬影；略收距离省转头时 caster 提交（仍有近景接触影）。
+            // 林间走动最低 15 / 走转 20：阴影收到 8m（近景接触影保留）。
+            QualitySettings.shadowDistance = BoluoDeviceInfo.IsSkyworthGmjStandard() ? 8f : 26f;
             QualitySettings.shadowResolution = ShadowResolution.Low;
 
             IslandSceneComponent scene = IslandSceneComponent.Active;
@@ -77,13 +103,16 @@ namespace Game
 
             // Boluo Heavy budget: keep LOD0 and cap pixelError. Old Max(14)+MaximumLOD=1
             // skipped fine heightmesh near river banks → big triangular stairs.
+            bool gmj = BoluoDeviceInfo.IsSkyworthGmjStandard();
+            float pixelErrorCap = gmj ? GmjTerrainPixelError : HeavyContentTerrainPixelError;
             terrain.heightmapMinimumLODSimplification = 0;
             terrain.heightmapMaximumLOD = 0;
             terrain.heightmapPixelError = Mathf.Min(
                 Mathf.Max(terrain.heightmapPixelError, 5f),
-                HeavyContentTerrainPixelError);
+                pixelErrorCap);
             terrain.detailObjectDistance = 0f;
             terrain.detailObjectDensity = 0f;
+            // 树距离不改（手机 / 闺蜜机同档）。
             terrain.treeDistance = Mathf.Min(terrain.treeDistance, 60f);
             terrain.treeBillboardDistance = Mathf.Min(terrain.treeBillboardDistance, 16f);
             terrain.treeCrossFadeLength = Mathf.Min(terrain.treeCrossFadeLength, 5f);

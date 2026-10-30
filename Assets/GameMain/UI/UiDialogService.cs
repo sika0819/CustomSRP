@@ -33,7 +33,7 @@ namespace Game
         /// </summary>
         public static void ShowToast(string message)
         {
-            UiTipToast.ShowMessage(message, 3f);
+            UiTipToast.ShowMessage(message);
         }
 
         /// <summary>
@@ -41,7 +41,7 @@ namespace Game
         /// </summary>
         public static void ShowErrorToast(string message)
         {
-            UiTipToast.ShowMessage(message, 4f, error: true);
+            UiTipToast.ShowMessage(message, error: true);
         }
 
         /// <summary>
@@ -56,7 +56,7 @@ namespace Game
                 return;
             _lastRequestFailure = reason;
             _lastRequestFailureTime = now;
-            UiTipToast.ShowMessage(reason, 5f, error: true, aboveLoading: true);
+            UiTipToast.ShowMessage(reason, error: true, aboveLoading: true);
         }
 
         #endregion

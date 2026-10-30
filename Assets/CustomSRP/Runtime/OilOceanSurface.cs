@@ -302,7 +302,7 @@ namespace CustomSRP
         {
             if (Application.isPlaying)
             {
-                Camera cam = Camera.main;
+                Camera cam = IslandJoystickCamera.ActiveView;
                 return cam != null ? cam.transform : null;
             }
 

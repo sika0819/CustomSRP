@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Game;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -62,8 +63,8 @@ namespace CustomSRP
                 buffer.SetGlobalTexture(DepthCopyId, _depth);
 
                 // --- rain globals ---
-                // Cache Camera.main once per pass; do not call Camera.main twice.
-                Camera cam = Camera.main;
+                // Island camera when the island is up; Camera.main only before that.
+                Camera cam = IslandJoystickCamera.ActiveView;
                 Matrix4x4 vp = (cam != null)
                     ? GL.GetGPUProjectionMatrix(cam.projectionMatrix, cam.allowMSAA) * cam.worldToCameraMatrix
                     : Matrix4x4.identity;

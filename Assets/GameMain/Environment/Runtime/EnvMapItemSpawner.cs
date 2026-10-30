@@ -352,6 +352,8 @@ namespace Game
                     parent = cat;
 
                 GameObject instance = Instantiate(prefab);
+                if (EnvStreamingConfig.IsTreeCategory(category))
+                    EnvStreamingConfig.PushTreeBillboardLod(instance);
                 EnvItemStreamerLite.AttachSpawned(instance, parent, i, false);
                 Vector3 pos = d.Pos;
                 EnvGroundFit ground = GameEntry.GroundFit;

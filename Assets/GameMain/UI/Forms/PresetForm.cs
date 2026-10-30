@@ -21,6 +21,9 @@ namespace Game
         protected override float SheetBottomOffset => 120f;
         public VisualTreeAsset PresetTemplate;
 
+        /// <summary>面板开着时相机用 <see cref="IslandCameraSrpSetup.PresetPanelRenderScale"/>。</summary>
+        public static bool IsOpen { get; private set; }
+
         const float ItemWidth = 264f;
         const float ItemGap = 36f;
         const float ClickSlop = 14f;
@@ -28,7 +31,6 @@ namespace Game
         const float ThumbWidth = 63f;
         const float SidePad = 60f;
         const float ScrollbarIdleHideSeconds = 3f;
-        const float ToastSeconds = 1.6f;
         const string BusyToastText = "天气正在改变,稍后再操作";
         const string HeardMarkerFile = "preset_heard_markers.txt";
         static readonly HashSet<string> HeardPresets = new HashSet<string>(StringComparer.Ordinal);
@@ -90,6 +92,7 @@ namespace Game
 
         public override void OnOpen(object userData)
         {
+            IsOpen = true;
             base.OnOpen(userData);
 
             DownloadedUnplayedManager.EnsureLoaded();
@@ -135,6 +138,7 @@ namespace Game
 
         public override void OnClose(bool isShutdown, object userData)
         {
+            IsOpen = false;
             // F2: closing must NOT cancel downloads or CancelOtherState.
             StopProgressTick();
             StopPlayingAnimTick();
@@ -1141,7 +1145,7 @@ namespace Game
 
         void ShowToast(string message)
         {
-            UiTipToast.ShowMessage(message ?? BusyToastText, ToastSeconds, anchoredY: 0f);
+            UiTipToast.ShowMessage(message ?? BusyToastText, anchoredY: 0f);
         }
 
         static void MarkHeard(string displayName)

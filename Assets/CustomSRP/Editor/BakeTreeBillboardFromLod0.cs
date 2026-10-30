@@ -23,7 +23,8 @@ namespace CustomSRP.Editor
         const int FrameCount = 2;
         const float FramePadding = 1.06f;
         const float Cutoff = 0.32f;
-        const int DilatePx = 10;
+        const int DilatePx = 16;
+        const int FringeFillPx = 96;
         const int BakeLayer = 30;
 
         static readonly Color BakeClearKey = new Color(1f, 0f, 1f, 0f);
@@ -199,6 +200,7 @@ namespace CustomSRP.Editor
                     return false;
                 }
 
+                FillFringeFromNeighbors(atlas);
                 DilateRgbIntoTransparent(atlas, Cutoff);
                 BackupExisting(albedoPath, name);
                 WritePng(atlas, albedoPath);
@@ -476,20 +478,133 @@ namespace CustomSRP.Editor
                 float dg = px[i].g - BakeClearKey.g;
                 float db = px[i].b - BakeClearKey.b;
                 if (dr * dr + dg * dg + db * db < threshSq)
-                {
                     px[i] = Color.clear;
-                    continue;
-                }
-
-                // Magenta fringe on thin twigs: strip magenta, keep luma.
-                if (px[i].r > px[i].g + 0.06f && px[i].b > px[i].g + 0.06f)
-                {
-                    float y = px[i].r * 0.299f + px[i].g * 0.587f + px[i].b * 0.114f;
-                    px[i] = new Color(y, y, y, px[i].a);
-                }
             }
 
             tex.SetPixels(px);
+        }
+
+        /// <summary>
+        /// Opaque neutral-grey and magenta-tinted texels are clear-color bleed, not foliage.
+        /// Copy RGB from the nearest real texel and keep alpha, so the card keeps its shape
+        /// without a grey outline. Each atlas half is filled on its own.
+        /// </summary>
+        static void FillFringeFromNeighbors(Texture2D tex)
+        {
+            if (tex == null)
+                return;
+            var px = tex.GetPixels32();
+            int w = tex.width;
+            int h = tex.height;
+            if (w < 4 || h < 4 || px == null || px.Length != w * h)
+                return;
+            int mid = w / 2;
+            FillFringeFrame(px, w, h, 0, mid);
+            FillFringeFrame(px, w, h, mid, w);
+            tex.SetPixels32(px);
+            tex.Apply(false, false);
+        }
+
+        static bool IsFringeTexel(Color32 c)
+        {
+            if (c.a < 128)
+                return false;
+            int max = System.Math.Max(c.r, System.Math.Max(c.g, c.b));
+            int min = System.Math.Min(c.r, System.Math.Min(c.g, c.b));
+            // Grey / magenta bleed is not a leaf or warm bark texel.
+            if (max - min < 15)
+                return true;
+            bool green = c.g >= c.r && c.g >= c.b;
+            bool yellow = c.r >= c.g && c.g >= c.b && c.r >= c.b + 20;
+            return !(green || yellow);
+        }
+
+        static void FillFringeFrame(Color32[] px, int w, int h, int x0, int x1)
+        {
+            int fw = x1 - x0;
+            if (fw < 4)
+                return;
+            int n = fw * h;
+            var fringe = new bool[n];
+            var has = new bool[n];
+            var rgb = new Color32[n];
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * w;
+                int mrow = y * fw;
+                for (int x = 0; x < fw; x++)
+                {
+                    int i = mrow + x;
+                    Color32 c = px[row + x0 + x];
+                    bool bad = IsFringeTexel(c);
+                    fringe[i] = bad;
+                    if (c.a >= 128 && !bad)
+                    {
+                        has[i] = true;
+                        rgb[i] = c;
+                    }
+                }
+            }
+
+            for (int pass = 0; pass < FringeFillPx; pass++)
+            {
+                bool grew = false;
+                var hasNext = (bool[])has.Clone();
+                var rgbNext = (Color32[])rgb.Clone();
+                for (int y = 0; y < h; y++)
+                {
+                    int mrow = y * fw;
+                    for (int x = 0; x < fw; x++)
+                    {
+                        int i = mrow + x;
+                        if (!fringe[i] || has[i])
+                            continue;
+                        Color32 sample = default;
+                        if (TryFilled(x - 1, y, ref sample)
+                            || TryFilled(x + 1, y, ref sample)
+                            || TryFilled(x, y - 1, ref sample)
+                            || TryFilled(x, y + 1, ref sample))
+                        {
+                            rgbNext[i] = sample;
+                            hasNext[i] = true;
+                            grew = true;
+                        }
+                    }
+                }
+
+                if (!grew)
+                    break;
+                has = hasNext;
+                rgb = rgbNext;
+
+                bool TryFilled(int sx, int sy, ref Color32 dest)
+                {
+                    if ((uint)sx >= (uint)fw || (uint)sy >= (uint)h)
+                        return false;
+                    int si = sy * fw + sx;
+                    if (!has[si])
+                        return false;
+                    dest = rgb[si];
+                    return true;
+                }
+            }
+
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * w;
+                int mrow = y * fw;
+                for (int x = 0; x < fw; x++)
+                {
+                    int i = mrow + x;
+                    if (!fringe[i] || !has[i])
+                        continue;
+                    Color32 c = px[row + x0 + x];
+                    c.r = rgb[i].r;
+                    c.g = rgb[i].g;
+                    c.b = rgb[i].b;
+                    px[row + x0 + x] = c;
+                }
+            }
         }
 
         static void DilateRgbIntoTransparent(Texture2D tex, float cutoff)

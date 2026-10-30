@@ -127,11 +127,10 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     half cutoff = (half)GetCutoff(config);
     if (crossBbEarly > 0.5 || yBbEarly > 0.5)
     {
-        // Full-rect impostors must clip transparent texels. Hard clip(alpha-cutoff)
-        // sparkles as mips / subpixel coverage change while walking. Widen the
-        // keep band by screen-space alpha derivative so edges stay temporally stable.
-        half aa = max(fwidth(alpha), (half)1e-4);
-        clip(alpha - cutoff + aa * 0.75h);
+        // Cap the derivative widen. An uncapped +fwidth kept the whole mip bleed
+        // ring once the card was small, and that ring is the distant grey outline.
+        half aa = min(max(fwidth(alpha), (half)1e-4), (half)0.08);
+        clip(alpha - cutoff + aa);
     }
     else
     {

@@ -1184,6 +1184,8 @@ namespace Game
             // 挂到不激活的容器上再克隆。直接 Instantiate 会把源物体的活动链表节点拷进新实例，
             // 第二次进岛这条链表成环，下一帧 FindActiveTransformWithPath 不再返回。
             GameObject go = Object.Instantiate(prefab, InactiveSpawnParent(), false);
+            if (actualTier == TierFull && EnvStreamingConfig.IsTreeCategory(item.Category))
+                EnvStreamingConfig.PushTreeBillboardLod(go);
             LogStepEnd("instantiate", item.PrefabName);
             return new SpawnedInstance
             {

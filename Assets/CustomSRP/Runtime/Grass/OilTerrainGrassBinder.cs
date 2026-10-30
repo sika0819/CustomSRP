@@ -31,6 +31,27 @@ namespace CustomSRP
         static readonly int WindDirId = Shader.PropertyToID("_OilGrassWindDir");
         static readonly int WindStrengthId = Shader.PropertyToID("_OilGrassWindStrength");
         static readonly int MaxDrawId = Shader.PropertyToID("_OilGrassMaxDraw");
+        static readonly int VpMatrixId = Shader.PropertyToID("_VPMatrix");
+        static readonly int CamPosId = Shader.PropertyToID("_CamPos");
+        static readonly int MinPlantYId = Shader.PropertyToID("_MinPlantY");
+        static readonly int VariantKindId = Shader.PropertyToID("_VariantKind");
+        static readonly int MinDrawDistanceId = Shader.PropertyToID("_MinDrawDistance");
+        static readonly int MaxDrawDistanceId = Shader.PropertyToID("_MaxDrawDistance");
+        static readonly int StartOffsetId = Shader.PropertyToID("_StartOffset");
+        static readonly int InstanceCountId = Shader.PropertyToID("_InstanceCount");
+        static readonly int AllInstancesPosId = Shader.PropertyToID("_AllInstancesPosWSBuffer");
+        static readonly int VisibleIdsAddId = Shader.PropertyToID("_VisibleIdsAdd");
+        static readonly int VisibleArgsId = Shader.PropertyToID("_VisibleArgs");
+        static readonly int VisibleInstancesOnlyPosId = Shader.PropertyToID("_VisibleInstancesOnlyPosWSIDBuffer");
+        static readonly int VisibleInstanceOnlyTransformId = Shader.PropertyToID("_VisibleInstanceOnlyTransformIDBuffer");
+        static readonly int KeepOutGridId = Shader.PropertyToID("_KeepOutGrid");
+        static readonly int KeepOutEnabledId = Shader.PropertyToID("_KeepOutEnabled");
+        static readonly int KeepOutResId = Shader.PropertyToID("_KeepOutRes");
+        static readonly int KeepOutOriginXId = Shader.PropertyToID("_KeepOutOriginX");
+        static readonly int KeepOutOriginZId = Shader.PropertyToID("_KeepOutOriginZ");
+        static readonly int KeepOutCellId = Shader.PropertyToID("_KeepOutCell");
+        static readonly int GrassTextureId = Shader.PropertyToID("_GrassTexture");
+        static readonly int GrassAtlasRectsId = Shader.PropertyToID("_GrassAtlasRects");
         [SerializeField] float minPlantWorldY = 6.2f;
         [SerializeField] int maxPerLeaf = 48000;
         [SerializeField] int maxTotalVisible = 48000;
@@ -395,14 +416,14 @@ namespace CustomSRP
                 return;
             }
 
-            var cam = Camera.main;
+            Camera cam = IslandJoystickCamera.ActiveView;
             if (cam == null)
             {
                 LastVisibleCount = 0;
                 return;
             }
 
-            MaybeRebuildBakeWindow(ResolveGrassFocus());
+            MaybeRebuildBakeWindow(cam.transform.position);
             LastVisibleCount = 0;
             EnsureGpu();
             PushWindGlobals();
@@ -413,6 +434,11 @@ namespace CustomSRP
             bool settled = _hasGrassView
                 && (camTf.position - _lastGrassCamPos).sqrMagnitude <= 0.04f
                 && Quaternion.Angle(camTf.rotation, _lastGrassCamRot) <= 0.75f;
+            // 闺蜜机标准版：转头/走动时整段复用上一份草 submit，停稳后再重算。
+            // 不改草密度与清晰度；林间走动时隔帧重算仍会掉到 15 以下。
+            bool gmjThrottle = !settled
+                && _hasLastGrassSubmit
+                && Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmjStandard();
             // DrawMeshInstancedIndirect only scopes the submit when its camera
             // argument is set; leaving it null makes the planar mirror probe
             // re-draw the whole grass window into the reflection RT. Bind the
@@ -420,7 +446,7 @@ namespace CustomSRP
             _bindDrawCamera = cam;
             try
             {
-                if (_hasLastGrassSubmit && settled)
+                if (_hasLastGrassSubmit && (settled || gmjThrottle))
                     ReplayLastGrassDraw();
                 else
                     CullAndDraw(cam);
@@ -493,7 +519,7 @@ namespace CustomSRP
 
         Vector3 ResolveGrassFocus()
         {
-            var cam = Camera.main;
+            Camera cam = IslandJoystickCamera.ActiveView;
             if (cam != null)
                 return cam.transform.position;
             return new Vector3((_minX + _maxX) * 0.5f, 0f, (_minZ + _maxZ) * 0.5f);
@@ -806,8 +832,8 @@ namespace CustomSRP
                 EnsureGrassVisible(ref _visibleIdV[v], n);
                 if (_variantMats != null && _variantMats[v] != null && _allPosV[v] != null)
                 {
-                    _variantMats[v].SetBuffer("_AllInstancesPosWSBuffer", _allPosV[v]);
-                    _variantMats[v].SetBuffer("_VisibleInstanceOnlyTransformIDBuffer", _visibleIdV[v]);
+                    _variantMats[v].SetBuffer(AllInstancesPosId, _allPosV[v]);
+                    _variantMats[v].SetBuffer(VisibleInstanceOnlyTransformId, _visibleIdV[v]);
                 }
             }
         }
@@ -906,9 +932,9 @@ namespace CustomSRP
                 {
                     EnsureKeepOutBuffer();
                     // Shared frustum/matrix globals: set ONCE per frame instead of per-variant.
-                    cullCompute.SetMatrix("_VPMatrix", vp);
-                    cullCompute.SetVector("_CamPos", cam.transform.position);
-                    cullCompute.SetFloat("_MinPlantY", minPlantWorldY);
+                    cullCompute.SetMatrix(VpMatrixId, vp);
+                    cullCompute.SetVector(CamPosId, cam.transform.position);
+                    cullCompute.SetFloat(MinPlantYId, minPlantWorldY);
                     BindKeepOutForKernel(ResolveCullKernel());
                 }
 
@@ -935,8 +961,8 @@ namespace CustomSRP
                     {
                         int kernel = ResolveCullKernel();
                         BindKeepOutForKernel(kernel);
-                        cullCompute.SetBuffer(kernel, "_AllInstancesPosWSBuffer", _allPosV[v]);
-                        cullCompute.SetInt("_VariantKind", v);
+                        cullCompute.SetBuffer(kernel, AllInstancesPosId, _allPosV[v]);
+                        cullCompute.SetInt(VariantKindId, v);
                         // One dispatch per band over the full packed window; CS does frustum + distance.
                         // Mobile: near band only — far blades are tiny after renderScale.
                         float bandMax = Application.isMobilePlatform
@@ -1005,10 +1031,10 @@ namespace CustomSRP
 
             int kernel = ResolveCullKernel();
             BindGrassCullOutputs(kernel, _useAdd, visibleIds, args, mesh);
-            cullCompute.SetFloat("_MinDrawDistance", minDraw);
-            cullCompute.SetFloat("_MaxDrawDistance", maxDraw);
-            cullCompute.SetInt("_StartOffset", 0);
-            cullCompute.SetInt("_InstanceCount", count);
+            cullCompute.SetFloat(MinDrawDistanceId, minDraw);
+            cullCompute.SetFloat(MaxDrawDistanceId, maxDraw);
+            cullCompute.SetInt(StartOffsetId, 0);
+            cullCompute.SetInt(InstanceCountId, count);
             cullCompute.Dispatch(kernel, Mathf.CeilToInt(count / 64f), 1, 1);
             SubmitIndirectDraw(variant, mesh, renderBound, visibleIds, args, _useAdd);
             return count;
@@ -1085,13 +1111,13 @@ namespace CustomSRP
             if (add)
             {
                 ResetGrassArgs(args, mesh);
-                cullCompute.SetBuffer(kernel, "_VisibleIdsAdd", visibleIds);
-                cullCompute.SetBuffer(kernel, "_VisibleArgs", args);
+                cullCompute.SetBuffer(kernel, VisibleIdsAddId, visibleIds);
+                cullCompute.SetBuffer(kernel, VisibleArgsId, args);
             }
             else
             {
                 visibleIds.SetCounterValue(0);
-                cullCompute.SetBuffer(kernel, "_VisibleInstancesOnlyPosWSIDBuffer", visibleIds);
+                cullCompute.SetBuffer(kernel, VisibleInstancesOnlyPosId, visibleIds);
             }
         }
 
@@ -1123,8 +1149,8 @@ namespace CustomSRP
             if (_grassMpb == null)
                 _grassMpb = new MaterialPropertyBlock();
             _grassMpb.Clear();
-            _grassMpb.SetBuffer("_AllInstancesPosWSBuffer", _allPosV[variant]);
-            _grassMpb.SetBuffer("_VisibleInstanceOnlyTransformIDBuffer", visibleIds);
+            _grassMpb.SetBuffer(AllInstancesPosId, _allPosV[variant]);
+            _grassMpb.SetBuffer(VisibleInstanceOnlyTransformId, visibleIds);
             Graphics.DrawMeshInstancedIndirect(
                 mesh, 0, mat, renderBound, args,
                 0, _grassMpb, ShadowCastingMode.Off, false, 0, _bindDrawCamera);
@@ -1389,13 +1415,13 @@ namespace CustomSRP
             if (mat == null)
                 return;
             Texture tex = TextureForVariant(topology);
-            if (tex != null && mat.HasProperty("_GrassTexture"))
-                mat.SetTexture("_GrassTexture", tex);
-            mat.SetVectorArray("_GrassAtlasRects", OilTerrainGrassAtlas.RectsForTopology(topology));
+            if (tex != null && mat.HasProperty(GrassTextureId))
+                mat.SetTexture(GrassTextureId, tex);
+            mat.SetVectorArray(GrassAtlasRectsId, OilTerrainGrassAtlas.RectsForTopology(topology));
             if (_allPosV != null && (uint)topology < (uint)_allPosV.Length && _allPosV[topology] != null)
-                mat.SetBuffer("_AllInstancesPosWSBuffer", _allPosV[topology]);
+                mat.SetBuffer(AllInstancesPosId, _allPosV[topology]);
             if (_visibleIdV != null && (uint)topology < (uint)_visibleIdV.Length && _visibleIdV[topology] != null)
-                mat.SetBuffer("_VisibleInstanceOnlyTransformIDBuffer", _visibleIdV[topology]);
+                mat.SetBuffer(VisibleInstanceOnlyTransformId, _visibleIdV[topology]);
         }
 
         void ApplyAtlasToMaterials()
@@ -1422,15 +1448,15 @@ namespace CustomSRP
                     Material mat = _variantMats[i];
                     if (mat == null)
                         continue;
-                    mat.SetBuffer("_AllInstancesPosWSBuffer", stub);
-                    mat.SetBuffer("_VisibleInstanceOnlyTransformIDBuffer", stub);
+                    mat.SetBuffer(AllInstancesPosId, stub);
+                    mat.SetBuffer(VisibleInstanceOnlyTransformId, stub);
                 }
             }
 
             if (_grassMpb != null)
             {
-                _grassMpb.SetBuffer("_AllInstancesPosWSBuffer", stub);
-                _grassMpb.SetBuffer("_VisibleInstanceOnlyTransformIDBuffer", stub);
+                _grassMpb.SetBuffer(AllInstancesPosId, stub);
+                _grassMpb.SetBuffer(VisibleInstanceOnlyTransformId, stub);
             }
 
             if (buffer.IsValid())
@@ -1749,20 +1775,20 @@ namespace CustomSRP
             ComputeBuffer structured = StructuredStub();
             if (_kernel >= 0)
             {
-                cullCompute.SetBuffer(_kernel, "_AllInstancesPosWSBuffer", structured);
-                cullCompute.SetBuffer(_kernel, "_KeepOutGrid", structured);
+                cullCompute.SetBuffer(_kernel, AllInstancesPosId, structured);
+                cullCompute.SetBuffer(_kernel, KeepOutGridId, structured);
                 if (!_useAdd)
-                    cullCompute.SetBuffer(_kernel, "_VisibleInstancesOnlyPosWSIDBuffer", AppendStub());
+                    cullCompute.SetBuffer(_kernel, VisibleInstancesOnlyPosId, AppendStub());
             }
 
             if (_kernelAdd < 0)
                 return;
-            cullCompute.SetBuffer(_kernelAdd, "_AllInstancesPosWSBuffer", structured);
-            cullCompute.SetBuffer(_kernelAdd, "_KeepOutGrid", structured);
+            cullCompute.SetBuffer(_kernelAdd, AllInstancesPosId, structured);
+            cullCompute.SetBuffer(_kernelAdd, KeepOutGridId, structured);
             if (_useAdd)
             {
-                cullCompute.SetBuffer(_kernelAdd, "_VisibleIdsAdd", structured);
-                cullCompute.SetBuffer(_kernelAdd, "_VisibleArgs", ArgsStub());
+                cullCompute.SetBuffer(_kernelAdd, VisibleIdsAddId, structured);
+                cullCompute.SetBuffer(_kernelAdd, VisibleArgsId, ArgsStub());
             }
         }
 
@@ -1831,12 +1857,12 @@ namespace CustomSRP
         void BindKeepOutForKernel(int kernel)
         {
             EnsureKeepOutBuffer();
-            cullCompute.SetBuffer(kernel, "_KeepOutGrid", _keepOutGrid);
-            cullCompute.SetInt("_KeepOutEnabled", _keepOutEnabled ? 1 : 0);
-            cullCompute.SetInt("_KeepOutRes", _keepOutRes);
-            cullCompute.SetFloat("_KeepOutOriginX", _keepOutOriginX);
-            cullCompute.SetFloat("_KeepOutOriginZ", _keepOutOriginZ);
-            cullCompute.SetFloat("_KeepOutCell", _keepOutCell);
+            cullCompute.SetBuffer(kernel, KeepOutGridId, _keepOutGrid);
+            cullCompute.SetInt(KeepOutEnabledId, _keepOutEnabled ? 1 : 0);
+            cullCompute.SetInt(KeepOutResId, _keepOutRes);
+            cullCompute.SetFloat(KeepOutOriginXId, _keepOutOriginX);
+            cullCompute.SetFloat(KeepOutOriginZId, _keepOutOriginZ);
+            cullCompute.SetFloat(KeepOutCellId, _keepOutCell);
         }
 
         public bool TryLoadKeepOut(byte[] bytes)

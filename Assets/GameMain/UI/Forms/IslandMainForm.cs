@@ -24,6 +24,7 @@ namespace Game
         const float PresetLabelHoldSeconds = 2.4f;
 
         VisualElement _timeHand;
+        float _appliedDialDegrees = float.NaN;
         VisualElement _timeDial;
         VisualElement _timeLabel;
         VisualElement _timeIcon1;
@@ -140,6 +141,7 @@ namespace Game
             OnClick("timeBackground2", CycleTimePeriod);
 
             _timeHand = Root.Q("timeHand");
+            _appliedDialDegrees = float.NaN;
             if (_timeHand != null)
             {
                 _timeHand.usageHints = UsageHints.DynamicTransform;
@@ -936,6 +938,9 @@ namespace Game
                 return;
             // Four cardinal snaps only — match Boluo HudTimeDialController InitClockHandFromTimeType.
             float degrees = GameEntry.Weather.DialAngleDegrees;
+            if (!float.IsNaN(_appliedDialDegrees) && Mathf.Approximately(degrees, _appliedDialDegrees))
+                return;
+            _appliedDialDegrees = degrees;
             _timeHand.style.rotate = new Rotate(Angle.Degrees(degrees));
         }
 

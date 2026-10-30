@@ -49,7 +49,7 @@ namespace Game
                 Base.EditorResourceMode = true;
 #endif
             if (Base != null)
-                Base.FrameRate = 60;
+                Base.FrameRate = IslandCameraSrpSetup.DefaultFrameRate;
             InitCustomComponents();
             EnsureUiGroups();
 #if !UNITY_EDITOR
@@ -92,7 +92,8 @@ namespace Game
                 }
             }
             QualitySettings.SetQualityLevel(veryLow, true);
-            Application.targetFrameRate = 60;
+            // 目标帧按机型：闺蜜机标准 45 / 4K 60，手机 30/45/60。见 IslandCameraSrpSetup。
+            Application.targetFrameRate = IslandCameraSrpSetup.DefaultFrameRate;
             QualitySettings.vSyncCount = 0;
             // Never Screen.SetResolution: 1280×720 locks 16:9, then FullScreenWindow
             // stretches onto taller phones (20:9) and flattens UI + game view.

@@ -114,7 +114,9 @@ namespace CustomSRP
             if (Application.isMobilePlatform)
             {
                 shadowSettings = shadowSettings.ClonedForMobile();
-                shadowSettings.maxDistance = Mathf.Min(shadowSettings.maxDistance, 25f);
+                // 闺蜜机标准版阴影距离与 IslandMobileTune 对齐（仍开实时阴影）。
+                float shadowCap = Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmjStandard() ? 8f : 25f;
+                shadowSettings.maxDistance = Mathf.Min(shadowSettings.maxDistance, shadowCap);
             }
 
             ProfilingSampler cameraSampler;
@@ -151,7 +153,10 @@ namespace CustomSRP
                 postFXSettings = cameraSettings.postFXSettings;
             }
 
+            // 闺蜜机：整机关后处理（OilFilter / LUT / Warp 等全屏 pass）。
+            bool gmjSkipPostFx = Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmj();
             bool hasActivePostFX =
+                !gmjSkipPostFx &&
                 IslandLeakProbe.Allow(IslandLeakProbe.Module.PostFx) &&
                 !isReflection &&
                 postFXSettings != null &&

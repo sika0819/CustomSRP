@@ -1,5 +1,6 @@
 using System;
 using Cysharp.Threading.Tasks;
+using Game.BoluoApi;
 using Game.Native;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -72,6 +73,35 @@ namespace Game
 
         public static IslandJoystickCamera Current { get; private set; }
 
+        Camera _view;
+
+        /// <summary>同物体上的 Camera。OnEnable 缓存，热路径不要再 GetComponent。</summary>
+        public Camera View
+        {
+            get
+            {
+                if (_view == null)
+                    _view = GetComponent<Camera>();
+                return _view;
+            }
+        }
+
+        /// <summary>
+        /// 岛上行走相机。还没进岛时退回 <see cref="Camera.main"/>。
+        /// 热路径用这个，避免每帧再按 MainCamera 标签查找。
+        /// </summary>
+        public static Camera ActiveView
+        {
+            get
+            {
+                IslandJoystickCamera joy = Current;
+                Camera view = joy != null ? joy.View : null;
+                if (view != null && view.isActiveAndEnabled)
+                    return view;
+                return Camera.main;
+            }
+        }
+
         /// <summary>当前水平朝向（度）。存档与重贴日志读这个，不读 Transform（含 Pitch）。</summary>
         public float YawDegrees => _yaw;
 
@@ -83,6 +113,12 @@ namespace Game
         float _speedRatio;
         float _yaw;
         bool _downloadMoveLock;
+        bool _retreatActive;
+        Vector3 _retreatDir;
+        float _retreatMeters;
+        float _retreatDuration;
+        float _retreatElapsed;
+        float _retreatAlong;
         float _verticalSpeed;
 
         /// <summary>Inspector-authored <see cref="EyeHeight"/>. Cached on first OnEnable so a
@@ -110,6 +146,8 @@ namespace Game
         float _appliedRenderScale = -1f;
         float _authoredVerticalFov = -1f;
         float _lastAspectForFov = -1f;
+        /// <summary>闺蜜机走路档 renderScale 粘滞截止时间，避免 0.75↔0.5 来回切重建 RT 掉帧。</summary>
+        float _gmjWalkScaleHoldUntil = -1f;
 
         // Camera-Y lerp from current height to ground+EyeHeight (used by walking / preset release).
         bool _heightTransitioning;
@@ -167,6 +205,8 @@ namespace Game
 
         void OnEnable()
         {
+            if (_view == null)
+                _view = GetComponent<Camera>();
             Current = this;
             if (_defaultEyeHeight < 0f)
                 _defaultEyeHeight = EyeHeight;
@@ -293,8 +333,7 @@ namespace Game
                 IslandLocomotionState.IsWalking = false;
                 if (this != null)
                 {
-                    if (_spawnHold)
-                        SnapHeldYaw(_yaw);
+                    SnapHeldYaw(_yaw);
                     ApplyRenderScale(false);
                 }
                 Log.Info(
@@ -311,8 +350,43 @@ namespace Game
         {
             _downloadMoveLock = locked;
             if (!locked)
+            {
+                CancelDownloadRetreat();
                 return;
+            }
+
             HaltHorizontalMotion();
+        }
+
+        /// <summary>下载弹窗的后退还在播。</summary>
+        public bool IsDownloadRetreatPlaying => _retreatActive;
+
+        /// <summary>
+        /// 下载弹窗弹出后，沿当时的水平朝向在 <paramref name="seconds"/> 内后退
+        /// <paramref name="meters"/>。朝向在开始时定死，中途转视角不会拐弯。
+        /// </summary>
+        public void BeginDownloadRetreat(float meters, float seconds)
+        {
+            if (meters <= 0f || seconds <= 0f)
+                return;
+            Vector3 back = Quaternion.Euler(0f, _yaw, 0f) * Vector3.back;
+            back.y = 0f;
+            if (back.sqrMagnitude < 1e-6f)
+                return;
+            _retreatDir = back.normalized;
+            _retreatMeters = meters;
+            _retreatDuration = seconds;
+            _retreatElapsed = 0f;
+            _retreatAlong = 0f;
+            _retreatActive = true;
+            HaltHorizontalMotion();
+        }
+
+        public void CancelDownloadRetreat()
+        {
+            _retreatActive = false;
+            _retreatElapsed = 0f;
+            _retreatAlong = 0f;
         }
 
         /// <summary>沿水平朝向后退，离开挡住路的区域门。</summary>
@@ -630,18 +704,31 @@ namespace Game
             if (dt <= 0f)
                 return;
 
-            ConsumeLookInput();
+            bool looked = ConsumeLookInput();
             ConsumeMoveInput(dt);
 
             bool walking = IsWalking;
             IslandLocomotionState.IsWalking = walking;
 
             EnsureBody();
-            ApplyRenderScale(walking);
+            // 闺蜜机：摇杆有位移（含纯横向转向）或 look 增量时压到走路档。
+            // 转头时草/阴影重算最重，站立 0.75 扛不住 20 帧；走路档本就是 0.5。
+            // 粘滞 0.8s：连续转头/走停走时不反复 0.75↔0.5 重建中间 RT（实测会闪到 ~10 帧）。
+            bool stickTurning = _smoothedMove.sqrMagnitude > WalkRenderScaleThreshold * WalkRenderScaleThreshold;
+            bool lowerScale = walking;
+            if (BoluoDeviceInfo.IsSkyworthGmjStandard())
+            {
+                if (walking || looked || stickTurning)
+                    _gmjWalkScaleHoldUntil = Time.unscaledTime + 0.8f;
+                lowerScale = walking || looked || stickTurning
+                    || Time.unscaledTime < _gmjWalkScaleHoldUntil;
+            }
+            ApplyRenderScale(lowerScale);
             TickHeightTransition(dt);
             TickPitchRestore(dt);
 
             Vector3 motion = ComputeMotion(dt);
+            ApplyDownloadRetreat(dt, ref motion);
             if (_pinUntilGrounded)
                 motion.y = -GroundStickSpeed * dt;
             else if (!_heightTransitioning)
@@ -681,13 +768,15 @@ namespace Game
                 _cc.enabled = true;
         }
 
-        void ConsumeLookInput()
+        /// <returns>本帧是否有转头输入（供闺蜜机压 renderScale）。</returns>
+        bool ConsumeLookInput()
         {
             if (!LocomotionInput.ConsumeLook(out Vector2 look))
-                return;
+                return false;
             // Screen-relative: same fraction of width → same yaw. Ref width keeps portrait feel.
             float scale = RefLookWidth / Mathf.Max(1f, Screen.width);
             _yaw += look.x * LookSensitivity * scale;
+            return Mathf.Abs(look.x) > 0.5f || Mathf.Abs(look.y) > 0.5f;
         }
 
         void ConsumeMoveInput(float dt)
@@ -714,6 +803,25 @@ namespace Game
             _smoothedMove = Vector2.zero;
             _speedRatio = 0f;
             LocomotionInput.ClearAll();
+        }
+
+        /// <summary>按开始时定下的后退方向，在给定时长内走完给定距离。</summary>
+        void ApplyDownloadRetreat(float dt, ref Vector3 motion)
+        {
+            if (!_retreatActive)
+                return;
+            _retreatElapsed += dt;
+            float t = _retreatDuration <= 0f
+                ? 1f
+                : Mathf.Clamp01(_retreatElapsed / _retreatDuration);
+            float eased = t * t * (3f - 2f * t);
+            float along = _retreatMeters * eased;
+            float step = along - _retreatAlong;
+            _retreatAlong = along;
+            motion.x = _retreatDir.x * step;
+            motion.z = _retreatDir.z * step;
+            if (t >= 1f)
+                _retreatActive = false;
         }
 
         bool IsWalking => Mathf.Abs(_smoothedMove.y) > WalkRenderScaleThreshold;
@@ -1205,9 +1313,11 @@ namespace Game
 
         void ApplyRenderScale(bool walking)
         {
-            // 弹窗 / 原生半层 / 闲置沉浸同档；数值见 IslandCameraSrpSetup（手机 / 闺蜜机分档）。
+            // 预设面板固定 0.375（含闺蜜机标准版）。其它弹窗 / 原生半层 / 闲置沉浸同档。
             // 定时窗只抬 BottomIconsHidden、不抬 OverlayPresent，保持场景正常分辨率。
-            float scale = HudOverlayGate.HasPopup() || NativeOverlayGate.OverlayPresent
+            float scale = PresetForm.IsOpen
+                ? IslandCameraSrpSetup.PresetPanelRenderScale
+                : HudOverlayGate.HasPopup() || NativeOverlayGate.OverlayPresent
                 ? IslandCameraSrpSetup.PopupRenderScale
                 : IslandIdleImmersive.IsActive
                     ? IslandCameraSrpSetup.ImmersiveRenderScale
@@ -1235,7 +1345,7 @@ namespace Game
             if (_lastAspectForFov >= 0f && Mathf.Abs(aspect - _lastAspectForFov) <= 0.01f)
                 return;
 
-            Camera cam = GetComponent<Camera>();
+            Camera cam = View;
             if (cam == null)
                 return;
 

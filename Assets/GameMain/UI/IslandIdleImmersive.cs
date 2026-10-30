@@ -1,3 +1,4 @@
+using Game.BoluoApi;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityGameFramework.Runtime;
@@ -216,6 +217,14 @@ namespace Game
 
         void TickOilWarp()
         {
+            // 闺蜜机标准版：沉浸全屏扭曲占一整张颜色 RT，林间站立会直接掉到十来帧。
+            if (BoluoDeviceInfo.IsSkyworthGmjStandard())
+            {
+                if (_oilWarpDirty || _oilWarpWeight > 1e-4f)
+                    ClearOilWarp();
+                return;
+            }
+
             float target = _fullyFadedOut ? 1f : 0f;
             float dur = target > _oilWarpWeight
                 ? OilWarpFadeInSeconds
