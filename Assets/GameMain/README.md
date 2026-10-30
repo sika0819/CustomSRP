@@ -118,7 +118,8 @@ Editor 联调:`GameMain/Boluo/环境·渠道·版本`;换票需开启 `Editor Gu
 | [Docs/06-ui.md](Docs/06-ui.md) | 表单打不开、UI 布局错、下载流程;7 个运行时表单 |
 | [Docs/07-environment.md](Docs/07-environment.md) | 穿模、掉出地面、帧率抖、篝火不亮;流式参数总表 |
 | [Docs/08-input-camera.md](Docs/08-input-camera.md) | 走不动、视角乱、相机 render scale 不变 |
-| [Docs/09-boluoapi-native.md](Docs/09-boluoapi-native.md) | 登录拿不到 token、Bank 下载不了、混流 HUD 不出 |
+| [Docs/09-boluoapi-native.md](Docs/09-boluoapi-native.md) | 登录拿不到 token、Bank HTTP/MD5 API、混流 HUD 不出 |
+| [Docs/13-bank-download.md](Docs/13-bank-download.md) | 下载策略全文：同意链 / 三入口 / 队列 / 红点 / 流程图时序图 |
 | [Docs/10-bug-index.md](Docs/10-bug-index.md) | **先查这里**:已知坑总表(症状→定位)+ 标准排障流程 + grep 命令 |
 | [Docs/11-rain-device-visual.md](Docs/11-rain-device-visual.md) | 真机已是雨仍无雨丝;与「真机没云」区分;streakMaterial / Current / 重打包 |
 | [Docs/11-rain-device-visual.md](Docs/11-rain-device-visual.md) | 真机已是「雨」仍无雨丝；与「真机没云」区分 |
@@ -140,7 +141,7 @@ Editor 联调:`GameMain/Boluo/环境·渠道·版本`;换票需开启 `Editor Gu
 | 坐标不再保存 | 06 / 03 | `PushSaveSuppress` 计数未归零 |
 | 预设切换卡住 | 04 | `SchemeState` 卡在 1 → 需 `MarkPlaying()` / `AbortTransition()` |
 | 登录拿不到 token | 09 | `[DeviceLogin]` `[SignatureLib]` |
-| Bank 一直重下 | 09 | `[BankDownloader] md5 cache` |
+| Bank 一直重下 / 下完闪回未下载 / 不自动进预设 | 13 / 09 | `[UserBankDownloadFlow]` `[BankDownloader]` |
 | 真机资源加载失败 | 02 | `[YooAsset] Invalid location` |
 
 ### 8.2 热重载复位清单（Disable Domain Reload）

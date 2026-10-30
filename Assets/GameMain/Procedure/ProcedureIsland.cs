@@ -246,7 +246,8 @@ namespace Game
                 IslandEntryLog.Skip("island", "forceUncover", "why=stale gen=" + gen);
                 return;
             }
-            UnlockLocomotionAfterUncover(closeLoadingCover: false);
+            // Force path: wipe leftover Panel/Dialog from a stuck prior session once.
+            UnlockLocomotionAfterUncover(closeLoadingCover: false, clearOverlayForms: true);
             IslandEntryLog.Ok("island", "forceReady");
             NativeBridgeFacade.NotifyIslandReady();
         }
@@ -1007,7 +1008,8 @@ namespace Game
             if (Stale("afterLookWarmup"))
                 return;
 
-            UnlockLocomotionAfterUncover(closeLoadingCover: false);
+            // 淡出前清一次残留 Panel/Dialog。此后用户已可点 HUD，再关会把刚打开的预设弹走。
+            UnlockLocomotionAfterUncover(closeLoadingCover: false, clearOverlayForms: true);
             const float fadeSec = 0.35f;
             BootLoadingService.FadeHide(fadeSec);
             // 只等淡出协程。HasForm 在 Hide 之后仍为 true，界面要等静帧画完再关。
@@ -1066,6 +1068,7 @@ namespace Game
             await UniTask.Delay(200, DelayType.UnscaledDeltaTime);
             if (gen != _uncoverGeneration)
                 return;
+            // 只松行走闩 / 关 Loading 残留；勿 CloseGroup Panel——揭罩后用户常已点开预设。
             UnlockLocomotionAfterUncover();
             await UniTask.Delay(600, DelayType.UnscaledDeltaTime);
             if (gen != _uncoverGeneration)
@@ -1144,18 +1147,33 @@ namespace Game
             BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();
         }
 
-        static void UnlockLocomotionAfterUncover(bool closeLoadingCover = true)
+        /// <param name="closeLoadingCover">关 Loading 组（淡出中勿传 true）。</param>
+        /// <param name="clearOverlayForms">
+        /// 清 Panel/Dialog 与 pending 意图。只在揭罩交互窗口打开前传一次；
+        /// PostUncoverRelock 再清会把冷启动时用户刚点开的预设弹层关掉。
+        /// </param>
+        static void UnlockLocomotionAfterUncover(
+            bool closeLoadingCover = true,
+            bool clearOverlayForms = false)
         {
             try
             {
-                PendingDownloadIntent.Clear();
-                GameEntry.Presets?.AbortTransition();
-                PresetService.Instance?.AbortWeatherHold();
+                if (clearOverlayForms)
+                {
+                    PendingDownloadIntent.Clear();
+                    GameEntry.Presets?.AbortTransition();
+                    PresetService.Instance?.AbortWeatherHold();
+                }
+
                 IslandJoystickCamera.Current?.ForceUnlockLocomotion();
                 if (GameEntry.UI != null)
                 {
-                    UiAssets.CloseGroup("Panel");
-                    UiAssets.CloseGroup("Dialog");
+                    if (clearOverlayForms)
+                    {
+                        UiAssets.CloseGroup("Panel");
+                        UiAssets.CloseGroup("Dialog");
+                    }
+
                     // Loading 残留会挡 UITK 命中 → 摇杆收不到指针。淡出进行中不能关，否则罩会被拆掉再打开。
                     if (closeLoadingCover && GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
                         UiAssets.CloseGroup("Loading");
@@ -1169,6 +1187,7 @@ namespace Game
             }
             Log.Info(
                 "[ProcedureIsland] UnlockLocomotionAfterUncover " +
+                $"clearOverlay={clearOverlayForms} " +
                 $"presetBusy={GameEntry.Presets?.IsTransitioning == true} " +
                 $"overlayBlock={Native.NativeOverlayGate.BlocksLocomotion} " +
                 $"popup={HudOverlayGate.HasPopup()}");

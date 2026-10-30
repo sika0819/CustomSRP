@@ -229,6 +229,44 @@ namespace Game.BoluoApi
             BumpProgressEpoch();
         }
 
+        /// <summary>
+        /// 确认盘上就绪后写入正向缓存，避免随后全量 Invalidate / Entries.Remove 导致 UI 闪回「未下载」。
+        /// </summary>
+        public static void MarkLocalReady(string bankName)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                return;
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            CacheLocalReady(stem, true);
+            BumpProgressEpoch();
+        }
+
+        public static void MarkLocalReady(IList<string> bankNames)
+        {
+            if (bankNames == null || bankNames.Count == 0)
+                return;
+            for (int i = 0; i < bankNames.Count; i++)
+            {
+                string n = bankNames[i];
+                if (string.IsNullOrEmpty(n))
+                    continue;
+                CacheLocalReady(AudioEnginePaths.StripBankExtension(n), true);
+            }
+
+            BumpProgressEpoch();
+        }
+
+        /// <summary>该 bank 是否仍在队列 / 活跃槽（Pending 或 Downloading）。</summary>
+        public static bool IsBankBusy(string bankName)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                return false;
+            if (!TryGetActiveItem(bankName, out var item) || item == null)
+                return false;
+            return item.State == BankDownloadState.Pending
+                || item.State == BankDownloadState.Downloading;
+        }
+
         static void BumpProgressEpoch() => ProgressEpoch++;
 
         sealed class ActiveSlot

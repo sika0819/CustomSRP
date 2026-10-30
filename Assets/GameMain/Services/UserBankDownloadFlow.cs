@@ -146,8 +146,9 @@ namespace Game
                 if (ticket > 0)
                     PushProgress(ticket, pending);
 
-                BankDownloader.InvalidateLocalReadyCache();
+                // 先 onBanksDone；就绪 bank 写入正向缓存（勿全量 Invalidate，多预设并下会把已完成卡闪回未下载）。
                 InvokeSafe(onBanksDone, result, "onBanksDone");
+                MarkResultLocalReady(result);
             }
             catch (Exception e)
             {
@@ -192,8 +193,8 @@ namespace Game
                     preempt);
                 if (ticket > 0)
                     PushProgress(ticket, pending);
-                BankDownloader.InvalidateLocalReadyCache();
                 InvokeSafe(onBanksDone, result, "onBanksDone");
+                MarkResultLocalReady(result);
             }
             catch (Exception e)
             {
@@ -203,6 +204,24 @@ namespace Game
             {
                 InvokeSafe(onComplete, "onComplete");
             }
+        }
+
+        static void MarkResultLocalReady(IReadOnlyList<BankDownloadItem> result)
+        {
+            if (result == null || result.Count == 0)
+                return;
+            var names = new List<string>(result.Count);
+            for (int i = 0; i < result.Count; i++)
+            {
+                var item = result[i];
+                if (item == null || string.IsNullOrEmpty(item.BankName))
+                    continue;
+                if (item.State == BankDownloadState.Ready)
+                    names.Add(item.BankName);
+            }
+
+            if (names.Count > 0)
+                BankDownloader.MarkLocalReady(names);
         }
 
         static async UniTask<IReadOnlyList<BankDownloadItem>> RunDownloadBanks(
@@ -240,7 +259,6 @@ namespace Game
             Action onComplete)
         {
             Log.Info("[UserBankDownloadFlow] all banks local ready — skip consent/progress");
-            BankDownloader.InvalidateLocalReadyCache();
             try
             {
                 onDownloadStarting?.Invoke();
@@ -250,6 +268,7 @@ namespace Game
                 Log.Warning("[UserBankDownloadFlow] onDownloadStarting: " + e.Message);
             }
 
+            // 已就绪短路：勿全量 Invalidate（会清掉 onBanksDone 刚写入的正向 ready 缓存）。
             InvokeSafe(onBanksDone, Array.Empty<BankDownloadItem>(), "onBanksDone");
             InvokeSafe(onComplete, "onComplete");
         }

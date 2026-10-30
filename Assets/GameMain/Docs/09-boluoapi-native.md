@@ -106,6 +106,8 @@ static void SignatureGeneration(string jsonStr, out string sign, out string nonc
 
 ### Bank 目录与下载
 
+> **策略全文（同意链 / 三入口 / 红点 / 流程图）**：[13-bank-download.md](13-bank-download.md)。
+
 ```csharp
 // BankUpgradeClient
 static UniTask<BankUpgradeData> RequestUpgradeBank();

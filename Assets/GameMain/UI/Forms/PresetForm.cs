@@ -778,7 +778,7 @@ namespace Game
                     if (saveSuppressPushed)
                         IslandPlayerPosSave.PopSaveSuppress();
                 },
-                onBanksDone: _ => OnPresetBanksDone(presetId, null),
+                onBanksDone: _ => OnPresetBanksDone(presetId),
                 onDownloadStarting: () =>
                 {
                     _userTriggered.Add(presetId);
@@ -791,16 +791,31 @@ namespace Game
                 preempt: true);
         }
 
-        void OnPresetBanksDone(int presetId, IReadOnlyList<BankDownloadItem> _)
+        void OnPresetBanksDone(int presetId) =>
+            OnPresetBanksDoneAsync(presetId).Forget();
+
+        async UniTaskVoid OnPresetBanksDoneAsync(int presetId)
         {
             // 注意：保存抑制的出栈由 DownloadBanksAsync 的 finally 统一负责，这里不要重复 Pop。
             IslandPresetAsset preset = GameEntry.Presets?.GetById(presetId);
             string[] banks = preset != null ? preset.BankNames : null;
 
-            // Empty-url Skipped must not count as ready (Boluo no-Url → Failed).
+            // 多预设并下：本路 pending 可能先结束，同包其它 bank 仍在队列；
+            // 等本卡 banks 齐或队列空闲，勿过早清 _userTriggered 导致图标闪回未下载。
             bool allLocal = AreBanksLocallyReady(banks);
             if (!allLocal)
+                allLocal = await WaitPresetBanksSettled(banks);
+
+            if (!allLocal)
             {
+                if (AnyPresetBankBusy(banks))
+                {
+                    // 仍在下：保持转圈，等下一路 onBanksDone / 进度 tick。
+                    if (Root != null)
+                        RefreshAllStates(force: true);
+                    return;
+                }
+
                 _userTriggered.Remove(presetId);
                 if (PendingDownloadIntent.IsPresetMatch(presetId))
                     PendingDownloadIntent.Clear();
@@ -810,8 +825,10 @@ namespace Game
             }
 
             _userTriggered.Remove(presetId);
+            if (banks != null && banks.Length > 0)
+                BankDownloader.MarkLocalReady(banks);
 
-            // F7: auto-enter only if pending still points at this preset.
+            // F7: 仅最后点的 pending 自动进场；未跳转的保持已下载未播红点。
             if (!PendingDownloadIntent.IsPresetMatch(presetId))
             {
                 if (Root != null)
@@ -827,6 +844,7 @@ namespace Game
                 return;
             }
 
+            // 已跳转：记已听，不显示红点。
             MarkHeard(preset.DisplayName);
             if (Root != null)
             {
@@ -836,12 +854,67 @@ namespace Game
                         _selected = i;
                 }
 
-                // 关窗前全量刷：同 bank 其它卡立刻变已下载未播。
                 RefreshAllStates(force: true);
                 CloseSelfImmediate();
             }
 
             GameEntry.Presets?.RequestTransition(presetId);
+        }
+
+        /// <summary>
+        /// 等到本预设 banks 全部 IsLocalReady，或相关 bank 不再 busy（失败/无包）后停止。
+        /// </summary>
+        static async UniTask<bool> WaitPresetBanksSettled(string[] banks)
+        {
+            if (banks == null || banks.Length == 0)
+                return true;
+
+            const float idleGraceSeconds = 0.4f;
+            const float maxWaitSeconds = 180f;
+            float deadline = Time.realtimeSinceStartup + maxWaitSeconds;
+            float lastBusyAt = Time.realtimeSinceStartup;
+
+            while (Time.realtimeSinceStartup < deadline)
+            {
+                if (AreBanksLocallyReady(banks))
+                    return true;
+
+                if (AnyPresetBankBusy(banks))
+                {
+                    lastBusyAt = Time.realtimeSinceStartup;
+                }
+                else if (Time.realtimeSinceStartup - lastBusyAt >= idleGraceSeconds)
+                {
+                    // 队列已空仍不齐 → 真失败 / 无 Url。
+                    return AreBanksLocallyReady(banks);
+                }
+
+                for (int i = 0; i < banks.Length; i++)
+                {
+                    string bn = banks[i];
+                    if (string.IsNullOrEmpty(bn) || BankDownloader.IsLocalReady(bn))
+                        continue;
+                    BankDownloader.InvalidateLocalReadyCache(bn);
+                }
+
+                await UniTask.Delay(100, DelayType.UnscaledDeltaTime);
+            }
+
+            return AreBanksLocallyReady(banks);
+        }
+
+        static bool AnyPresetBankBusy(string[] banks)
+        {
+            if (banks == null)
+                return false;
+            for (int i = 0; i < banks.Length; i++)
+            {
+                string bn = banks[i];
+                if (!string.IsNullOrEmpty(bn) && BankDownloader.IsBankBusy(bn))
+                    return true;
+            }
+
+            return false;
         }
 
         static bool AreBanksLocallyReady(string[] banks)

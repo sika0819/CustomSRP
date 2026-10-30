@@ -85,8 +85,7 @@ namespace Game
             if (string.IsNullOrEmpty(key))
                 return;
             EnsureLoaded();
-            if (!BoluoGamePersistence.AllowsAccountProgressDisk)
-                return;
+            // 内存始终更新（对齐 Boluo）；落盘由 PersistDownloadedUnplayedRaw 按账号门控。
             Played.Add(key);
             FirstShownAt.Remove(key);
             Save();
@@ -97,8 +96,8 @@ namespace Game
             if (string.IsNullOrEmpty(key))
                 return false;
             EnsureLoaded();
-            if (!BoluoGamePersistence.AllowsAccountProgressDisk)
-                return false;
+            // 不按 AllowsAccountProgressDisk 禁红点：游客/无 saveLocal 仍会话内显示；
+            // 仅 Save/Load 走 persistence 门控（对齐 Boluo DownloadedUnplayedManager）。
             if (Played.Contains(key))
                 return false;
 
