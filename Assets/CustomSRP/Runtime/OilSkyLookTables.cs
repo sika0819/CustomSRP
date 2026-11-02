@@ -101,18 +101,66 @@ namespace CustomSRP
         public static readonly Color SunriseSkyHorizon = Hex(0xE0, 0xA0, 0x28);
         public static readonly Color SunriseSunDisc = Hex(0xFF, 0x8A, 0x5F);
         public static readonly Color SunriseSun = Hex(0xF0, 0xA8, 0x3A);
-        public static readonly Color SunriseFog = Hex(0x97, 0x50, 0x28);
-        public static readonly Color SunriseCloud = Hex(0xBC, 0x72, 0x73);
+        // Soft peach haze — soil #975028 + oilFill browned the dawn scene.
+        public static readonly Color SunriseFog = Hex(0xB8, 0x78, 0x50);
+        // Mid peach. #F2CCB4 chalked the morning skybox white under bloom;
+        // #BC7273 fell into the cool cavity and read blue-black.
+        public static readonly Color SunriseCloud = Hex(0xE0, 0xB0, 0x90);
+        public static readonly Color SunriseCloudShade = Hex(0xC0, 0x88, 0x68);
         public static readonly Color SunriseAmbZenith = Hex(0x51, 0x86, 0xB0);
-        public static readonly Color SunriseAmbHorizon = Hex(0xC0, 0x6D, 0x31);
+        // Peach-rose horizon — #C06D31 mixed with cool zenith into muddy oilFill.
+        public static readonly Color SunriseAmbHorizon = Hex(0xD0, 0x80, 0x50);
         /// <summary>Camera_1 ambientLightMultiplier @ 06:13 (pulled down — scene was over-bright).</summary>
         public const float SunriseAmbientMul = 0.82f;
-        /// <summary>Main-light intensity at sunrise (NPR; was 0.62 + disc 1.05 → yellow flood).</summary>
-        public const float SunriseLightIntensity = 0.45f;
+        /// <summary>
+        /// Directional light ladder — noon peak 1, night floor 0.07.
+        /// Dawn/dusk sit between so 07:30 清晨 ~0.38–0.45, not near noon.
+        /// </summary>
+        public const float LightIntensityDawn = 0.35f;
+        public const float LightIntensityDay = 1.0f;
+        public const float LightIntensityDusk = 0.45f;
+        public const float LightIntensityNight = 0.07f;
+        /// <summary>Sunrise peak key — holds near dawn so 清晨起床 does not climb toward noon.</summary>
+        public const float SunriseLightIntensity = 0.38f;
         /// <summary>Skybox sun disc intensity at sunrise peak (was 1.05).</summary>
         public const float SunriseSunIntensity = 0.72f;
         /// <summary>Skybox sun glow amount at sunrise peak (was 0.28).</summary>
         public const float SunriseSunGlow = 0.16f;
+
+        /// <summary>Main-light intensity on the shared dawn/day/dusk/night ladder (no sunrise pin).</summary>
+        public static float LightIntensityAtPeriod(float period)
+        {
+            period = Mathf.Repeat(period, 4f);
+            int i0 = Mathf.Clamp(Mathf.FloorToInt(period), 0, 3);
+            int i1 = i0 == 3 ? 0 : i0 + 1;
+            float t = period - i0;
+            float a = i0 switch
+            {
+                0 => LightIntensityDawn,
+                1 => LightIntensityDay,
+                2 => LightIntensityDusk,
+                _ => LightIntensityNight,
+            };
+            float b = i1 switch
+            {
+                0 => LightIntensityDawn,
+                1 => LightIntensityDay,
+                2 => LightIntensityDusk,
+                _ => LightIntensityNight,
+            };
+            return Mathf.Lerp(a, b, t);
+        }
+
+        /// <summary>Clock hours → ladder intensity, then Canonical sunrise pin when applicable.</summary>
+        public static float LightIntensityAtHours(float hours, OilSkyLookId id = OilSkyLookId.Canonical)
+        {
+            float period = OilSkyboxTime.HoursToPeriod(hours);
+            float intensity = LightIntensityAtPeriod(period);
+            float w = CanonicalSunriseWeight(id, hours);
+            if (w > 0.001f)
+                intensity = Mathf.Lerp(intensity, SunriseLightIntensity, w);
+            return intensity;
+        }
 
         /// <summary>
         /// boluo-main 清晨起床带。峰值约 6:13，8:15 前收回。
@@ -233,6 +281,16 @@ namespace CustomSRP
         static Color Hex(byte r, byte g, byte b) =>
             new Color(r / 255f, g / 255f, b / 255f, 1f);
 
+        /// <summary>
+        /// Night dome displays as #2F4071. Anchors upload as raw vectors (no sRGB decode),
+        /// and PaintSky scales a dark dome by ~0.87, so store linear(hex) / that scale.
+        /// </summary>
+        static Color NightSky()
+        {
+            Color lin = Hex(0x2F, 0x40, 0x71).linear;
+            return new Color(lin.r / 0.8725f, lin.g / 0.864f, lin.b / 0.8895f, 1f);
+        }
+
         static Color MidOf(Color zenith, Color horizon) =>
             Color.Lerp(zenith, horizon, 0.42f);
 
@@ -259,9 +317,9 @@ namespace CustomSRP
             // Dusk keeps a warm edge; chalk #E8C48C horizon + Soften TwilightFog milked the dome.
             var duskZ = Hex(0x2C, 0x3A, 0x58);
             var duskH = Hex(0xA0, 0x78, 0x58);
-            // Night hue: Loóna camp → deep blue-black (was chalky teal #2A5260).
-            var nightZ = Hex(0x06, 0x12, 0x1C);
-            var nightH = Hex(0x0A, 0x1C, 0x2A);
+            // Night dome displays #2F4071 (zenith and horizon share it; upload is pre-linearized).
+            Color nightZ = NightSky();
+            Color nightH = NightSky();
 
             return new LookTable
             {
@@ -280,29 +338,30 @@ namespace CustomSRP
                         Hex(0xB3, 0xBD, 0xDB), Hex(0x59, 0x66, 0x94),
                         0.08f, 0.75f, 0.28f, 0.055f, 0.45f, 0.14f, 0.15f),
                     // Moon disc near-white so yellow Moon_Oil reads; glow cool blue-white.
-                    Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x02, 0x08, 0x10),
+                    Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x01, 0x04, 0x0C),
                         Hex(0x40, 0x58, 0x68), Hex(0x0A, 0x12, 0x18),
-                        Hex(0xE0, 0xE8, 0xF0), Hex(0x78, 0xA0, 0xB0),
-                        0.05f, 0.06f, 0.015f, 0.065f, 0.78f, 0.26f, 0.9f),
+                        Hex(0xE0, 0xE8, 0xF0), Hex(0x48, 0x68, 0x80),
+                        0.05f, 0.06f, 0.015f, 0.065f, 0.78f, 0.12f, 0.9f),
                 },
                 // Live Camera_1 ambient gradients @ 06/12/18/00.
+                // Dawn/dusk horizons lifted off soil brown — cool×brown oilFill read dirty on foliage.
                 ambient = new[]
                 {
-                    Amb(Hex(0x47, 0x7A, 0xB3), Hex(0xAD, 0x61, 0x3D), 0.96f),
+                    Amb(Hex(0x5A, 0x88, 0xC0), Hex(0xC8, 0x88, 0x68), 0.96f),
                     Amb(Hex(0x6E, 0x94, 0x88), Hex(0x68, 0x98, 0xA4), 1.00f),
-                    Amb(Hex(0x78, 0x8B, 0xCF), Hex(0x6E, 0x48, 0x36), 0.95f),
-                    Amb(Hex(0x0A, 0x18, 0x24), Hex(0x06, 0x10, 0x18), 0.36f),
+                    Amb(Hex(0x6A, 0x7A, 0xB8), Hex(0x8A, 0x60, 0x50), 0.95f),
+                    Amb(Hex(0x06, 0x10, 0x1C), Hex(0x04, 0x0C, 0x16), 0.20f),
                 },
                 // fogColor5 raw from Camera_1 (Soften → MorningFog / Day haze / NightDistanceFog).
                 light = new[]
                 {
                     // Cooler dawn haze; chalk #A49D94 + MorningFog Soften whitened the zenith band.
-                    Light(Hex(0xF0, 0xC0, 0x58), 0.38f, Hex(0x6A, 0x72, 0x8A), 1.35f),
+                    Light(Hex(0xF2, 0xD0, 0x80), LightIntensityDawn, Hex(0x6A, 0x72, 0x8A), 1.35f),
                     // Day haze stays blue-gray (#6C99DB); chalk #B8C2D1 + Soften → MorningFog milked noon.
-                    Light(Hex(0xE6, 0xEB, 0xE8), 1.0f, Hex(0x6C, 0x99, 0xDB), 0.50f),
+                    Light(Hex(0xE6, 0xEB, 0xE8), LightIntensityDay, Hex(0x6C, 0x99, 0xDB), 0.50f),
                     // Warm dusk haze — pale #B3A7AE + TwilightFog Soften washed the skybox white.
-                    Light(Hex(0xC8, 0xB4, 0x9A), 0.57f, Hex(0x8E, 0x6A, 0x5C), 1.25f),
-                    Light(Hex(0x1A, 0x40, 0x50), 0.14f, Hex(0x0A, 0x18, 0x28), 1.05f),
+                    Light(Hex(0xE0, 0xC4, 0xA0), LightIntensityDusk, Hex(0x9A, 0x78, 0x80), 1.25f),
+                    Light(Hex(0x12, 0x2C, 0x40), LightIntensityNight, Hex(0x06, 0x10, 0x1C), 1.05f),
                 },
             };
         }
@@ -315,9 +374,9 @@ namespace CustomSRP
             var dayH = Hex(0x70, 0xAF, 0xD5);
             var duskZ = Hex(0x03, 0x08, 0x23);
             var duskH = Hex(0x1A, 0x2B, 0x61);
-            // Night: deep blue-black (was Loóna teal chalk).
-            var nightZ = Hex(0x06, 0x14, 0x1E);
-            var nightH = Hex(0x08, 0x1A, 0x26);
+            // Night dome displays #2F4071.
+            Color nightZ = NightSky();
+            Color nightH = NightSky();
 
             return new LookTable
             {
@@ -335,24 +394,24 @@ namespace CustomSRP
                         Hex(0xFF, 0x79, 0x58), Hex(0xFF, 0x79, 0x58),
                         Hex(0x92, 0xB0, 0xEC), Hex(0x4A, 0x59, 0x78),
                         0.075f, 0.65f, 0.22f, 0.06f, 0.55f, 0.16f, 0.15f),
-                    Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x02, 0x08, 0x10),
+                    Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x01, 0x04, 0x0C),
                         Hex(0x28, 0x3C, 0x4A), Hex(0x08, 0x10, 0x16),
-                        Hex(0xE0, 0xE8, 0xF0), Hex(0x70, 0x98, 0xA8),
-                        0.05f, 0.05f, 0.015f, 0.07f, 0.8f, 0.26f, 0.9f),
+                        Hex(0xE0, 0xE8, 0xF0), Hex(0x48, 0x68, 0x80),
+                        0.05f, 0.05f, 0.015f, 0.07f, 0.8f, 0.12f, 0.9f),
                 },
                 ambient = new[]
                 {
                     Amb(Hex(0x69, 0xA1, 0xAB), Hex(0x84, 0x58, 0x6F), 0.96f),
                     Amb(Hex(0x6D, 0xA3, 0xAD), Hex(0x7B, 0xAD, 0xB4), 1.00f),
                     Amb(Hex(0x76, 0x9E, 0xBB), Hex(0x83, 0x5D, 0x53), 0.95f),
-                    Amb(Hex(0x08, 0x14, 0x1C), Hex(0x05, 0x0E, 0x14), 0.34f),
+                    Amb(Hex(0x06, 0x10, 0x1C), Hex(0x04, 0x0C, 0x16), 0.20f),
                 },
                 light = new[]
                 {
-                    Light(Hex(0x8E, 0x52, 0x44), 0.38f, Hex(0x3A, 0x62, 0x74), 1.08f),
-                    Light(Hex(0xFF, 0xFA, 0xBD), 1.0f, Hex(0x6C, 0xBB, 0xEC), 0.99f),
-                    Light(Hex(0xFF, 0x79, 0x58), 0.48f, Hex(0x11, 0x1C, 0x40), 0.88f),
-                    Light(Hex(0x1A, 0x48, 0x58), 0.14f, Hex(0x0A, 0x18, 0x28), 0.92f),
+                    Light(Hex(0x8E, 0x52, 0x44), LightIntensityDawn, Hex(0x3A, 0x62, 0x74), 1.08f),
+                    Light(Hex(0xFF, 0xFA, 0xBD), LightIntensityDay, Hex(0x6C, 0xBB, 0xEC), 0.99f),
+                    Light(Hex(0xFF, 0x79, 0x58), LightIntensityDusk, Hex(0x11, 0x1C, 0x40), 0.88f),
+                    Light(Hex(0x12, 0x2C, 0x40), LightIntensityNight, Hex(0x06, 0x10, 0x1C), 0.92f),
                 },
             };
         }
@@ -365,9 +424,9 @@ namespace CustomSRP
             var dayH = Hex(0x00, 0x41, 0xFF);
             var duskZ = Hex(0xB5, 0xAE, 0x75);
             var duskH = Hex(0xFF, 0xEF, 0xAB);
-            // Night: deep blue-black dome. Day anchors and intensities stay.
-            var nightZ = Hex(0x06, 0x12, 0x1C);
-            var nightH = Hex(0x0A, 0x1C, 0x2A);
+            // Night dome displays #2F4071. Day anchors stay.
+            Color nightZ = NightSky();
+            Color nightH = NightSky();
 
             return new LookTable
             {
@@ -386,26 +445,26 @@ namespace CustomSRP
                         Hex(0xB3, 0xBD, 0xDB), Hex(0x59, 0x66, 0x94),
                         0.085f, 0.82f, 0.3f, 0.055f, 0.35f, 0.12f, 0.15f),
                     // Moon disc near-white so yellow Moon_Oil reads; glow cool teal-white.
-                    Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x08, 0x18, 0x20),
+                    Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x01, 0x04, 0x0C),
                         Hex(0x58, 0x80, 0x88), Hex(0x10, 0x1C, 0x22),
-                        Hex(0xE8, 0xEE, 0xF4), Hex(0xA0, 0xC8, 0xCC),
-                        0.05f, 0.08f, 0.02f, 0.07f, 0.85f, 0.32f, 1f),
+                        Hex(0xE8, 0xEE, 0xF4), Hex(0x48, 0x68, 0x80),
+                        0.05f, 0.08f, 0.02f, 0.07f, 0.85f, 0.14f, 1f),
                 },
                 ambient = new[]
                 {
-                    Amb(Hex(0x47, 0x7A, 0xB3), Hex(0xAD, 0x61, 0x3D), 0.96f),
+                    Amb(Hex(0x5A, 0x88, 0xC0), Hex(0xC8, 0x88, 0x68), 0.96f),
                     Amb(Hex(0x6B, 0xA2, 0xAC), Hex(0x7B, 0xB5, 0xB3), 1.00f),
                     // 17:00 warm afternoon — horizon pulls orange like Atmosphere 3 @17.
                     Amb(Hex(0x6D, 0xA3, 0xAD), Hex(0xB5, 0x5E, 0x24), 0.95f),
-                    Amb(Hex(0x0A, 0x18, 0x24), Hex(0x06, 0x10, 0x18), 0.36f),
+                    Amb(Hex(0x06, 0x10, 0x1C), Hex(0x04, 0x0C, 0x16), 0.20f),
                 },
                 light = new[]
                 {
-                    Light(Hex(0xDE, 0x8D, 0x20), 0.47f, Hex(0x8D, 0x67, 0x5A), 1.37f),
-                    Light(Hex(0xFF, 0xFF, 0xCE), 1.0f, Hex(0x6C, 0x99, 0xDB), 0.51f),
+                    Light(Hex(0xDE, 0x8D, 0x20), LightIntensityDawn, Hex(0x8D, 0x67, 0x5A), 1.37f),
+                    Light(Hex(0xFF, 0xFF, 0xCE), LightIntensityDay, Hex(0x6C, 0x99, 0xDB), 0.51f),
                     // Gold haze at 17:00 (Atmosphere 3 fogColor5 sample), not 18:00 slate.
-                    Light(Hex(0xFF, 0xFF, 0xA3), 0.72f, Hex(0xC4, 0xB1, 0x66), 1.13f),
-                    Light(Hex(0x1A, 0x40, 0x50), 0.14f, Hex(0x0A, 0x18, 0x28), 0.50f),
+                    Light(Hex(0xFF, 0xFF, 0xA3), LightIntensityDusk, Hex(0xC4, 0xB1, 0x66), 1.13f),
+                    Light(Hex(0x12, 0x2C, 0x40), LightIntensityNight, Hex(0x06, 0x10, 0x1C), 0.50f),
                 },
             };
         }
@@ -418,9 +477,9 @@ namespace CustomSRP
             var dayH = Hex(0x00, 0x41, 0xFF);
             var duskZ = Hex(0x37, 0x42, 0x6E);
             var duskH = Hex(0xE8, 0xC4, 0x8C);
-            // Night: deep blue-black dome. Day anchors and intensities stay.
-            var nightZ = Hex(0x06, 0x12, 0x1C);
-            var nightH = Hex(0x0A, 0x1C, 0x2A);
+            // Night dome displays #2F4071. Day anchors stay.
+            Color nightZ = NightSky();
+            Color nightH = NightSky();
 
             return new LookTable
             {
@@ -439,25 +498,25 @@ namespace CustomSRP
                         Hex(0xB3, 0xBD, 0xDB), Hex(0x59, 0x66, 0x94),
                         0.08f, 0.75f, 0.28f, 0.055f, 0.45f, 0.14f, 0.15f),
                     // Moon disc near-white so yellow Moon_Oil reads; glow cool teal-white.
-                    Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x08, 0x18, 0x20),
+                    Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x01, 0x04, 0x0C),
                         Hex(0x58, 0x80, 0x88), Hex(0x10, 0x1C, 0x22),
-                        Hex(0xE8, 0xEE, 0xF4), Hex(0xA0, 0xC8, 0xCC),
-                        0.05f, 0.08f, 0.02f, 0.07f, 0.85f, 0.32f, 1f),
+                        Hex(0xE8, 0xEE, 0xF4), Hex(0x48, 0x68, 0x80),
+                        0.05f, 0.08f, 0.02f, 0.07f, 0.85f, 0.14f, 1f),
                 },
                 ambient = new[]
                 {
-                    Amb(Hex(0x47, 0x7A, 0xB3), Hex(0xAD, 0x61, 0x3D), 0.96f),
+                    Amb(Hex(0x5A, 0x88, 0xC0), Hex(0xC8, 0x88, 0x68), 0.96f),
                     Amb(Hex(0x6B, 0xA2, 0xAC), Hex(0x7B, 0xB5, 0xB3), 1.00f),
-                    Amb(Hex(0x78, 0x8B, 0xCF), Hex(0x6E, 0x48, 0x36), 0.95f),
-                    Amb(Hex(0x0A, 0x18, 0x24), Hex(0x06, 0x10, 0x18), 0.36f),
+                    Amb(Hex(0x6A, 0x7A, 0xB8), Hex(0x8A, 0x60, 0x50), 0.95f),
+                    Amb(Hex(0x06, 0x10, 0x1C), Hex(0x04, 0x0C, 0x16), 0.20f),
                 },
                 light = new[]
                 {
                     // Soften pulls orange-wall #85482A / cyan #40A0FE toward MorningFog.
-                    Light(Hex(0xFA, 0xF5, 0xC8), 0.55f, Hex(0x40, 0xA0, 0xFE), 1.52f),
-                    Light(Hex(0xFF, 0xFF, 0xCE), 1.0f, Hex(0x6C, 0x99, 0xDB), 1.13f),
-                    Light(Hex(0xF7, 0x91, 0x45), 0.57f, Hex(0x41, 0x38, 0x4A), 1.31f),
-                    Light(Hex(0x1A, 0x40, 0x50), 0.14f, Hex(0x0A, 0x18, 0x28), 1.05f),
+                    Light(Hex(0xFA, 0xF5, 0xC8), LightIntensityDawn, Hex(0x40, 0xA0, 0xFE), 1.52f),
+                    Light(Hex(0xFF, 0xFF, 0xCE), LightIntensityDay, Hex(0x6C, 0x99, 0xDB), 1.13f),
+                    Light(Hex(0xF7, 0x91, 0x45), LightIntensityDusk, Hex(0x41, 0x38, 0x4A), 1.31f),
+                    Light(Hex(0x12, 0x2C, 0x40), LightIntensityNight, Hex(0x06, 0x10, 0x1C), 1.05f),
                 },
             };
         }
@@ -471,9 +530,9 @@ namespace CustomSRP
             var dayH = Hex(0x7A, 0xA4, 0xD4);
             var duskZ = Hex(0x37, 0x42, 0x6E);
             var duskH = Hex(0xE8, 0xC4, 0x8C);
-            // Night: deep blue-black dome. Day anchors and intensities stay.
-            var nightZ = Hex(0x06, 0x12, 0x1C);
-            var nightH = Hex(0x0A, 0x1C, 0x2A);
+            // Night dome displays #2F4071. Day anchors stay.
+            Color nightZ = NightSky();
+            Color nightH = NightSky();
 
             return new LookTable
             {
@@ -492,53 +551,52 @@ namespace CustomSRP
                         Hex(0xB3, 0xBD, 0xDB), Hex(0x59, 0x66, 0x94),
                         0.08f, 0.75f, 0.28f, 0.055f, 0.45f, 0.14f, 0.15f),
                     // Moon disc near-white so yellow Moon_Oil reads; glow cool teal-white.
-                    Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x08, 0x18, 0x20),
+                    Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x01, 0x04, 0x0C),
                         Hex(0x58, 0x80, 0x88), Hex(0x10, 0x1C, 0x22),
-                        Hex(0xE8, 0xEE, 0xF4), Hex(0xA0, 0xC8, 0xCC),
-                        0.05f, 0.08f, 0.02f, 0.07f, 0.85f, 0.32f, 1f),
+                        Hex(0xE8, 0xEE, 0xF4), Hex(0x48, 0x68, 0x80),
+                        0.05f, 0.08f, 0.02f, 0.07f, 0.85f, 0.14f, 1f),
                 },
                 ambient = new[]
                 {
-                    Amb(Hex(0x47, 0x7A, 0xB3), Hex(0xAD, 0x61, 0x3D), 0.96f),
+                    Amb(Hex(0x5A, 0x88, 0xC0), Hex(0xC8, 0x88, 0x68), 0.96f),
                     // Atmosphere 8 noon — deep blue zenith + warm sand horizon.
                     Amb(Hex(0x00, 0x4F, 0xFF), Hex(0xB0, 0x92, 0x5F), 1.00f),
-                    Amb(Hex(0x78, 0x8B, 0xCF), Hex(0x6E, 0x48, 0x36), 0.95f),
-                    Amb(Hex(0x0A, 0x18, 0x24), Hex(0x06, 0x10, 0x18), 0.36f),
+                    Amb(Hex(0x6A, 0x7A, 0xB8), Hex(0x8A, 0x60, 0x50), 0.95f),
+                    Amb(Hex(0x06, 0x10, 0x1C), Hex(0x04, 0x0C, 0x16), 0.20f),
                 },
                 light = new[]
                 {
-                    Light(Hex(0xDE, 0x8D, 0x20), 0.47f, Hex(0x85, 0x48, 0x2A), 1.52f),
-                    Light(Hex(0xFF, 0xEF, 0xCD), 1.0f, Hex(0x6C, 0x99, 0xDB), 1.13f),
-                    Light(Hex(0xF7, 0x91, 0x45), 0.57f, Hex(0x41, 0x38, 0x4A), 1.31f),
-                    Light(Hex(0x1A, 0x40, 0x50), 0.14f, Hex(0x0A, 0x18, 0x28), 1.05f),
+                    Light(Hex(0xDE, 0x8D, 0x20), LightIntensityDawn, Hex(0x85, 0x48, 0x2A), 1.52f),
+                    Light(Hex(0xFF, 0xEF, 0xCD), LightIntensityDay, Hex(0x6C, 0x99, 0xDB), 1.13f),
+                    Light(Hex(0xF7, 0x91, 0x45), LightIntensityDusk, Hex(0x41, 0x38, 0x4A), 1.31f),
+                    Light(Hex(0x12, 0x2C, 0x40), LightIntensityNight, Hex(0x06, 0x10, 0x1C), 1.05f),
                 },
             };
         }
 
-        /// <summary>Dial night — Loóna deep-teal fog and cool moon. Intensities stay on Atmosphere 10.</summary>
+        /// <summary>
+        /// Night presets are 19:00–23:00, which is the dusk→midnight blend.
+        /// Both anchors are the screenshot dome (#2F4071) so they match midnight.
+        /// </summary>
         static LookTable BuildNightCold()
         {
             LookTable canon = BuildCanonical();
-            // Loóna camp night → deeper blue-black dome (less teal chalk).
-            var nightZ = Hex(0x02, 0x0A, 0x14);
-            var nightH = Hex(0x0A, 0x1A, 0x28);
-            var duskZ = Hex(0x08, 0x18, 0x28);
-            var duskH = Hex(0x0C, 0x24, 0x34);
-            canon.sky[3] = Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x01, 0x06, 0x0C),
+            Color nightZ = NightSky();
+            Color nightH = NightSky();
+            SkyAnchor nightSky = Sky(nightZ, MidOf(nightZ, nightH), nightH, Hex(0x01, 0x03, 0x08),
                 Hex(0x28, 0x3C, 0x4A), Hex(0x08, 0x10, 0x16),
-                Hex(0xE0, 0xE8, 0xF0), Hex(0x70, 0x98, 0xA8),
-                0.05f, 0.05f, 0.015f, 0.07f, 0.82f, 0.26f, 0.9f);
-            // Dusk enters sleep early (20:00 「准备入睡」). Hue only; intensity stays 0.28.
-            canon.sky[2] = Sky(duskZ, MidOf(duskZ, duskH), duskH, Hex(0x06, 0x12, 0x1C),
-                Hex(0x50, 0x78, 0x88), Hex(0x20, 0x3C, 0x4C),
-                Hex(0xC8, 0xDC, 0xE4), Hex(0x60, 0x88, 0x98),
-                0.06f, 0.18f, 0.06f, 0.06f, 0.62f, 0.2f, 0.3f);
-            canon.ambient[0] = Amb(Hex(0x3F, 0x6B, 0x98), Hex(0xAD, 0x61, 0x3D), 0.96f);
+                Hex(0xE0, 0xE8, 0xF0), Hex(0x48, 0x68, 0x80),
+                0.05f, 0.05f, 0.015f, 0.07f, 0.82f, 0.12f, 0.9f);
+            canon.sky[2] = nightSky;
+            canon.sky[3] = nightSky;
+            canon.ambient[0] = Amb(Hex(0x3F, 0x6B, 0x98), Hex(0xC8, 0x88, 0x68), 0.96f);
             canon.ambient[1] = Amb(Hex(0x6B, 0xA2, 0xAC), Hex(0x7B, 0xB5, 0xB3), 1.00f);
-            canon.ambient[2] = Amb(Hex(0x2A, 0x48, 0x58), Hex(0x18, 0x2C, 0x38), 0.78f);
-            canon.ambient[3] = Amb(Hex(0x08, 0x14, 0x1C), Hex(0x05, 0x0E, 0x14), 0.32f);
-            canon.light[2] = Light(Hex(0x1E, 0x4A, 0x58), 0.24f, Hex(0x28, 0x3C, 0x48), 1.05f);
-            canon.light[3] = Light(Hex(0x1A, 0x48, 0x58), 0.16f, Hex(0x0A, 0x18, 0x28), 0.55f);
+            AmbientAnchor nightAmb = Amb(Hex(0x04, 0x0C, 0x16), Hex(0x03, 0x08, 0x12), 0.16f);
+            canon.ambient[2] = nightAmb;
+            canon.ambient[3] = nightAmb;
+            LightAnchor nightLight = Light(Hex(0x10, 0x28, 0x3C), LightIntensityNight, Hex(0x06, 0x10, 0x1C), 0.55f);
+            canon.light[2] = nightLight;
+            canon.light[3] = nightLight;
             return canon;
         }
 

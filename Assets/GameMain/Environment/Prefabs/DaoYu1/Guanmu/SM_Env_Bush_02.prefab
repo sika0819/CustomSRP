@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 2607627965205349598}
   - component: {fileID: 6545181222630460859}
   - component: {fileID: 4672960063198436058}
+  - component: {fileID: 673483032477166344}
   m_Layer: 0
   m_Name: SM_Env_Bush_02_Leaves_LOD1
   m_TagString: Untagged
@@ -238,3 +239,16 @@ LODGroup:
     - renderer: {fileID: 4672960063198436058}
   m_Enabled: 1
   m_GlobalIlluminationLOD: 0
+
+--- !u!114 &673483032477166344
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2431637814603401708}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c3e91f4b2d4e6a8c0d1f2e3a4b5c6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 

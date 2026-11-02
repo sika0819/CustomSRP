@@ -65,7 +65,8 @@ namespace Game.BoluoApi
         /// <summary>
         /// 流量窗「继续下载」：先由调用方 Priority 入队，再调本方法开闸。
         /// 内部只 EnsureRunner，禁止调用方再 Resume。
-        /// 仅覆盖本用户下载批次；批次结束须 <see cref="RevokeCellularAllow"/>。
+        /// 本岛会话有效，直到 <see cref="ResetForNewSession"/> / 回到 Wi‑Fi 后
+        /// <see cref="ApplyWifiRestoreRevoke"/>；用户流水线不再每批次 Revoke。
         /// </summary>
         public static void UserAllowCellularAlways()
         {
@@ -76,7 +77,7 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 用户下载批次结束 / 下次 EnsureReady 前：清开闸，不 Abort 队列。
+        /// 显式清开闸（测试 / 特殊路径）；正常用户流水线不调用。
         /// 再次点下载若仍蜂窝会重新 NeedsMobileDataPrompt。
         /// </summary>
         public static void RevokeCellularAllow()
@@ -101,6 +102,10 @@ namespace Game.BoluoApi
 
         public static bool IsOffline() =>
             EffectiveReachability() == NetworkReachability.NotReachable;
+
+        /// <summary>当前有效可达为 Wi‑Fi / 有线（含 OEM 双通道校正后的 LAN）。</summary>
+        public static bool IsWifiOrLan() =>
+            EffectiveReachability() == NetworkReachability.ReachableViaLocalAreaNetwork;
 
         /// <summary>未开闸 ∧ 蜂窝（仅 Android / iOS；Editor 需开 SimulateMobilePlatform）。</summary>
         public static bool NeedsMobileDataPrompt()

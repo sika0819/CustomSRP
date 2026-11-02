@@ -16,10 +16,11 @@ namespace Game
         const string CrpTypeName = "CustomSRP.CustomRenderPipelineCamera, Assembly-CSharp";
 
         /// <summary>
-        /// 站立 renderScale。手机 0.5；闺蜜机 0.75（大屏站立糊感太重）。
+        /// 站立 renderScale。手机 0.5；平板与闺蜜机 0.75（大屏站立糊感太重）。
+        /// 平板判定与 FXAA 相同：<see cref="ScreenLayout.IsPad"/>。
         /// </summary>
         public static float DefaultRenderScale =>
-            BoluoDeviceInfo.IsSkyworthGmj() ? 0.75f : 0.5f;
+            BoluoDeviceInfo.IsSkyworthGmj() || ScreenLayout.IsPad ? 0.75f : 0.5f;
 
         /// <summary>
         /// 走路略压一档。手机 0.375；闺蜜机 0.5（站立 0.75 的下一档）。
@@ -240,8 +241,10 @@ namespace Game
             // CameraSettings.RenderScaleMode.Override == 2
             SetField(settingsType, settings, "renderScaleMode", 2);
             SetField(settingsType, settings, "renderScale", DefaultRenderScale);
-            // 全机型关 FXAA。
-            SetField(settingsType, settings, "allowFXAA", false);
+            // 油画开时关 FXAA：湿油色块硬边会被 AA 洗软。Pad 也不再单独开。
+            SetField(
+                settingsType, settings, "allowFXAA",
+                ScreenLayout.IsPad && !IslandGraphicsTier.AllowsOilFilter);
             SetField(settingsType, settings, "keepAlpha", false);
             SetField(settingsType, settings, "maskLights", false);
         }

@@ -17,6 +17,8 @@ CBUFFER_START(UnityPerMaterial)
     float4 _BaseColor;
     float4 _AmbientColor;
     float4 _SpecColor;
+    float4 _TopColor;
+    float4 _BottomColor;
     float _Cutoff;
     float _Clipping;
     float _ShadeSteps;
@@ -25,6 +27,12 @@ CBUFFER_START(UnityPerMaterial)
     float _ShadeLift;
     float _ShadowWobble;
     float _ShadowBrushScale;
+    float _GradientOffset;
+    float _GradientSmoothness;
+    float _FoliageHeight;
+    float _FoliageYMin;
+    float _OilFoliage;
+    float _OilBark;
     // 0=Mesh UV, 1=World, 2=Object — matches Boluo LitStrokeRock / wood mat authoring
     float _WorldTriplanar;
     float _TriplanarTiling;

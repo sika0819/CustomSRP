@@ -538,11 +538,13 @@ namespace Game
                 if (nearCount > 0)
                 {
                     FlushBatch(cam, proto, _batchNear, nearCount, ShadowCastingMode.On);
+                    FlushMirror(proto, _batchNear, nearCount, ShadowCastingMode.On);
                 }
 
                 if (batchCount > 0)
                 {
                     FlushBatch(cam, proto, _batch, batchCount, ShadowCastingMode.Off);
+                    FlushMirror(proto, _batch, batchCount, ShadowCastingMode.Off);
                 }
             }
 
@@ -566,11 +568,10 @@ namespace Game
             if (count <= 0)
                 return;
 
-            // Bind to the main camera so the planar mirror probe never picks up
-            // these instances. Graphics.DrawMeshInstanced (legacy overload) draws
-            // for every camera rendering that frame including reflection probes,
-            // which is exactly what we don't want for grass / clutter / small veg.
-            // RenderMeshInstanced takes a RenderParams.camera that scopes the draw.
+            // Scope this batch to one camera. Grass / clutter / far cards pass the
+            // main camera only. Near trees and buildings also get FlushMirror so
+            // the planar probe receives them. A null camera would replay into every
+            // camera and the mirror submit can consume the main-view batch.
             //
             // worldBounds MUST be the union of instance world AABBs. Passing
             // proto.LocalBounds (mesh-space, near origin) makes Unity cull the
@@ -592,6 +593,17 @@ namespace Game
             };
 
             Graphics.RenderMeshInstanced(rp, proto.Mesh, 0, batch, count);
+        }
+
+        static void FlushMirror(
+            Prototype proto, Matrix4x4[] batch, int count, ShadowCastingMode shadowCastingMode)
+        {
+            if (proto.MainCameraOnly)
+                return;
+            Camera mirror = IslandLocomotionState.PlanarMirror;
+            if (mirror == null)
+                return;
+            FlushBatch(mirror, proto, batch, count, shadowCastingMode);
         }
 
         Camera ResolveCamera()

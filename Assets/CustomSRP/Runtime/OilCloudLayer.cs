@@ -21,10 +21,17 @@ namespace CustomSRP
         public const string BrushPath = "Assets/CustomSRP/Textures/Cloud/Cloud_A.png";
 
         const float RingRadius = 400f;
-        // Local mesh Y. Bottom (MeshY0) sits on sea; MeshY1 raised for taller clouds.
+        // Local mesh Y. Bottom (MeshY0) is the belly; MeshY1 raised for taller clouds.
+        // ringHeight lifts both rings off the sea (zhanweitu1). Low belly should sit at/above
+        // DawnSunRingHeight so the first ring clears the 清晨起床 sun disc.
         const float MeshY0 = -62.5f;
         const float MeshY1 = 110f;
-        const float HighLocalY = 80f;
+        const float HighLocalY = 140f;
+        const float DefaultRingScale = 1.85f; // shared by ringScale default + DawnSunRingHeight
+        /// <summary>清晨起床太阳在默认云环半径上的世界 Y（第一层肚皮下限）。</summary>
+        public static readonly float DawnSunRingHeight =
+            Mathf.Tan(OilSkyboxTime.DawnSunElevationDeg * Mathf.Deg2Rad)
+            * RingRadius * DefaultRingScale;
         const float HighScaleMul = 0.68f;
         const float HighYawDegrees = 70f;
         const float HighSdfBias = 0.08f;
@@ -32,6 +39,11 @@ namespace CustomSRP
         const float WindBlendSeconds = 0.85f;
         const float CalmYawRad = 0f;
         const float StormYawRad = 16f * Mathf.Deg2Rad;
+        // Rest yaw (0) lays a cloud belly across the pinned moon for 放空发呆 and 准备入睡.
+        // +12° puts both discs in the atlas gap. Other presets keep the authored ring.
+        const float MoonGapYawDegrees = 12f;
+        const int IdlePresetId = 6;
+        const int SleepPresetId = 10;
 
         public Material material;
 
@@ -44,7 +56,7 @@ namespace CustomSRP
         public float wind = 0.2f;
 
         [Tooltip("Boluo FBX ring used 1.85 on a ~400 m mesh.")]
-        public float ringScale = 1.85f;
+        public float ringScale = DefaultRingScale;
 
         [Tooltip("When on, low-ring belly tracks OilOceanSurface world Y.")]
         public bool followSeaLevel = true;
@@ -52,21 +64,21 @@ namespace CustomSRP
         [Tooltip("World Y of the low-ring belly when followSeaLevel is off, or no ocean exists.")]
         public float seaLevel = 0f;
 
-        [Tooltip("Extra meters to lift the ring after anchoring the belly to sea. Keep 0 for belly on water.")]
-        public float ringHeight = 0f;
+        [Tooltip("Extra meters to lift both rings after anchoring. 0 = belly on water; ≥ DawnSunRingHeight (~91) so the low ring sits at/above 清晨起床 sun.")]
+        public float ringHeight = 180f;
 
         public bool highRing = true;
 
         [Header("Shape")]
-        [Range(0f, 0.2f)] public float uvDisturbance = 0.04f;
-        [Range(0.01f, 0.5f)] public float sdfSoftness = 0.14f;
+        [Range(0f, 0.2f)] public float uvDisturbance = 0.028f;
+        [Range(0.01f, 0.5f)] public float sdfSoftness = 0.08f;
         [Range(0.003f, 1.5f)] public float sdfMin = 0.48f;
         [Range(0.003f, 1.5f)] public float sdfMax = 0.90f;
 
         [Header("Light")]
         [Range(0f, 1f)] public float topShadow = 1f;
-        [Range(0f, 1f)] public float topHighlight = 0.92f;
-        [Range(0f, 3f)] public float edgeIntensity = 1.55f;
+        [Range(0f, 1f)] public float topHighlight = 1f;
+        [Range(0f, 3f)] public float edgeIntensity = 2.2f;
 
         public static OilCloudLayer Current { get; private set; }
 
@@ -246,7 +258,7 @@ namespace CustomSRP
         {
             TickWind();
             var sky = GetComponent<OilSkyboxTime>();
-            float period = sky != null ? sky.CurrentPeriod() : 1f;
+            float period = sky != null ? sky.VisualPeriod() : 1f;
             Vector3 orbitSun;
             Vector3 orbitMoon;
             if (sky != null)
@@ -275,6 +287,7 @@ namespace CustomSRP
                 out Color ambientEquator,
                 out Color ambientGround);
 
+            float sunrise = OilSkyboxTime.CurrentSunriseWeight(OilSkyboxTime.PeriodToHours(period));
             float shaped = ShapeCoverage(coverage);
             if (_windIntensity > 0.01f)
             {
@@ -285,7 +298,8 @@ namespace CustomSRP
             float scale = Mathf.Max(0.2f, ringScale);
             // Pin low-ring belly (local MeshY0) to sea, then apply optional lift.
             origin.y = ResolveSeaLevel() - MeshY0 * scale + ringHeight;
-            Quaternion yaw = Quaternion.Euler(0f, _yaw * Mathf.Rad2Deg, 0f);
+            float yawRad = MoonGapYawActive() ? MoonGapYawDegrees * Mathf.Deg2Rad : _yaw;
+            Quaternion yaw = Quaternion.Euler(0f, yawRad * Mathf.Rad2Deg, 0f);
             return new Frame
             {
                 low = Matrix4x4.TRS(origin, yaw, Vector3.one * scale),
@@ -300,10 +314,10 @@ namespace CustomSRP
                 ambientSky = ambientSky,
                 ambientEquator = ambientEquator,
                 ambientGround = ambientGround,
-                cloudParams = new Vector4(moonBlend, shaped, 1f, 0f),
+                cloudParams = new Vector4(moonBlend, shaped, 1f, sunrise),
                 windVector = new Vector4(
                     Mathf.Lerp(CalmYawRad, StormYawRad, _windIntensity),
-                    _yaw,
+                    yawRad,
                     Mathf.Lerp(0f, 0.014f, _windIntensity),
                     _windIntensity),
                 dawn = dawn,
@@ -326,6 +340,20 @@ namespace CustomSRP
             cmd.SetGlobalVector(WindId, frame.windVector);
             cmd.SetGlobalFloat(DawnId, frame.dawn);
             cmd.SetGlobalFloat(NightId, frame.night);
+        }
+
+        /// <summary>
+        /// 放空发呆 / 准备入睡 pin the moon in view. The rest ring covers that disc;
+        /// those two presets draw at <see cref="MoonGapYawDegrees"/> instead.
+        /// </summary>
+        static bool MoonGapYawActive()
+        {
+            PresetService presets = GameEntry.Presets;
+            if (presets == null)
+                return false;
+
+            int id = presets.CurrentId;
+            return id == IdlePresetId || id == SleepPresetId;
         }
 
         void TickWind()
@@ -417,6 +445,9 @@ namespace CustomSRP
                 : (hours >= 19.5f ? Mathf.InverseLerp(19.5f, 21f, hours)
                     : hours < 7f ? Mathf.InverseLerp(7f, 6f, hours) : 0f);
             night = Mathf.Max(moonBlend, clockNight);
+            // Night presets at 19:00–20:00 are still before the 21:00 clock gate.
+            if (OilSkyboxTime.NightColdHoldsPigment(hours))
+                night = 1f;
             float day = 1f - night;
 
             // Same period ambient channels as OilSkyboxTime.EvaluateAmbient.
@@ -427,21 +458,36 @@ namespace CustomSRP
             float wrapped = Mathf.Repeat(period, 4f);
             float dist = Mathf.Min(wrapped, 4f - wrapped);
             dawn = Mathf.SmoothStep(0.4f, 0.02f, dist);
-
-            body = Color.Lerp(look.horizon, look.mid, 0.45f);
-            body = Color.Lerp(body, new Color(0.93f, 0.94f, 0.96f), 0.28f * day);
-            // boluo-main Camera_1 @ 清晨起床：云 #BC7273。
+            // Period dawn peaks at 06:00 and is already weak by 清晨起床 (07:30).
             float sunrise = OilSkyboxTime.CurrentSunriseWeight(hours);
+            dawn = Mathf.Max(dawn, sunrise);
+            // Clock night holds through 07:00 and would ink the sunrise clouds black.
+            night *= 1f - sunrise;
+
+            // Body stays closer to sky mid/horizon pigment — chalk wash kills 色块 contrast.
+            body = Color.Lerp(look.horizon, look.mid, 0.55f);
+            body = Color.Lerp(body, new Color(0.90f, 0.91f, 0.94f), 0.08f * day);
             if (!OilSkyboxTime.ColorOverrideActive && sunrise > 0.001f)
                 body = Color.Lerp(body, OilSkyLookTables.SunriseCloud, sunrise);
-            // 云高光 #FBF3E9 — pale cream, keep impasto readable under fog.
-            Color cloudHilite = new Color(0.984f, 0.953f, 0.914f);
-            body = Color.Lerp(body, cloudHilite, 0.22f * dawn);
-            // Night: lock body to NightFog (#0A1828) ink — not lit chalk.
-            Color nightBody = Color.Lerp(look.mid, OilSkyboxTime.NightFogColor, 0.78f);
+            // Knife highlight: cream + horizon warmth (zhanweitu1 peach slabs).
+            Color cloudHilite = Color.Lerp(
+                new Color(0.99f, 0.96f, 0.90f),
+                look.horizon,
+                0.30f * Mathf.Max(dawn, OilSkyboxTime.ColorOverrideActive ? 0.45f : 0f));
+            // Dawn mid is dark blue. Skip that pull while the sunrise peach is up.
+            body = Color.Lerp(body, Color.Lerp(look.mid, cloudHilite, 0.35f), 0.22f * dawn * (1f - sunrise));
+            // Night clouds stay on the shipped ink (canonical anchors + #0A1828).
+            // The sky dome can move; this endpoint does not follow the new night fog.
+            Color onlineNightZ = new Color(0x06 / 255f, 0x12 / 255f, 0x1C / 255f, 1f);
+            Color onlineNightH = new Color(0x0A / 255f, 0x1C / 255f, 0x2A / 255f, 1f);
+            Color onlineNightFog = new Color(0x0A / 255f, 0x18 / 255f, 0x28 / 255f, 1f);
+            Color onlineMid = Color.Lerp(onlineNightZ, onlineNightH, 0.42f);
+            Color nightBody = Color.Lerp(onlineMid, onlineNightFog, 0.78f);
             body = Color.Lerp(body, nightBody, night);
-            Color sunHighlight = Color.Lerp(look.horizon, cloudHilite, 0.62f);
-            // Moon lift stays dim cool grey, not bright blue-white.
+            // Highlight must sit clearly above body so slab gates read as separate paint.
+            Color sunHighlight = Color.Lerp(look.horizon, cloudHilite, 0.78f);
+            sunHighlight = Color.Lerp(sunHighlight, Color.white, 0.12f * day);
+            // Shipped moon lift: dim cool grey, not a near-black edge.
             Color moonHighlight = Color.Lerp(nightBody, new Color(0.22f, 0.24f, 0.30f), 0.35f);
             highlight = Color.Lerp(sunHighlight, moonHighlight, night);
 
@@ -458,8 +504,21 @@ namespace CustomSRP
                 zenith = Color.Lerp(ring, Color.Lerp(body, washed, 0.72f), wash);
             }
 
-            // Night far-side must stay inked — blue zenith wash looked like white sheets.
-            zenith = Color.Lerp(zenith, nightBody, night * 0.7f);
+            // Shipped far-side: dark ring inked 70% toward the night body.
+            Color nightRing = Color.Lerp(onlineNightH, onlineNightZ, 0.22f);
+            Color nightZenith = Color.Lerp(nightRing, nightBody, 0.7f);
+            zenith = Color.Lerp(zenith, nightZenith, night);
+            horizon = Color.Lerp(look.horizon, onlineNightH, night);
+
+            // Sky zenith/mid stay blue (#0128CD / #4868B8). Clouds do not inherit them.
+            float cloudW = Mathf.SmoothStep(0.15f, 0.45f, sunrise);
+            if (!OilSkyboxTime.ColorOverrideActive && cloudW > 0.001f)
+            {
+                body = Color.Lerp(body, OilSkyLookTables.SunriseCloud, cloudW);
+                highlight = Color.Lerp(highlight, new Color(1f, 0.97f, 0.92f, 1f), cloudW);
+                zenith = Color.Lerp(zenith, OilSkyLookTables.SunriseCloudShade, cloudW);
+                horizon = Color.Lerp(horizon, new Color(0.93f, 0.70f, 0.40f, 1f), cloudW);
+            }
         }
 
         static Mesh BuildRing()

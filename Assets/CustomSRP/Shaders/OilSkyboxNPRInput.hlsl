@@ -4,6 +4,8 @@
 // Grayscale impasto ridges. Sampled in the sky pass; the slot is not a leftover.
 TEXTURE2D(_OilCanvas);
 SAMPLER(sampler_OilCanvas);
+TEXTURE2D(_OilCanvasNormal);
+SAMPLER(sampler_OilCanvasNormal);
 TEXTURE2D(_SunTex);
 SAMPLER(sampler_SunTex);
 TEXTURE2D(_MoonTex);

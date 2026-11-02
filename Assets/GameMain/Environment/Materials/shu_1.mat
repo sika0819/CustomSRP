@@ -64,7 +64,7 @@ Material:
     - _FlutterScale: 0.2
     - _FlutterSpeed: 1
     - _GradientAmount: 0.3
-    - _GradientOffset: 6
+    - _GradientOffset: 0
     - _GradientSmoothness: 0.2
     - _GrassMode: 0
     - _InternalEdge: 0

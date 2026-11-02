@@ -1,3 +1,5 @@
+using UnityEngine;
+
 namespace Game
 {
     /// <summary>
@@ -16,6 +18,12 @@ namespace Game
 
         /// <summary>True if OilPlanarReflection actually re-rendered the mirror this frame.</summary>
         public static bool MirrorRenderedThisFrame { get; set; }
+
+        /// <summary>
+        /// Planar mirror camera. Null when the reflection RT is released.
+        /// Native instancing issues a second draw here so near trees show in the water.
+        /// </summary>
+        public static Camera PlanarMirror { get; set; }
 
         /// <summary>
         /// Frames left where a yaw change must not force a full mirror redraw.

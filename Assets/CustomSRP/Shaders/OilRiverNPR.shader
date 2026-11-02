@@ -10,6 +10,7 @@ Shader "CustomSRP/OilRiverNPR"
 
         _IntersectionNoise ("Intersection Noise", 2D) = "white" {}
         _PaintMap ("Water Paint (Monet)", 2D) = "gray" {}
+        _PaintNormal ("Paint Normal", 2D) = "bump" {}
         _GlintMap ("Sun Glint Dabs", 2D) = "black" {}
         [NoScaleOffset] _BumpMap ("Wave Normal", 2D) = "bump" {}
         _BumpScale ("Bump Scale", Range(0, 2)) = 0.9

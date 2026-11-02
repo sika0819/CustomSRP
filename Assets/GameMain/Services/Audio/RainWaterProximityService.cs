@@ -105,7 +105,7 @@ namespace Game
         {
             if (!_started)
                 return;
-            if (_contentAudioPaused)
+            if (_contentAudioPaused || IslandAudioSession.IsYieldHeld)
                 return;
 
             StopPlaying();
@@ -160,7 +160,7 @@ namespace Game
         {
             if (!_started || !WanosInteraction.IsReady)
                 return;
-            if (_contentAudioPaused)
+            if (_contentAudioPaused || IslandAudioSession.IsYieldHeld)
                 return;
 
             if (!WantRainWeather())
@@ -187,7 +187,12 @@ namespace Game
         bool WantRainWeather()
         {
             WeatherService weather = GameEntry.Weather;
-            return weather != null && weather.Kind == IslandWeatherKind.Rain && weather.Level > 0;
+            if (weather == null)
+                return false;
+            if (weather.Kind == IslandWeatherKind.Rain && weather.Level > 0)
+                return true;
+            // 切到晴天时 Kind 已变，雨 RTPC 还在 2s 淡出。拍水面跟这条曲线一起收，不要同帧 Stop。
+            return weather.IsWeatherTransitioning && weather.VisualRainAudio > 0f;
         }
 
         void RebuildWaterPoints()
@@ -256,7 +261,7 @@ namespace Game
 
         void StartPlaying()
         {
-            if (_contentAudioPaused)
+            if (_contentAudioPaused || IslandAudioSession.IsYieldHeld)
             {
                 _pendingEvaluate = true;
                 return;

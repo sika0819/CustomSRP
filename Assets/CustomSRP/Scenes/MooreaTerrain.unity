@@ -261,15 +261,15 @@ MonoBehaviour:
   ringScale: 1.85
   followSeaLevel: 1
   seaLevel: 0
-  ringHeight: 0
-  highRing: 0
-  uvDisturbance: 0.04
-  sdfSoftness: 0.14
+  ringHeight: 120
+  highRing: 1
+  uvDisturbance: 0.028
+  sdfSoftness: 0.08
   sdfMin: 0.48
   sdfMax: 0.9
   topShadow: 1
-  topHighlight: 0.92
-  edgeIntensity: 1.55
+  topHighlight: 1
+  edgeIntensity: 2.2
 --- !u!1 &362718928
 GameObject:
   m_ObjectHideFlags: 0

@@ -14,7 +14,7 @@
 |---|---|---|---|
 | **区域门** `SceneBankGateSpawner` | 走进 Trigger | `ShowRequestFirst` + 锁移动 + **有**进度窗；`prioritize=true` `preempt=true` | 开固墙 / toast 失败 |
 | **预设** `PresetForm` | 点未就绪卡 | **无**进度窗（卡片环）；`prioritize=false` `preempt=true` | pending 命中则自动进预设；否则红点 |
-| **音乐** `MusicForm` | 点未就绪曲 | **有**进度窗；`prioritize=true` `preempt=true` | pending 命中则解码后播 |
+| **音乐** `MusicForm` | 点未就绪曲 | **无**进度窗（`SuppressProgressDialog`，行内环）；`prioritize=true` `preempt=true` | pending 命中则解码后播 |
 
 另有一条**静默启动流水线** `BankUpgradeBootstrap`（Critical / Rest），不走用户流量窗。
 
@@ -73,9 +73,9 @@ flowchart LR
 | 层 | 类型 | 职责 |
 |---|---|---|
 | 意图 | `PendingDownloadIntent` | 最后一次用户点的「下完做什么」：进预设 / 播音乐；两者互斥覆盖 |
-| 流水线 | `UserBankDownloadFlow` | FilterPending → 同意链 →（可选进度窗）→ DownloadBanks → onBanksDone → Revoke |
-| 同意 | `DownloadConsentSession` | **唯一**弹窗所有者；用户 `EnsureReady` 才弹流量窗 |
-| 蜂窝 | `DownloadCellularGate` | WifiOnly / AllowAlways；批次结束 `RevokeCellularAllow` |
+| 流水线 | `UserBankDownloadFlow` | FilterPending → 同意链 →（可选进度窗）→ DownloadBanks → onBanksDone |
+| 同意 | `DownloadConsentSession` | **唯一**弹窗所有者；无网→存储→蜂窝→（AppLaunch Wi‑Fi 确认） |
+| 蜂窝 | `DownloadCellularGate` | WifiOnly / AllowAlways；本岛会话开闸，离岛 / 回 Wi‑Fi 复位 |
 | 门禁计算 | `DownloadNetworkGate` | 离线 / 存储×2 / PendingKilobytes 文案 |
 | 传输 | `BankDownloader` | 三队列、HTTP、MD5、落盘、载入引擎、`IsLocalReady` 缓存 |
 | 目录 | `PresetBankCatalog` + `BankUpgradeClient` | 服务端 upgrade/bank → url/size/md5/version |
@@ -92,34 +92,40 @@ flowchart TD
   FP -->|pending 空| ReadyPath[CompleteAlreadyReady<br/>onDownloadStarting → onBanksDone → onComplete]
   FP -->|有待下| ER[DownloadConsentSession.EnsureReady]
   ER --> Offline{离线?}
-  Offline -->|是| Toast1[无网 toast → OnCancel]
+  Offline -->|是| Toast1[无网弹窗 → OnCancel]
   Offline -->|否| Stor{可用空间 ≥ 需求×2?}
   Stor -->|否| Toast2[存储不足 → OnCancel]
   Stor -->|是| Cell{NeedsMobileDataPrompt?}
-  Cell -->|Wi‑Fi| Go[onReady → onDownloadStarting]
   Cell -->|蜂窝| MD[流量确认窗]
   MD -->|继续| Allow[UserAllowCellularAlways] --> Go
-  MD -->|切 Wi‑Fi| Wifi[UserRequireWifiOnly → OnCancel]
+  MD -->|切 Wi‑Fi| WifiOnly[UserRequireWifiOnly → OnCancel]
+  Cell -->|非蜂窝| WifiGate{AppLaunch Wi‑Fi确认开且未接受?}
+  WifiGate -->|是| WC[Wi‑Fi 确认窗]
+  WC -->|立即下载| Go
+  WC -->|稍后| Later[OnWifiConfirmLater → OnCancel]
+  WifiGate -->|否| Go[onReady → onDownloadStarting]
   Go --> Busy{_busy?}
   Busy -->|否| DL1[开进度窗可选 → DownloadBanks]
-  Busy -->|是| Merge[MergeIntoBusyDownload<br/>并入队列不 Revoke]
+  Busy -->|是| Merge[MergeIntoBusyDownload<br/>并入队列]
   DL1 --> Done[onBanksDone → MarkResultLocalReady]
   Merge --> Done
-  Done --> Fin[关进度窗 → RevokeCellularAllow → onComplete]
+  Done --> Fin[关进度窗 → onComplete]
   ReadyPath --> End([结束])
   Fin --> End
   Toast1 --> End
   Toast2 --> End
-  Wifi --> End
+  WifiOnly --> End
+  Later --> End
 ```
 
 ### 策略要点
 
 1. **已落盘不进同意链 / HTTP**：`FilterPending` 用 `BankDownloader.IsLocalReady`；全齐走 `CompleteAlreadyReady`（仍调 `onDownloadStarting` / `onBanksDone`，以便预设自动进场、音乐开播）。
 2. **流量窗只服务用户点击**：Rest / 传输层 `NotifyNeedCellularConsent` **只记账不开窗**。
-3. **每次 EnsureReady 先 `RevokeCellularAllow`**：上一批发完的 AllowAlways 不跨批次复用。
-4. **`_busy` 重叠并入队列**：第二路不丢单、不开第二进度窗、不提前 Revoke；由持有进度窗的那一路 finally 收尾。
-5. **完成先 `onBanksDone` 再写正向 ready 缓存**：禁止完成后全量 `InvalidateLocalReadyCache`（多预设并下会把已完成卡刷回「未下载」）。
+3. **蜂窝 AllowAlways 本岛会话级**：点「继续下载」后同会话再下不重弹；离岛 / 回 Wi‑Fi 复位。
+4. **AppLaunch `feature.cancelAccount==1`**：Wi‑Fi 上插入 Wi‑Fi 确认窗（本会话接受一次后跳过）；`==2` / 缺缓存则跳过。
+5. **`_busy` 重叠并入队列**：第二路不丢单、不开第二进度窗；由持有进度窗的那一路 finally 收尾。
+6. **完成先 `onBanksDone` 再写正向 ready 缓存**：禁止完成后全量 `InvalidateLocalReadyCache`（多预设并下会把已完成卡刷回「未下载」）。
 
 ---
 
@@ -144,10 +150,12 @@ sequenceDiagram
     Flow->>PF: onBanksDone → 自动进场或红点
   else 有待下
     Flow->>Consent: EnsureReady(pending)
-    Consent->>Cell: RevokeCellularAllow
-    opt 蜂窝
+    opt 蜂窝未开闸
       Consent->>User: 流量窗
       User->>Cell: UserAllowCellularAlways
+    end
+    opt AppLaunch Wi‑Fi 确认开且 Wi‑Fi
+      Consent->>User: Wi‑Fi 确认窗
     end
     Consent->>Flow: onReady
     Flow->>PF: onDownloadStarting → SetPreset + 卡片转圈
@@ -161,7 +169,6 @@ sequenceDiagram
     else 被其它点击覆盖
       PF->>PF: Refresh → RedDot（未跳转）
     end
-    Flow->>Cell: RevokeCellularAllow
     Flow->>PF: onComplete → PopSaveSuppress
   end
 ```
@@ -199,7 +206,7 @@ sequenceDiagram
 |---|---|
 | Intent 最后点击优先 | 只有 `PendingDownloadIntent.IsPresetMatch` 才自动 `RequestTransition` |
 | 未跳转保持完成态 | banks 齐 → `MarkLocalReady` + `ShouldShowRedDot` → `statedownloadsuccess` |
-| 已跳转无红点 | 进场前 `MarkHeard` / `MarkPlayed` |
+| 已跳转无红点 | `PresetService.Apply` / 进岛 `RestorePlaybackFromAccount` 记 `MarkPlayed`（`PresetForm` 仍可提前 Mark） |
 | 未齐且仍 busy | **不清** `_userTriggered`，继续转圈；勿因 2s 超时刷回未下载 |
 | Merge 不 Revoke | 第一路 finally 才 `RevokeCellularAllow` + `_busy=false` |
 
@@ -312,7 +319,7 @@ flowchart LR
 | 维度 | 区域门 | 预设 | 音乐 |
 |---|---|---|---|
 | 申请窗 | 有（`ShowRequestFirst`） | 无 | 无 |
-| 进度窗 | 有 | **无**（`SuppressProgressDialog`） | 有 |
+| 进度窗 | 有 | **无**（`SuppressProgressDialog`） | **无**（行内环） |
 | 锁移动 | 有 + 后退 1m | 无 | 无 |
 | 保存抑制 | — | `IslandPlayerPosSave` Push/Pop | 同左 |
 | 自动后续 | 开门 | 切预设 | 播放 |
@@ -345,7 +352,7 @@ stateDiagram-v2
 | AllReady | `stateready` | 全齐但不显示红点（已听 / 保护过期） |
 | Playing | equalizer | `CurrentId` 且 `SchemeState==2` |
 
-红点：`DownloadedUnplayedManager` — **内存始终可显示**；`Persist*` 仍受 `AllowsAccountProgressDisk` 门控（游客不落盘，会话内仍有红点）。
+红点：`DownloadedUnplayedManager` — **内存始终可显示**；真机 `Persist*` 受 `AllowsAccountProgressDisk` 门控（游客不落盘）；**Editor** 另写 `Boluo.Editor.DownloadedUnplayed`，避免游客退登重进红点回潮。
 
 ---
 
@@ -361,17 +368,18 @@ sequenceDiagram
 
   Login->>Boot: Start(userToken ready)
   Boot->>DL: Critical（Startup 队列）
-  Boot->>DL: Rest（Normal，可被蜂窝打断）
-  Note over Boot,Cell: Rest 蜂窝 → NotifyNeedCellularConsent<br/>不开流量窗
+  Boot->>Boot: Rest → EnsureReady（开关开则 Wi‑Fi 确认）
+  Boot->>DL: Rest DownloadBanks（Normal）
+  Note over Boot,Cell: Rest 蜂窝未开闸 → 静默巡检<br/>不开流量窗
   User->>DL: User 队列 preempt
   Note over DL: User 优先；可 Abort 非 User 活跃槽
 ```
 
-| 波次 | 内容 | 队列 | 流量窗 |
+| 波次 | 内容 | 队列 | 弹窗 |
 |---|---|---|---|
 | Essential 本地 | Common_Init / Common_Music | 不解压 HTTP | — |
-| Critical | Music1_1、区域氛围、风雨等 | Startup | 不弹；缺网可 defer |
-| Rest | catalog 其余 | Normal | 不弹；记账等用户点下 |
+| Critical | Music1_1、区域氛围、风雨等 | Startup | 版本不一致 → 申请下载 |
+| Rest | catalog 其余 | Normal | 开关开 → **揭罩后**弹 §4.6（不自动 Resume）；关 → 静默 |
 
 用户点下后与 Rest **共享同一 `BankDownloader` / 同一磁盘**；`FilterPending` 跳过已 Critical/Rest/音乐下过的 stem。
 
@@ -383,8 +391,8 @@ sequenceDiagram
 |---|---|
 | 离岛 | `BankDownloader.PauseForLeave`（Abort 活跃，保留 .tmp）；`PendingDownloadIntent.Clear`；`DownloadConsentSession.ResetForLeaveIsland` |
 | 换票后再进 | `ResumeAfterLeave`；`BankUpgradeBootstrap.InvalidateAfterLeave` 后可再 `Start` |
-| 退登 | Clear Intent；`DownloadedUnplayedManager.ResetSession` |
-| Flow 批次结束 | `RevokeCellularAllow`（不 Abort 队列） |
+| 退登 | Clear Intent；`DownloadedUnplayedManager.ResetSession`；蜂窝闸复位 |
+| Flow 批次结束 | 不再 Revoke；蜂窝许可保留到离岛 / 回 Wi‑Fi |
 
 详见 [12-session-lifecycle.md](12-session-lifecycle.md)。
 
@@ -396,6 +404,7 @@ sequenceDiagram
 |---|---|
 | [Services/UserBankDownloadFlow.cs](../Services/UserBankDownloadFlow.cs) | 用户统一流水线 |
 | [Services/DownloadConsentSession.cs](../Services/DownloadConsentSession.cs) | 同意链 / 弹窗唯一所有者 |
+| [BoluoApi/BoluoAppLaunchCache.cs](../BoluoApi/BoluoAppLaunchCache.cs) | AppLaunch `feature.cancelAccount`（Wi‑Fi 确认开关） |
 | [Services/DownloadUiOptions.cs](../Services/DownloadUiOptions.cs) | 申请窗 / 锁移动 / 抑进度窗 |
 | [Services/DownloadNetworkGate.cs](../Services/DownloadNetworkGate.cs) | 离线 / 存储 / 体积 |
 | [Services/PendingDownloadIntent.cs](../Services/PendingDownloadIntent.cs) | 下完进预设或播音乐 |
@@ -424,6 +433,7 @@ sequenceDiagram
 | 下完不自动进预设 | Intent 被其它点击覆盖；或 `AreBanksLocallyReady` 偶发 false | 只最后点击进场；`WaitPresetBanksSettled` |
 | 已下 bank 仍显示未下载 | 队列 Pending 盖住磁盘；Downloading 强 false | disk-first + Downloading 时 Probe |
 | 游客无红点 | 旧逻辑用 `AllowsAccountProgressDisk` 禁显示 | 内存可显示；仅落盘门控 |
+| 进入过仍亮红点 | 只在 Form 点选 Mark；虹膜 Apply / 恢复播放未记；Persist 未 Save | `Apply`/`Restore` MarkPlayed；Save 后 `PlayerPrefsSave` |
 | 换票后银行不再下 | Bootstrap `_started` 早置位 | [12](12-session-lifecycle.md) |
 | `DownloadBanks` 参数错位 | 与 `DownloadBank` 顺序不同 | **命名参数** |
 | Rest 弹流量窗 | 误调 `EnsureReady` | Rest 只用 `NotifyNeedCellularConsent` |

@@ -55,6 +55,8 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _FoliageHeight: 12
+    - _FoliageYMin: 0
     - _AlphaClip: 0.8
     - _AlphaTest: 1
     - _Canvas: 0
@@ -69,7 +71,7 @@ Material:
     - _FlutterScale: 0.2
     - _FlutterSpeed: 1
     - _GradientAmount: 0.3
-    - _GradientOffset: 6
+    - _GradientOffset: 0
     - _GradientSmoothness: 0.1
     - _GrassMode: 0
     - _InternalEdge: 0

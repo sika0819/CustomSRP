@@ -82,8 +82,10 @@ Launch 进岛后，10 个手动预设对应不同落点 / 时段 / 天气。下�
 Play Launch（或已在 Play）后：
 
 - **GameMain → Boluo → 截图 → 各预设 4K 无 UI** — 依次切预设 1–10，藏 UIDocument / Canvas / Debugger，主相机渲 **3840×2160** 到 `.tmp/preset_4k/`
-- **GameMain → Boluo → 截图 → 打开 4K 输出目录**
-- 也可在工程根写入触发文件 `Temp/capture_preset_4k`（进入 Play 后自动跑）
+- **GameMain → Boluo → 截图 → 各预设占位图封面（264 圆角）** — 同流程，方图中心裁切后缩到 **264×264** 圆角 PNG（对齐 `zhanweitu`），输出 `.tmp/preset_cover/`
+- **GameMain → Boluo → 截图 → 打开 4K 输出目录** / **打开封面输出目录**
+- 编辑器截图期间强制油画 **16-tap HQ** + `renderScale=1`
+- 也可在工程根写入触发文件 `Temp/capture_preset_4k` 或 `Temp/capture_preset_cover`（进入 Play 后自动跑）
 
 真机无 UI 桥：运行时 `DevicePresetShotHelper`（adb 写 `preset_shot_cmd.txt`）。
 

@@ -1,4 +1,6 @@
+using System.Collections;
 using GameFramework.UI;
+using UnityEngine;
 
 namespace Game
 {
@@ -28,6 +30,7 @@ namespace Game
         public const string RequestDownloadForm = "Assets/GameMain/UI/Forms/Download/RequestDownloadForm.prefab";
         public const string DownloadProgressForm = "Assets/GameMain/UI/Forms/Download/DownloadProgressForm.prefab";
         public const string MobileDataConfirmForm = "Assets/GameMain/UI/Forms/Download/MobileDataConfirmForm.prefab";
+        public const string WifiConfirmForm = "Assets/GameMain/UI/Forms/Download/WifiConfirmForm.prefab";
         public const string InsufficientStorageForm = "Assets/GameMain/UI/Forms/Download/InsufficientStorageForm.prefab";
         public const string NoNetworkForm = "Assets/GameMain/UI/Forms/Download/NoNetworkForm.prefab";
 
@@ -60,6 +63,8 @@ namespace Game
 
         public static void CloseGroup(string groupName)
         {
+            if (GameEntry.UI == null)
+                return;
             IUIGroup group = GameEntry.UI.GetUIGroup(groupName);
             if (group == null)
                 return;
@@ -71,6 +76,29 @@ namespace Game
 
             for (int i = 0; i < serials.Length; i++)
                 GameEntry.UI.CloseUIForm(serials[i]);
+        }
+
+        /// <summary>
+        /// 揭罩 / 退登：等 UITK / Custom SRP 画完再 Close，避免同帧拆 Document 撞 UnityGfxDeviceW。
+        /// </summary>
+        public static void CloseGroupDeferred(string groupName, int endOfFramePasses = 1)
+        {
+            MonoBehaviour host = GameEntry.Base;
+            if (host == null || !host.isActiveAndEnabled)
+            {
+                CloseGroup(groupName);
+                return;
+            }
+
+            host.StartCoroutine(CloseGroupAfterPaint(groupName, Mathf.Max(0, endOfFramePasses)));
+        }
+
+        static IEnumerator CloseGroupAfterPaint(string groupName, int endOfFramePasses)
+        {
+            for (int i = 0; i < endOfFramePasses; i++)
+                yield return new WaitForEndOfFrame();
+            yield return null;
+            CloseGroup(groupName);
         }
     }
 }

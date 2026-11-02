@@ -181,6 +181,19 @@ namespace Game.BoluoApi
                 }
             }
 
+            // 独立包：未过期且同设备的游客缓存直接复用，不重打 touristLogin。
+            if (BoluoSession.TryHydrateReusableGuest(BoluoDeviceInfo.GetIdentifier()))
+            {
+                Log.Info(
+                    $"[DeviceLogin] reuse guest cache userToken len={BoluoSession.UserToken.Length} " +
+                    $"userId={BoluoSession.UserId ?? ""}");
+                IslandEntryLog.Skip(
+                    "userTicket",
+                    "guestReuse",
+                    "len=" + BoluoSession.UserToken.Length);
+                return true;
+            }
+
             return await RequestTouristLoginAsync(failFast);
         }
 
@@ -413,7 +426,7 @@ namespace Game.BoluoApi
             BoluoSession.ApplyUserSession(resp.data, isGuest: true, saveLocal: false);
             Log.Info(
                 $"[DeviceLogin] touristLogin ok userToken len={resp.data.token.Length} " +
-                $"userId={resp.data.userId ?? ""}");
+                $"userId={resp.data.userId ?? ""} expire={resp.data.expireTime}");
             return true;
         }
 

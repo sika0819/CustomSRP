@@ -6,7 +6,13 @@
 // w: Tile data size, as integer.
 float4 _ForwardPlusTileSettings;
 
+#if defined(SHADER_API_GLES3) || defined(SHADER_API_GLES)
+// GLES: skip tiles SSBO (Adreno BufferBlock limit). OilNPROtherLights iterates
+// the packed other-light CBUFFER instead of per-tile indices.
+#define CUSTOM_SRP_FORWARD_PLUS_STUB 1
+#else
 StructuredBuffer<int> _ForwardPlusTiles;
+#endif
 
 struct ForwardPlusTile
 {
@@ -25,7 +31,11 @@ struct ForwardPlusTile
 
     int GetLightCount()
     {
+#if defined(CUSTOM_SRP_FORWARD_PLUS_STUB)
+        return 0;
+#else
         return _ForwardPlusTiles[GetHeaderIndex()];
+#endif
     }
 
     int GetFirstLightIndexInTile()
@@ -40,7 +50,11 @@ struct ForwardPlusTile
 
     int GetLightIndex(int lightIndexInTile)
     {
+#if defined(CUSTOM_SRP_FORWARD_PLUS_STUB)
+        return 0;
+#else
         return _ForwardPlusTiles[lightIndexInTile];
+#endif
     }
 
     bool IsMinimumEdgePixel(float2 screenUV)

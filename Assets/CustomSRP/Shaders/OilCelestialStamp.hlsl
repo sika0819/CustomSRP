@@ -171,7 +171,7 @@ half3 OilWaterStampBodyOnSurface(
     float2 uv = float2(dot(toP, right), dot(toP, up)) / max(size, 1e-4);
     uv = uv * 0.5 + 0.5;
 
-    // Water twist — 横 (across) strong, 纵 (along) faint（相对相机朝向）.
+    // Water twist — 原地涟漪。不用滚动浪纹/笔触法线，否则日/月盘会跟着浪飘走。
     float warpAmp = (0.045 + (float)distortAmt * 0.55) * lerp(1.15, 0.85, elev);
 #if defined(OIL_MOBILE_PERF)
     warpAmp *= 0.75;
@@ -181,22 +181,18 @@ half3 OilWaterStampBodyOnSurface(
     float lookLen = length(lookH);
     lookH = lookLen > 1e-4 ? lookH / lookLen : float3(0.0, 0.0, 1.0);
     float3 sideH = cross(float3(0.0, 1.0, 0.0), lookH);
-    float across = dot(nFlat, sideH.xz);
-    float along = dot(nFlat, lookH.xz);
     float2 acrossUV = float2(dot(sideH, right), dot(sideH, up));
     float aLen = length(acrossUV);
     acrossUV = aLen > 1e-4 ? acrossUV / aLen : float2(1.0, 0.0);
     float2 alongUV = float2(-acrossUV.y, acrossUV.x);
-    float2 waveWarp = acrossUV * (across * warpAmp)
-        + alongUV * (along * warpAmp * 0.22);
-    float strokeW = (float)(stroke - 0.5h);
-    float2 strokeWarp = acrossUV * (strokeW * warpAmp * 0.65)
-        + alongUV * (strokeW * warpAmp * 0.12);
-    float shiverA = sin(positionWS.x * 0.55 + positionWS.z * 0.31 + _Time.y * 1.7);
-    float shiverL = cos(positionWS.z * 0.48 - positionWS.x * 0.27 + _Time.y * 1.3);
-    float2 shiver = acrossUV * (shiverA * warpAmp * 0.40)
-        + alongUV * (shiverL * warpAmp * 0.10);
-    uv += waveWarp + strokeWarp + shiver;
+    float shiverA = sin(positionWS.x * 0.55 + positionWS.z * 0.31 + _Time.y * 1.7)
+        + 0.45 * sin(positionWS.z * 0.72 + positionWS.x * 0.19 + _Time.y * 2.15);
+    float shiverL = cos(positionWS.z * 0.48 - positionWS.x * 0.27 + _Time.y * 1.3)
+        + 0.45 * cos(positionWS.x * 0.61 - positionWS.z * 0.33 + _Time.y * 1.85);
+    // 横强纵弱；略抬 shiver 补回原先 waveWarp 的可视扭曲。
+    float2 shiver = acrossUV * (shiverA * warpAmp * 0.72)
+        + alongUV * (shiverL * warpAmp * 0.18);
+    uv += shiver;
 
     float2 centered = uv - 0.5;
     float r = length(centered) * 2.0;

@@ -53,6 +53,7 @@
 | A | `Sound/WanosSoundAgentHelper.cs` | 非音乐资源 `Pause`/`Resume` 调 `PauseAll`/`ResumeAll` | 一个音效暂停会静音整个引擎 | 设计取舍，注意调用 |
 | B | `Services/Audio/RainWaterProximityService.cs` / `WeatherAudioBridge.cs` | ~~首装切风雨 miss bank 后不重试~~ → 已订 `WanosBankStore.OnBankLoaded` 重试 | 首装切雨无雨声 | 已修 |
 | C | `Services/Audio/WaterSurfaceProbe.cs` | 只采样内陆水的**直接子节点** | 单 prefab 路径下采不到水面点，河声退化 | 见 [05](05-audio.md) |
+| C2 | `Services/Audio/AmbienceZoneService.cs` | ~~水域缺钉正午 Time of A Day；Mist 当瀑 + 湖互斥~~ | 路过瀑布/河边「完全没声」 | 已修：钉 12h + Mist 排除 + 贴瀑优先 |
 | D | `Services/Audio/AmbienceZoneService.cs` | `TransferPlayOwnership` 里 emitter 池存在同 GO 双槽的可能 | 活跃 emitter 被误回收 | 距离边界快速切换时可能复现 |
 | E | `Services/Audio/AmbienceZoneService.cs` | 池长度在构建时锁定，新增 source 会整体重分配 | 已发放的 emitter 不回收 | MapItem extras 迟到时可能触发 |
 | F | `Services/NowPlayingService.cs` | `Tick()` 依赖 `Native/BoluoNativeBridge` 泵送 | 非原生宿主下远程播放/暂停不生效 | 需自行泵送 |

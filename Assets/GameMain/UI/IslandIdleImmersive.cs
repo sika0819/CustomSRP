@@ -1,4 +1,3 @@
-using Game.BoluoApi;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityGameFramework.Runtime;
@@ -14,8 +13,6 @@ namespace Game
         const float IdleFadeAfterSeconds = 15f;
         const float FadeOutDuration = 1f;
         const float FadeInDuration = 0.35f;
-        const float OilWarpFadeInSeconds = 1f;
-        const float OilWarpFadeOutSeconds = 1f;
 
         /// <summary>HUD 已完全淡出；供相机压 renderScale / 目标帧率等查询。</summary>
         public static bool IsActive { get; private set; }
@@ -32,8 +29,6 @@ namespace Game
         bool _fullyFadedOut;
         bool _hadPopupLastFrame;
         float _currentAlpha = 1f;
-        float _oilWarpWeight;
-        bool _oilWarpDirty;
 
         public bool IsIdleImmersive => _fullyFadedOut;
 
@@ -67,19 +62,16 @@ namespace Game
                 if (_fullyFadedOut || fadingOut)
                     ExitImmersive();
                 TickFade();
-                TickOilWarp();
                 return;
             }
 
             if (_fullyFadedOut)
             {
-                // 摇杆走动也退出：否则全屏扭曲还会占一整张颜色 RT，和走路时的每帧水面反射叠在一起。
                 if (pointerPressedThisFrame || locomotionActive)
                     ExitImmersive();
                 else
                     _breath.Tick();
                 TickFade();
-                TickOilWarp();
                 return;
             }
 
@@ -87,7 +79,6 @@ namespace Game
                 RegisterActivity();
 
             TickFade();
-            TickOilWarp();
 
             if (!_armed || _fadeElapsed >= 0f)
                 return;
@@ -103,7 +94,6 @@ namespace Game
             IsActive = false;
             _armed = false;
             SetHudAlpha(1f);
-            ClearOilWarp();
             IslandCameraSrpSetup.ApplyTargetFrameRate();
             IslandAssetReclaimScheduler.Cancel();
         }
@@ -137,7 +127,6 @@ namespace Game
             IsActive = false;
             SetHudAlpha(1f);
             _breath.Hide();
-            ClearOilWarp();
             ArmCountdown();
         }
 
@@ -155,8 +144,6 @@ namespace Game
             _fullyFadedOut = false;
             IsActive = false;
             _breath.Hide();
-            // 退出立刻关掉扭曲，避免淡出那一秒还在分配全屏 RT。
-            ClearOilWarp();
             StartFade(_currentAlpha, 1f, FadeInDuration);
             ArmCountdown();
             if (wasImmersive)
@@ -213,47 +200,6 @@ namespace Game
                 if (_fadeRoots[i] != null)
                     _fadeRoots[i].style.opacity = alpha;
             }
-        }
-
-        void TickOilWarp()
-        {
-            // 闺蜜机标准版：沉浸全屏扭曲占一整张颜色 RT，林间站立会直接掉到十来帧。
-            if (BoluoDeviceInfo.IsSkyworthGmjStandard())
-            {
-                if (_oilWarpDirty || _oilWarpWeight > 1e-4f)
-                    ClearOilWarp();
-                return;
-            }
-
-            float target = _fullyFadedOut ? 1f : 0f;
-            float dur = target > _oilWarpWeight
-                ? OilWarpFadeInSeconds
-                : OilWarpFadeOutSeconds;
-            float step = dur > 1e-4f ? Time.unscaledDeltaTime / dur : 1f;
-            float next = Mathf.MoveTowards(_oilWarpWeight, target, step);
-            if (Mathf.Abs(next - _oilWarpWeight) > 1e-5f || next > 1e-4f || _oilWarpDirty)
-            {
-                _oilWarpWeight = next;
-                if (_oilWarpWeight > 1e-4f)
-                {
-                    PushOilWarp(_breath.Breath01, _oilWarpWeight, _breath.BreathPhaseRadians);
-                    _oilWarpDirty = true;
-                }
-                else
-                    ClearOilWarp();
-            }
-        }
-
-        static void PushOilWarp(float breath01, float weight01, float phaseRadians) =>
-            IslandSceneComponent.Active?.OilWarp?.SetImmersiveWarp(breath01, weight01, phaseRadians);
-
-        void ClearOilWarp()
-        {
-            _oilWarpWeight = 0f;
-            if (!_oilWarpDirty)
-                return;
-            PushOilWarp(0f, 0f, 0f);
-            _oilWarpDirty = false;
         }
     }
 }

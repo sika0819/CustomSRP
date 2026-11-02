@@ -44,7 +44,7 @@ namespace Game
         public float HeightTransitionDuration = 0.5f;
 
         [Header("Water")]
-        [Tooltip("Reject moves onto seabed (below ocean surface) or into river channels.")]
+        [Tooltip("Reject moves onto the seabed (terrain at or below the ocean surface). Rivers stay walkable.")]
         public bool BlockWaterWalking = true;
 
         // ─── Constants ─────────────────────────────────────────────────────────────
@@ -63,18 +63,32 @@ namespace Game
         /// </summary>
         const float OceanBelowSurfaceBan = 0.25f;
         /// <summary>
-        /// 高度图须至少高于海平面此值才可走。与 <see cref="AmbienceZoneCatalog.OceanLandClearanceMeters"/> 对齐。
-        /// 旧逻辑用 oceanY-0.25 当湿沙放行，平坦海底≈海平面时整片海湾都能走。
+        /// 高度图相对海平面的禁走净空。0 = 不高于海平面即禁（平坦海底≈海面也禁）。
+        /// 禁止复用 <see cref="AmbienceZoneCatalog.OceanLandClearanceMeters"/>(0.4)：
+        /// 那是听感岸线，会把整段湿岸/海岸判成海里，表现为「站岸上走不了」。
         /// </summary>
-        const float OceanWalkMinAboveSea = AmbienceZoneCatalog.OceanLandClearanceMeters;
+        const float OceanWalkMinAboveSea = 0f;
         /// <summary>眼睛离地形矩形边的最小内缩，避免胶囊探出岛外踩上海面碰撞。</summary>
         const float TerrainEdgeMargin = 0.75f;
-        /// <summary>河面水平距离 / 竖直容差（米）。</summary>
-        const float RiverBanRadiusXZ = 5f;
-        const float RiverBanRadiusY = 4f;
-        const float RiverQueryRadius = 8f;
+        /// <summary>
+        /// 脚相对甲板顶面的下沉容差。CharacterController 贴薄 Box 会抖；过紧会把站桥判成海里。
+        /// </summary>
+        const float DeckFootSlop = 1.0f;
+        /// <summary>刚离开命名甲板后的放行秒数，盖住桥段缝 / 边缘单帧 miss。</summary>
+        const float NamedDeckGraceSeconds = 0.4f;
+        /// <summary>宽限期内相对上一甲板脚点的最大水平距离（× BodyRadius）。</summary>
+        const float NamedDeckGraceRadiusFactor = 2.5f;
 
         static readonly RaycastHit[] GroundHits = new RaycastHit[24];
+        /// <summary>桥面 footprint：中心 + 四向，避免单点射线落进桥段缝。</summary>
+        static readonly Vector2[] NamedDeckProbeOffsets =
+        {
+            Vector2.zero,
+            new Vector2(1f, 0f),
+            new Vector2(-1f, 0f),
+            new Vector2(0f, 1f),
+            new Vector2(0f, -1f),
+        };
 
         // ─── State ─────────────────────────────────────────────────────────────────
 
@@ -115,6 +129,12 @@ namespace Game
         CharacterController _cc;
         EnvMeshColliderLod _colliderLod;
         const float ColliderRefreshMinRadius = 48f;
+        /// <summary>本次贴地命中的是命名甲板，传送时跳过禁水钳制。</summary>
+        bool _sampledNamedDeck;
+
+        Vector3 _lastNamedDeckFoot;
+        float _lastNamedDeckY;
+        float _namedDeckGraceUntil;
 
         Vector2 _smoothedMove;
         float _speedRatio;
@@ -127,6 +147,10 @@ namespace Game
         float _retreatElapsed;
         float _retreatAlong;
         float _verticalSpeed;
+
+        /// <summary>上一帧可走落点（非海/河禁区）。已在海底时回滚用这个，不能只回 before。</summary>
+        Vector3 _lastSafeEye;
+        bool _hasLastSafeEye;
 
         /// <summary>Inspector-authored <see cref="EyeHeight"/>. Cached on first OnEnable so a
         /// preset that bumps EyeHeight for StayBehind gets reverted to this when walking starts.</summary>
@@ -413,6 +437,12 @@ namespace Game
             Teleport(foot + worldDelta, _yaw);
         }
 
+        /// <summary>
+        /// 本次 <see cref="Teleport"/> 在水面钳制之前的眼睛高度。
+        /// 读档比较落差要用这个：钳制会把桥底抬到水面附近，看起来只掉了一点，保住眼位就会失效。
+        /// </summary>
+        public float SampledTeleportEyeY { get; private set; }
+
         /// <summary>脚落到 <paramref name="worldPos"/> 的地面上，眼睛抬到行走高度。出生和读档用。</summary>
         public void Teleport(Vector3 worldPos, float yawDegrees)
         {
@@ -421,18 +451,26 @@ namespace Game
             _verticalSpeed = 0f;
             _smoothedMove = Vector2.zero;
             EnsureBody();
+            // 先开落点附近碰撞再贴地：桥/码头 MeshCollider 若仍关着，高度图会贴到桥底河床。
+            RefreshNearbyCollidersAt(worldPos);
+            Physics.SyncTransforms();
             Vector3 ground = SampleGround(worldPos);
-            SetPose(ground + Vector3.up * EyeHeight, Quaternion.Euler(Pitch, _yaw, 0f));
-            // 立刻打开落点附近 MeshCollider，避免走路穿大石。
+            Vector3 eye = ground + Vector3.up * EyeHeight;
+            SampledTeleportEyeY = eye.y;
+            // 已经贴上命名甲板就不要再被禁水钳制拽回河面，否则下一帧胶囊会从桥底被顶上来。
+            SetPose(eye, Quaternion.Euler(Pitch, _yaw, 0f), unconstrained: _sampledNamedDeck);
             RefreshNearbyColliders();
         }
 
-        void RefreshNearbyColliders()
+        void RefreshNearbyColliders() =>
+            RefreshNearbyCollidersAt(transform.position);
+
+        void RefreshNearbyCollidersAt(Vector3 worldPos)
         {
             if (_colliderLod == null)
                 _colliderLod = FindAnyObjectByType<EnvMeshColliderLod>();
             float radius = Mathf.Max(ColliderRefreshMinRadius, EnvStreamingConfig.MeshColliderEnableRadius);
-            _colliderLod?.ForceRefreshNear(transform.position, radius);
+            _colliderLod?.ForceRefreshNear(worldPos, radius);
         }
 
         /// <summary>
@@ -981,10 +1019,83 @@ namespace Game
         void MoveBody(Vector3 motion)
         {
             motion = ClampMotionToTerrain(motion);
+            motion = FilterMotionAwayFromWater(motion);
             if (_cc != null && _cc.enabled)
                 MoveViaCharacterController(motion);
             else
                 MoveFreeCam(motion);
+        }
+
+        /// <summary>
+        /// 目标 XZ 已在禁海：本帧水平位移清零，避免 CharacterController 先踩上海底再回滚。
+        /// 例外：已在禁区时朝 last-safe 逃离放行；无 last-safe 时不锁死水平移动。
+        /// </summary>
+        Vector3 FilterMotionAwayFromWater(Vector3 motion)
+        {
+            if (!BlockWaterWalking)
+                return motion;
+            if (Mathf.Abs(motion.x) + Mathf.Abs(motion.z) <= 1e-6f)
+                return motion;
+
+            Vector3 eye = transform.position;
+            Vector3 curFoot = eye;
+            curFoot.y = eye.y - EyeHeight;
+            Vector3 destFoot = eye + motion;
+            destFoot.y = curFoot.y;
+            if (!IsFootInForbiddenWater(destFoot))
+                return motion;
+
+            // 已在禁区且还没有岸上 safe：不要把摇杆清零，否则海岸误判时整个人冻住。
+            if (IsFootInForbiddenWater(curFoot) && !_hasLastSafeEye)
+                return motion;
+
+            // 已踩进禁区：允许朝 last-safe 走，交给 ApplyWaterWalkBan 拉回岸。
+            if (MotionMovesTowardLastSafe(eye, motion))
+                return motion;
+
+            // 轴向拆开：贴岸斜走时尽量沿可走边滑。
+            Vector3 onlyX = motion;
+            onlyX.z = 0f;
+            Vector3 footX = eye + onlyX;
+            footX.y = destFoot.y;
+            bool xOk = Mathf.Abs(onlyX.x) > 1e-6f && !IsFootInForbiddenWater(footX);
+
+            Vector3 onlyZ = motion;
+            onlyZ.x = 0f;
+            Vector3 footZ = eye + onlyZ;
+            footZ.y = destFoot.y;
+            bool zOk = Mathf.Abs(onlyZ.z) > 1e-6f && !IsFootInForbiddenWater(footZ);
+
+            if (xOk && zOk)
+                return onlyX.sqrMagnitude >= onlyZ.sqrMagnitude ? onlyX : onlyZ;
+            if (xOk)
+                return onlyX;
+            if (zOk)
+                return onlyZ;
+
+            if (MotionMovesTowardLastSafe(eye, onlyX))
+                return onlyX;
+            if (MotionMovesTowardLastSafe(eye, onlyZ))
+                return onlyZ;
+
+            motion.x = 0f;
+            motion.z = 0f;
+            return motion;
+        }
+
+        bool MotionMovesTowardLastSafe(Vector3 eye, Vector3 motion)
+        {
+            if (!_hasLastSafeEye)
+                return false;
+            float mx = motion.x;
+            float mz = motion.z;
+            if (mx * mx + mz * mz <= 1e-8f)
+                return false;
+            float dx = _lastSafeEye.x - eye.x;
+            float dz = _lastSafeEye.z - eye.z;
+            if (dx * dx + dz * dz <= 1e-4f)
+                return false;
+            return dx * mx + dz * mz > 0f;
         }
 
         /// <summary>本帧水平位移不许离开地形矩形，避免一步踩上海面。</summary>
@@ -1013,6 +1124,8 @@ namespace Game
         void MoveViaCharacterController(Vector3 motion)
         {
             Vector3 before = transform.position;
+            float savedStep = _cc.stepOffset;
+            RaiseStepForOceanDeck(before, motion);
 
             // 高速单帧位移超过半径时拆步，减轻对 MeshCollider 的隧道穿模。
             float horiz = new Vector2(motion.x, motion.z).magnitude;
@@ -1024,6 +1137,7 @@ namespace Game
                 flags |= _cc.Move(slice);
             if ((flags & CollisionFlags.Below) != 0 && _verticalSpeed < 0f)
                 _verticalSpeed = -GroundStickSpeed;
+            _cc.stepOffset = savedStep;
 
             // CC 只动 XZ；高度过渡期间 Y 由 lerp 接管，避免与 CC 的贴地反力互拽。
             if (_heightTransitioning)
@@ -1034,6 +1148,7 @@ namespace Game
                 transform.position = p;
             }
 
+            TryClimbOceanDeck(before, motion);
             ApplyWaterWalkBan(before);
             ClampFootNotBelowOcean();
             ApplyIslandTerrainLimit();
@@ -1046,6 +1161,7 @@ namespace Game
             if (Mathf.Abs(motion.x) + Mathf.Abs(motion.z) <= 1e-4f)
             {
                 transform.position = pos;
+                ApplyWaterWalkBan(before);
                 ClampFootNotBelowOcean();
                 ApplyIslandTerrainLimit();
                 return;
@@ -1063,6 +1179,7 @@ namespace Game
                 pos.y = ground.y + EyeHeight;
             }
             transform.position = pos;
+            TryClimbOceanDeck(before, motion);
             ApplyWaterWalkBan(before);
             ClampFootNotBelowOcean();
             ApplyIslandTerrainLimit();
@@ -1178,58 +1295,101 @@ namespace Game
             }
 
             if (_drive != EyeDrive.Locomotion)
+            {
+                RememberSafeEyeIfAllowed();
                 return;
+            }
             if (wasEnabled && _cc != null)
             {
                 _cc.enabled = true;
                 transform.SetPositionAndRotation(pos, rot);
                 Physics.SyncTransforms();
             }
+            RememberSafeEyeIfAllowed();
         }
 
-        /// <summary>海上（高度图未过岸线净空）/ 河里：水平位移回滚。</summary>
-        void ApplyWaterWalkBan(Vector3 beforeEye)
+        void RememberSafeEyeIfAllowed()
         {
             if (!BlockWaterWalking)
                 return;
             Vector3 eye = transform.position;
             Vector3 foot = eye - Vector3.up * EyeHeight;
-            if (!IsFootInForbiddenWater(foot))
+            if (IsFootInForbiddenWater(foot))
                 return;
+            // 海床放行点不记 safe，避免踩进海里之后被送回礁石。
+            // 人已经站在海水上的桥面时要记：桥是路，探空一帧应该回到桥上，而不是被拉回岸。
+            if (TryGetOceanSurfaceY(out float oceanY)
+                && TrySampleHeightmapY(foot, out float terrainY)
+                && IsOceanTerrainForbidden(terrainY, oceanY)
+                && !IsFootPlantedOnNamedOceanDeck(foot))
+                return;
+            _lastSafeEye = eye;
+            _hasLastSafeEye = true;
+        }
+
+        /// <summary>海上（高度图未过岸线净空）：回到上一可走岸点，禁止站在海底滑行。河不禁。</summary>
+        void ApplyWaterWalkBan(Vector3 beforeEye)
+        {
+            if (!BlockWaterWalking)
+                return;
+
+            Vector3 eye = transform.position;
+            Vector3 foot = eye - Vector3.up * EyeHeight;
+            if (!IsFootInForbiddenWater(foot))
+            {
+                RememberSafeEyeIfAllowed();
+                return;
+            }
+
+            // 一律优先 last-safe。若回 before，岸→礁石→水 会被 before 钉在礁石上走不回来。
+            Vector3 restore = _hasLastSafeEye ? _lastSafeEye : beforeEye;
 
             bool ccOn = _cc != null && _cc.enabled;
             if (ccOn)
                 _cc.enabled = false;
-            eye.x = beforeEye.x;
-            eye.z = beforeEye.z;
-            transform.position = eye;
+            transform.position = restore;
             Physics.SyncTransforms();
             if (ccOn)
                 _cc.enabled = true;
         }
 
         /// <summary>
-        /// 脚底不得沉到海底：最低只允许到海平面 − 浅滩容差（湿沙）。
-        /// 不抬到海平面本身，避免被托上海面盒子后一直走。
+        /// 已掉进海底时：优先拽回上一可走点；没有可走记录才抬到浅滩下限防穿地。
+        /// 不再把人托到「海平面 − 0.25」当公路走。
         /// </summary>
         void ClampFootNotBelowOcean()
         {
             if (!TryGetOceanSurfaceY(out float oceanY))
                 return;
 
-            float minFootY = oceanY - OceanBelowSurfaceBan;
             Vector3 eye = transform.position;
             float footY = eye.y - EyeHeight;
+            Vector3 foot = eye;
+            foot.y = footY;
+
+            if (BlockWaterWalking && IsFootInForbiddenWater(foot) && _hasLastSafeEye)
+            {
+                bool ccOn = _cc != null && _cc.enabled;
+                if (ccOn)
+                    _cc.enabled = false;
+                transform.position = _lastSafeEye;
+                Physics.SyncTransforms();
+                if (ccOn)
+                    _cc.enabled = true;
+                return;
+            }
+
+            float minFootY = oceanY - OceanBelowSurfaceBan;
             if (footY >= minFootY - 1e-3f)
                 return;
 
-            bool ccOn = _cc != null && _cc.enabled;
-            if (ccOn)
+            bool ccLift = _cc != null && _cc.enabled;
+            if (ccLift)
                 _cc.enabled = false;
             eye.y = minFootY + EyeHeight;
             transform.position = eye;
             Physics.SyncTransforms();
-            if (ccOn)
+            if (ccLift)
                 _cc.enabled = true;
         }
 
@@ -1240,7 +1400,9 @@ namespace Game
             Vector3 foot = eye - Vector3.up * EyeHeight;
             if (!IsFootInForbiddenWater(foot))
                 return eye;
-            // 传送落点在海里：抬到可走岸线以上。河面没有可站立碰撞时保持原位，走路时再由禁行回滚。
+            // 传送落点在海里：有上一可走点就回去；否则抬到可走岸线以上。
+            if (_hasLastSafeEye)
+                return _lastSafeEye;
             if (TryGetOceanSurfaceY(out float oceanY) && foot.y <= oceanY + OceanWalkMinAboveSea)
                 return new Vector3(eye.x, oceanY + OceanWalkMinAboveSea + EyeHeight + 0.5f, eye.z);
             return eye;
@@ -1248,14 +1410,22 @@ namespace Game
 
         bool IsFootInForbiddenWater(Vector3 foot)
         {
-            bool hasStand = TryGetHighestStandY(foot, out float standY);
+            // 禁水放行只认命名甲板 footprint，不认「柱内最高面」（石头/栏杆会抢命中）。
+            bool hasDeck = TryGetNamedDeckStand(foot, out float deckY, out Collider deckCol);
 
-            // 海：高度图必须明显高于海面；海面盒是 Trigger 不能托人。码头/桥按甲板放行。
+            // 海：高度图不高于海面就禁。海水上的桥/码头放行，岸边比桥面低一截也允许抬上去。
+            // 水下结构不算桥面。海里石头不算。
             if (TryGetOceanSurfaceY(out float oceanY))
             {
-                const float deckAboveSea = 0.5f;
-                bool onDeckAboveSea = hasStand && standY >= oceanY + deckAboveSea;
-                if (!onDeckAboveSea)
+                float minDeckY = oceanY - NamedDeckSpawnPolicy.OceanDeckBelowSeaSlackMeters;
+                bool planted = IsStandingOnNamedDeck(foot, hasDeck, deckY, deckCol, minDeckY);
+                bool approaching = !planted
+                    && hasDeck
+                    && deckCol != null
+                    && NamedDeckSpawnPolicy.IsFootNearOceanDeck(foot.y, deckY, oceanY);
+                if (!planted
+                    && !approaching
+                    && !HasNamedDeckGrace(foot, minDeckY))
                 {
                     if (TrySampleHeightmapY(foot, out float terrainY))
                     {
@@ -1270,31 +1440,216 @@ namespace Game
                 }
             }
 
-            // 河：水平近河道且竖直也在河面容差内；已站在桥/码头甲板（明显高于河面）则放行。
-            WaterSurfaceProbe probe = GameEntry.World?.WaterProbe;
-            if (probe != null && probe.TryNearestRiver(
-                    foot, RiverQueryRadius, out Vector3 nearest, out _))
+            return false;
+        }
+
+        /// <summary>
+        /// 桥面比岸高、台阶又跨不上去时，这一帧把步高临时抬到桥面。
+        /// 调用方负责在 Move 之后把 stepOffset 设回去，避免顺手爬上石头。
+        /// </summary>
+        void RaiseStepForOceanDeck(Vector3 eye, Vector3 plannedMotion)
+        {
+            if (_cc == null || !_cc.enabled || _heightTransitioning)
+                return;
+            Vector3 foot = eye;
+            foot.y = eye.y - EyeHeight;
+            if (!TryGetOceanSurfaceY(out float oceanY))
+                return;
+            if (!TryDeckForClimb(foot, foot, plannedMotion, out float deckY, out Collider deckCol))
+                return;
+            if (!TargetsDeckBounds(foot, foot, plannedMotion, deckCol.bounds))
+                return;
+            if (!NamedDeckSpawnPolicy.ShouldLiftOntoOceanDeck(foot.y, deckY, oceanY, targetsDeck: true))
+                return;
+            float rise = deckY - foot.y;
+            _cc.stepOffset = Mathf.Min(rise + 0.05f, Mathf.Max(0.05f, _cc.height - 0.01f));
+        }
+
+        /// <summary>
+        /// 摇杆已经指向海水上的桥面，但胶囊被竖直面挡住：直接把脚放到桥面上。
+        /// 只处理高差在上台阶范围内的命名甲板。高桥底下的河床不会被吸上去。
+        /// </summary>
+        void TryClimbOceanDeck(Vector3 beforeEye, Vector3 plannedMotion)
+        {
+            if (!BlockWaterWalking || _heightTransitioning)
+                return;
+            if (!TryGetOceanSurfaceY(out float oceanY))
+                return;
+
+            Vector3 beforeFoot = beforeEye;
+            beforeFoot.y = beforeEye.y - EyeHeight;
+            Vector3 afterEye = transform.position;
+            Vector3 afterFoot = afterEye;
+            afterFoot.y = beforeFoot.y;
+
+            if (!TryDeckForClimb(beforeFoot, afterFoot, plannedMotion, out float deckY, out Collider deckCol))
+                return;
+            Bounds box = deckCol.bounds;
+            if (!TargetsDeckBounds(beforeFoot, afterFoot, plannedMotion, box))
+                return;
+            if (!NamedDeckSpawnPolicy.ShouldLiftOntoOceanDeck(beforeFoot.y, deckY, oceanY, targetsDeck: true))
+                return;
+
+            Vector3 intent = beforeFoot;
+            intent.x += plannedMotion.x;
+            intent.z += plannedMotion.z;
+            Vector3 stand = ContainsXZ(box, intent)
+                ? intent
+                : ContainsXZ(box, afterFoot) ? afterFoot : intent;
+            stand.x = Mathf.Clamp(stand.x, box.min.x, box.max.x);
+            stand.z = Mathf.Clamp(stand.z, box.min.z, box.max.z);
+
+            Vector3 eye = stand;
+            eye.y = deckY + EyeHeight + 0.02f;
+            bool ccOn = _cc != null && _cc.enabled;
+            if (ccOn)
+                _cc.enabled = false;
+            transform.position = eye;
+            Physics.SyncTransforms();
+            if (ccOn)
+                _cc.enabled = true;
+            if (_verticalSpeed < 0f)
+                _verticalSpeed = -GroundStickSpeed;
+            RememberNamedDeck(new Vector3(stand.x, deckY, stand.z), deckY);
+        }
+
+        bool TryDeckForClimb(
+            Vector3 beforeFoot, Vector3 afterFoot, Vector3 plannedMotion,
+            out float deckY, out Collider deckCol)
+        {
+            Vector3 intent = beforeFoot;
+            intent.x += plannedMotion.x;
+            intent.z += plannedMotion.z;
+            if (TryGetNamedDeckStand(intent, out deckY, out deckCol) && deckCol != null)
+                return true;
+            if (TryGetNamedDeckStand(afterFoot, out deckY, out deckCol) && deckCol != null)
+                return true;
+            return TryGetNamedDeckStand(beforeFoot, out deckY, out deckCol) && deckCol != null;
+        }
+
+        static bool TargetsDeckBounds(Vector3 beforeFoot, Vector3 afterFoot, Vector3 planned, Bounds box)
+        {
+            Vector3 intent = beforeFoot;
+            intent.x += planned.x;
+            intent.z += planned.z;
+            bool overlaps = ContainsXZ(box, beforeFoot)
+                || ContainsXZ(box, afterFoot)
+                || ContainsXZ(box, intent);
+            if (!overlaps)
+                return false;
+            if (ContainsXZ(box, beforeFoot))
+                return true;
+            return DistanceToBoundsXZ(beforeFoot, box) <= NamedDeckSpawnPolicy.OceanDeckClimbReachMeters;
+        }
+
+        static bool ContainsXZ(Bounds box, Vector3 p)
+        {
+            return p.x >= box.min.x && p.x <= box.max.x && p.z >= box.min.z && p.z <= box.max.z;
+        }
+
+        static float DistanceToBoundsXZ(Vector3 p, Bounds box)
+        {
+            float dx = 0f;
+            if (p.x < box.min.x)
+                dx = box.min.x - p.x;
+            else if (p.x > box.max.x)
+                dx = p.x - box.max.x;
+            float dz = 0f;
+            if (p.z < box.min.z)
+                dz = box.min.z - p.z;
+            else if (p.z > box.max.z)
+                dz = p.z - box.max.z;
+            return Mathf.Sqrt(dx * dx + dz * dz);
+        }
+
+        /// <summary>脚的水平位置落在海水之上的命名桥面里，不是只被旁边的探针扫到。</summary>
+        bool IsFootPlantedOnNamedOceanDeck(Vector3 foot)
+        {
+            if (!TryGetOceanSurfaceY(out float oceanY))
+                return false;
+            if (!TryGetNamedDeckStand(foot, out float deckY, out Collider deckCol) || deckCol == null)
+                return false;
+            if (!NamedDeckSpawnPolicy.IsOceanDeckSurface(deckY, oceanY))
+                return false;
+            if (foot.y < deckY - DeckFootSlop)
+                return false;
+            return ContainsXZ(deckCol.bounds, foot);
+        }
+
+        /// <summary>
+        /// 脚确实站在高出水面的命名码头/桥上。礁石/地形最高点不算甲板。
+        /// </summary>
+        bool IsStandingOnNamedDeck(
+            Vector3 foot, bool hasDeck, float deckY, Collider deckCol, float minDeckY)
+        {
+            if (!hasDeck || deckCol == null)
+                return false;
+            if (deckY < minDeckY)
+                return false;
+            if (foot.y < deckY - DeckFootSlop)
+                return false;
+            RememberNamedDeck(foot, deckY);
+            return true;
+        }
+
+        void RememberNamedDeck(Vector3 foot, float deckY)
+        {
+            _lastNamedDeckFoot = foot;
+            _lastNamedDeckY = deckY;
+            _namedDeckGraceUntil = Time.time + NamedDeckGraceSeconds;
+        }
+
+        /// <summary>
+        /// 刚还在甲板上：桥段 Box 缝 / 边缘单帧 miss 时不要清零摇杆或拽回岸。
+        /// 只在上一甲板附近且高度仍合理时放行，避免宽限变成海里跑步。
+        /// </summary>
+        bool HasNamedDeckGrace(Vector3 foot, float minDeckY)
+        {
+            if (Time.time > _namedDeckGraceUntil)
+                return false;
+            if (_lastNamedDeckY < minDeckY)
+                return false;
+            float graceR = Mathf.Max(0.75f, BodyRadius * NamedDeckGraceRadiusFactor);
+            float dx = foot.x - _lastNamedDeckFoot.x;
+            float dz = foot.z - _lastNamedDeckFoot.z;
+            if (dx * dx + dz * dz > graceR * graceR)
+                return false;
+            if (foot.y < _lastNamedDeckY - DeckFootSlop)
+                return false;
+            return true;
+        }
+
+        static bool IsNamedDeckCollider(Collider c)
+        {
+            if (c == null)
+                return false;
+
+            // 根常被 SealSpawnedNames 改成 envN；海边码头 Box 在根上，Dock 写在 LOD 子节点名里。
+            Transform self = c.transform;
+            if (NamedDeckSpawnPolicy.MatchesObjectName(self.name))
+                return true;
+
+            Transform p = self.parent;
+            for (int i = 0; i < 6 && p != null; i++, p = p.parent)
             {
-                float dx = foot.x - nearest.x;
-                float dz = foot.z - nearest.z;
-                float xzSq = dx * dx + dz * dz;
-                if (xzSq <= RiverBanRadiusXZ * RiverBanRadiusXZ
-                    && Mathf.Abs(foot.y - nearest.y) <= RiverBanRadiusY)
-                {
-                    const float deckAboveRiver = 0.5f;
-                    if (hasStand && standY >= nearest.y + deckAboveRiver)
-                        return false;
+                if (NamedDeckSpawnPolicy.MatchesObjectName(p.name))
                     return true;
-                }
+            }
+
+            int childCount = self.childCount;
+            for (int i = 0; i < childCount; i++)
+            {
+                if (NamedDeckSpawnPolicy.MatchesObjectName(self.GetChild(i).name))
+                    return true;
             }
 
             return false;
         }
 
-        /// <summary>高度图未过岸线净空 → 海里（含平坦海底）。甲板例外在调用方处理。</summary>
+        /// <summary>高度图不高于海平面 → 海里（含平坦海底）。甲板例外在调用方处理。</summary>
         static bool IsOceanTerrainForbidden(float terrainY, float oceanY)
         {
-            // 与岸线 land 判定对齐：land 须 h > ocean+clearance，故 <= 一律禁。
+            // 只禁真正没过海面的格子。听感 clearance(0.4) 不能拿来禁走。
             return terrainY <= oceanY + OceanWalkMinAboveSea;
         }
 
@@ -1328,30 +1683,47 @@ namespace Game
         }
 
         /// <summary>
-        /// 脚附近最高的朝上碰撞面（码头 BoxCollider 高于海床）。忽略海/河碰撞体本身。
+        /// 身体半径内最高的命名甲板（Dock/Pier/Bridge/Qiao/Deck）。
+        /// 单点射线容易落进相邻 SWS_DemoPier Box 缝，过桥会被禁水清零位移。
         /// </summary>
-        bool TryGetHighestStandY(Vector3 foot, out float standY)
+        bool TryGetNamedDeckStand(Vector3 foot, out float standY, out Collider standCol)
         {
             standY = float.NegativeInfinity;
+            standCol = null;
             const float probeUp = 4f;
             const float probeDown = 6f;
-            Vector3 origin = foot + Vector3.up * probeUp;
             float dist = probeUp + probeDown;
-            int count = Physics.RaycastNonAlloc(
-                origin, Vector3.down, GroundHits, dist, GroundMask,
-                QueryTriggerInteraction.Ignore);
+            // 桥根和岸之间常隔着一截被判成海的高度图。探针要盖住这段，人才能走到板子上。
+            float radius = Mathf.Max(
+                NamedDeckSpawnPolicy.OceanDeckClimbReachMeters,
+                Mathf.Max(0.35f, BodyRadius * 0.85f));
             bool found = false;
-            for (int i = 0; i < count; i++)
+
+            for (int o = 0; o < NamedDeckProbeOffsets.Length; o++)
             {
-                if (GroundHits[i].normal.y < GroundNormalMinY)
-                    continue;
-                if (IsWaterSurfaceCollider(GroundHits[i].collider))
-                    continue;
-                float y = GroundHits[i].point.y;
-                if (y <= standY)
-                    continue;
-                standY = y;
-                found = true;
+                Vector2 xz = NamedDeckProbeOffsets[o] * radius;
+                Vector3 origin = foot;
+                origin.x += xz.x;
+                origin.y += probeUp;
+                origin.z += xz.y;
+                int count = Physics.RaycastNonAlloc(
+                    origin, Vector3.down, GroundHits, dist, GroundMask,
+                    QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < count; i++)
+                {
+                    if (GroundHits[i].normal.y < GroundNormalMinY)
+                        continue;
+                    if (IsWaterSurfaceCollider(GroundHits[i].collider))
+                        continue;
+                    if (!IsNamedDeckCollider(GroundHits[i].collider))
+                        continue;
+                    float y = GroundHits[i].point.y;
+                    if (y <= standY)
+                        continue;
+                    standY = y;
+                    standCol = GroundHits[i].collider;
+                    found = true;
+                }
             }
 
             return found;
@@ -1389,7 +1761,6 @@ namespace Game
 
         static bool TryGetOceanSurfaceY(out float oceanY)
         {
-            oceanY = 0f;
             ISeaLevel sea = IslandSceneComponent.Active != null
                 ? IslandSceneComponent.Active.Sea
                 : null;
@@ -1402,25 +1773,90 @@ namespace Game
             GameObject ocean = IslandWorldService.Instance != null
                 ? IslandWorldService.Instance.OceanInstance
                 : null;
-            if (ocean == null)
-                return false;
-            oceanY = ocean.transform.position.y;
+            if (ocean != null)
+            {
+                oceanY = ocean.transform.position.y;
+                return true;
+            }
+
+            // 海面尚未登记时也不能放行走海底：退回岸线常量。
+            oceanY = AmbienceZoneCatalog.OceanSurfaceY;
             return true;
         }
 
         Vector3 SampleGround(Vector3 worldPos)
         {
             // 高度图贴地，不吃树冠/石头。射线先命中树会把切预设的眼睛抬飞。
+            // 禁止把海底抬成「湿沙公路」——禁走只认高度图相对海平面。
+            _sampledNamedDeck = false;
             TryGroundUnder(worldPos, out Vector3 ground);
-            // 不抬到海平面（否则人站上海面盒）；只托住过深海底到浅滩下限。
-            if (TryGetOceanSurfaceY(out float oceanY))
+            // 桥/码头：高度图是河床或桥下地面时，提示高度已在甲板上就改贴命名甲板。
+            if (TryPreferNamedDeckOverWater(worldPos, ground, out Vector3 deck))
             {
-                float minY = oceanY - OceanBelowSurfaceBan;
-                if (ground.y < minY)
-                    ground.y = minY;
+                _sampledNamedDeck = true;
+                return deck;
             }
 
             return ground;
+        }
+
+        /// <summary>
+        /// 提示点已在命名甲板高度带内时改用甲板，不论脚下高度图算不算禁水。
+        /// 走路误入桥下不会被拽上桥（提示高度仍在河床一带，策略会拒绝）。
+        /// </summary>
+        bool TryPreferNamedDeckOverWater(Vector3 hint, Vector3 terrainGround, out Vector3 deck)
+        {
+            deck = terrainGround;
+            if (!TryNamedDeckUnder(hint, out deck))
+                return false;
+            return NamedDeckSpawnPolicy.ShouldPreferDeckOverWater(
+                hintY: hint.y,
+                terrainY: terrainGround.y,
+                deckY: deck.y,
+                eyeHeight: EyeHeight);
+        }
+
+        /// <summary>落点 footprint 内最高的命名码头/桥面（Dock/Pier/Bridge/Qiao/Deck）。</summary>
+        bool TryNamedDeckUnder(Vector3 worldPos, out Vector3 deck)
+        {
+            deck = worldPos;
+            // 读档/贴地：竖直范围比走路禁水探针更大，提示点可能远高于或略低于桥面。
+            const float probeUp = 8f;
+            const float probeDown = 24f;
+            float dist = probeUp + probeDown;
+            float radius = Mathf.Max(0.35f, BodyRadius * 0.85f);
+            float bestY = float.NegativeInfinity;
+            bool found = false;
+            for (int o = 0; o < NamedDeckProbeOffsets.Length; o++)
+            {
+                Vector2 xz = NamedDeckProbeOffsets[o] * radius;
+                Vector3 origin = worldPos;
+                origin.x += xz.x;
+                origin.y += probeUp;
+                origin.z += xz.y;
+                int count = Physics.RaycastNonAlloc(
+                    origin, Vector3.down, GroundHits, dist, GroundMask,
+                    QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < count; i++)
+                {
+                    if (GroundHits[i].normal.y < GroundNormalMinY)
+                        continue;
+                    if (IsWaterSurfaceCollider(GroundHits[i].collider))
+                        continue;
+                    if (!IsNamedDeckCollider(GroundHits[i].collider))
+                        continue;
+                    float y = GroundHits[i].point.y;
+                    if (y <= bestY)
+                        continue;
+                    bestY = y;
+                    found = true;
+                }
+            }
+
+            if (!found)
+                return false;
+            deck = new Vector3(worldPos.x, bestY, worldPos.z);
+            return true;
         }
 
         // ─── Render-scale / FOV ────────────────────────────────────────────────────

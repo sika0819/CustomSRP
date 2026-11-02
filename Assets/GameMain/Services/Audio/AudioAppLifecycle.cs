@@ -43,6 +43,14 @@ namespace Game
         {
             _needsRestore = false;
             _inBackground = false;
+            IslandAudioSession.ResetStartupGate();
+        }
+
+        /// <summary>揭罩时人已在前台并且解 mute 成功：清掉加载期间留下的恢复闩。</summary>
+        public static void NoteForegroundAudibleStarted()
+        {
+            _needsRestore = false;
+            _inBackground = false;
         }
 
         /// <summary>
@@ -99,8 +107,15 @@ namespace Game
         static void EnterBackground()
         {
             _needsRestore = true;
+            // 锁屏曲终：主线程预热 JNI GlobalRef + 再推传输计划，避免回调线程 FindClass / 计划过期。
+            BoluoAndroidEngineNative.WarmBackgroundEndedJni();
+            BackgroundTransportSync.PublishPlan();
             BoluoAndroidEngineNative.NotifyAppLifecycle(
                 true, BackgroundPlayPolicyCallback.GetBackgroundPlayDisable());
+            // 启动期还没在前台出过声，或对方播放器已抢走焦点：音乐会停，声景必须一起停。
+            // 已稳定出声且仍允许后台播时不闩，避免 HOME 把还在响的环境声掐掉。
+            if (ShouldYieldContentOnBackground())
+                IslandAudioSession.HoldYield("background-yield");
             Log.Info("[AudioAppLifecycle] enter background — restore armed");
         }
 
@@ -182,6 +197,8 @@ namespace Game
             }
 
             _needsRestore = false;
+            IslandAudioSession.ClearYieldHold();
+            IslandAudioSession.NoteAudibleCommitted();
 
             // 3. 平台层：抢回 AudioFocus（原生必要时 reset + 重播）。前后台态已在解 mute 前同步。
             BoluoAndroidEngineNative.ReclaimFocusOnForeground();
@@ -208,6 +225,7 @@ namespace Game
         /// <summary>
         /// 后台续播且没有被系统打断、用户也没暂停：回前台不要碰引擎。
         /// 播放设备状态在 Unity pause/resume 间会短暂离开 Started，不能拿它当「已经停了」。
+        /// 内容声已被闩 / 原生仍因丢焦 mute：必须走完整恢复（音乐 + 声景一起拉起）。
         /// </summary>
         static bool CanKeepAudibleAcrossLifecycle()
         {
@@ -219,7 +237,30 @@ namespace Game
                 return false;
             if (!WanosEngine.IsPlaybackEnabled)
                 return false;
+            if (IslandAudioSession.Instance != null && IslandAudioSession.Instance.IsContentAudioPaused)
+                return false;
+            if (IslandAudioSession.IsYieldHeld)
+                return false;
+            if (BoluoAndroidEngineNative.NeedsForegroundVoiceRestore())
+                return false;
             return true;
+        }
+
+        /// <summary>
+        /// 进后台时是否要把声景和音乐一起让出去。
+        /// 启动期尚未在前台出声：一切走就停。已经出过声则只在禁后台播或对方持有焦点时停。
+        /// </summary>
+        static bool ShouldYieldContentOnBackground()
+        {
+            if (BackgroundPlayPolicyCallback.GetBackgroundPlayDisable())
+                return true;
+            if (!IslandAudioSession.AudibleCommitted)
+                return true;
+            if (!BoluoAudioSessionNative.AllowUnmuteNow())
+                return true;
+            if (!BoluoAndroidEngineNative.AllowUnmuteNow())
+                return true;
+            return false;
         }
     }
 }

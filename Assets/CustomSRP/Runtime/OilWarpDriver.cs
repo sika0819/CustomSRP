@@ -4,7 +4,7 @@ using UnityEngine;
 namespace CustomSRP
 {
     /// <summary>
-    /// Immersive breath → oil UV-warp globals for OilWarpPass.
+    /// Former immersive breath → oil UV-warp driver. Pass is hard-off; SetImmersiveWarp is no-op.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class OilWarpDriver : MonoBehaviour, IOilWarpVisualDriver
@@ -58,23 +58,17 @@ namespace CustomSRP
 
         public void SetImmersiveWarp(float breath01, float weight01, float phaseRadians)
         {
-            float weight = Mathf.Clamp01(weight01);
-            // Stand / walk / exit: weight 0 → strength 0 so OilWarpPass.IsActive is false
-            // and the full-screen warp RT is not allocated.
-            if (weight <= 1e-4f)
+            // Immersion no longer uses full-screen UV warp (looks bad; also costs a color RT).
+            // Keep the hook so callers compile, but always force strength 0.
+            _ = breath01;
+            _ = weight01;
+            _ = phaseRadians;
+            if (_strength > 1e-4f || _phaseRadians != 0f)
             {
                 _strength = 0f;
                 _phaseRadians = 0f;
                 PushGlobals();
-                return;
             }
-
-            // Breath only pulses a little — keep a floor so oil never rests while immersive.
-            const float BreathFloor = 0.72f;
-            float breath = Mathf.Lerp(BreathFloor, 1f, Mathf.Clamp01(breath01));
-            _strength = breath * weight;
-            _phaseRadians = phaseRadians;
-            PushGlobals();
         }
 
         public void SetScale(float scale) => _scale = Mathf.Max(0.1f, scale);

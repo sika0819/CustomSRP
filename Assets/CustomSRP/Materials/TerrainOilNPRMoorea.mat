@@ -87,7 +87,7 @@ Material:
     - _CanvasStrength: 0.08
     - _EdgeStrength: 0.4
     - _InternalEdge: 0
-    - _OilDetail: 0.2
+    - _OilDetail: 0.42
     - _Metallic0: 0
     - _Metallic1: 0
     - _Metallic2: 0
@@ -104,14 +104,14 @@ Material:
     - _RidgeAmount: 1
     - _ShadeLift: 0.42
     - _ShadeSteps: 4
-    - _ShadowBrushScale: 1.35
+    - _ShadowBrushScale: 1.2
     - _ShadowLift: 1.05
-    - _ShadowWobble: 0.55
-    - _Smoothness0: 0.25
-    - _Smoothness1: 0.25
-    - _Smoothness2: 0.25
-    - _Smoothness3: 0.25
-    - _SpecularThreshold: 0.88
+    - _ShadowWobble: 0.4
+    - _Smoothness0: 0.08
+    - _Smoothness1: 0.08
+    - _Smoothness2: 0.08
+    - _Smoothness3: 0.08
+    - _SpecularThreshold: 0.94
     - _TerrainHeight: 1185
     - _TerrainWorldSize: 16500
     m_Colors:
@@ -120,6 +120,6 @@ Material:
     - _EdgeColor: {r: 0.28, g: 0.22, b: 0.16, a: 1}
     - _ShadowTint: {r: 0.34, g: 0.3, b: 0.64, a: 1}
     - _ShadowWarm: {r: 0.42, g: 0.36, b: 0.52, a: 1}
-    - _SpecularColor: {r: 0.42, g: 0.36, b: 0.28, a: 1}
+    - _SpecularColor: {r: 0.18, g: 0.16, b: 0.14, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

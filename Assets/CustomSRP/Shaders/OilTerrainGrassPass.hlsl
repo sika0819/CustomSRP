@@ -40,7 +40,7 @@ half3 OilTerrainGrassVertexLit(half3 albedo, half3 normalWS, float3 positionWS)
 
     if (GetDirectionalLightCount() > 0)
     {
-        DirectionalLightData lightData = _DirectionalLightData[0];
+        DirectionalLightData lightData = GetDirectionalLightData(0);
         lightColor = (half3)lightData.color.rgb;
         L = (half3)lightData.directionAndMask.xyz;
         lightLum = OilVegMainLightLuma(lightColor);
@@ -92,6 +92,9 @@ struct Varyings
     half fade : TEXCOORD2;
     half useTex : TEXCOORD3;
     half3 normalWS : TEXCOORD4;
+    // Blade height 0 root → 1 tip (pre-atlas). Flowers skip root darken.
+    half tip : TEXCOORD5;
+    half isFlower : TEXCOORD6;
 };
 
 Varyings OilTerrainGrassPassVertex(Attributes input)
@@ -158,6 +161,8 @@ Varyings OilTerrainGrassPassVertex(Attributes input)
     output.uv = TRANSFORM_TEX(uv, _GrassTexture);
     output.fade = fade;
     output.useTex = 1.0h;
+    output.tip = (half)tip;
+    output.isFlower = flower ? 1.0h : 0.0h;
 
     half3 n = normalize(half3(0, 1, 0) + (_RandomNormal * hash) * (half3)windDir);
     output.normalWS = n;
@@ -173,7 +178,15 @@ half4 OilTerrainGrassPassFragment(Varyings input) : SV_TARGET
     half clipT = input.useTex > 0.5h ? min((half)_AlphaClip, 0.34h) : (half)_AlphaClip;
     clip(alpha - clipT);
 
-    half3 rgb = OilTerrainGrassVertexLit(tex.rgb, input.normalWS, input.positionWS);
+    // Flowers: raw atlas color (no green volume). Grass: mild root darken only.
+    half3 albedo = tex.rgb;
+    if (input.isFlower < 0.5h)
+    {
+        half root = 1.0h - saturate(input.tip);
+        root *= root;
+        albedo *= lerp(1.0h, 0.84h, root);
+    }
+    half3 rgb = OilTerrainGrassVertexLit(albedo, input.normalWS, input.positionWS);
 
     float viewZ = -TransformWorldToView(input.positionWS).z;
 #if defined(OIL_MOBILE_PERF)

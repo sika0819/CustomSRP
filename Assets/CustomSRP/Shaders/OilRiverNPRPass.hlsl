@@ -64,7 +64,7 @@ bool OilRiverResolveSun(out float3 L)
         return false;
     }
 
-    L = _DirectionalLightData[0].directionAndMask.xyz;
+    L = GetDirectionalLightData(0).directionAndMask.xyz;
     return length(L) > 0.05;
 }
 
@@ -148,15 +148,12 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     half3 lightN = half3(0.0h, 1.0h, 0.0h);
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
 
-    // 对齐海：深/浅水色 + Monet 笔触主导 albedo。
-    half3 albedo = lerp(_ShallowColor.rgb, _BaseColor.rgb, 0.45h);
-    albedo *= (half)_AlbedoBoost;
+    half3 albedo = OilInlandWaterPigment();
 
     half3 paint = SampleRiverPaint(paintSt);
     half stroke = PaintStroke(PaintLuma(paint), (half)_PaintContrast);
     half relief = saturate((half)_PaintRelief);
-    albedo = lerp(albedo, paint, relief);
-    albedo = ImpastoDeviation(albedo, stroke, relief * 0.55h);
+    albedo = ImpastoStrokeAlbedo(albedo, paint, stroke, relief * 0.55h);
 
     Fragment fragment = GetFragment(input.positionCS_SS);
     half2 shore = OilRiverShoreFoamMask(
@@ -226,8 +223,8 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
     color = (half3)ApplyOilFog((float3)color, surface.depth, stroke, input.positionWS);
 #endif
 
-    // 对齐海：雾后叠天空/平面倒影（山/岸来自镜子 RT）；岸沫区压 openWater。
-    color = ApplyOilWaterReflection(
+    // 倒影釉用同一块水色。白天 0.78，满铺会把清晨和黄昏的天空铺白。
+    color = ApplyOilWaterReflectionEx(
         color,
         input.positionWS,
         normalWS,
@@ -236,7 +233,12 @@ half4 OilRiverNPRPassFragment(Varyings input) : SV_TARGET
         (1.0h - shoreMask) * (1.0h - shoreWash),
         fragment.screenUV,
         0.35h,
-        3.0h);
+        3.0h,
+        lerp(0.78h, 0.40h, night),
+        OilInlandWaterPigment(),
+        OilInlandWaterPigment(),
+        false);
+    color = OilInlandWaterHoldHue(color, OilInlandWaterPigment());
 
     half glint = OilRiverSunGlint(input.positionWS, normalWS, t, stroke);
     glint *= (1.0h - shoreMask * 0.85h);

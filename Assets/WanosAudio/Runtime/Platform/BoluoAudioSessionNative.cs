@@ -52,6 +52,21 @@ namespace WanosAudio
 
         [DllImport(Lib)]
         private static extern int BoluoAudioSession_AllowUnmuteNow();
+
+        [DllImport(Lib)]
+        private static extern void WanosMusicPlayer_NoteUnityMusicVoice(ulong instanceId);
+
+        [DllImport(Lib)]
+        private static extern int WanosMusicPlayer_TryHandleBackgroundTrackEnded(ulong instanceId);
+
+        [DllImport(Lib)]
+        private static extern void WanosMusicPlayer_NoteUnityMusicContext(int playMode, int albumIndex, int trackIndex);
+
+        [DllImport(Lib)]
+        private static extern int BoluoMusicPlayerIOS_ClaimVoiceResume(string eventName);
+
+        [DllImport(Lib)]
+        private static extern int BoluoMusicPlayerIOS_WasVoiceResumeClaimedRecently();
 #endif
         /// <summary>
         /// 追加音频诊断行。统一过滤字段 <c>[BoluoAudioDbg]</c>（iOS trail 文件 + console；其它平台 Debug.Log）。
@@ -159,6 +174,30 @@ namespace WanosAudio
 #endif
         }
 
+        /// <summary>
+        /// 回前台同一 Resume 事件只发一次。true 表示调用方应该 Post。
+        /// </summary>
+        public static bool ClaimVoiceResume(string eventName)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            try { return BoluoMusicPlayerIOS_ClaimVoiceResume(eventName ?? "") != 0; }
+            catch { return true; }
+#else
+            return true;
+#endif
+        }
+
+        /// <summary>窗口内已经发过 Resume_ALL 或 Resume_Music。用来跳过再压一次增益。</summary>
+        public static bool WasVoiceResumeClaimedRecently()
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            try { return BoluoMusicPlayerIOS_WasVoiceResumeClaimedRecently() != 0; }
+            catch { return false; }
+#else
+            return false;
+#endif
+        }
+
         /// <summary>Unity KeepSilent 后同步桥接「未在出声」，避免把静音启动记成可恢复播放。</summary>
         public static void NoteUnitySilent()
         {
@@ -185,6 +224,35 @@ namespace WanosAudio
         {
 #if UNITY_IOS && !UNITY_EDITOR
             WanosMusicPlayer_NativeSetPaths(persistent, streaming);
+#endif
+        }
+
+        public static void NoteUnityMusicVoice(ulong instanceId)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            try { WanosMusicPlayer_NoteUnityMusicVoice(instanceId); }
+            catch { /* 未强链时忽略 */ }
+#endif
+        }
+
+        public static bool TryHandleBackgroundMusicEnded(ulong instanceId)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            try { return WanosMusicPlayer_TryHandleBackgroundTrackEnded(instanceId) != 0; }
+            catch { return false; }
+#else
+            return false;
+#endif
+        }
+
+        /// <summary>
+        /// playMode 为 C# MusicPlayMode（1 单曲 / 2 列表 / 3 随机）。
+        /// </summary>
+        public static void NoteUnityMusicContext(int playMode, int albumIndex, int trackIndex)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            try { WanosMusicPlayer_NoteUnityMusicContext(playMode, albumIndex, trackIndex); }
+            catch { /* 未强链时忽略 */ }
 #endif
         }
     }

@@ -29,7 +29,21 @@ namespace Game
 
         const int MaxSamplesPerSurface = 128;
 
+        /// <summary>
+        /// 离散采样 Voronoi 边界 sticky 偏置（米）。对齐海岸
+        /// <see cref="AmbienceZoneCatalog.OceanShoreStickBiasMeters"/>。
+        /// </summary>
+        public const float ShellStickBiasMeters = 6f;
+
+        /// <summary>
+        /// 邻点线段投影搜索半径。河 bounds 采样沿长轴可疏到 ~20m，
+        /// 比海岸 8m 网格更宽，否则沿河 shell 仍会在样点之间阶跃。
+        /// </summary>
+        public const float ShellNeighborSegmentMeters = 24f;
+
         readonly List<Surface> Surfaces = new List<Surface>(8);
+        Vector3[] _flatRiver = System.Array.Empty<Vector3>();
+        Vector3[] _flatFall = System.Array.Empty<Vector3>();
         GameObject _sourceRoot;
         bool _built;
 
@@ -45,6 +59,8 @@ namespace Game
         public void Clear()
         {
             Surfaces.Clear();
+            _flatRiver = System.Array.Empty<Vector3>();
+            _flatFall = System.Array.Empty<Vector3>();
             _sourceRoot = null;
             _built = false;
         }
@@ -55,6 +71,8 @@ namespace Game
             GameObject root = world != null ? world.InlandWaterInstance : null;
 
             Surfaces.Clear();
+            _flatRiver = System.Array.Empty<Vector3>();
+            _flatFall = System.Array.Empty<Vector3>();
             _sourceRoot = root;
             _built = true;
 
@@ -75,6 +93,8 @@ namespace Game
                     Surfaces.Add(surface);
             }
 
+            RebuildFlatCaches();
+
             var names = new System.Text.StringBuilder();
             for (int i = 0; i < Surfaces.Count; i++)
             {
@@ -83,7 +103,45 @@ namespace Game
                 names.Append(Surfaces[i].Name).Append('=').Append(Surfaces[i].Points.Length);
             }
 
-            Log.Info($"[WaterProbe] rebuilt surfaces={Surfaces.Count} [{names}]");
+            Log.Info(
+                $"[WaterProbe] rebuilt surfaces={Surfaces.Count} riverPts={_flatRiver.Length} fallPts={_flatFall.Length} [{names}]");
+        }
+
+        void RebuildFlatCaches()
+        {
+            int riverN = 0;
+            int fallN = 0;
+            for (int i = 0; i < Surfaces.Count; i++)
+            {
+                var s = Surfaces[i];
+                if (s?.Points == null)
+                    continue;
+                if (s.Kind == SurfaceKind.River)
+                    riverN += s.Points.Length;
+                else if (s.Kind == SurfaceKind.Waterfall)
+                    fallN += s.Points.Length;
+            }
+
+            _flatRiver = riverN > 0 ? new Vector3[riverN] : System.Array.Empty<Vector3>();
+            _flatFall = fallN > 0 ? new Vector3[fallN] : System.Array.Empty<Vector3>();
+            int ri = 0;
+            int fi = 0;
+            for (int i = 0; i < Surfaces.Count; i++)
+            {
+                var s = Surfaces[i];
+                if (s?.Points == null)
+                    continue;
+                if (s.Kind == SurfaceKind.River)
+                {
+                    for (int j = 0; j < s.Points.Length; j++)
+                        _flatRiver[ri++] = s.Points[j];
+                }
+                else if (s.Kind == SurfaceKind.Waterfall)
+                {
+                    for (int j = 0; j < s.Points.Length; j++)
+                        _flatFall[fi++] = s.Points[j];
+                }
+            }
         }
 
         void EnsureBuilt()
@@ -108,30 +166,125 @@ namespace Game
             SurfaceKind kind, Vector3 listener,
             out Vector3 closest, out float dist)
         {
+            int sticky = -1;
+            return TryNearestShell(kind, listener, ref sticky, out closest, out dist);
+        }
+
+        /// <summary>
+        /// 水平 shell：sticky + 邻点线段投影。沿河走时距离不再在离散样点 Voronoi
+        /// 边界阶跃（否则 Point/增益曲线会忽大忽小）。
+        /// <paramref name="stickyIndex"/> 传入上次命中的扁平下标（无则 -1），成功后写回。
+        /// </summary>
+        public bool TryNearestShell(
+            SurfaceKind kind, Vector3 listener, ref int stickyIndex,
+            out Vector3 closest, out float dist)
+        {
+            EnsureBuilt();
+            Vector3[] flat = kind == SurfaceKind.River ? _flatRiver : _flatFall;
+            return ResolveShell(flat, listener, ref stickyIndex, out closest, out dist);
+        }
+
+        /// <summary>
+        /// 对扁平样点做 sticky + XZ 线段投影。供运行时与单测共用。
+        /// </summary>
+        public static bool ResolveShell(
+            Vector3[] flat, Vector3 listener, ref int stickyIndex,
+            out Vector3 closest, out float dist,
+            float stickBiasMeters = ShellStickBiasMeters,
+            float neighborMeters = ShellNeighborSegmentMeters)
+        {
             closest = default;
             dist = float.MaxValue;
-            EnsureBuilt();
-
-            bool any = false;
-            for (int i = 0; i < Surfaces.Count; i++)
+            if (flat == null || flat.Length == 0)
             {
-                var s = Surfaces[i];
-                if (s == null || s.Kind != kind || s.Points == null || s.Points.Length == 0)
-                    continue;
+                stickyIndex = -1;
+                return false;
+            }
 
-                if (DistanceToBounds(s.Bounds, listener) >= dist)
+            float bestSq = float.PositiveInfinity;
+            int best = -1;
+            for (int i = 0; i < flat.Length; i++)
+            {
+                float sq = HorizontalSq(listener, flat[i]);
+                if (sq >= bestSq)
                     continue;
+                bestSq = sq;
+                best = i;
+            }
 
-                float d = DistanceToSurface(s, listener, out Vector3 point);
-                if (d < dist)
+            if (best < 0)
+            {
+                stickyIndex = -1;
+                return false;
+            }
+
+            if ((uint)stickyIndex < (uint)flat.Length)
+            {
+                float stickySq = HorizontalSq(listener, flat[stickyIndex]);
+                float bias = Mathf.Max(0f, stickBiasMeters);
+                if (stickySq <= bestSq + bias * bias)
                 {
-                    dist = d;
-                    closest = point;
-                    any = true;
+                    best = stickyIndex;
+                    bestSq = stickySq;
                 }
             }
 
-            return any;
+            stickyIndex = best;
+            Vector3 bestPt = flat[best];
+            float bestDist = Mathf.Sqrt(bestSq);
+            Vector3 bestShore = bestPt;
+
+            float neighborMax = Mathf.Max(0f, neighborMeters);
+            float neighborMaxSq = neighborMax * neighborMax;
+            for (int i = 0; i < flat.Length; i++)
+            {
+                if (i == best)
+                    continue;
+                if (HorizontalSq(bestPt, flat[i]) > neighborMaxSq)
+                    continue;
+                if (!TryProjectToSegmentXZ(listener, bestPt, flat[i], out Vector3 proj, out float d))
+                    continue;
+                if (d >= bestDist)
+                    continue;
+                bestDist = d;
+                bestShore = proj;
+            }
+
+            closest = bestShore;
+            dist = bestDist;
+            return true;
+        }
+
+        static float HorizontalSq(Vector3 a, Vector3 b)
+        {
+            float dx = a.x - b.x;
+            float dz = a.z - b.z;
+            return dx * dx + dz * dz;
+        }
+
+        static bool TryProjectToSegmentXZ(
+            Vector3 listener, Vector3 a, Vector3 b, out Vector3 proj, out float dist)
+        {
+            float abx = b.x - a.x;
+            float abz = b.z - a.z;
+            float abLenSq = abx * abx + abz * abz;
+            float t = 0f;
+            if (abLenSq > 1e-6f)
+            {
+                float apx = listener.x - a.x;
+                float apz = listener.z - a.z;
+                t = Mathf.Clamp01((apx * abx + apz * abz) / abLenSq);
+            }
+
+            // Y 沿线段插值，发射器高度贴水面而不是听者脚底。
+            proj = new Vector3(
+                a.x + abx * t,
+                a.y + (b.y - a.y) * t,
+                a.z + abz * t);
+            float dx = listener.x - proj.x;
+            float dz = listener.z - proj.z;
+            dist = Mathf.Sqrt(dx * dx + dz * dz);
+            return true;
         }
 
         public bool TryNearestRiver(
@@ -154,32 +307,6 @@ namespace Game
                 for (int j = 0; j < s.Points.Length; j++)
                     dst.Add(s.Points[j]);
             }
-        }
-
-        float DistanceToBounds(Bounds b, Vector3 p)
-        {
-            float dx = Mathf.Max(b.min.x - p.x, 0f) + Mathf.Max(p.x - b.max.x, 0f);
-            float dy = Mathf.Max(b.min.y - p.y, 0f) + Mathf.Max(p.y - b.max.y, 0f);
-            float dz = Mathf.Max(b.min.z - p.z, 0f) + Mathf.Max(p.z - b.max.z, 0f);
-            return Mathf.Sqrt(dx * dx + dy * dy + dz * dz);
-        }
-
-        float DistanceToSurface(Surface s, Vector3 listener, out Vector3 closest)
-        {
-            closest = s.Points[0];
-            float bestSq = float.MaxValue;
-            for (int i = 0; i < s.Points.Length; i++)
-            {
-                float dx = s.Points[i].x - listener.x;
-                float dy = s.Points[i].y - listener.y;
-                float dz = s.Points[i].z - listener.z;
-                float sq = dx * dx + dy * dy + dz * dz;
-                if (sq >= bestSq)
-                    continue;
-                bestSq = sq;
-                closest = s.Points[i];
-            }
-            return Mathf.Sqrt(bestSq);
         }
 
         Surface BuildSurface(Transform t)

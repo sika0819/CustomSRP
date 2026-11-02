@@ -19,9 +19,13 @@ namespace CustomSRP
         };
 
         RendererListHandle _list;
+        bool _invertCulling;
 
         void Render(UnsafeGraphContext context)
         {
+            // Absolute, not a toggle. The mirror pass must flip winding or
+            // Cull Back drops the island and trees. The main camera passes false.
+            context.cmd.SetInvertCulling(_invertCulling);
             context.cmd.DrawRendererList(_list);
         }
 
@@ -32,11 +36,13 @@ namespace CustomSRP
             uint renderingLayerMask,
             bool opaque,
             in CameraRendererTextures textures,
-            in LightResources lightResources)
+            in LightResources lightResources,
+            bool invertCulling = false)
         {
             ProfilingSampler sampler = opaque ? SamplerOpaque : SamplerTransparent;
             using IUnsafeRenderGraphBuilder builder = renderGraph.AddUnsafePass(
                 sampler.name, out GeometryPass pass, sampler);
+            pass._invertCulling = invertCulling;
 
             pass._list = renderGraph.CreateRendererList(
                 new RendererListDesc(ShaderTagIds, cullingResults, camera)

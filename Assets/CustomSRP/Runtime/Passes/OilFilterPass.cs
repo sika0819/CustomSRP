@@ -9,6 +9,7 @@ namespace CustomSRP
 {
     /// <summary>
     /// Low-cost edge wet-oil after Bloom, before color grading (fwidth + 4 taps).
+    /// Editor capture boost switches to <see cref="PostFXStack.Pass.OilFilterHq"/> (16-tap).
     /// </summary>
     public class OilFilterPass
     {
@@ -26,6 +27,7 @@ namespace CustomSRP
             HasDepthId = Shader.PropertyToID("_OilFilterHasDepth"),
             RadiusScaleId = Shader.PropertyToID("_OilFilterRadiusScale"),
             StrengthId = Shader.PropertyToID("_OilFilterStrength"),
+            CaptureMaxId = Shader.PropertyToID("_OilFilterCaptureMax"),
             DepthCopyId = Shader.PropertyToID("_CameraDepthTexture");
 
         TextureHandle _source;
@@ -46,12 +48,12 @@ namespace CustomSRP
             float scale = RadiusRefShortSide / shortSide;
             if (shortSide < RadiusRefShortSide)
                 scale = Mathf.Min(scale, SmallBufferCap(shortSide));
-            return Mathf.Clamp(scale, 0.45f, 1f);
+            return Mathf.Clamp(scale, 0.35f, 1f);
         }
 
         /// <summary>
         /// Edge blend. 1080+ stays authored; phone half-res eases so standstill
-        /// wet-oil does not replace the edge. Short side 540 → 0.73, 1080 → 1.
+        /// wet-oil does not wash the edge soft. Short side 540 → ~0.58, 1080 → 1.
         /// </summary>
         public static float ComputeStrength(int bufferWidth, int bufferHeight)
         {
@@ -66,11 +68,11 @@ namespace CustomSRP
             return Mathf.Max(1, Mathf.Min(bufferWidth, bufferHeight));
         }
 
-        // Short side 540 → 0.73, 1080 → 1. Continuous so a resolution step does not pop.
+        // Short side 540 → ~0.58, 1080 → 1. Tighter than before so half-res stays crisp.
         static float SmallBufferCap(int shortSide)
         {
             float t = shortSide / RadiusRefShortSide;
-            return Mathf.Lerp(0.45f, 1f, t);
+            return Mathf.Lerp(0.30f, 1f, t);
         }
 
         void Render(UnsafeGraphContext context)
@@ -82,15 +84,19 @@ namespace CustomSRP
                 int h = Mathf.Max(1, _bufferSize.y);
                 buffer.SetGlobalVector(TexelSizeId, new Vector4(1f / w, 1f / h, w, h));
                 buffer.SetGlobalFloat(HasDepthId, _hasDepth ? 1f : 0f);
-                buffer.SetGlobalFloat(RadiusScaleId, ComputeRadiusScale(w, h));
+                buffer.SetGlobalFloat(
+                    RadiusScaleId, OilFilter.ResolveRadiusScale(ComputeRadiusScale(w, h)));
                 float authored = _stack.Settings != null
-                    ? Mathf.Clamp(_stack.Settings.OilFilter.strength, 0.05f, 1f)
+                    ? _stack.Settings.OilFilter.strength
                     : 0.45f;
+                authored = OilFilter.ResolveStrength(authored);
                 buffer.SetGlobalFloat(StrengthId, ComputeStrength(w, h) * authored);
+                buffer.SetGlobalFloat(CaptureMaxId, OilFilter.CaptureMax ? 1f : 0f);
                 if (_hasDepth)
                     buffer.SetGlobalTexture(DepthCopyId, _depth);
 
-                _stack.Draw(buffer, _source, _result, Pass.OilFilter);
+                Pass oilPass = OilFilter.ForceHighQuality ? Pass.OilFilterHq : Pass.OilFilter;
+                _stack.Draw(buffer, _source, _result, oilPass);
             }
         }
 

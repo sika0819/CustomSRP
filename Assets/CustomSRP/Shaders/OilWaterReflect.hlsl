@@ -6,6 +6,12 @@ TEXTURE2D(_OilPlanarReflectTex);
 SAMPLER(sampler_OilPlanarReflectTex);
 float4 _OilPlanarReflectTex_TexelSize;
 float _OilPlanarReflectOn;
+float _OilPlanarPlaneY;
+// 海/河把滑条放进材质 cbuffer。瀑布不画平面倒影，这里补一份，避免 Metal 报未声明。
+#ifndef OIL_REFLECT_STRENGTH_DECLARED
+#define OIL_REFLECT_STRENGTH_DECLARED
+float _ReflectStrength;
+#endif
 
 float _OilSkyPeriod;
 float _OilSkyLookReady;
@@ -34,6 +40,57 @@ half OilWaterNightWeight(float period)
     period = period - floor(period * 0.25) * 4.0;
     float d = min(abs(period - 3.0), min(abs(period + 1.0), abs(period - 7.0)));
     return saturate(1.0 - d * 1.15);
+}
+
+// 白天是河面 Deep × 0.85。夜晚收到深青，河和瀑布仍同一块颜色。
+// 釉面若继续用白天的天蓝，夜里会被重新铺亮。
+half3 OilInlandWaterPigment()
+{
+    half3 day = half3(0.52156866h, 0.7921569h, 0.9647059h) * 0.85h;
+    // 去掉一层白。清晨、白天、黄昏的天空釉才不会把河和瀑布铺成奶色。
+    half floorW = min(day.r, min(day.g, day.b));
+    day -= floorW * 0.28h;
+    half night = OilWaterNightWeight(_OilSkyPeriod);
+    half3 nightCol = half3(0.045h, 0.062h, 0.14h);
+    return lerp(day, nightCol, night);
+}
+
+// 黄昏锚在 period 2。午和夜都是 0，避免把已经压暗的夜再染一遍。
+half OilWaterDuskWeight(float period)
+{
+    if (period < 0.0 || period > 4.0)
+    {
+        period = 1.0;
+    }
+    period = period - floor(period * 0.25) * 4.0;
+    return saturate(1.0 - abs(period - 2.0) * 2.2);
+}
+
+// 黄昏地平是暖褐 #A07858，主光是 #E0C4A0。和天蓝相加饱和度掉到大约 0.04，看起来是灰白。
+// 只把这种低饱和亮灰染回水色。树的绿、日道的黄饱和度更高，留在原色上。
+half3 OilInlandWaterHoldHue(half3 color, half3 pigment)
+{
+    half dusk = OilWaterDuskWeight(_OilSkyPeriod);
+    if (dusk < 0.02h)
+    {
+        return color;
+    }
+
+    half maxC = max(color.r, max(color.g, color.b));
+    half minC = min(color.r, min(color.g, color.b));
+    half sat = (maxC - minC) / max(maxC, 1e-3h);
+    half chalk = saturate((0.38h - sat) / 0.38h);
+    chalk *= saturate((maxC - 0.28h) / 0.22h);
+    half dye = dusk * chalk;
+    if (dye < 0.02h)
+    {
+        return color;
+    }
+
+    half pL = max(pigment.r, max(pigment.g, pigment.b));
+    half3 chr = pigment / max(pL, 1e-3h);
+    half3 dyed = chr * (maxC * lerp(1.0h, 0.68h, dusk));
+    return lerp(color, dyed, dye);
 }
 
 // Keep in sync with OilSkyboxNPRPass.hlsl PeriodLookFallback — same Camera_1 anchors
@@ -249,7 +306,7 @@ half3 OilWaterPosterizeLuma(half3 c, half steps)
     return c * (L > 1e-4h ? (Lq / L) : 1.0h);
 }
 
-half3 ApplyOilWaterReflection(
+half3 ApplyOilWaterReflectionEx(
     half3 color,
     float3 positionWS,
     half3 normalWS,
@@ -258,10 +315,14 @@ half3 ApplyOilWaterReflection(
     half openWater,
     float2 screenUV,
     half distort,
-    half reflectSteps)
+    half reflectSteps,
+    half reflectStrength,
+    half3 deepCol,
+    half3 shallowCol,
+    bool gatePlane)
 {
     // strength 用入参路径的材质常量；俯视时也要能明显拉开 0↔1（旧 nadir×0.2 体感「没反应」）。
-    half strength = (half)_ReflectStrength * saturate(openWater);
+    half strength = reflectStrength * saturate(openWater);
     if (strength < 0.01h)
     {
         return color;
@@ -298,8 +359,8 @@ half3 ApplyOilWaterReflection(
 
     // 解析天空略往水体收；过亮压 chalk。平面山体倒影叠在后面，不受 keep 冲掉。
     half3 waterTint = lerp(
-        (half3)_BaseColor.rgb,
-        (half3)_ShallowColor.rgb,
+        deepCol,
+        shallowCol,
         saturate(fresnel * 1.3h + 0.25h));
     {
         half rb = (waterTint.r + waterTint.b) * 0.5h;
@@ -350,56 +411,49 @@ half3 ApplyOilWaterReflection(
         }
     }
 
-    if (_OilPlanarReflectOn > 0.5)
+    // 海和河跟 59cf380 一样，屏幕 UV 直接采海平面那张镜子。
+    // 瀑布帘身离海平面远，贴上岛会整面是山，仍用高度门。
+    bool onPlane = !gatePlane || abs(positionWS.y - _OilPlanarPlaneY) < 6.0;
+    if (_OilPlanarReflectOn > 0.5 && onPlane)
     {
         float2 uv = screenUV;
-        // 波浪法线直接进 UV（0.85），再加笔触底噪——平静处也能糊掉低分辨率锯齿。
-        float3 nWarp = normalize(lerp(float3(0.0, 1.0, 0.0), (float3)normalWS, 0.85));
-        float3 nFlat = float3(nWarp.x, 0.0, nWarp.z);
-        float3 lookH = float3(viewDir.x, 0.0, viewDir.z);
-        float lookLen = length(lookH);
-        lookH = lookLen > 1e-4 ? lookH / lookLen : float3(0.0, 0.0, 1.0);
-        float3 rightH = cross(float3(0.0, 1.0, 0.0), lookH);
-        float rightLen = length(rightH);
-        rightH = rightLen > 1e-4 ? rightH / rightLen : float3(1.0, 0.0, 0.0);
-        // 主扭曲在 U（横）：acrossReflect → 左右涟漪；V 只留很淡的沿倒影起伏。
-        float alongReflect = dot(nFlat, lookH);
-        float acrossReflect = dot(nFlat, rightH);
-        float2 warp = float2(acrossReflect, alongReflect * 0.28) * ((float)distortAmt * 2.4);
-        float strokeWobble = (float)(stroke - 0.5h);
-        warp += float2(strokeWobble, strokeWobble * 0.25) * (float)distortAmt;
-        uv += warp;
+        // 横条撕裂：只偏 U。相位跟世界 XZ 锚定，避免跟滚动浪/笔触一起漂；
+        // 沿屏幕 V 高频变幅，相邻横条左右错开，而不是二维涟漪扭曲。
+        float t = _Time.y;
+        float2 p = positionWS.xz;
+        float band = screenUV.y * (22.0 + (float)distortAmt * 36.0);
+        float phase = p.x * 0.31 + p.y * 0.22;
+        float tear = sin(band + phase + t * 1.25)
+            + 0.62 * sin(band * 2.15 - phase * 1.4 + t * 1.85)
+            + 0.34 * sin(band * 4.6 + phase * 0.7 - t * 0.95);
+        // 比旧 0.08 涟漪档更大：纯横向才读得出撕缝；仍远小于旧浪纹法线灌 UV 的漂移量。
+        float amp = (float)distortAmt * 0.22;
+        uv.x += tear * amp;
         float2 edge = saturate(min(uv, 1.0 - uv) * 6.0);
         half edgeFade = (half)(edge.x * edge.y);
         if (edgeFade > 0.001h)
         {
             // 镜子只画景物，清空处 alpha 为 0。天空留解析色，不把清屏黑盖上去。
-#if defined(OIL_MOBILE_PERF)
-            half4 planarTex = SAMPLE_TEXTURE2D_LOD(
-                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv, 0.0);
-            half3 planar = (half3)planarTex.rgb;
-            half planarMask = planarTex.a;
-#else
-            // 主扭曲在 U。竖向两 tap 对 192px 镜子几乎看不出，海面全屏时却每像素多两次采样。
+            // 只横向 smear：拉成油面横笔，勿混 V 否则条带糊成一团扭曲。
             float2 texel = max(_OilPlanarReflectTex_TexelSize.xy, float2(1.0 / 160.0, 1.0 / 160.0));
-            float smear = 2.0 + (float)distortAmt * 18.0;
-            texel.x *= smear;
+            float smearX = 5.0 + (float)distortAmt * 34.0;
+            float2 oX = float2(texel.x * smearX, 0.0);
             half4 p0 = SAMPLE_TEXTURE2D_LOD(
                 _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv, 0.0);
             half4 p1 = SAMPLE_TEXTURE2D_LOD(
-                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv + float2(texel.x, 0.0), 0.0);
+                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv + oX, 0.0);
             half4 p2 = SAMPLE_TEXTURE2D_LOD(
-                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv - float2(texel.x, 0.0), 0.0);
+                _OilPlanarReflectTex, sampler_OilPlanarReflectTex, uv - oX, 0.0);
             half3 planar = (half3)(p0.rgb + p1.rgb + p2.rgb) * (1.0h / 3.0h);
             half planarMask = (p0.a + p1.a + p2.a) * (1.0h / 3.0h);
-#endif
             // 植被溢绿削一档；山体轮廓保留。
             half maxRB = max(planar.r, planar.b);
             half gPush = saturate((planar.g - maxRB) * 2.4h);
             planar.g = lerp(planar.g, maxRB, gPush * 0.72h);
             planar.b = saturate(planar.b + gPush * 0.12h);
-            // 平面相机倒影（山/岸）拉满 edgeFade，不再 ×0.32 冲没。
-            reflectCol = lerp(reflectCol, planar, edgeFade * planarMask);
+            // 往水色收一截 → 虚影，不是实镜。
+            planar = lerp(planar, waterTint, 0.22h);
+            reflectCol = lerp(reflectCol, planar, edgeFade * planarMask * 0.82h);
         }
     }
 
@@ -409,6 +463,33 @@ half3 ApplyOilWaterReflection(
     half3 posterized = OilWaterPosterizeLuma(reflectCol, steps);
     reflectCol = lerp(reflectCol, posterized, 0.18h);
     return lerp(color, reflectCol, saturate(mix));
+}
+
+half3 ApplyOilWaterReflection(
+    half3 color,
+    float3 positionWS,
+    half3 normalWS,
+    half3 viewDir,
+    half stroke,
+    half openWater,
+    float2 screenUV,
+    half distort,
+    half reflectSteps)
+{
+    return ApplyOilWaterReflectionEx(
+        color,
+        positionWS,
+        normalWS,
+        viewDir,
+        stroke,
+        openWater,
+        screenUV,
+        distort,
+        reflectSteps,
+        (half)_ReflectStrength,
+        (half3)_BaseColor.rgb,
+        (half3)_ShallowColor.rgb,
+        false);
 }
 
 #endif

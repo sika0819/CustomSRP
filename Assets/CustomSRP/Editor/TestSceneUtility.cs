@@ -362,6 +362,7 @@ namespace CustomSRP.Editor
         public const string OilSkyStrokePath = TexturesPath + "/OilSkyStroke.png";
         public const string SkyboxTexturesPath = TexturesPath + "/Skybox";
         public const string SkyOilCanvasPath = TexturesPath + "/OilCanvas.png";
+        public const string SkyOilCanvasNormalPath = TexturesPath + "/OilCanvasNormal.png";
         public const string SkyBrushStampPath = SkyboxTexturesPath + "/SkyBrush.png";
         public const string SkySunOilPath = SkyboxTexturesPath + "/Sun_Oil.png";
         public const string SkyMoonOilPath = SkyboxTexturesPath + "/Moon_Oil.png";
@@ -466,12 +467,13 @@ namespace CustomSRP.Editor
             var importer = (TextureImporter)AssetImporter.GetAtPath(OilCanvasPath);
             if (importer != null)
             {
+                // Shared with OilSkybox: linear + no mips. sRGB/mips wipe PaintSky 底纹.
                 importer.textureType = TextureImporterType.Default;
                 importer.sRGBTexture = false;
-                importer.mipmapEnabled = true;
+                importer.mipmapEnabled = false;
                 importer.wrapMode = TextureWrapMode.Repeat;
                 importer.filterMode = FilterMode.Bilinear;
-                importer.anisoLevel = 4;
+                importer.anisoLevel = 8;
                 importer.textureCompression = TextureImporterCompression.CompressedHQ;
                 importer.SaveAndReimport();
             }
@@ -625,6 +627,13 @@ namespace CustomSRP.Editor
                 material.SetTexture("_PaintMap", paint);
             }
 
+            Texture2D paintNormal = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                TexturesPath + "/OilOceanPaintNormal.png");
+            if (paintNormal != null && material.HasProperty("_PaintNormal"))
+            {
+                material.SetTexture("_PaintNormal", paintNormal);
+            }
+
             Texture2D foam = EnsureOilOceanFoamTexture();
             if (foam != null)
             {
@@ -672,9 +681,75 @@ namespace CustomSRP.Editor
             return material;
         }
 
+        /// <summary>
+        /// Sky OilCanvas must stay linear + no mips. sRGB import crushes stroke midtones
+        /// so PaintSky groove/ridge reads as a flat wash (底纹消失).
+        /// </summary>
         public static Texture2D EnsureSkyOilCanvasTexture()
         {
-            return LoadSkyboxTexture(SkyOilCanvasPath);
+            if (!File.Exists(SkyOilCanvasPath))
+            {
+                Log.Error("[CustomSRP] Missing skybox OilCanvas: " + SkyOilCanvasPath);
+                return null;
+            }
+
+            var importer = (TextureImporter)AssetImporter.GetAtPath(SkyOilCanvasPath);
+            if (importer != null)
+            {
+                bool dirty = importer.sRGBTexture
+                    || importer.mipmapEnabled
+                    || importer.textureType != TextureImporterType.Default;
+                importer.textureType = TextureImporterType.Default;
+                importer.sRGBTexture = false;
+                importer.mipmapEnabled = false;
+                importer.wrapMode = TextureWrapMode.Repeat;
+                importer.filterMode = FilterMode.Bilinear;
+                importer.anisoLevel = 8;
+                importer.textureCompression = TextureImporterCompression.CompressedHQ;
+                if (dirty)
+                {
+                    importer.SaveAndReimport();
+                }
+            }
+
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(SkyOilCanvasPath);
+        }
+
+        /// <summary>
+        /// Tangent normal baked from OilCanvas.png. Must stay a Normal Map import
+        /// so DecodeNormal matches the stroke ridges.
+        /// </summary>
+        public static Texture2D EnsureSkyOilCanvasNormalTexture()
+        {
+            if (!File.Exists(SkyOilCanvasNormalPath))
+            {
+                Log.Error(
+                    "[CustomSRP] Missing OilCanvasNormal.png. Run:\n" +
+                    "  python3 Assets/CustomSRP/Textures/generate_oil_canvas_normal.py");
+                return null;
+            }
+
+            var importer = (TextureImporter)AssetImporter.GetAtPath(SkyOilCanvasNormalPath);
+            if (importer != null)
+            {
+                bool dirty = importer.sRGBTexture
+                    || importer.mipmapEnabled
+                    || importer.textureType != TextureImporterType.NormalMap
+                    || importer.wrapMode != TextureWrapMode.Repeat;
+                importer.textureType = TextureImporterType.NormalMap;
+                importer.sRGBTexture = false;
+                importer.mipmapEnabled = false;
+                importer.wrapMode = TextureWrapMode.Repeat;
+                importer.filterMode = FilterMode.Bilinear;
+                importer.anisoLevel = 8;
+                importer.textureCompression = TextureImporterCompression.CompressedHQ;
+                if (dirty)
+                {
+                    importer.SaveAndReimport();
+                }
+            }
+
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(SkyOilCanvasNormalPath);
         }
 
         static Texture2D LoadSkyboxTexture(string assetPath)
@@ -685,6 +760,7 @@ namespace CustomSRP.Editor
                 return null;
             }
 
+            // Sun / moon / stars are authored color — sRGB. Never route OilCanvas here.
             ConfigureSrgbTextureImporter(assetPath);
             return AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
         }
@@ -735,11 +811,17 @@ namespace CustomSRP.Editor
                 material.SetTexture("_CanvasMap", null);
             }
 
-            Texture2D oilCanvas = LoadSkyboxTexture(SkyOilCanvasPath);
+            Texture2D oilCanvas = EnsureSkyOilCanvasTexture();
             if (oilCanvas != null)
             {
                 material.SetTexture("_OilCanvas", oilCanvas);
-                material.SetTextureScale("_OilCanvas", new Vector2(1.15f, 1f));
+                material.SetTextureScale("_OilCanvas", new Vector2(1f, 1f));
+            }
+
+            Texture2D oilCanvasNormal = EnsureSkyOilCanvasNormalTexture();
+            if (oilCanvasNormal != null && material.HasProperty("_OilCanvasNormal"))
+            {
+                material.SetTexture("_OilCanvasNormal", oilCanvasNormal);
             }
 
             Texture2D sunTex = LoadSkyboxTexture(SkySunOilPath);
@@ -766,11 +848,11 @@ namespace CustomSRP.Editor
                 if (material.HasProperty("_BrushScale"))
                     material.SetFloat("_BrushScale", 8f);
                 if (material.HasProperty("_BrushStrength"))
-                    material.SetFloat("_BrushStrength", 1f);
+                    material.SetFloat("_BrushStrength", 0.75f);
                 if (material.HasProperty("_BrushContrast"))
-                    material.SetFloat("_BrushContrast", 1.8f);
+                    material.SetFloat("_BrushContrast", 2.48f);
                 if (material.HasProperty("_BrushRelief"))
-                    material.SetFloat("_BrushRelief", 1f);
+                    material.SetFloat("_BrushRelief", 0.78f);
                 if (material.HasProperty("_StarDensity"))
                     material.SetFloat("_StarDensity", 1f);
                 if (material.HasProperty("_StarSize"))
@@ -825,13 +907,13 @@ namespace CustomSRP.Editor
                 material.SetTexture("_CloudBrush", brush);
             }
 
-            material.SetFloat("_UVDisturbance", 0.04f);
-            material.SetFloat("_SdfSoftness", 0.14f);
+            material.SetFloat("_UVDisturbance", 0.028f);
+            material.SetFloat("_SdfSoftness", 0.08f);
             material.SetFloat("_SdfMin", 0.48f);
             material.SetFloat("_SdfMax", 0.90f);
             material.SetFloat("_TopShadow", 1f);
-            material.SetFloat("_TopHighlight", 0.92f);
-            material.SetFloat("_EdgeIntensity", 1.55f);
+            material.SetFloat("_TopHighlight", 1f);
+            material.SetFloat("_EdgeIntensity", 2.2f);
             material.enableInstancing = false;
             EditorUtility.SetDirty(material);
             return material;

@@ -8,7 +8,7 @@ using static CustomSRP.PostFXStack;
 namespace CustomSRP
 {
     /// <summary>
-    /// Immersive full-screen oil UV warp after OilFilter, before color grading.
+    /// Retired immersive full-screen oil UV warp (kept for shader/pass wiring; IsActive always false).
     /// </summary>
     public class OilWarpPass
     {
@@ -30,14 +30,9 @@ namespace CustomSRP
 
         public static bool IsActive(PostFXStack stack)
         {
-            if (!Game.IslandLeakProbe.Allow(Game.IslandLeakProbe.Module.Warp))
-                return false;
-            if (!OilWarpDriver.IsActive)
-                return false;
-            PostFXSettings settings = stack != null ? stack.Settings : null;
-            if (settings == null)
-                return true;
-            return settings.OilWarp.enabled;
+            // Hard-off: immersive oil UV warp retired (HUD fade / fps drop only).
+            _ = stack;
+            return false;
         }
 
         public static TextureHandle Record(

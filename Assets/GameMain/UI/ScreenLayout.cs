@@ -32,20 +32,28 @@ namespace Game
             }
         }
 
+        /// <summary>
+        /// Loading / BootEarlyCover 选横竖屏素材：跟窗口像素，不跟 Screen.orientation。
+        /// Android UaaL 下宿主可把平板锁横屏，而 Unity 仍报 Portrait（手机 Manifest 默认竖屏
+        /// + 运行时 SENSOR_LANDSCAPE），若先信 orientation 会误播 loading.mp4 竖屏片。
+        /// </summary>
         public static bool IsLandscapeForAssets
         {
             get
             {
-                ScreenOrientation orientation = Screen.orientation;
-                if (orientation == ScreenOrientation.LandscapeLeft
-                    || orientation == ScreenOrientation.LandscapeRight)
+                // 方向已是横屏、像素还停在竖屏的那一帧：继续用横屏底图，避免闪出旧竖屏篝火。
+                if (GameEntry.IsTransientPortraitReport)
                     return true;
-                if (orientation == ScreenOrientation.Portrait
-                    || orientation == ScreenOrientation.PortraitUpsideDown)
-                    return false;
 
-                CurrentSize(out int width, out int height);
-                return height > 0 && width >= height;
+                // 用 Screen 尺寸，不用游戏相机缓冲（旋转瞬间相机可能仍是旧轴）。
+                int width = Screen.width;
+                int height = Screen.height;
+                if (width > 0 && height > 0)
+                    return width >= height;
+
+                ScreenOrientation orientation = Screen.orientation;
+                return orientation == ScreenOrientation.LandscapeLeft
+                    || orientation == ScreenOrientation.LandscapeRight;
             }
         }
 

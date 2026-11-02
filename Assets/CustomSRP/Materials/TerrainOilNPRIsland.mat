@@ -116,7 +116,7 @@ Material:
     - _NormalScale1: 1
     - _NormalScale2: 1
     - _NormalScale3: 1
-    - _OilDetail: 0.2
+    - _OilDetail: 0.42
     - _PaintContrast: 1.75
     - _PaintRelief: 1
     - _PaintThickness: 0.12
@@ -125,14 +125,14 @@ Material:
     - _RidgeAmount: 0
     - _ShadeLift: 0.42
     - _ShadeSteps: 4
-    - _ShadowBrushScale: 1.35
+    - _ShadowBrushScale: 1.2
     - _ShadowLift: 0.62
     - _ShadowWobble: 0.4
-    - _Smoothness0: 0.25
-    - _Smoothness1: 0.25
-    - _Smoothness2: 0.25
-    - _Smoothness3: 0.25
-    - _SpecularThreshold: 0.88
+    - _Smoothness0: 0.08
+    - _Smoothness1: 0.08
+    - _Smoothness2: 0.08
+    - _Smoothness3: 0.08
+    - _SpecularThreshold: 0.94
     - _TerrainHeight: 200
     - _TerrainWorldSize: 1000
     m_Colors:
@@ -149,6 +149,6 @@ Material:
     - _MaskMapRemapScale3: {r: 1, g: 1, b: 1, a: 1}
     - _ShadowTint: {r: 0.36, g: 0.46, b: 0.62, a: 1}
     - _ShadowWarm: {r: 0.58, g: 0.48, b: 0.3, a: 1}
-    - _SpecularColor: {r: 0.5, g: 0.45, b: 0.38, a: 1}
+    - _SpecularColor: {r: 0.18, g: 0.16, b: 0.14, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

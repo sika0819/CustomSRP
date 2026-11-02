@@ -53,6 +53,7 @@ namespace Game
             BackgroundPlayPolicyCallback.SetBackgroundPlayDisableCallback(LoadBackgroundPlayDisable);
             GlobalPlaybackIntentCallback.SetHandlers(OnIntentPauseAll, OnIntentResumeAll);
             GlobalPlaybackIntentCallback.SetMediaTrackChangedHandler(OnMediaTrackChanged);
+            GlobalPlaybackIntentCallback.SetSystemAudioInterruptedHandler(OnSystemAudioInterrupted);
             NowPlayingSkipBridge.SetHandlers(OnSkipNext, OnSkipPrev);
 
             MusicPauseUICallback.SetCallbacks(
@@ -319,6 +320,17 @@ namespace Game
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
             music?.Resume();
             PublishFromPlaylist();
+        }
+
+        /// <summary>
+        /// 其它播放器抢焦点：音乐已由原生 Pause_Music/mute 停掉，这里补音效。
+        /// 不抬 <see cref="_userManuallyPaused"/>，回前台走打断恢复而非「用户暂停」。
+        /// </summary>
+        static void OnSystemAudioInterrupted()
+        {
+            // 会话可能还没 Start：HoldYield 先记下，避免之后 Post 的声景漏掉这次暂停。
+            IslandAudioSession.HoldYield("system-audio-interrupted");
+            Log.Info("[NowPlaying] system audio interrupted — content paused with music");
         }
 
         static void OnMediaTrackChanged()

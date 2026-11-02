@@ -36,17 +36,52 @@ struct DirectionalShadowCascade
     float4 cullingSphere, data;
 };
 
-StructuredBuffer<DirectionalShadowCascade> _DirectionalShadowCascades;
-
-StructuredBuffer<float4x4> _DirectionalShadowMatrices;
-
 struct OtherShadowBufferData
 {
     float4 tileData;
     float4x4 shadowMatrix;
 };
 
+// See Light.hlsl: Adreno GLES BufferBlock limit — pack cascades/matrices into CBUFFER.
+#if defined(SHADER_API_GLES3) || defined(SHADER_API_GLES)
+#define CUSTOM_SRP_SHADOW_CBUFFER 1
+#define CUSTOM_SRP_MAX_SHADOW_CASCADES 4
+#define CUSTOM_SRP_MAX_SHADOW_MATRICES 16
+CBUFFER_START(_CustomShadowCascadesMobile)
+    float4 _DirectionalShadowCascadeCullingSpheres[CUSTOM_SRP_MAX_SHADOW_CASCADES];
+    float4 _DirectionalShadowCascadeDatas[CUSTOM_SRP_MAX_SHADOW_CASCADES];
+CBUFFER_END
+CBUFFER_START(_CustomShadowMatricesMobile)
+    float4x4 _DirectionalShadowMatricesMobile[CUSTOM_SRP_MAX_SHADOW_MATRICES];
+CBUFFER_END
+
+DirectionalShadowCascade GetDirectionalShadowCascade(int index)
+{
+    DirectionalShadowCascade cascade;
+    cascade.cullingSphere = _DirectionalShadowCascadeCullingSpheres[index];
+    cascade.data = _DirectionalShadowCascadeDatas[index];
+    return cascade;
+}
+
+float4x4 GetDirectionalShadowMatrix(int index)
+{
+    return _DirectionalShadowMatricesMobile[index];
+}
+#else
+StructuredBuffer<DirectionalShadowCascade> _DirectionalShadowCascades;
+StructuredBuffer<float4x4> _DirectionalShadowMatrices;
 StructuredBuffer<OtherShadowBufferData> _OtherShadowData;
+
+DirectionalShadowCascade GetDirectionalShadowCascade(int index)
+{
+    return _DirectionalShadowCascades[index];
+}
+
+float4x4 GetDirectionalShadowMatrix(int index)
+{
+    return _DirectionalShadowMatrices[index];
+}
+#endif
 
 struct ShadowData
 {
@@ -152,7 +187,7 @@ ShadowData GetShadowData(Surface surfaceWS)
     int i;
     for (i = 0; i < _CascadeCount; i++)
     {
-        DirectionalShadowCascade cascade = _DirectionalShadowCascades[i];
+        DirectionalShadowCascade cascade = GetDirectionalShadowCascade(i);
         float distanceSqr = DistanceSquared(
             surfaceWS.position, cascade.cullingSphere.xyz);
         if (distanceSqr < cascade.cullingSphere.w)
@@ -210,11 +245,11 @@ float GetDirectionalShadowAttenuation(
     }
 
     // data.y is the world-space PCF radius (meters), used only to offset along the normal.
-    float texelSize = _DirectionalShadowCascades[global.cascadeIndex].data.y;
+    float texelSize = GetDirectionalShadowCascade(global.cascadeIndex).data.y;
     float3 normalBias = surfaceWS.interpolatedNormal * (
         directional.normalBias * texelSize);
     float3 positionSTS = mul(
-        _DirectionalShadowMatrices[directional.tileIndex],
+        GetDirectionalShadowMatrix(directional.tileIndex),
         float4(surfaceWS.position + normalBias, 1.0)
     ).xyz;
 #if defined(TERRAIN_SHADOW_RECEIVER)
@@ -232,11 +267,11 @@ float GetDirectionalShadowAttenuation(
 #endif
     if (global.cascadeBlend < 1.0)
     {
-        float texelSize1 = _DirectionalShadowCascades[global.cascadeIndex + 1].data.y;
+        float texelSize1 = GetDirectionalShadowCascade(global.cascadeIndex + 1).data.y;
         normalBias = surfaceWS.interpolatedNormal * (
             directional.normalBias * texelSize1);
         positionSTS = mul(
-            _DirectionalShadowMatrices[directional.tileIndex + 1],
+            GetDirectionalShadowMatrix(directional.tileIndex + 1),
             float4(surfaceWS.position + normalBias, 1.0)
         ).xyz;
 #if defined(TERRAIN_SHADOW_RECEIVER)
@@ -257,6 +292,10 @@ float GetDirectionalShadowAttenuation(
 float GetOtherShadow(
     OtherShadowData other, ShadowData global, Surface surfaceWS)
 {
+#if defined(CUSTOM_SRP_SHADOW_CBUFFER)
+    // GLES: no OtherShadow SSBO; point/spot never cast in this SRP anyway.
+    return 1.0;
+#else
     float tileIndex = other.tileIndex;
     float3 lightPlane = other.spotDirectionWS;
     if (other.isPoint)
@@ -275,6 +314,7 @@ float GetOtherShadow(
         float4(surfaceWS.position + normalBias, 1.0));
     return FilterOtherShadow(
         positionSTS.xyz / positionSTS.w, data.tileData.xyz);
+#endif
 }
 
 float GetOtherShadowAttenuation(

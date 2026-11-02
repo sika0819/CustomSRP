@@ -42,19 +42,40 @@ namespace CustomSRP
 
         static readonly ProfilingSampler Sampler = new ProfilingSampler("Lighting");
 
+        // GLES CBUFFER mirrors (Light.hlsl CUSTOM_SRP_LIGHT_CBUFFER). Cap matches shader.
+        const int MaxOtherLightsGles = 8;
+
         static readonly int
             DirLightCountId = Shader.PropertyToID("_DirectionalLightCount"),
             DirectionalLightDataId = Shader.PropertyToID("_DirectionalLightData"),
             OtherLightCountId = Shader.PropertyToID("_OtherLightCount"),
             OtherLightDataId = Shader.PropertyToID("_OtherLightData"),
             TilesId = Shader.PropertyToID("_ForwardPlusTiles"),
-            TileSettingsId = Shader.PropertyToID("_ForwardPlusTileSettings");
+            TileSettingsId = Shader.PropertyToID("_ForwardPlusTileSettings"),
+            DirLightColorsId = Shader.PropertyToID("_DirectionalLightColors"),
+            DirLightDirectionsId =
+                Shader.PropertyToID("_DirectionalLightDirectionsAndMasks"),
+            DirLightShadowDataId = Shader.PropertyToID("_DirectionalLightShadowData"),
+            OtherLightColorsId = Shader.PropertyToID("_OtherLightColors"),
+            OtherLightPositionsId = Shader.PropertyToID("_OtherLightPositions"),
+            OtherLightDirectionsId =
+                Shader.PropertyToID("_OtherLightDirectionsAndMasks"),
+            OtherLightSpotAnglesId = Shader.PropertyToID("_OtherLightSpotAngles");
 
         static readonly DirectionalLightData[] DirectionalLightDataArray =
             new DirectionalLightData[MaxDirLightCount];
 
         static readonly OtherLightData[] OtherLightDataArray =
             new OtherLightData[MaxOtherLightCount];
+
+        static readonly Vector4[]
+            DirLightColors = new Vector4[MaxDirLightCount],
+            DirLightDirections = new Vector4[MaxDirLightCount],
+            DirLightShadowData = new Vector4[MaxDirLightCount],
+            OtherLightColors = new Vector4[MaxOtherLightsGles],
+            OtherLightPositions = new Vector4[MaxOtherLightsGles],
+            OtherLightDirections = new Vector4[MaxOtherLightsGles],
+            OtherLightSpotAngles = new Vector4[MaxOtherLightsGles];
 
         static NativeArray<int> TileData;
 
@@ -281,6 +302,10 @@ namespace CustomSRP
                 _handles.otherBuffer, OtherLightDataArray, 0, 0, _otherLightCount);
             buffer.SetGlobalBuffer(OtherLightDataId, _handles.otherBuffer);
 
+            // Always mirror into CBUFFER arrays. GLES Oil/Terrain variants read these
+            // instead of StructuredBuffers (Adreno BufferBlock link limit).
+            UploadLightCbufferMirrors(buffer);
+
             // Planar mirror skipped tile bucketing; emit a 1×1 tile buffer so
             // GPU-side Forward+ loops don't read out-of-range indices.
             _forwardPlusJobHandle.Complete();
@@ -305,6 +330,55 @@ namespace CustomSRP
             {
                 _lightBounds.Dispose();
             }
+        }
+
+        void UploadLightCbufferMirrors(UnsafeCommandBuffer buffer)
+        {
+            for (int i = 0; i < MaxDirLightCount; i++)
+            {
+                if (i < _dirLightCount)
+                {
+                    DirectionalLightData d = DirectionalLightDataArray[i];
+                    DirLightColors[i] = d.color;
+                    DirLightDirections[i] = d.directionAndMask;
+                    DirLightShadowData[i] = d.shadowData;
+                }
+                else
+                {
+                    DirLightColors[i] = Vector4.zero;
+                    DirLightDirections[i] = Vector4.zero;
+                    DirLightShadowData[i] = Vector4.zero;
+                }
+            }
+
+            buffer.SetGlobalVectorArray(DirLightColorsId, DirLightColors);
+            buffer.SetGlobalVectorArray(DirLightDirectionsId, DirLightDirections);
+            buffer.SetGlobalVectorArray(DirLightShadowDataId, DirLightShadowData);
+
+            int otherUpload = Mathf.Min(_otherLightCount, MaxOtherLightsGles);
+            for (int i = 0; i < MaxOtherLightsGles; i++)
+            {
+                if (i < otherUpload)
+                {
+                    OtherLightData o = OtherLightDataArray[i];
+                    OtherLightColors[i] = o.color;
+                    OtherLightPositions[i] = o.position;
+                    OtherLightDirections[i] = o.directionAndMask;
+                    OtherLightSpotAngles[i] = o.spotAngle;
+                }
+                else
+                {
+                    OtherLightColors[i] = Vector4.zero;
+                    OtherLightPositions[i] = Vector4.zero;
+                    OtherLightDirections[i] = Vector4.zero;
+                    OtherLightSpotAngles[i] = Vector4.zero;
+                }
+            }
+
+            buffer.SetGlobalVectorArray(OtherLightColorsId, OtherLightColors);
+            buffer.SetGlobalVectorArray(OtherLightPositionsId, OtherLightPositions);
+            buffer.SetGlobalVectorArray(OtherLightDirectionsId, OtherLightDirections);
+            buffer.SetGlobalVectorArray(OtherLightSpotAnglesId, OtherLightSpotAngles);
         }
 
         public static Handles Record(

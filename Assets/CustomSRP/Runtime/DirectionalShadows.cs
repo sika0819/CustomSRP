@@ -37,7 +37,11 @@ namespace CustomSRP
             CascadesId = Shader.PropertyToID("_DirectionalShadowCascades"),
             MatricesId = Shader.PropertyToID("_DirectionalShadowMatrices"),
             CascadeCountId = Shader.PropertyToID("_CascadeCount"),
-            ShadowPancakingId = Shader.PropertyToID("_ShadowPancaking");
+            ShadowPancakingId = Shader.PropertyToID("_ShadowPancaking"),
+            CascadeCullingSpheresId =
+                Shader.PropertyToID("_DirectionalShadowCascadeCullingSpheres"),
+            CascadeDatasId = Shader.PropertyToID("_DirectionalShadowCascadeDatas"),
+            MatricesMobileId = Shader.PropertyToID("_DirectionalShadowMatricesMobile");
 
         static readonly GlobalKeyword SoftCascadeBlendKeyword =
             GlobalKeyword.Create("_SOFT_CASCADE_BLEND");
@@ -47,6 +51,10 @@ namespace CustomSRP
 
         static readonly Matrix4x4[] Matrices =
             new Matrix4x4[MaxLightCount * MaxCascades];
+
+        static readonly Vector4[]
+            CascadeCullingSpheres = new Vector4[MaxCascades],
+            CascadeDatas = new Vector4[MaxCascades];
 
         struct ShadowedLight
         {
@@ -261,9 +269,34 @@ namespace CustomSRP
             buffer.SetBufferData(
                 _handles.matrixBuffer, Matrices,
                 0, 0, _lightCount * _settings.cascadeCount);
+            // GLES CBUFFER mirrors (Shadows.hlsl CUSTOM_SRP_SHADOW_CBUFFER).
+            UploadShadowCbufferMirrors(buffer);
             buffer.SetKeyword(
                 SoftCascadeBlendKeyword, _settings.softCascadeBlend);
             buffer.EndSample("Directional Shadows");
+        }
+
+        void UploadShadowCbufferMirrors(UnsafeCommandBuffer buffer)
+        {
+            int cascadeCount = _lightCount > 0 ? _settings.cascadeCount : 0;
+            for (int i = 0; i < MaxCascades; i++)
+            {
+                if (i < cascadeCount)
+                {
+                    CascadeCullingSpheres[i] = Cascades[i].cullingSphere;
+                    CascadeDatas[i] = Cascades[i].data;
+                }
+                else
+                {
+                    CascadeCullingSpheres[i] = Vector4.zero;
+                    CascadeDatas[i] = Vector4.zero;
+                }
+            }
+
+            buffer.SetGlobalVectorArray(CascadeCullingSpheresId, CascadeCullingSpheres);
+            buffer.SetGlobalVectorArray(CascadeDatasId, CascadeDatas);
+            // Full matrix table (MaxLightCount * MaxCascades); unused slots stay identity/zero.
+            buffer.SetGlobalMatrixArray(MatricesMobileId, Matrices);
         }
 
         void RenderDirectionalShadows(int index, UnsafeCommandBuffer buffer)

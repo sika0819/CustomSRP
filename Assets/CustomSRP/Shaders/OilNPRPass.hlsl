@@ -3,6 +3,7 @@
 
 #include "OilNPRInput.hlsl"
 #include "OilNPRLighting.hlsl"
+#include "OilImpastoCore.hlsl"
 
 // Billboard wind: object-space sway so cards stay attached to the trunk pivot.
 float3 OilBillboardWindDisplace(float3 positionOS)
@@ -132,6 +133,10 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     }
 #endif
 
+    // 镜子里活下来的岛上树像素写成不透明，水面才按 alpha 叠出浅倒影。
+    if (_OilMirrorCapture > 0.5)
+        alpha = 1.0h;
+
     // 片树烘焙：贴图颜色 = 近树 _BaseMap * _BaseColor，光照留到运行时同一套模型。
 #if defined(OIL_BILLBOARD_ALBEDO_CAPTURE)
     return half4(albedo, alpha);
@@ -184,8 +189,11 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         clip(ndotv - (half)_EdgeFade);
 #endif
         half3 bakedN = (half3)SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, config.baseUV).rgb;
+        half3 paintedBb = ImpastoDeviation(albedo, brush, 0.55h);
+        surface.color = (float3)paintedBb;
         half3 bb = OilTreeCrossBillboardShade(
-            albedo, bakedN, (half)_NormalStrength, surface, config.fragment.screenUV);
+            paintedBb, bakedN, (half)_NormalStrength, surface, input.positionOS,
+            config.fragment.screenUV);
 #if defined(OIL_MOBILE_PERF)
         bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush);
 #else
@@ -195,34 +203,87 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         return half4(bb, alpha);
     }
 
-    half yPeriodW = 0.0h;
 #if defined(OIL_Y_BILLBOARD)
-    // 片树专用变体。朝上烘焙法线；晨昏夜走 OilTreeCrossBillboardShade（植被光照）。
-    // 移动端时段收成 0/1，同一像素不叠 NPR 和植被光照。过渡 lerp 只留非移动端。
+    // Y 片树：全时段植被光照 + 与近树叶同一套 object-Y 油画色带。
     float yBbFrag = _OilYBillboard;
     if (yBbFrag > 0.5)
     {
-        yPeriodW = (half)OilFoliagePeriodWeight(_OilSkyPeriod);
-#if defined(OIL_MOBILE_PERF)
-        yPeriodW = yPeriodW >= 0.5h ? 1.0h : 0.0h;
-#endif
         half3 bakedN = (half3)SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, config.baseUV).rgb;
-        if (yPeriodW >= 0.999h)
-        {
-            half3 bb = OilTreeCrossBillboardShade(
-                albedo, bakedN, (half)_NormalStrength, surface, config.fragment.screenUV);
+        half3 paintedBb = ImpastoDeviation(albedo, brush, 0.55h);
+        surface.color = (float3)paintedBb;
+        half3 bb = OilTreeCrossBillboardShade(
+            paintedBb, bakedN, (half)_NormalStrength, surface, input.positionOS,
+            config.fragment.screenUV);
 #if defined(OIL_MOBILE_PERF)
-            bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush);
+        bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush);
 #else
-            bb = OilWeaveTint(bb, input.positionWS.xz * 0.15);
-            bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush, input.positionWS);
+        bb = OilWeaveTint(bb, input.positionWS.xz * 0.15);
+        bb = (half3)ApplyOilFog((float3)bb, surface.depth, brush, input.positionWS);
 #endif
-            return half4(bb, alpha);
-        }
+        return half4(bb, alpha);
+    }
+#endif
 
-        half3 litN = OilTreeBillboardLitNormal(bakedN, (half)_NormalStrength);
-        surface.normal = (float3)litN;
-        surface.interpolatedNormal = (float3)litN;
+    // Near leaves: same vegetation lighting + volume paint as Y-billboard.
+    if (_OilFoliage > 0.5)
+    {
+        half3 painted = OilFoliagePaintAlbedo(albedo, input.positionOS, normalWS);
+        painted = ImpastoDeviation(painted, brush, 0.72h);
+        surface.color = (float3)painted;
+        half3 foliage = OilFoliageLighting(
+            surface, painted, (half)_ShadeSteps, config.fragment.screenUV);
+#if defined(OIL_MOBILE_PERF)
+        foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush);
+#else
+        foliage = OilWeaveTint(foliage, input.positionWS.xz * 0.15);
+        foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush, input.positionWS);
+#endif
+        return half4(foliage, alpha);
+    }
+
+    // 树干：暖赭体积色 + 更硬油画色块（圆柱明暗），不走叶片绿体积。
+    if (_OilBark > 0.5)
+    {
+#if defined(OIL_MOBILE_PERF)
+        surface.dither = InterleavedGradientNoise(config.fragment.positionSS, 0);
+#endif
+        half3 painted = OilBarkPaintAlbedo(albedo, input.positionOS, normalWS);
+        painted = ImpastoDeviation(painted, brush, 0.58h);
+        surface.color = (float3)painted;
+#if !defined(OIL_MOBILE_PERF)
+        half brushDx = (half)ddx((float)brush);
+        half brushDz = (half)ddy((float)brush);
+        normalWS = ImpastoTiltNormal(normalWS, brushDx, brushDz, 0.45h);
+        surface.normal = (float3)normalWS;
+#endif
+        half3 bark = OilBarkLighting(
+            surface, painted, (half)_ShadeSteps, config.fragment.screenUV);
+#if !defined(OIL_MOBILE_PERF)
+        if (GetDirectionalLightCount() > 0)
+        {
+            half3 L = (half3)GetDirectionalLightData(0).directionAndMask.xyz;
+            half3 H = normalize(L + viewDir);
+            bark += ImpastoRidgeSpec(brush, saturate(dot(normalWS, H)), 0.58h)
+                * half3(1.0h, 0.92h, 0.78h);
+        }
+        bark = OilWeaveTint(bark, input.positionWS.xz * 0.15);
+        bark = (half3)ApplyOilFog((float3)bark, surface.depth, brush, input.positionWS);
+#else
+        bark = (half3)ApplyOilFog((float3)bark, surface.depth, brush);
+#endif
+        return half4(bark, alpha);
+    }
+
+    // Wood props / rocks: 恢复改前颜色路径 — 只做轻量 Impasto，不做 PaintStack 压黑。
+
+    albedo = ImpastoDeviation(albedo, brush, 0.52h);
+    surface.color = (float3)albedo;
+#if !defined(OIL_MOBILE_PERF)
+    {
+        half brushDx = (half)ddx((float)brush);
+        half brushDz = (half)ddy((float)brush);
+        normalWS = ImpastoTiltNormal(normalWS, brushDx, brushDz, 0.40h);
+        surface.normal = (float3)normalWS;
     }
 #endif
 
@@ -262,21 +323,15 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         0.2h,
         surface.smoothness,
         config.fragment.screenUV);
+    if (GetDirectionalLightCount() > 0)
+    {
+        half3 L = (half3)GetDirectionalLightData(0).directionAndMask.xyz;
+        half3 H = normalize(L + viewDir);
+        color += ImpastoRidgeSpec(brush, saturate(dot(normalWS, H)), 0.52h)
+            * lerp(half3(1.0h, 0.96h, 0.88h), (half3)GetDirectionalLightData(0).color.rgb, 0.3h);
+    }
     color = OilWeaveTint(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);
-#endif
-
-#if defined(OIL_Y_BILLBOARD) && !defined(OIL_MOBILE_PERF)
-    // Mid period (2s dial blend): lerp vegetation ↔ NPR.
-    if (yPeriodW > 0.001h)
-    {
-        half3 bakedN = (half3)SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, config.baseUV).rgb;
-        half3 foliage = OilTreeCrossBillboardShade(
-            albedo, bakedN, (half)_NormalStrength, surface, config.fragment.screenUV);
-        foliage = OilWeaveTint(foliage, input.positionWS.xz * 0.15);
-        foliage = (half3)ApplyOilFog((float3)foliage, surface.depth, brush, input.positionWS);
-        color = lerp(color, foliage, yPeriodW);
-    }
 #endif
 
     return half4(color, alpha);

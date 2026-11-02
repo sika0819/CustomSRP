@@ -12,7 +12,7 @@ namespace CustomSRP
         public static readonly Color MorningFog = Hex(0xD1, 0xC7, 0xB8);
         // Deeper mauve — chalk #C4B6C0 milked dusk skyboxes to lavender-white.
         public static readonly Color TwilightFog = Hex(0x7A, 0x68, 0x78);
-        public static readonly Color NightDistanceFog = Hex(0x0A, 0x18, 0x28);
+        public static readonly Color NightDistanceFog = Hex(0x06, 0x10, 0x1C);
 
         static Color Hex(byte r, byte g, byte b) =>
             new Color(r / 255f, g / 255f, b / 255f, 1f);
@@ -49,8 +49,10 @@ namespace CustomSRP
             }
             else
             {
-                s *= 0.12f;
-                v = Mathf.Lerp(v, 0.22f, 0.55f);
+                // Keep the blue. Crushing saturation and lifting V toward 0.22
+                // turned the night dome into a brighter gray wash.
+                s *= 0.88f;
+                v = Mathf.Min(v, 0.12f);
             }
 
             Color softened = Color.HSVToRGB(h, Mathf.Clamp01(s), Mathf.Clamp01(v));
@@ -62,12 +64,14 @@ namespace CustomSRP
                 softened = Color.Lerp(
                     softened, MorningFog, coolTint * 0.82f * (1f - midday * 0.92f));
 
-            // Soft mauve wash only — 0.78× chalk TwilightFog erased dusk indigo/amber.
+            // Soft mauve wash only — 0.78× chalk TwilightFog erased dusk indigo/amber;
+            // 0.34 still beige-muddied the scene with soil fog anchors.
             if (!night && dusk > 0.01f)
-                softened = Color.Lerp(softened, TwilightFog, dusk * 0.34f);
-            // Dawn: warm mist toward MorningFog. 0.28 left haze too blue; 0.88 chalked the dome.
+                softened = Color.Lerp(softened, TwilightFog, dusk * 0.20f);
+            // Dawn: warm mist toward MorningFog. 0.28 left haze too blue; 0.88 chalked the dome;
+            // 0.58 + brown SunriseFog read dirty — ease the beige pull.
             else if (dawn > 0.01f)
-                softened = Color.Lerp(softened, MorningFog, dawn * 0.58f);
+                softened = Color.Lerp(softened, MorningFog, dawn * 0.38f);
 
             if (night)
             {

@@ -23,19 +23,25 @@ namespace CustomSRP
 
         // Soft oil glaze: tiny RT + shader multi-tap blur (no mips — SRP blit
         // into autoGenerateMips RT leaves higher LODs empty / black).
+        // Editor and mid/high phones keep this size so the island stays readable.
         public const float Scale = 0.12f;
         public const float MobileScale = 0.1f;
         public const int MinSize = 48;
         public const int MaxSize = 192;
+        // 闺蜜机（含 4K）和低端机：镜子仍画岛和树，但 RT 大约四分之一面积。
+        const float BudgetScale = 0.055f;
+        const int BudgetMinSize = 40;
+        const int BudgetMaxSize = 96;
         const float ClipPlaneOffset = 0.04f;
 
-        // Throttle: a full mirror render (cull + opaque + skybox) is expensive.
+        // Throttle: a full mirror render (cull + opaque) is expensive.
         // The water shader samples _OilPlanarReflectTex with *current* screen UV,
         // so a stale RT immediately reads as slide / shake / "one frame behind".
         // Rules (pose vs previous frame):
         //   any meaningful turn              -> every frame (never throttle yaw/pitch)
         //   except MirrorTurnGraceFrames     -> reuse previous RT (render scale just changed)
         //   walking on mobile, little turn   -> every WalkMirrorInterval frames
+        //   闺蜜机 / 低端机平移（含快走）     -> every BudgetMoveInterval frames
         //   fast move (standing / desktop)   -> every frame
         //   slow creep, no turn              -> even frames only
         //   stationary (below Still*)        -> never (reuse RT)
@@ -46,10 +52,14 @@ namespace CustomSRP
         const float StillTurnAngle = 0.05f;          // degrees
         /// <summary>Mobile walk + little turn: re-render mirror every N frames.</summary>
         const int WalkMirrorInterval = 6;
+        /// <summary>闺蜜机和低端机平移：整面镜子按这个间隔重画。</summary>
+        const int BudgetMoveInterval = 10;
 
         static readonly int ReflectTexId = Shader.PropertyToID("_OilPlanarReflectTex");
         static readonly int ReflectOnId = Shader.PropertyToID("_OilPlanarReflectOn");
         static readonly int ReflectTexelId = Shader.PropertyToID("_OilPlanarReflectTex_TexelSize");
+        static readonly int ReflectPlaneYId = Shader.PropertyToID("_OilPlanarPlaneY");
+        static readonly int MirrorCaptureId = Shader.PropertyToID("_OilMirrorCapture");
 
         static OilPlanarReflection _instance;
         static bool _rendering;
@@ -177,6 +187,8 @@ namespace CustomSRP
             CameraRenderer renderer,
             CustomRenderPipelineSettings settings)
         {
+            TickPendingReflectionRtDestroy();
+
             if (TemporarilyDisabled)
             {
                 Suppress();
@@ -283,13 +295,7 @@ namespace CustomSRP
             {
                 // Re-emit globals only; the cached RT content already matches.
                 if (_reflectionRt != null && _rtW > 0 && _rtH > 0)
-                {
-                    Shader.SetGlobalTexture(ReflectTexId, _reflectionRt);
-                    Shader.SetGlobalFloat(ReflectOnId, 1f);
-                    Shader.SetGlobalVector(
-                        ReflectTexelId,
-                        new Vector4(1f / _rtW, 1f / _rtH, _rtW, _rtH));
-                }
+                    EmitPlanarGlobals();
                 _updatedFrame = Time.frameCount;
                 _prevFramePos = source.transform.position;
                 _prevFrameRot = source.transform.rotation;
@@ -313,6 +319,13 @@ namespace CustomSRP
 
             _rendering = true;
             _updatedFrame = Time.frameCount;
+            // Disabled cameras ignore worldToCameraMatrix. Enable only for this
+            // manual render; the camera stays out of the pipeline list.
+            bool wasEnabled = mirror.enabled;
+            mirror.enabled = true;
+            // Tree/prop fragments force alpha 1 while this is set, so the water
+            // glaze can see them. Terrain already writes 1. Sky stays alpha 0.
+            Shader.SetGlobalFloat(MirrorCaptureId, 1f);
             bool prevInvert = GL.invertCulling;
             GL.invertCulling = true;
             try
@@ -323,6 +336,8 @@ namespace CustomSRP
             finally
             {
                 GL.invertCulling = prevInvert;
+                mirror.enabled = wasEnabled;
+                Shader.SetGlobalFloat(MirrorCaptureId, 0f);
                 _hasCachedMatrices = false;
                 _rendering = false;
             }
@@ -336,8 +351,14 @@ namespace CustomSRP
             _skyDirty = false;
             _pendingSkyDirty = false;
 
+            EmitPlanarGlobals();
+        }
+
+        void EmitPlanarGlobals()
+        {
             Shader.SetGlobalTexture(ReflectTexId, _reflectionRt);
             Shader.SetGlobalFloat(ReflectOnId, 1f);
+            Shader.SetGlobalFloat(ReflectPlaneYId, _planeY);
             Shader.SetGlobalVector(
                 ReflectTexelId,
                 new Vector4(1f / _rtW, 1f / _rtH, _rtW, _rtH));
@@ -389,13 +410,13 @@ namespace CustomSRP
                 return true;
             }
 
-            // Mobile walk, mostly translation: interval reuse (tiny RT hides walk parallax).
-            // 闺蜜机标准版再稀一点：倒影本就糊，少画镜面相机几乎看不出。4K 与手机同间隔。
-            if (Application.isMobilePlatform && IslandLocomotionState.IsWalking)
+            // 平移时复用上一张镜子。转头已经在上面每帧重画，这里不再挡。
+            // 闺蜜机和低端机连快走也进间隔，避免整岛每帧再画一遍。
+            bool budget = UseBudgetMirror;
+            if (Application.isMobilePlatform &&
+                (IslandLocomotionState.IsWalking || (budget && moveSq > SlowMoveThresholdSq)))
             {
-                int interval = Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmjStandard()
-                    ? WalkMirrorInterval + 4
-                    : WalkMirrorInterval;
+                int interval = budget ? BudgetMoveInterval : WalkMirrorInterval;
                 return (Time.frameCount % interval) == 0;
             }
 
@@ -429,6 +450,7 @@ namespace CustomSRP
             _mirrorCam.allowHDR = false;
             _mirrorCam.allowMSAA = false;
             _mirrorCam.useOcclusionCulling = false;
+            IslandLocomotionState.PlanarMirror = _mirrorCam;
             return _mirrorCam;
         }
 
@@ -436,6 +458,8 @@ namespace CustomSRP
         {
             if (_mirrorCam != null)
             {
+                if (IslandLocomotionState.PlanarMirror == _mirrorCam)
+                    IslandLocomotionState.PlanarMirror = null;
                 CoreUtils.Destroy(_mirrorCam.gameObject);
                 _mirrorCam = null;
             }
@@ -479,6 +503,9 @@ namespace CustomSRP
             mirror.transform.SetPositionAndRotation(
                 reflectedPos, Quaternion.Euler(-euler.x, euler.y, euler.z));
 
+            // Same reflected view as 59cf380: source view × sea plane, oblique
+            // clip on both cull and draw. A second GPU Y-flip after
+            // SetupCameraProperties clips the island out of the RT.
             _cachedView = sourceView * reflection;
             mirror.worldToCameraMatrix = _cachedView;
 
@@ -535,6 +562,8 @@ namespace CustomSRP
                 return;
             }
 
+            // One sea-level mirror. River and ocean both sample it with screen UV,
+            // which is the 59cf380 glaze. A river-height plane leaves the sea RT empty.
             _planeY = sea.Level;
             _hasPlane = true;
         }
@@ -550,36 +579,56 @@ namespace CustomSRP
             if (srcW < 8 || srcH < 8)
                 return false;
 
-            float scale = Application.isMobilePlatform ? MobileScale : Scale;
-            float aspect = srcW / (float)srcH;
-            if (aspect <= 1e-4f)
-                return false;
+            ResolveMirrorSize(srcW, srcH, srcW / (float)srcH, out w, out h);
+            return true;
+        }
 
-            w = Mathf.Clamp(Mathf.RoundToInt(srcW * scale), MinSize, MaxSize);
-            h = Mathf.Max(MinSize, Mathf.RoundToInt(w / aspect));
-            if (h > MaxSize)
+        /// <summary>
+        /// 闺蜜机标准版、4K 和低端机走小镜子。编辑器恒为 false，方便看清倒影。
+        /// </summary>
+        static bool UseBudgetMirror =>
+            Application.isMobilePlatform &&
+            (IslandGraphicsTier.IsLowEnd || Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmj());
+
+        static void ResolveMirrorSize(int srcW, int srcH, float srcAspect, out int w, out int h)
+        {
+            float scale;
+            int minSize;
+            int maxSize;
+            if (UseBudgetMirror)
             {
-                h = MaxSize;
-                w = Mathf.Max(MinSize, Mathf.RoundToInt(h * aspect));
+                scale = BudgetScale;
+                minSize = BudgetMinSize;
+                maxSize = BudgetMaxSize;
+            }
+            else if (Application.isMobilePlatform)
+            {
+                scale = MobileScale;
+                minSize = MinSize;
+                maxSize = MaxSize;
+            }
+            else
+            {
+                scale = Scale;
+                minSize = MinSize;
+                maxSize = MaxSize;
             }
 
-            return true;
+            float aspect = srcAspect > 1e-4f ? srcAspect : srcW / (float)Mathf.Max(1, srcH);
+            w = Mathf.Clamp(Mathf.RoundToInt(srcW * scale), minSize, maxSize);
+            h = Mathf.Max(minSize, Mathf.RoundToInt(w / aspect));
+            if (h > maxSize)
+            {
+                h = maxSize;
+                w = Mathf.Max(minSize, Mathf.RoundToInt(h * aspect));
+            }
         }
 
         void EnsureReflectionRt(int srcW, int srcH, float srcAspect)
         {
             // Same math as DesiredRtSize so the throttle gate and the rebuild
             // never disagree; srcAspect is passed in for the degenerate case.
-            float aspect = srcAspect > 1e-4f ? srcAspect : srcW / (float)Mathf.Max(1, srcH);
-            float scale = Application.isMobilePlatform ? MobileScale : Scale;
-
-            int w = Mathf.Clamp(Mathf.RoundToInt(srcW * scale), MinSize, MaxSize);
-            int h = Mathf.Max(MinSize, Mathf.RoundToInt(w / aspect));
-            if (h > MaxSize)
-            {
-                h = MaxSize;
-                w = Mathf.Max(MinSize, Mathf.RoundToInt(h * aspect));
-            }
+            ResolveMirrorSize(srcW, srcH, srcAspect, out int w, out int h);
 
             if (_reflectionRt != null &&
                 _rtW == w &&
@@ -624,17 +673,61 @@ namespace CustomSRP
             }
 
             // 全局属性和 targetTexture 都持有引用，只 Destroy 字段卸不掉 GPU 内存。
+            // 先摘引用；Release/Destroy 延后，避免本帧镜子 / 水面仍在采时 UnityGfxDeviceW SEGV。
             if (_mirrorCam != null)
                 _mirrorCam.targetTexture = null;
             Shader.SetGlobalTexture(ReflectTexId, null);
             Shader.SetGlobalFloat(ReflectOnId, 0f);
 
-            _reflectionRt.Release();
-            // Scene view renders this in edit mode; Object.Destroy is illegal there.
-            CoreUtils.Destroy(_reflectionRt);
+            RenderTexture rt = _reflectionRt;
             _reflectionRt = null;
             _rtW = 0;
             _rtH = 0;
+            QueueDestroyReflectionRt(rt);
+        }
+
+        static readonly System.Collections.Generic.List<RenderTexture> PendingRtDestroy =
+            new System.Collections.Generic.List<RenderTexture>(2);
+        static int _pendingRtQuietFrames;
+
+        static void QueueDestroyReflectionRt(RenderTexture rt)
+        {
+            if (rt == null)
+                return;
+            if (!Application.isPlaying)
+            {
+                if (rt.IsCreated())
+                    rt.Release();
+                CoreUtils.Destroy(rt);
+                return;
+            }
+
+            if (!PendingRtDestroy.Contains(rt))
+                PendingRtDestroy.Add(rt);
+            // 至少空两帧再卸，盖住 RenderBefore 已提交的镜子。
+            _pendingRtQuietFrames = Mathf.Max(_pendingRtQuietFrames, 2);
+        }
+
+        static void TickPendingReflectionRtDestroy()
+        {
+            if (PendingRtDestroy.Count == 0)
+                return;
+            if (_pendingRtQuietFrames > 0)
+            {
+                _pendingRtQuietFrames--;
+                return;
+            }
+
+            for (int i = 0; i < PendingRtDestroy.Count; i++)
+            {
+                RenderTexture rt = PendingRtDestroy[i];
+                if (rt == null)
+                    continue;
+                if (rt.IsCreated())
+                    rt.Release();
+                CoreUtils.Destroy(rt);
+            }
+            PendingRtDestroy.Clear();
         }
 
         void ApplyCachedMatrices()

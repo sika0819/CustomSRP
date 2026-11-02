@@ -110,8 +110,10 @@ namespace Game
         /// <summary>Called when the HUD veil finishes and the preset is live.</summary>
         public void MarkPlaying()
         {
-            if (CurrentId > 0)
-                SchemeState = 2;
+            // Always leave switching (1). A no-op when CurrentId==0 used to nail
+            // IsTransitioning forever — HUD preset icon / walking / card clicks all die
+            // until leave-island clears SchemeState.
+            SchemeState = CurrentId > 0 ? 2 : 0;
         }
 
         public void Apply(int id, bool teleportPlayer = true)
@@ -120,14 +122,18 @@ namespace Game
             if (preset == null)
                 return;
 
+            // Commit id before native audio. A throw in ForceRetarget/Clear used to leave
+            // CurrentId stale so MarkPlaying could not clear SchemeState=1.
+            CurrentId = id;
+            BoluoGameSave.CapturePresetScheme(id);
+
             // Doc: BGM 不停播，落点强制切曲 —— 播本预设 Music* bank（先 Stop_Music 再 Play，不叠声）。
             GameEntry.Music?.ForceRetargetAtLanding(ResolvePresetMusicBank(preset));
             // Drop every content 3D voice before teleport so old emitters never follow.
             // Iris path already cleared + held; direct Apply clears here then retriggers below.
             IslandAudioSession.Instance?.ClearContent3D();
-
-            CurrentId = id;
-            BoluoGameSave.CapturePresetScheme(id);
+            // 进场即已听：清「已下载未播」红点。勿只靠 PresetForm——虹膜 Apply / 恢复播放态也会进这里。
+            MarkPresetHeard(preset);
             GameEntry.Weather?.SetLookKind(preset.LookKind);
             GameEntry.Weather?.SetTimeOfDay(preset.TimeHours);
             GameEntry.Weather?.ClearPanelTransitionLock();
@@ -206,6 +212,14 @@ namespace Game
             EnvItemStreamerLite.CatchUpAtFocus();
         }
 
+        /// <summary>
+        /// Iris already running (queued Begin) — raise switching latch without re-firing the event.
+        /// </summary>
+        public void ArmTransitioning()
+        {
+            SchemeState = 1;
+        }
+
         /// <summary>Interrupt (form close / uncover) — drop switching latch without a stuck busy state.</summary>
         public void AbortTransition()
         {
@@ -230,15 +244,26 @@ namespace Game
         {
             BoluoGameSave.EnsureLoaded();
             int id = BoluoGameSave.PresetSchemeId;
-            if (id > 0 && GetById(id) != null)
+            IslandPresetAsset restored = id > 0 ? GetById(id) : null;
+            if (restored != null)
             {
                 CurrentId = id;
                 SchemeState = 2;
+                // 进岛恢复当前预设：视作已进入，避免切走后再开面板红点又亮。
+                MarkPresetHeard(restored);
                 return;
             }
 
             CurrentId = 0;
             SchemeState = 0;
+        }
+
+        static void MarkPresetHeard(IslandPresetAsset preset)
+        {
+            if (preset == null || string.IsNullOrEmpty(preset.DisplayName))
+                return;
+            DownloadedUnplayedManager.MarkPlayed(
+                DownloadedUnplayedManager.PresetKey(preset.DisplayName));
         }
 
         public bool IsWeatherHeld { get; private set; }

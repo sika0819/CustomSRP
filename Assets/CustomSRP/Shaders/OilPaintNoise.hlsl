@@ -37,20 +37,22 @@ half3 OilDitherQuantize(half3 color, half dither01, half quantize)
     return lerp(color, bands, saturate(quantize));
 }
 
-// Canvas tooth. One sine, no texture.
+// Canvas tooth. One sine, no texture. Value only — keep authored hue.
 half3 OilWeaveTint(half3 color, float2 p)
 {
     half w = (half)sin(p.x * 1.7 + p.y * 0.8) * 0.5h + 0.5h;
-    return color * lerp(0.94h, 1.04h, w);
+    half weave = (half)sin(p.x * 4.1 - p.y * 3.3) * 0.5h + 0.5h;
+    // Deeper tooth so weave reads as raised canvas under paint.
+    half tooth = lerp(0.84h, 1.16h, w) * lerp(0.93h, 1.07h, weave);
+    return color * tooth;
 }
 
-// Hundreds of meters. Peaks drift warm, hollows drift cool, without replacing the splat hue.
+// Hundreds of meters. Value climate only — no warm/cool palette drift.
 half3 OilClimateTint(half3 albedo, float3 positionWS)
 {
     float climate = OilFbm(positionWS.xz * 0.002);
-    half3 warm = albedo * half3(1.14h, 1.04h, 0.76h);
-    half3 cool = albedo * half3(0.78h, 0.98h, 0.86h);
-    return lerp(albedo, lerp(cool, warm, (half)climate), 0.2h);
+    half lift = lerp(0.94h, 1.07h, (half)climate);
+    return albedo * lift;
 }
 
 #endif

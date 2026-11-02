@@ -16,6 +16,10 @@ namespace Game
             _ => Single,
         };
 
+        /// <summary>列表/随机才曲终自动下一首；单曲循环只重播本曲（锁屏传输同规则）。</summary>
+        public static bool IsListAdvanceMode(int mode) =>
+            mode == Loop || mode == Shuffle;
+
         public static string TipText(int mode) => mode switch
         {
             Single => "单曲循环",

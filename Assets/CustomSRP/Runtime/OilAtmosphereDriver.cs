@@ -107,6 +107,8 @@ namespace CustomSRP
                 return false;
 
             weather.PushVisuals();
+            // PushLookKind clears poster; re-pin cover palette if a preset is already live.
+            ApplyPosterForCurrentPreset();
             return true;
         }
 
@@ -277,10 +279,11 @@ namespace CustomSRP
 
         void OnPresetChanged(object sender, GameEventArgs e)
         {
-            if (e is not PresetChangedEventArgs)
+            if (e is not PresetChangedEventArgs args)
                 return;
 
-            // 展位图取样会盖掉预设的时段、天气和雾。这里按 WeatherService 已写入的预设重推。
+            // 时段 / 天气 / 雾密度走 WeatherService；天空·环境光·雾色·主光对齐 zhanweitu 封面。
+            // SetLookKind 会清掉 poster pin，所以展位色必须最后再套。
             WeatherService weather = GameEntry.Weather;
             if (weather != null)
             {
@@ -291,9 +294,26 @@ namespace CustomSRP
                 SetLightColorOverride(weather.LightColorOverride);
             }
 
+            ApplyPosterForPreset(args.PresetId);
+
             // Force re-pin dawn/sleep looks even when CurrentId is unchanged (re-apply same preset).
             _syncedCelestialLookId = -1;
             SyncCelestialLookFromPreset();
+        }
+
+        void ApplyPosterForCurrentPreset()
+        {
+            int id = GameEntry.Presets != null ? GameEntry.Presets.CurrentId : 0;
+            ApplyPosterForPreset(id);
+        }
+
+        void ApplyPosterForPreset(int presetId)
+        {
+            if (presetId <= 0)
+                return;
+            if (SkyboxTime == null)
+                ResolveRefs();
+            SkyboxTime?.ApplyPresetPoster(presetId);
         }
 
         void SyncCelestialLookFromPreset()
@@ -322,7 +342,7 @@ namespace CustomSRP
             }
 
             Vector3 camFwd = ResolveCameraForward();
-            float period = SkyboxTime.CurrentPeriod();
+            float period = SkyboxTime.VisualPeriod();
             Vector3 orbitSun = OilSkyboxTime.SunDirectionAt(period);
             Vector3 orbitMoon = OilSkyboxTime.MoonDirectionAt(period);
 

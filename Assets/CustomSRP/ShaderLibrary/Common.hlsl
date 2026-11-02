@@ -11,6 +11,8 @@ SAMPLER(sampler_point_clamp);
 // Bake-only. _OilBakeClipOn > 0.5 drops fragments under the water plane.
 float _OilBakeClipOn;
 float _OilBakeClipY;
+// 1 while the planar mirror is drawing. Opaque scenery writes alpha 1.
+float _OilMirrorCapture;
 
 void OilBakeClipAboveWater(float3 positionWS)
 {

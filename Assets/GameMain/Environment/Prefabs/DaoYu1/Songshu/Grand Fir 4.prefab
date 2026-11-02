@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 1058711559963992408}
   - component: {fileID: 8622878233492319325}
   - component: {fileID: 4904444100527158807}
+  - component: {fileID: 665960462673094199}
   m_Layer: 0
   m_Name: TFF_Pine_Tree_02A_LOD_1
   m_TagString: Untagged
@@ -303,3 +304,16 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+
+--- !u!114 &665960462673094199
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1951184187715024905}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c3e91f4b2d4e6a8c0d1f2e3a4b5c6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 

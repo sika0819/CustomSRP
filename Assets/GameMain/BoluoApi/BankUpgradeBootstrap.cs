@@ -43,6 +43,8 @@ namespace Game.BoluoApi
         static int _runId;
         static bool _fatal;
         static bool _silentDeferred;
+        /// <summary>Rest Wi‑Fi 确认点「稍后」：本岛会话不再自动弹 / 静默开 Rest。</summary>
+        static bool _restWifiConfirmDeclined;
         static UniTaskCompletionSource _catalogTcs = new UniTaskCompletionSource();
         static UniTaskCompletionSource _criticalTcs = new UniTaskCompletionSource();
 
@@ -54,6 +56,7 @@ namespace Game.BoluoApi
             _started = false;
             _fatal = false;
             _silentDeferred = false;
+            _restWifiConfirmDeclined = false;
             _catalogTcs = new UniTaskCompletionSource();
             _criticalTcs = new UniTaskCompletionSource();
             AudioEnginePaths.ResetSession();
@@ -68,6 +71,7 @@ namespace Game.BoluoApi
             _started = false;
             _runId++;
             _silentDeferred = false;
+            _restWifiConfirmDeclined = false;
             DownloadCellularGate.ResetForNewSession();
             Game.DownloadConsentSession.ResetForLeaveIsland();
         }
@@ -115,7 +119,9 @@ namespace Game.BoluoApi
                 {
                     WanosAudio.WanosEngine.EnablePlayback("critical-cue-retry");
                     WanosAudio.WanosEngine.StartEngine("critical-cue-retry");
-                    WanosAudio.WanosEngine.Unmute("critical-cue-retry");
+                    if (!IslandAudioSession.IsYieldHeld
+                        && WanosAudio.WanosEngine.Unmute("critical-cue-retry"))
+                        IslandAudioSession.NoteAudibleCommitted();
                 }
                 else
                     WanosAudio.WanosEngine.StartEngine("critical-cue-dsp");
@@ -365,7 +371,7 @@ namespace Game.BoluoApi
                 // 与线上版本不一致 → 申请下载弹窗；用户确认后再走门禁链。
                 PromptCriticalUpdateIfNeeded(loadIntoEngine);
 
-                // Rest：Wi‑Fi / 已开闸可静默；蜂窝未开闸则巡检叠流量窗。
+                // Rest：Wi‑Fi / 已开闸 → 同意链（开关开则 Wi‑Fi 确认）；蜂窝未开闸则静默巡检。
                 await StartOrDeferRestDownload(loadIntoEngine, runId);
             }
             catch (Exception e)
@@ -480,18 +486,85 @@ namespace Game.BoluoApi
                 return;
             }
 
+            if (_restWifiConfirmDeclined)
+            {
+                Log.Info(
+                    "[BankUpgradeBootstrap] Rest skipped — Wi‑Fi confirm declined this island");
+                return;
+            }
+
+            bool wifiConfirm = BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled();
+
             if (!DownloadCellularGate.CanTransmitNow())
             {
                 Log.Info(
-                    "[BankUpgradeBootstrap] defer silent Rest — " +
+                    "[BankUpgradeBootstrap] defer Rest — " +
                     $"offline={DownloadCellularGate.IsOffline()} " +
-                    $"needMobilePrompt={DownloadCellularGate.NeedsMobileDataPrompt()} pending={pending}");
+                    $"needMobilePrompt={DownloadCellularGate.NeedsMobileDataPrompt()} pending={pending} " +
+                    $"wifiConfirm={wifiConfirm}");
                 _silentDeferred = true;
                 RunSilentRestPatrol(loadIntoEngine, runId).Forget();
                 return;
             }
 
-            await DownloadRest(loadIntoEngine);
+            // 开关开：必须等揭罩后再弹 §4.6。加载罩揭开时会 Clear Dialog，
+            // 罩下弹确认等于现网「defer 后看不见 / 被清掉」。禁止自动 Resume。
+            if (wifiConfirm && !CanPresentWifiConfirmUi())
+            {
+                Log.Info(
+                    "[BankUpgradeBootstrap] defer Rest Wi‑Fi confirm until uncover " +
+                    $"(ui={(GameEntry.UI != null)} cover={BootLoadingService.IsVisible} " +
+                    $"hiding={BootLoadingService.IsHiding})");
+                _silentDeferred = true;
+                RunSilentRestPatrol(loadIntoEngine, runId).Forget();
+                return;
+            }
+
+            // 可传：走同意链。开关关 → 静默 Ready；开关开且已揭罩 → 必出 §4.6。
+            PromptRestViaConsent(loadIntoEngine);
+            await UniTask.CompletedTask;
+        }
+
+        /// <summary>
+        /// §4.6 确认窗可被人看见：UI 就绪且加载罩已揭（含淡出结束）。
+        /// 揭罩 <c>clearOverlayForms</c> 会关 Dialog，罩下开窗必丢。
+        /// </summary>
+        static bool CanPresentWifiConfirmUi()
+        {
+            if (GameEntry.UI == null)
+                return false;
+            if (BootLoadingService.IsVisible || BootLoadingService.IsHiding)
+                return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Rest 经 <see cref="Game.DownloadConsentSession.EnsureReady"/>：
+        /// 开关开且 Wi‑Fi → 必弹 §4.6（不自动续下）；开关关 → 存够后静默开下。
+        /// </summary>
+        static void PromptRestViaConsent(bool loadIntoEngine)
+        {
+            List<string> pending = CollectPendingRestBankNames();
+            if (pending.Count == 0)
+                return;
+
+            bool load = loadIntoEngine;
+            bool wifiConfirm = BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled();
+            Log.Info(
+                "[BankUpgradeBootstrap] Rest EnsureReady count=" + pending.Count +
+                " wifiConfirm=" + wifiConfirm);
+            Game.DownloadConsentSession.EnsureReady(
+                pending,
+                onReady: () => DownloadRest(load).Forget(),
+                new Game.DownloadUiOptions
+                {
+                    OnWifiConfirmLater = () =>
+                    {
+                        _restWifiConfirmDeclined = true;
+                        Log.Info(
+                            "[BankUpgradeBootstrap] Rest Wi‑Fi confirm later — stop auto Rest");
+                    },
+                });
         }
 
         static async UniTask DownloadRest(bool loadIntoEngine)
@@ -513,8 +586,8 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 进岛后：仅 Rest 静默待下。蜂窝未开闸 / 无网 → 干等（不弹流量窗、不弹存储窗）；
-        /// Wi‑Fi 或用户在区域/预设/音乐点下载并「继续下载」开闸后 → 开 Rest。
+        /// 进岛后：Rest 待下。蜂窝未开闸 / 无网 → 干等（不弹流量窗）；
+        /// 可传后走 <see cref="PromptRestViaConsent"/>（含 Wi‑Fi 确认开关）。
         /// Critical 更新只走 <see cref="PromptCriticalUpdateIfNeeded"/>，不进静默队列。
         /// </summary>
         static async UniTaskVoid RunSilentRestPatrol(bool loadIntoEngine, int runId)
@@ -525,6 +598,13 @@ namespace Game.BoluoApi
                 await UniTask.Delay(1000, DelayType.UnscaledDeltaTime);
                 if (runId != _runId || !_silentDeferred)
                     return;
+
+                if (_restWifiConfirmDeclined)
+                {
+                    _silentDeferred = false;
+                    Log.Info("[BankUpgradeBootstrap] Rest patrol stop — Wi‑Fi confirm declined");
+                    return;
+                }
 
                 List<string> pending = CollectPendingRestBankNames();
                 if (pending.Count == 0)
@@ -538,9 +618,14 @@ namespace Game.BoluoApi
                 if (!DownloadCellularGate.CanTransmitNow())
                     continue;
 
+                // 开关开：等揭罩后再弹确认，绝不在此自动 DownloadRest。
+                if (BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled()
+                    && !CanPresentWifiConfirmUi())
+                    continue;
+
                 _silentDeferred = false;
-                Log.Info("[BankUpgradeBootstrap] silent Rest patrol — transmit ok");
-                await DownloadRest(loadIntoEngine);
+                Log.Info("[BankUpgradeBootstrap] Rest patrol — transmit ok → consent");
+                PromptRestViaConsent(loadIntoEngine);
                 return;
             }
 

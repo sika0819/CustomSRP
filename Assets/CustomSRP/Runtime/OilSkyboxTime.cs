@@ -66,7 +66,7 @@ namespace CustomSRP
         public const float SleepMoonElevationDeg = 12f;
 
         /// <summary>Night distance fog #0A1828 — deep blue-black mist (matches NightCold).</summary>
-        public static readonly Color NightFogColor = new Color(0x0A / 255f, 0x18 / 255f, 0x28 / 255f, 1f);
+        public static readonly Color NightFogColor = new Color(0x06 / 255f, 0x10 / 255f, 0x1C / 255f, 1f);
 
         /// <summary>Active AtmosphereProfile-equivalent look (Boluo Camera_1/5/3/7/8/10).</summary>
         public OilSkyLookId ActiveLookId { get; private set; } = OilSkyLookId.Canonical;
@@ -204,7 +204,35 @@ namespace CustomSRP
         public static float PeriodToHours(float period) =>
             Mathf.Repeat(period * 6f + 6f, 24f);
 
+        /// <summary>
+        /// Settled NightCold from 18:00 through 06:00 keeps the midnight pigment.
+        /// Night presets are 19:00, 20:00, 22:30, and 23:00; the dial night is 00:00.
+        /// An open look blend stays on the clock so the dial can still fade in.
+        /// </summary>
+        public static bool NightColdHoldsPigment(float hours)
+        {
+            if (LookBlendOpen || s_overrideColors || s_activeLookId != OilSkyLookId.NightCold)
+                return false;
+            hours = Mathf.Repeat(hours, 24f);
+            return hours >= 18f || hours < 6f;
+        }
+
+        public static float NightColdPigmentPeriod(float period)
+        {
+            if (!NightColdHoldsPigment(PeriodToHours(period)))
+                return period;
+            return 3f;
+        }
+
+        /// <summary>Clock period (06 dawn / 12 day / 18 dusk / 00 night). Audio and the dial keep this.</summary>
         public float CurrentPeriod() => HoursToPeriod(timeOfDay);
+
+        /// <summary>
+        /// Period for the skybox, sun/moon discs, and the directional light.
+        /// Settled NightCold uses midnight (period 3) — darkest dome and key light —
+        /// so 19:00–23:00 presets match 00:00 instead of a dusk blend or a low sun.
+        /// </summary>
+        public float VisualPeriod() => NightColdPigmentPeriod(CurrentPeriod());
 
         public static bool IsOilSky(Material material) =>
             material != null && material.shader != null && material.shader.name == ShaderName;
@@ -233,11 +261,23 @@ namespace CustomSRP
         }
 
         /// <summary>
-        /// Pin sky, ambient, fog, and sun to zhanweitu1–8. Ids outside 1–8 clear the pin.
+        /// Pin sky, ambient, fog, and sun to zhanweitu1–10.
+        /// Ids 11+ wrap like IslandPresetBuilder covers; id ≤0 clears the pin.
+        /// Night presets (4 / 6 / 10 / 12) skip the cover sample and stay on
+        /// midnight NightCold — darkest dome and key light, same as 00:00.
         /// </summary>
         public bool ApplyPresetPoster(int presetId)
         {
-            if (!TryPoster(presetId, out OilSkyColorSet set))
+            if (presetId == 4 || presetId == 6 || presetId == 10 || presetId == 12)
+            {
+                ClearColorOverride();
+                return true;
+            }
+
+            int coverId = presetId;
+            if (coverId > 10)
+                coverId = ((coverId - 1) % 10) + 1;
+            if (!TryPoster(coverId, out OilSkyColorSet set))
             {
                 ClearColorOverride();
                 return false;
@@ -247,59 +287,79 @@ namespace CustomSRP
             return true;
         }
 
-        /// <summary>展位图取样：天空 / 地平雾 / 环境光（叶草灌木叠色）/ 主光。</summary>
+        /// <summary>
+        /// 展位图取样：天空 / 地平雾 / 环境光（叶草灌木叠色）/ 主光。
+        /// 主光强度跟预设钟点走同一把梯子（正午 1 / 夜晚 0.07），清晨预设不抬到正午。
+        /// </summary>
         static bool TryPoster(int presetId, out OilSkyColorSet set)
         {
             set = default;
+            // IslandPresetBuilder hours for covers 1–10.
+            float morning = OilSkyLookTables.LightIntensityAtHours(7.5f);
+            float afternoon = OilSkyLookTables.LightIntensityAtHours(13f);
+            float noon = OilSkyLookTables.LightIntensityDay;
+            float night = OilSkyLookTables.LightIntensityNight;
             switch (presetId)
             {
-                case 1: // 清晨起床 — 桃粉霞、暖橄榄植被
+                case 1: // 清晨起床 @07:30 — zhanweitu1：粉紫穹、桃金地平
                     set = Poster(
-                        0xC4, 0x86, 0x84, 0xE4, 0xB0, 0x9C, 0xF2, 0xC8, 0xA4,
-                        0x8A, 0x60, 0x48, 0xE0, 0xA0, 0x70,
-                        0xFF, 0xB0, 0x60, 0.65f, 0xE8, 0xC0, 0xA8);
+                        0x9C, 0x72, 0x70, 0xB0, 0x78, 0x62, 0xC4, 0x98, 0x68,
+                        0x8A, 0x60, 0x48, 0xD0, 0x90, 0x60,
+                        0xE8, 0xA0, 0x50, morning, 0xC0, 0x98, 0x80);
                     return true;
-                case 2: // 独自旅行 — 青白天、薄荷植被
+                case 2: // 独自旅行 @07:30 — 青白天、薄荷植被
                     set = Poster(
                         0xA9, 0xC3, 0xDD, 0x8E, 0xC8, 0xD4, 0x7E, 0xC8, 0xC8,
                         0x5A, 0xA8, 0xB8, 0x7E, 0xD0, 0xC0,
-                        0xF2, 0xF7, 0xF4, 1.15f, 0x7E, 0xC8, 0xC8);
+                        0xF2, 0xF7, 0xF4, morning, 0x7E, 0xC8, 0xC8);
                     return true;
-                case 3: // 午后放松 — 奶油天空、青绿植被、暖金雾
+                case 3: // 午后放松 @13:00 — 奶油天空、青绿植被、暖金雾
                     set = Poster(
                         0xD6, 0xCA, 0xA5, 0xC8, 0xB8, 0x88, 0xC8, 0xB8, 0x88,
                         0x8A, 0x9A, 0x78, 0xD0, 0xB0, 0x70,
-                        0xFF, 0xE6, 0xA0, 0.85f, 0xD6, 0xC8, 0xA0);
+                        0xFF, 0xE6, 0xA0, afternoon, 0xD6, 0xC8, 0xA0);
                     return true;
-                case 4: // 委屈泛滥 — 夜雨篝火、深蓝雾、暗青植被
+                case 4: // 委屈泛滥 @22:30 — 夜雨篝火、深蓝雾、暗青植被
                     set = Poster(
                         0x2D, 0x43, 0x60, 0x1A, 0x30, 0x48, 0x13, 0x2C, 0x42,
                         0x1A, 0x30, 0x58, 0x10, 0x28, 0x30,
-                        0x6A, 0x88, 0xC0, 0.16f, 0x1A, 0x30, 0x48);
+                        0x6A, 0x88, 0xC0, night, 0x1A, 0x30, 0x48);
                     return true;
-                case 5: // 专注工作 — 雾林，桃顶、青雾、深青植被
+                case 5: // 专注工作 @07:30 — 雾林，桃顶、青雾、深青植被
                     set = Poster(
                         0xE4, 0xC8, 0xC0, 0xA8, 0xC0, 0xC4, 0x8F, 0xB8, 0xC0,
                         0x3A, 0x78, 0x78, 0x6A, 0x98, 0x98,
-                        0xF4, 0xE8, 0xDC, 0.50f, 0x7A, 0xA8, 0xB0);
+                        0xF4, 0xE8, 0xDC, morning, 0x7A, 0xA8, 0xB0);
                     return true;
-                case 6: // 放空发呆 — 深夜雨、海军蓝
+                case 6: // 放空发呆 @23:00 — 深夜雨、海军蓝
                     set = Poster(
                         0x1E, 0x3B, 0x52, 0x15, 0x28, 0x38, 0x11, 0x1F, 0x27,
                         0x15, 0x28, 0x38, 0x10, 0x18, 0x20,
-                        0x5A, 0x78, 0xA8, 0.14f, 0x15, 0x24, 0x30);
+                        0x5A, 0x78, 0xA8, night, 0x15, 0x24, 0x30);
                     return true;
-                case 7: // 灵感唤醒 — 晴天瀑布、亮青空、鲜绿
+                case 7: // 灵感唤醒 @07:30 — 晴天瀑布、亮青空、鲜绿
                     set = Poster(
                         0x70, 0xB1, 0xC2, 0x9A, 0xC8, 0xC8, 0xB0, 0xD0, 0xD8,
                         0x6A, 0x9A, 0x78, 0xC0, 0xD8, 0xA8,
-                        0xFF, 0xF4, 0xD0, 1.40f, 0xB0, 0xD0, 0xD8);
+                        0xFF, 0xF4, 0xD0, morning, 0xB0, 0xD0, 0xD8);
                     return true;
-                case 8: // 假日躺平 — 正午海岛、淡蓝天、饱和绿
+                case 8: // 假日躺平 @12:00 — 正午海岛、淡蓝天、饱和绿
                     set = Poster(
                         0x84, 0xC3, 0xE7, 0xA8, 0xD4, 0xE4, 0xA8, 0xD0, 0xE8,
                         0x6A, 0xAA, 0x88, 0xD0, 0xE8, 0xC0,
-                        0xFF, 0xF8, 0xEC, 1.50f, 0xA8, 0xD0, 0xE8);
+                        0xFF, 0xF8, 0xEC, noon, 0xA8, 0xD0, 0xE8);
+                    return true;
+                case 9: // 学习冲刺 @07:30 — 青雾林径、饱和青绿
+                    set = Poster(
+                        0x7A, 0xB8, 0xC0, 0x6A, 0xB0, 0xB0, 0x88, 0xC0, 0xB8,
+                        0x2A, 0x78, 0x78, 0x6A, 0xB0, 0x90,
+                        0xE0, 0xF0, 0xF0, morning, 0x78, 0xC0, 0xC0);
+                    return true;
+                case 10: // 准备入睡 @20:00 — 星夜针叶林、深蓝雾
+                    set = Poster(
+                        0x12, 0x1C, 0x38, 0x0E, 0x18, 0x2C, 0x18, 0x20, 0x38,
+                        0x10, 0x28, 0x38, 0x0C, 0x1C, 0x28,
+                        0x6A, 0x88, 0xB8, night, 0x10, 0x1C, 0x30);
                     return true;
                 default:
                     return false;
@@ -481,7 +541,7 @@ namespace CustomSRP
         {
             _lightColorOverride = color;
             if (Application.isPlaying)
-                ApplySun(CurrentPeriod());
+                ApplySun(VisualPeriod());
             else
                 ApplyEditorPreview();
         }
@@ -508,7 +568,7 @@ namespace CustomSRP
             }
 
             PublishColorOverride();
-            float period = CurrentPeriod();
+            float period = VisualPeriod();
             skyboxApplyDepth++;
             try
             {
@@ -686,7 +746,7 @@ namespace CustomSRP
                     return;
                 }
 
-                float period = CurrentPeriod();
+                float period = VisualPeriod();
                 SyncSkyMaterial(mat, period, force: true);
                 ApplyAmbient(period);
                 ApplyFogColor(period);
@@ -718,7 +778,7 @@ namespace CustomSRP
         void ApplyInternal(bool markDirty)
         {
             PublishColorOverride();
-            float period = CurrentPeriod();
+            float period = VisualPeriod();
 
             BindSkybox();
             Material mat = ActiveSkyMaterial();
@@ -808,6 +868,8 @@ namespace CustomSRP
             {
                 color = _lightColorOverride.Value;
             }
+            // Directional Light max is 1 — poster samples used to author 1.15–1.50 and blow out.
+            intensity = Mathf.Clamp(intensity, 0f, 1f);
             if (sun.color != color)
             {
                 sun.color = color;
@@ -868,7 +930,7 @@ namespace CustomSRP
         /// <summary>Re-push fog color/density shader globals after OilAtmosphereDriver edits RenderSettings.</summary>
         public void PushFogGlobals()
         {
-            EvaluateFog(CurrentPeriod(), out Color fog);
+            EvaluateFog(VisualPeriod(), out Color fog);
             if (RenderSettings.fogColor != fog)
                 RenderSettings.fogColor = fog;
             PushFogShaderGlobals(fog);
@@ -911,10 +973,10 @@ namespace CustomSRP
         }
 
         public Vector3 ResolvedSunDirection =>
-            _hasCelestialOverride ? _overrideSunDir : SunDirectionAt(CurrentPeriod());
+            _hasCelestialOverride ? _overrideSunDir : SunDirectionAt(VisualPeriod());
 
         public Vector3 ResolvedMoonDirection =>
-            _hasCelestialOverride ? _overrideMoonDir : MoonDirectionAt(CurrentPeriod());
+            _hasCelestialOverride ? _overrideMoonDir : MoonDirectionAt(VisualPeriod());
 
         public int CelestialLookId => _celestialLookId;
 
@@ -1060,7 +1122,7 @@ namespace CustomSRP
             skyboxApplyDepth++;
             try
             {
-                ApplySun(CurrentPeriod());
+                ApplySun(VisualPeriod());
                 EditorUtility.SetDirty(sun);
                 if (sun.transform != null)
                 {
@@ -1079,7 +1141,7 @@ namespace CustomSRP
         public static SkyLookPreset EvaluateSkyLook(float period)
         {
             if (!LookBlendOpen)
-                return EvaluateSkyLook(s_activeLookId, period);
+                return EvaluateSkyLook(s_activeLookId, NightColdPigmentPeriod(period));
             return SkyLookPreset.Lerp(
                 EvaluateSkyLook(s_blendFrom, period),
                 EvaluateSkyLook(s_blendTo, period),
@@ -1112,19 +1174,41 @@ namespace CustomSRP
             return look;
         }
 
+        /// <summary>
+        /// Day poster used to pin sunIntensity 1.05 / glow 0.22 — morning skies bloomed white.
+        /// Scale disc with the poster light so 清晨起床 stays under sunrise caps.
+        /// </summary>
+        static void OverrideSunParams(OilSkyColorSet c, out float size, out float intensity, out float glow)
+        {
+            bool night = c.lightIntensity < 0.35f;
+            if (night)
+            {
+                size = 0.02f;
+                intensity = 0.02f;
+                glow = 0.02f;
+                return;
+            }
+
+            float t = Mathf.Clamp01((c.lightIntensity - 0.35f) / 0.65f);
+            size = 0.07f;
+            intensity = Mathf.Lerp(0.55f, 0.85f, t);
+            glow = Mathf.Lerp(0.12f, 0.18f, t);
+        }
+
         static SkyLookPreset SkyLookFromOverride()
         {
             OilSkyColorSet c = s_colorSet;
             bool night = c.lightIntensity < 0.35f;
+            OverrideSunParams(c, out float sunSize, out float sunIntensity, out float sunGlow);
             return new SkyLookPreset
             {
                 zenith = c.zenith,
                 mid = c.mid,
                 horizon = c.horizon,
                 ground = c.ground,
-                sunSize = night ? 0.02f : 0.07f,
-                sunIntensity = night ? 0.02f : 1.05f,
-                sunGlow = night ? 0.02f : 0.22f,
+                sunSize = sunSize,
+                sunIntensity = sunIntensity,
+                sunGlow = sunGlow,
                 moonSize = night ? 0.07f : 0.02f,
                 moonIntensity = night ? 0.55f : 0f,
                 moonGlow = night ? 0.32f : 0f,
@@ -1136,7 +1220,8 @@ namespace CustomSRP
         {
             OilSkyColorSet c = s_colorSet;
             bool night = c.lightIntensity < 0.35f;
-            var sunParams = night ? new Vector4(0.02f, 0.02f, 0.02f, 0f) : new Vector4(0.07f, 1.05f, 0.22f, 0f);
+            OverrideSunParams(c, out float sunSize, out float sunIntensity, out float sunGlow);
+            var sunParams = new Vector4(sunSize, sunIntensity, sunGlow, 0f);
             var moonParams = night ? new Vector4(0.07f, 0.55f, 0.32f, 0f) : new Vector4(0.02f, 0f, 0f, 0f);
             float stars = night ? 1f : 0f;
             for (int i = 0; i < 4; i++)
@@ -1375,26 +1460,30 @@ namespace CustomSRP
 
         void SyncSkyMaterial(Material mat, float period, bool force)
         {
-            // Brush / Stars live on the shared skybox material — only drive _Period from the clock.
+            // Brush / Stars live on the shared skybox material — only drive _Period.
+            // Settled NightCold writes midnight so the shader does not sit in the dusk blend.
             // Look anchors stay put across a same-palette slot blend; the shader lerps them by _Period.
+            float visual = NightColdPigmentPeriod(period);
             bool periodMoved = force
                 || float.IsNaN(_lastSyncedPeriod)
-                || Mathf.Abs(period - _lastSyncedPeriod) >= 1e-5f;
+                || Mathf.Abs(visual - _lastSyncedPeriod) >= 1e-5f;
             // force refreshes _Period / sun dirs. Anchors upload only when the look or blend t changes,
             // so a same-palette slot fade does not restamp stars and halos every frame.
             bool lookMoved = LookAnchorsDirty();
             if (!periodMoved && !lookMoved)
                 return;
 
+            if (periodMoved || lookMoved)
+                Shader.SetGlobalFloat(OilSkyPeriodId, visual);
+
             if (periodMoved)
             {
-                _lastSyncedPeriod = period;
-                mat.SetFloat(PeriodId, period);
-                Shader.SetGlobalFloat(OilSkyPeriodId, period);
+                _lastSyncedPeriod = visual;
+                mat.SetFloat(PeriodId, visual);
                 Shader.SetGlobalFloat(OilSkySunriseId, CurrentSunriseWeight(s_clockHours));
-                ResolveCelestialDirections(period, out Vector3 sunDir, out Vector3 moonDir);
+                ResolveCelestialDirections(visual, out Vector3 sunDir, out Vector3 moonDir);
                 PushCelestialGlobals(sunDir, moonDir);
-                NotifyPlanarIfSkyChanged(period);
+                NotifyPlanarIfSkyChanged(visual);
             }
 
             if (lookMoved)
@@ -1499,12 +1588,13 @@ namespace CustomSRP
                 return;
             }
 
-            mat.SetFloat(PeriodId, period);
-            Shader.SetGlobalFloat(OilSkyPeriodId, period);
+            float visual = NightColdPigmentPeriod(period);
+            mat.SetFloat(PeriodId, visual);
+            Shader.SetGlobalFloat(OilSkyPeriodId, visual);
             PushLookGlobals(s_activeLookId);
             PushFogCanvasGlobal(mat);
-            Shader.SetGlobalVector(OilSkySunDirId, SunDirectionAt(period));
-            Shader.SetGlobalVector(OilSkyMoonDirId, MoonDirectionAt(period));
+            Shader.SetGlobalVector(OilSkySunDirId, SunDirectionAt(visual));
+            Shader.SetGlobalVector(OilSkyMoonDirId, MoonDirectionAt(visual));
         }
 
         /// <summary>Foggy weather weight 0–1 for OilDistanceFog.Soften (set by OilAtmosphereDriver).</summary>
@@ -1592,7 +1682,7 @@ namespace CustomSRP
             }
 
             OilSkyLookTables.EvaluateAmbient(
-                s_activeLookId, period, cumulus, out sky, out equator, out ground, out oilFill);
+                s_activeLookId, NightColdPigmentPeriod(period), cumulus, out sky, out equator, out ground, out oilFill);
         }
 
         static float ResolveCumulus()
@@ -1620,12 +1710,13 @@ namespace CustomSRP
                 return;
             }
 
-            OilSkyLookTables.EvaluateLight(s_activeLookId, period, out color, out intensity);
+            OilSkyLookTables.EvaluateLight(s_activeLookId, NightColdPigmentPeriod(period), out color, out intensity);
         }
 
         /// <summary>
         /// Distance fog tint from the active look table, softened like BoluoDistanceFog.
-        /// Follows the same period blend as the main light (no 21:00 snap).
+        /// A look blend follows the clock. Settled NightCold uses the midnight pigment
+        /// so 19:00–23:00 presets do not pick up dusk haze.
         /// </summary>
         public static void EvaluateFog(float period, out Color fogColor)
         {
@@ -1643,14 +1734,16 @@ namespace CustomSRP
                 return;
             }
 
-            OilSkyLookTables.EvaluateFog(s_activeLookId, period, out fogColor, s_foggyBlend);
+            OilSkyLookTables.EvaluateFog(
+                s_activeLookId, NightColdPigmentPeriod(period), out fogColor, s_foggyBlend);
         }
 
         /// <summary>Cozy fogDensityMultiplier scale relative to noon (preset density × this).</summary>
         public static float EvaluateFogDensityScale(float period)
         {
             if (!LookBlendOpen)
-                return OilSkyLookTables.EvaluateFogDensityScale(s_activeLookId, period);
+                return OilSkyLookTables.EvaluateFogDensityScale(
+                    s_activeLookId, NightColdPigmentPeriod(period));
             float from = OilSkyLookTables.EvaluateFogDensityScale(s_blendFrom, period);
             float to = OilSkyLookTables.EvaluateFogDensityScale(s_blendTo, period);
             return Mathf.Lerp(from, to, s_blendT);

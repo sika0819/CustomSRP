@@ -29,11 +29,11 @@ namespace Game
     }
 
     /// <summary>
-    /// 绑定一张 <c>NoticeCard</c>。进度条按宽度做 9-slice，文案按 0.1 秒刷新。
+    /// 绑定一张 <c>NoticeCard</c>。进度条即时刷新；速度 / 剩余走
+    /// <see cref="DownloadProgressDisplayMeter"/>（约 1s 提交 + EMA）。
     /// </summary>
     public sealed class NoticeCardPresenter
     {
-        const float TextInterval = 0.1f;
         const float MinVisual = 0.05f;
         const string ProgressClass = "notice-card--progress";
         const string IconDownload = "notice-card__icon--download";
@@ -52,11 +52,7 @@ namespace Game
         Label _downloaded;
         Label _sizeDetail;
 
-        bool _hasSample;
-        float _sampleTime;
-        float _sampleMb;
-        float _speedMbps = -1f;
-        float _nextTextTime = -1f;
+        readonly DownloadProgressDisplayMeter _meter = new DownloadProgressDisplayMeter();
         int _shownPercent = -1;
         int _shownDownloaded = -1;
         bool _downloadedApplied;
@@ -140,8 +136,9 @@ namespace Game
         }
 
         /// <summary>
-        /// percent 为 0–100。速度始终展示（未知为「速度--MB/秒」）；
-        /// 有速度才更新剩余时间，无速度时保持上次文案、不写「剩余--」。
+        /// percent 为 0–100。进度条 / MB 可随推送更新；
+        /// 速度始终展示（未知为「速度--MB/秒」），与剩余约 1s 提交一次；
+        /// 无速度时保持上次剩余文案、不写「剩余--」。
         /// </summary>
         public void SetProgress(float percent, float downloadedMb, float totalMb)
         {
@@ -157,45 +154,27 @@ namespace Game
                 _fill.style.width = Length.Percent(visual * 100f);
             }
 
-            float now = Time.realtimeSinceStartup;
-            bool speedSampled = false;
-            if (_hasSample)
-            {
-                float dt = now - _sampleTime;
-                if (dt >= TextInterval)
-                {
-                    float delta = downloadedMb - _sampleMb;
-                    if (delta >= 0f && dt > 0.0001f)
-                        _speedMbps = delta / dt;
-                    _sampleTime = now;
-                    _sampleMb = downloadedMb;
-                    speedSampled = true;
-                }
-            }
-            else
-            {
-                _hasSample = true;
-                _sampleTime = now;
-                _sampleMb = downloadedMb;
-                _speedMbps = -1f;
-            }
-
             bool completed = percent >= 100f;
+            bool commitSpeedEta = _meter.Tick(Time.realtimeSinceStartup, downloadedMb, completed);
             int shownPercent = Mathf.RoundToInt(percent);
             int shownDownloaded = Mathf.RoundToInt(downloadedMb);
-            bool changed = shownPercent != _shownPercent || shownDownloaded != _shownDownloaded;
-            // 速度重采样后也要刷新，否则「速度--」会一直卡到下次进度整数变化。
-            if (!completed && !changed && !speedSampled && _nextTextTime >= 0f && now < _nextTextTime)
+            bool sizeChanged = shownPercent != _shownPercent || shownDownloaded != _shownDownloaded;
+            if (!completed && !sizeChanged && !commitSpeedEta)
                 return;
 
             _shownPercent = shownPercent;
             _shownDownloaded = shownDownloaded;
-            _nextTextTime = now + TextInterval;
-            WriteTexts(percent, downloadedMb, totalMb, completed);
+            WriteTexts(percent, downloadedMb, totalMb, completed, commitSpeedEta);
         }
 
-        void WriteTexts(float percent, float downloadedMb, float totalMb, bool completed)
+        void WriteTexts(
+            float percent,
+            float downloadedMb,
+            float totalMb,
+            bool completed,
+            bool commitSpeedEta)
         {
+            float speedMbps = _meter.DisplaySpeedMbps;
             bool hasTotal = totalMb > 0.01f;
             if (_downloaded != null && (!_downloadedApplied || _downloadedShown != hasTotal))
             {
@@ -213,29 +192,36 @@ namespace Game
                     _eta.text = "完成";
                 if (_sizeDetail != null)
                 {
-                    string speedText = _speedMbps > 0.001f
-                        ? _speedMbps.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+                    // DisplaySpeed 只在 commit 时变；百分比可跟手。
+                    string speedText = speedMbps > 0.001f
+                        ? speedMbps.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)
                         : "--";
                     _sizeDetail.text = $"{Mathf.RoundToInt(percent)}%  速度{speedText}MB/秒";
                 }
                 return;
             }
 
+            // DisplaySpeed 只在 commit 时更新，MB 跟手时速度数字保持不动。
             DownloadDialogCopy.ProgressCopy copy = DownloadDialogCopy.Progress(
                 downloadedMb,
                 totalMb,
-                _speedMbps,
+                speedMbps,
                 completed);
 
             if (_sentence != null)
                 _sentence.text = copy.Prefix ?? string.Empty;
-            // 无速度时 Eta 为空：保持上次有效剩余时间，不显示「剩余--」。
-            if (_eta != null && !string.IsNullOrEmpty(copy.Eta))
-                _eta.text = copy.Eta;
             if (_downloaded != null)
                 _downloaded.text = copy.Downloaded ?? string.Empty;
             if (_sizeDetail != null)
                 _sizeDetail.text = copy.SizeDetail ?? string.Empty;
+
+            if (!commitSpeedEta || _eta == null)
+                return;
+
+            // Meter 侧 sticky：无速度时为空，保持上次有效剩余。
+            string eta = _meter.ResolveEta(downloadedMb, totalMb, completed);
+            if (!string.IsNullOrEmpty(eta))
+                _eta.text = eta;
         }
 
         void ApplyIcon(NoticeCardContent content)
@@ -286,11 +272,7 @@ namespace Game
 
         void ResetSamples()
         {
-            _hasSample = false;
-            _sampleTime = 0f;
-            _sampleMb = 0f;
-            _speedMbps = -1f;
-            _nextTextTime = -1f;
+            _meter.Reset();
             _shownPercent = -1;
             _shownDownloaded = -1;
             _downloadedApplied = false;

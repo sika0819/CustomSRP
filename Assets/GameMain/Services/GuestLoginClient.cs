@@ -77,6 +77,16 @@ namespace Game
                 yield break;
             }
 
+            // 退登后内存空：未过期同设备缓存先灌回，避免无谓 touristLogin。
+            if (Game.BoluoApi.BoluoSession.TryHydrateReusableGuest(
+                    UnityEngine.SystemInfo.deviceUniqueIdentifier))
+            {
+                GuestSession.SyncFromBoluo();
+                Log.Info($"[GuestLogin] reuse guest cache userId={GuestSession.UserId}");
+                done?.Invoke(true, "cache");
+                yield break;
+            }
+
 #if UNITY_EDITOR
             if (ShouldTryRemoteInEditor())
             {

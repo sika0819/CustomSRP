@@ -25,6 +25,7 @@ namespace Game.Tests
         {
             UiAssets.RequestDownloadForm,
             UiAssets.MobileDataConfirmForm,
+            UiAssets.WifiConfirmForm,
             UiAssets.InsufficientStorageForm,
             UiAssets.NoNetworkForm,
             UiAssets.DownloadProgressForm,
@@ -104,8 +105,7 @@ namespace Game.Tests
             Assert.AreEqual(1, ready);
             Assert.IsFalse(HasForm(UiAssets.MobileDataConfirmForm));
 
-            // 批次结束撤销后，第二次点下载仍应出流量窗。
-            DownloadCellularGate.RevokeCellularAllow();
+            // 本岛会话开闸：第二次点下载不应再出流量窗。
             int ready2 = 0;
             DownloadConsentSession.EnsureReady(
                 banks,
@@ -116,16 +116,13 @@ namespace Game.Tests
                     RequestSizeMb = DownloadNetworkGate.FormatSizeMb(banks),
                 });
             yield return WaitForm(UiAssets.RequestDownloadForm, FormOpenTimeoutSec);
-            Prompt("【蜂窝③】第二次下载：再点「立即下载」→「继续下载」，确认仍会弹流量窗。");
-            yield return WaitUntil(
-                () => HasForm(UiAssets.MobileDataConfirmForm),
-                HumanClickTimeoutSec,
-                "第二次点下载后再次出现蜂窝窗");
+            Prompt("【蜂窝③】第二次下载：点「立即下载」。预期：不再出流量窗，直接 Ready。");
             yield return WaitUntil(
                 () => ready2 > 0,
                 HumanClickTimeoutSec,
-                "第二次点「继续下载」后 onReady");
+                "第二次点「立即下载」后 onReady（无流量窗）");
             Assert.AreEqual(1, ready2);
+            Assert.IsFalse(HasForm(UiAssets.MobileDataConfirmForm));
             Prompt("【蜂窝】通过 ✓");
         }
 
@@ -234,6 +231,9 @@ namespace Game.Tests
             DownloadCellularGate.EditorSimulateMobilePlatform = true;
             DownloadCellularGate.EditorReachabilityOverride =
                 NetworkReachability.ReachableViaCarrierDataNetwork;
+            // 蜂窝路径不测 Wi‑Fi 确认窗。
+            BoluoApi.BoluoAppLaunchCache.EditorCancelAccountOverride =
+                BoluoApi.BoluoAppLaunchCache.FeatureOff;
         }
 
         static void ArmWifi()
@@ -241,6 +241,9 @@ namespace Game.Tests
             DownloadCellularGate.EditorSimulateMobilePlatform = true;
             DownloadCellularGate.EditorReachabilityOverride =
                 NetworkReachability.ReachableViaLocalAreaNetwork;
+            // 默认关：点立即下载直接 Ready（开关开另测）。
+            BoluoApi.BoluoAppLaunchCache.EditorCancelAccountOverride =
+                BoluoApi.BoluoAppLaunchCache.FeatureOff;
         }
 
         static void ResetConsent()
@@ -249,6 +252,7 @@ namespace Game.Tests
             DownloadCellularGate.EditorClearReachabilityOverride();
             DownloadCellularGate.ResetForNewSession();
             DownloadCellularGate.EditorSimulateMobilePlatform = false;
+            BoluoApi.BoluoAppLaunchCache.EditorClearOverride();
         }
 
         static void CloseDownloadDialogs()

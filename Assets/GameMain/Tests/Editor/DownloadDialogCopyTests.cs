@@ -130,16 +130,29 @@ namespace Game.Tests
         }
 
         [Test]
-        public void Storage_KeepsClosingQuoteBeforeComma()
+        public void Wifi_UsesDocCopy()
+        {
+            DownloadDialogCopy.DialogCopy copy = DownloadDialogCopy.Wifi("500");
+            Assert.AreEqual("温馨提示", copy.Title);
+            Assert.AreEqual(
+                "需要下载约 500 MB音频资源，当前已连接Wi-Fi，可放心下载",
+                copy.Body);
+            Assert.AreEqual("立即下载", copy.PrimaryLabel);
+            Assert.AreEqual("稍后", copy.SecondaryLabel);
+            Assert.IsTrue(copy.ShowSecondary);
+        }
+
+        [Test]
+        public void Storage_UsesDocCopy()
         {
             DownloadDialogCopy.DialogCopy copy = DownloadDialogCopy.Storage("600");
             Assert.AreEqual("温馨提示", copy.Title);
             Assert.AreEqual(
-                "设备存储空间不足，需至少预留600MB空间才能下载，建议清理存储空间后重试”，无法启动下载。",
+                "设备存储空间不足，需至少预留600MB空间才能下载，建议清理存储空间后重试",
                 copy.Body);
             Assert.AreEqual("我知道了", copy.PrimaryLabel);
             Assert.IsFalse(copy.ShowSecondary);
-            Assert.IsTrue(copy.Body.Contains("重试”，无法启动下载。"));
+            Assert.IsFalse(copy.Body.Contains("”"));
         }
 
         [Test]

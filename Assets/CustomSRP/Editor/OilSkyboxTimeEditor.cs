@@ -54,7 +54,7 @@ namespace CustomSRP.Editor
 
             EditorGUILayout.EndHorizontal();
 
-            float period = sky.CurrentPeriod();
+            float period = sky.VisualPeriod();
             OilSkyboxTime.EvaluateFog(period, out Color fog);
             string fogHex = ColorUtility.ToHtmlStringRGB(fog);
             EditorGUILayout.HelpBox(

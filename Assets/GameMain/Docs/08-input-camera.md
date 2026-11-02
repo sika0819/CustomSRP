@@ -104,9 +104,10 @@ ApplyAspectFov
 
 - 移动被切成**最多 8 个子步**，避免高速穿 `MeshCollider`。
 - 地面采样优先 `EnvGroundFit.TrySnapY`（高度图），否则 `Physics.RaycastNonAlloc`（24 命中，取法线朝上且最低的一个）。
+- `Teleport` 先 `ForceRefreshNear` 再贴地；若高度图落在禁水区且提示高度已在命名甲板带内，改贴 Dock/Pier/Bridge/Qiao/Deck（避免桥上读档掉桥底）。
 - 渲染缩放（`IslandCameraSrpSetup`）：
   `弹窗 0.375` / `闲置沉浸 0.375` / `走动 0.375` / `静止 0.5`。
-- 水面禁行：海面（`oceanY - 0.25` 以下）、河流（XZ 5m 内且 Y 差 ±4m，除非站在水面上方 0.5m）。
+- 水面禁行只认海（高度图 `<= oceanY`，平坦海底也禁；**不要**用听感 `OceanLandClearanceMeters(0.4)`，否则湿岸站着走不了）。河不禁，可沿河床走上岛。海水上的桥/码头（名称含 `Dock/Pier/Bridge/Qiao/Deck`，含流式改名后的子节点 / `Qiao` 父节点；桥面不低于海平面 0.25m）可走，岸比桥面低不超过 1.75m 时允许抬上去；水下结构和海里石头不算。探测 footprint 半径约 3.5m（中心+四向），`DeckFootSlop=1` + 约 0.4s 宽限，避免桥段 Box 缝把过桥摇杆清零。人已经站在桥面上时 last-safe 跟着桥走；海床误站点仍不写入 safe。海面盒为 Trigger。
 
 ### 相机 → SRP 桥（`IslandCameraSrpSetup`）
 
@@ -135,6 +136,8 @@ static void SetRenderScale(GameObject cameraGo, float scale);
 | 停手后视角还在转 | `LocomotionInput.SetLook` 是累加，相机没消费（被禁用） | 相机恢复时会一次性应用；`ClearAll()` 可清 |
 | 摇杆在死区内也算「在移动」 | `TryGetMove` 死区内仍返回 true（速度 0） | 消费方按 `speedRatio` 判断 |
 | 点 HUD 图标会同时拉出摇杆 | 摇杆用名字黑名单排除 HUD | 改名后需同步黑名单 |
+| 过桥中途卡住 / 被拽回岸 | 禁水只认命名甲板；单点射线落进相邻 Pier Box 缝 → `FilterMotionAwayFromWater` 清零 XZ | footprint 探测 + `DeckFootSlop` + named-deck grace；查 Pier `BoxCollider` 是否断开 |
+| 海边码头走不上去 | 流式 `SealSpawnedNames` 把根改成 `envN`，`IsNamedDeckCollider` 只看自/父名 → JianZhu 下的 `SM_Env_Dock_02` 认不出 | 同时认子节点名（`SM_Env_Dock_02_LOD1` / `Prefab_Docks`）；分类父 `Qiao` 仍命中 |
 | 相机卡在地面里 | 地形采样用 AABB 最近点 + 法线朝上筛选；大 mesh 可能取不到 | 看 `GroundNormalMinY=0.45` |
 | 走快了穿过石头 | 已用子步拆分；仍有漏判时检查石头碰撞体是否被 LOD 关掉 | 见 [07-environment.md](07-environment.md) |
 | 相机 render scale 不变 | 反射找不到 `CustomRenderPipelineCamera`（SRP 改程序集名） | 日志 `[IslandCamera] CustomRenderPipelineCamera type not found` |

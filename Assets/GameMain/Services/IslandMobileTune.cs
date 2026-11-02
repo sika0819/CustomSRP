@@ -15,6 +15,21 @@ namespace Game
         /// <summary>闺蜜机标准版：再抬一点像素误差，远景高度网格略粗，近景几乎看不出。4K 不用。</summary>
         const float GmjTerrainPixelError = 36f;
 
+        /// <summary>手机与闺蜜机硬影距离。CRP 再收到 25。</summary>
+        public const float PhoneShadowDistance = 26f;
+
+        /// <summary>平板硬影距离，对齐 Quality 里 Ultra 的 40，中景还能看到接触影。</summary>
+        public const float TabletShadowDistance = 40f;
+
+        /// <summary>移动端远处换成 basemap，避免整岛 splat 常驻。</summary>
+        const float MobileBasemapDistance = 100f;
+
+        /// <summary>
+        /// Basemap shader 缺失时的兜底：超过岛相机 farClip(750)，全程走 TerrainOilNPR splat，
+        /// 避免 Hidden basemap 粉红。正常包仍用 <see cref="MobileBasemapDistance"/>。
+        /// </summary>
+        const float MissingBasemapSafeDistance = 800f;
+
         public static void ApplyAfterTerrainSpawn(GameObject terrainInstance)
         {
             DisableLaunchDirectionalLights();
@@ -32,9 +47,10 @@ namespace Game
 #if !UNITY_EDITOR
             if (QualitySettings.shadows == ShadowQuality.Disable)
                 QualitySettings.shadows = ShadowQuality.HardOnly;
-            // Shorter than Ultra's 40; matches CRP maxDistance for near contact shadows.
-            // 闺蜜机与手机同档硬影距离，避免 6m 观感像没影子。
-            QualitySettings.shadowDistance = 26f;
+            // 手机 / 闺蜜机短于 Ultra 的 40。平板拉到 40，中景接触影还能看见。
+            QualitySettings.shadowDistance = UseTabletShadowDistance
+                ? TabletShadowDistance
+                : PhoneShadowDistance;
             QualitySettings.shadowResolution = ShadowResolution.Low;
 
             IslandSceneComponent scene = IslandSceneComponent.Active;
@@ -94,11 +110,34 @@ namespace Game
             terrain.treeBillboardDistance = Mathf.Min(terrain.treeBillboardDistance, 16f);
             terrain.treeCrossFadeLength = Mathf.Min(terrain.treeCrossFadeLength, 5f);
             // 远处换成一张 basemap，避免整张岛的 splat 常驻。
-            terrain.basemapDistance = 100f;
+            // BaseMap* / AddPass 只写在 TerrainOilNPR Dependency 字符串里，Yoo AutoCollect
+            // 收不到；靠 Always Included + Resources/EngineKeepAlive 材质硬引用进包。
+            // 缺 shader 时绝不能压到 100——Unity 会换 InternalErrorShader，整片洋红。
+            terrain.basemapDistance = ResolveBasemapDistance();
             // Off: terrain self-shadow caused stripe acne; receive stays on in shader.
             terrain.shadowCastingMode = ShadowCastingMode.Off;
             // 全档保持网格路径。Draw Instanced 会让每个顶点采样高度图，占带宽。
             terrain.drawInstanced = false;
+        }
+
+        /// <summary>
+        /// 平板加长阴影。闺蜜机即使长宽比像平板，仍走手机距离。
+        /// </summary>
+        public static bool UseTabletShadowDistance =>
+            ScreenLayout.IsPad && !BoluoDeviceInfo.IsSkyworthGmj();
+
+        static float ResolveBasemapDistance()
+        {
+            Shader basemap = Shader.Find("Hidden/CustomSRP/TerrainLitBasemap");
+            Shader gen = Shader.Find("Hidden/CustomSRP/TerrainLitBasemapGen");
+            if (basemap != null && gen != null)
+                return MobileBasemapDistance;
+
+            Log.Error(
+                "[IslandMobileTune] TerrainLitBasemap/Gen missing — keep splat path" +
+                " (basemap=" + (basemap != null) + " gen=" + (gen != null) +
+                "). Rebuild player with EngineKeepAlive mats + Always Included.");
+            return MissingBasemapSafeDistance;
         }
 
         static Terrain RegisteredTerrain(GameObject terrainRoot)

@@ -7,10 +7,11 @@ Shader "CustomSRP/OilSkyboxNPR"
 
         [Header(Oil Canvas)]
         _OilCanvas ("OilCanvas", 2D) = "gray" {}
+        _OilCanvasNormal ("OilCanvas Normal", 2D) = "bump" {}
         _BrushScale ("Brush Scale", Range(0.5, 8)) = 8
         _BrushStrength ("Brush Strength", Range(0, 1)) = 1
         _BrushContrast ("Brush Contrast", Range(0.5, 4)) = 1.8
-        _BrushRelief ("Brush Relief", Range(0, 1)) = 1
+        _BrushRelief ("Brush Relief", Range(0, 1)) = 0.78
 
         [Header(Sun Moon Stars)]
         _SunTex ("Sun Texture", 2D) = "white" {}

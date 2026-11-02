@@ -697,11 +697,15 @@ namespace Game
             ItemBinding item = _items[index];
             var presets = GameEntry.Presets;
 
-            // F4 switching gate.
+            // F4 switching gate. Stale SchemeState=1 with no iris → heal then allow click.
             if (presets != null && presets.IsTransitioning)
             {
-                ShowToast(BusyToastText);
-                return;
+                IslandMainForm.Current?.HealStalePresetTransitionLatch();
+                if (presets.IsTransitioning)
+                {
+                    ShowToast(BusyToastText);
+                    return;
+                }
             }
 
             if (GameEntry.Weather != null && GameEntry.Weather.IsWeatherBusy)

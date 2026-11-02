@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 4792470882834742111}
   - component: {fileID: 5998082811410764458}
   - component: {fileID: 4419241978093186387}
+  - component: {fileID: 89997810429582735}
   m_Layer: 0
   m_Name: Grand Fir 8
   m_TagString: Untagged
@@ -302,3 +303,16 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+
+--- !u!114 &89997810429582735
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 89270680789952096}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c3e91f4b2d4e6a8c0d1f2e3a4b5c6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 

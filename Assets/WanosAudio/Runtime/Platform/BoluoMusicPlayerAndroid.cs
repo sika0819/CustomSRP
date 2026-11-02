@@ -237,12 +237,14 @@ namespace WanosAudio
         public void OnSystemAudioMuted(string empty)
         {
             WanosEngine.MarkInterrupted("android-system-mute");
+            GlobalPlaybackIntentCallback.NotifySystemAudioInterrupted();
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.TransientInterrupt);
         }
 
         public void OnCompetingAudioMuted(string empty)
         {
             WanosEngine.MarkInterrupted("android-competing-mute");
+            GlobalPlaybackIntentCallback.NotifySystemAudioInterrupted();
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.CompetingLong);
         }
 
@@ -251,6 +253,7 @@ namespace WanosAudio
         public void OnAudioFocusRequestFailed(string empty)
         {
             WanosEngine.MarkInterrupted("android-focus-request-failed");
+            GlobalPlaybackIntentCallback.NotifySystemAudioInterrupted();
         }
         public void SetUserAudioSettings(string payload) { }
 

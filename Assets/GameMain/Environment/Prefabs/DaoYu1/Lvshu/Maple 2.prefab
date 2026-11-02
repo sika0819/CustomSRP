@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 1802139263089283213}
   - component: {fileID: 7283975290536982929}
   - component: {fileID: 5423898782350299689}
+  - component: {fileID: 773013953488352986}
   m_Layer: 0
   m_Name: LOD_Billboard
   m_TagString: Untagged
@@ -334,3 +335,16 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+
+--- !u!114 &773013953488352986
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 211218776531837397}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c3e91f4b2d4e6a8c0d1f2e3a4b5c6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 

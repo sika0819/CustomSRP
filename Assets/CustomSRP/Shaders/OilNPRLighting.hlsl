@@ -45,6 +45,22 @@ half QuantizeNdotL(half ndotL, half steps)
     return (i + f) / (steps - 1.0h);
 }
 
+// 树干专用：更窄的色块羽化，圆柱明暗界更像油画块面，不像软 Lambert。
+half QuantizeNdotLBark(half ndotL, half steps)
+{
+    steps = max(steps, 2.0h);
+    half n = saturate(ndotL) * (steps - 1.0h);
+    half i = floor(n);
+    half f = frac(n);
+#if defined(OIL_MOBILE_PERF)
+    half feather = 0.18h;
+#else
+    half feather = 0.26h;
+#endif
+    f = smoothstep(0.5h - feather * 0.5h, 0.5h + feather * 0.5h, f);
+    return (i + f) / (steps - 1.0h);
+}
+
 // Wide lit falloff. The brush only nicks the edge; the body stays a soft diffuse wash.
 half PainterlyLitAmount(half attenuation, half brush, half wobble)
 {
@@ -93,7 +109,7 @@ half3 PainterlyUmbra(
 // Mobile campfire fill: range×spot×1/r², no point-shadow tap.
 Light GetOtherLightNoShadow(int index, Surface surfaceWS)
 {
-    OtherLightData data = _OtherLightData[index];
+    OtherLightData data = GetOtherLightData(index);
     Light light;
     light.color = data.color.rgb;
     float3 position = data.position.xyz;
@@ -123,11 +139,24 @@ half3 OilNPROtherLights(
 #if defined(OIL_NPR_NO_OTHER_LIGHTS)
     return 0.0h;
 #else
-    if (GetOtherLightCount() <= 0)
+    int otherCount = GetOtherLightCount();
+    if (otherCount <= 0)
     {
         return 0.0h;
     }
 
+    half steps = max(shadeSteps * 0.5h, 2.0h);
+    half3 sum = 0.0h;
+#if defined(CUSTOM_SRP_LIGHT_CBUFFER)
+    // GLES: no Forward+ tile SSBO — walk the packed other-light CBUFFER (cap 8).
+    int last = otherCount - 1;
+#if defined(OIL_MOBILE_PERF)
+    last = min(last, 1);
+#endif
+    for (int j = 0; j <= last; j++)
+    {
+        Light light = GetOtherLightNoShadow(j, surfaceWS);
+#else
     ForwardPlusTile tile = GetForwardPlusTile(screenUV);
     int first = tile.GetFirstLightIndexInTile();
     int last = tile.GetLastLightIndexInTile();
@@ -135,11 +164,10 @@ half3 OilNPROtherLights(
     // Campfire + one spare. Other lights do not sample the shadow atlas.
     last = min(last, first + 1);
 #endif
-    half steps = max(shadeSteps * 0.5h, 2.0h);
-    half3 sum = 0.0h;
     for (int j = first; j <= last; j++)
     {
         Light light = GetOtherLightNoShadow(tile.GetLightIndex(j), surfaceWS);
+#endif
         if ((surfaceWS.renderingLayerMask & light.renderingLayerMask) == 0u)
         {
             continue;
@@ -228,7 +256,7 @@ half3 OilNPRLightingEx(
         return OilDitherQuantize(unlit, (half)surfaceWS.dither, quantize);
     }
 
-    DirectionalLightData lightData = _DirectionalLightData[0];
+    DirectionalLightData lightData = GetDirectionalLightData(0);
     half3 lightColor = (half3)lightData.color.rgb;
     half3 L = (half3)lightData.directionAndMask.xyz;
     half attenuation = forcedAttenuation;
@@ -275,8 +303,8 @@ half3 OilNPRLightingEx(
     // albedo fill: lit ground stays readable, the cast shape is a darker slice of it.
     // Same treatment for terrain + mesh receivers (rocks / wood / props).
     half umbraHueMix = 0.4h;
-    half3 nightLit = albedo * half3(0.11h, 0.13h, 0.18h) + albedo * lightColor;
-    half3 nightUmbra = albedo * half3(0.035h, 0.040h, 0.055h);
+    half3 nightLit = albedo * half3(0.045h, 0.055h, 0.085h) + albedo * lightColor;
+    half3 nightUmbra = albedo * half3(0.016h, 0.018h, 0.028h);
     litColor = lerp(nightLit, litColor, dayLit);
     umbraColor = lerp(nightUmbra, umbraColor, dayLit);
     umbraHueMix *= dayLit;
@@ -321,21 +349,21 @@ half3 OilNPRLightingEx(
 #endif
 }
 
-// Vegetation path: shared OilVegetationDirect + local other lights (billboards).
+// Vegetation path: shared OilVegetationDirect + local other lights.
+// No cascade sample: leaf volume paint is the shade. Near-in-shadow-distance vs
+// far-out used to noon-pop even when ReceiveShadows=0 on some variants.
 half3 OilFoliageLighting(Surface surfaceWS, half3 albedo, half shadeSteps, float2 screenUV)
 {
     half3 N = normalize((half3)surfaceWS.normal);
     half3 lightColor = 0.0h;
     half3 L = half3(0.0h, 1.0h, 0.0h);
-    half att = 0.0h;
+    half att = 1.0h;
     half lightLum = 0.0h;
     if (GetDirectionalLightCount() > 0)
     {
-        ShadowData shadowData = GetShadowData(surfaceWS);
-        Light light = GetDirectionalLight(0, surfaceWS, shadowData);
-        lightColor = (half3)light.color;
-        L = (half3)light.direction;
-        att = (half)light.attenuation;
+        DirectionalLightData data = GetDirectionalLightData(0);
+        lightColor = (half3)data.color.rgb;
+        L = (half3)data.directionAndMask.xyz;
         lightLum = OilVegMainLightLuma(lightColor);
     }
 
@@ -353,22 +381,159 @@ half3 OilTreeBillboardLitNormal(half3 bakedNormalEnc, half normalStrength)
     return normalize(lerp(half3(0.0h, 1.0h, 0.0h), bakedWS, strength));
 }
 
-// Far cross-card: same OilFoliageLighting as near leaves (BoluoUnity LitAlbedoObject).
-// Dark: OilVegetationLitNormal biases toward up → ambient matches grass zenith fill.
+// Volume paint needs OilNPRInput CBUFFER (_FoliageHeight / Top/Bottom).
+// Ocean / River / Waterfall / Terrain include this file without those uniforms —
+// keep paint + billboard shade behind the OilNPR input include guard.
+#if defined(CUSTOM_OIL_NPR_INPUT_INCLUDED)
+
+// Leaf: oil-paint clump volume without real shadows.
+// Top/Bottom = 草叶色/草根色 as relative shade hue (lit keeps albedo).
+// Mesh-local Y: (OS.y - YMin) / HeightSpan → every LOD maps its own bounds to 0..1
+// (absolute meters disagreed across LOD0/LOD1/LOD2 meshes and short bushes).
+// Palm/TAI atlas: only green texels take leaf volume; trunk keeps side paint.
+half3 OilFoliagePaintAlbedo(half3 albedo, float3 positionOS, half3 normalWS)
+{
+    float span = max(_FoliageHeight, 0.01);
+    float yOff = clamp(_GradientOffset, -0.5, 0.5);
+    float y01 = saturate((positionOS.y - _FoliageYMin) / span + yOff);
+    // LOD-stable crown→base band (no nUp — LOD meshes disagree on normals).
+    float volume = saturate(pow(y01, 0.82));
+
+    half3 leafPainted = OilVolumePaintAlbedo(
+        albedo,
+        volume,
+        (half3)_TopColor.rgb,
+        (half3)_BottomColor.rgb,
+        max(_GradientSmoothness, 0.08));
+
+    // g ≫ r,b → leaf；棕树干用侧面曲率做暖赭体积，不再几乎平涂。
+    half leafMask = saturate((albedo.g - max(albedo.r, albedo.b)) * 5.0h);
+    half3 n = normalize(normalWS);
+    half barkSide = saturate(1.0h - abs(dot(n, half3(0.0h, 1.0h, 0.0h))));
+    float barkVol = saturate(y01 * 0.30 + (float)barkSide * 0.70);
+    barkVol = saturate(pow(barkVol, 0.78));
+    half3 trunkPainted = OilVolumePaintAlbedo(
+        albedo,
+        barkVol,
+        half3(0.62h, 0.48h, 0.34h),
+        half3(0.30h, 0.20h, 0.14h),
+        max((float)_GradientSmoothness, 0.10));
+    return lerp(trunkPainted, leafPainted, leafMask);
+}
+
+// 树干体积色：相对暗部（亮部保留 albedo）。Top/Bottom 近白时用暖赭默认。
+half3 OilBarkPaintAlbedo(half3 albedo, float3 positionOS, half3 normalWS)
+{
+    float span = max(_FoliageHeight, 0.01);
+    float yOff = clamp(_GradientOffset, -0.5, 0.5);
+    float y01 = saturate((positionOS.y - _FoliageYMin) / span + yOff);
+    half3 n = normalize(normalWS);
+    half barkSide = saturate(1.0h - abs(dot(n, half3(0.0h, 1.0h, 0.0h))));
+    float volume = saturate(y01 * 0.28 + (float)barkSide * 0.72);
+    volume = saturate(pow(volume, 0.75));
+
+    half3 top = (half3)_TopColor.rgb;
+    half3 bottom = (half3)_BottomColor.rgb;
+    half topPeak = max(top.r, max(top.g, top.b));
+    half botFloor = min(bottom.r, min(bottom.g, bottom.b));
+    if (topPeak > 0.92h && botFloor > 0.92h)
+    {
+        top = half3(0.62h, 0.48h, 0.34h);
+        bottom = half3(0.28h, 0.18h, 0.12h);
+    }
+
+    return OilVolumePaintAlbedo(
+        albedo,
+        volume,
+        top,
+        bottom,
+        max((float)_GradientSmoothness, 0.10));
+}
+
+// 树干光照：更紧的色块分带 + 更少环境光冲淡，圆柱明暗界清楚。
+half3 OilBarkLighting(Surface surfaceWS, half3 albedo, half shadeSteps, float2 screenUV)
+{
+    half3 N = normalize((half3)surfaceWS.normal);
+    half3 ambient = OilNPRAmbient(surfaceWS);
+    half3 other = OilNPROtherLights(surfaceWS, albedo, N, shadeSteps, screenUV);
+
+    if (GetDirectionalLightCount() <= 0)
+    {
+        half3 unlit = albedo * (ambient * 0.85h) + other;
+        return OilDitherQuantize(unlit, (half)surfaceWS.dither, 0.22h);
+    }
+
+    ShadowData shadowData = GetShadowData(surfaceWS);
+    Light light = GetDirectionalLight(0, surfaceWS, shadowData);
+    half3 lightColor = (half3)light.color;
+    half3 L = (half3)light.direction;
+    half attenuation = (half)light.attenuation;
+
+    // 比半兰伯特更收一点 wrap，柱面明暗界更实。
+    half ndotl = saturate(dot(N, L) * 0.72h + 0.28h);
+    half steps = clamp(shadeSteps, 2.0h, 3.0h);
+    half attSoft = smoothstep(0.08h, 0.50h, attenuation);
+    half keyLum = dot(lightColor, half3(0.2126h, 0.7152h, 0.0722h));
+    half dayLit = saturate(keyLum * 2.5h);
+    half shadowKeep = lerp(0.03h, 0.16h, dayLit);
+    half litCont = saturate(ndotl * lerp(shadowKeep, 1.0h, attSoft));
+    litCont += ((half)surfaceWS.dither - 0.5h) * (0.35h / steps);
+    half lit = QuantizeNdotLBark(litCont, steps);
+#if defined(OIL_MOBILE_PERF)
+    lit = lerp(lit, litCont, 0.08h);
+#else
+    lit = lerp(lit, litCont, 0.12h);
+#endif
+
+    // 环境光少掺，否则树干被 SH 洗成圆筒平涂。
+    half3 litColor = albedo * (ambient * 0.28h + lightColor);
+    // 暖赭暗部：相对 albedo，避免旧「树干色 ×0.42」死黑。
+    half3 dayUmbra = albedo * half3(0.48h, 0.34h, 0.24h);
+    half3 nightUmbra = albedo * half3(0.040h, 0.045h, 0.065h);
+    half3 nightLit = albedo * (ambient * 0.55h + lightColor);
+    litColor = lerp(nightLit, litColor, dayLit);
+    half3 umbraColor = lerp(nightUmbra, dayUmbra, dayLit);
+
+    // 暗部略偏冷、亮部偏暖 → 油画冷暖交界。
+    half3 coolShade = albedo * half3(0.36h, 0.38h, 0.46h);
+    umbraColor = lerp(umbraColor, coolShade, 0.22h * dayLit);
+
+    if (any(other > 1e-4h))
+        umbraColor = lerp(umbraColor, albedo * half3(0.50h, 0.28h, 0.12h) + other * 0.22h, 0.45h);
+
+    half3 color = lerp(umbraColor, litColor, lit) + other;
+#if !defined(OIL_MOBILE_PERF)
+    half3 V = (half3)surfaceWS.viewDirection;
+    half inv = 1.0h - saturate(dot(N, V));
+    color += albedo * half3(1.0h, 0.82h, 0.55h) * (inv * inv) * 0.06h;
+#endif
+    return color;
+}
+
+// Far cross-card / Y-billboard: paint then OilFoliageLighting (matches near leaves).
+// Paint uses raw baked normal (same role as near mesh N); lit normal stays up-biased.
 half3 OilTreeCrossBillboardShade(
     half3 albedo,
     half3 bakedNormalEnc,
     half normalStrength,
     Surface surfaceWS,
+    float3 positionOS,
     float2 screenUV)
 {
-    half3 n = OilTreeBillboardLitNormal(bakedNormalEnc, normalStrength);
+    half3 bakedOS = OilTreeCrossBillboardDecodeObjectNormal(bakedNormalEnc);
+    half3 nPaint = normalize((half3)TransformObjectToWorldNormal((float3)bakedOS));
+    half3 nLit = OilTreeBillboardLitNormal(bakedNormalEnc, normalStrength);
+    half3 painted = OilFoliagePaintAlbedo(albedo, positionOS, nPaint);
 
     Surface s = surfaceWS;
-    s.normal = (float3)n;
-    s.interpolatedNormal = (float3)n;
-    return OilFoliageLighting(s, albedo, 2.0h, screenUV);
+    s.normal = (float3)nLit;
+    s.interpolatedNormal = (float3)nLit;
+    s.color = (float3)painted;
+    // Same shade steps as near leaf mat (was hardcoded 2 → LOD lighting pop).
+    return OilFoliageLighting(s, painted, max((half)_ShadeSteps, 2.0h), screenUV);
 }
+
+#endif // CUSTOM_OIL_NPR_INPUT_INCLUDED
 
 // Wrapper: sample cascade shadows (forcedAttenuation < 0).
 // shadowTint/shadowWarm/shadowLift/shadeLift: dead code for water (RECEIVE_SHADOWS=0).

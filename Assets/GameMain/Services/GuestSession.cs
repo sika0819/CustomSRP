@@ -86,6 +86,11 @@ namespace Game
             string device = SystemInfo.deviceUniqueIdentifier;
             if (string.IsNullOrEmpty(device))
                 device = "editor";
+
+            // 退登后内存空：先灌未过期同设备缓存（含上次 editor / tourist 票）。
+            if (BoluoSession.TryHydrateReusableGuest(device))
+                return;
+
             // 稳定 id：勿用 string.GetHashCode（跨进程不稳定）。
             string id = "guest_" + StableHex8(device);
             string token = "editor_guest_" + id;

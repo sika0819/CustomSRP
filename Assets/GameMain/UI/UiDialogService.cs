@@ -253,6 +253,23 @@ namespace Game
         }
 
         /// <summary>
+        /// Wi‑Fi 下载确认（AppLaunch 线上下载弹窗开关开启时）。
+        /// </summary>
+        public static void ShowWifiDownloadConfirm(
+            string resourceSize,
+            Action onDownload,
+            Action onLater = null)
+        {
+            var data = new WifiConfirmForm.UserData
+            {
+                ResourceSize = resourceSize,
+                OnDownload = onDownload,
+                OnLater = onLater,
+            };
+            UiAssets.OpenDialog(UiAssets.WifiConfirmForm, data);
+        }
+
+        /// <summary>
         /// Show insufficient storage dialog.
         /// </summary>
         public static void ShowInsufficientStorage(

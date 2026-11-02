@@ -76,10 +76,14 @@ Material:
     - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
     - _EnvironmentReflections: 1
+    - _FoliageHeight: 12
+    - _GradientOffset: 0
+    - _GradientSmoothness: 0.12
     - _InternalEdge: 0
     - _NormalStrength: 0.85
     - _OilCrossBillboard: 0
     - _OilFoliage: 0
+    - _OilBark: 1
     - _OilFoliageSkipDay: 0
     - _OilYBillboard: 0
     - _PaintThickness: 0.18
@@ -87,7 +91,7 @@ Material:
     - _QueueOffset: 0
     - _ReceiveShadows: 1
     - _ShadeLift: 0.42
-    - _ShadeSteps: 4
+    - _ShadeSteps: 3
     - _ShadowBrushScale: 1.8
     - _ShadowLift: 0.95
     - _ShadowWobble: 0.45
@@ -105,7 +109,7 @@ Material:
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
-    - _BottomColor: {r: 0.4157, g: 0.3569, b: 0.2941, a: 1}
+    - _BottomColor: {r: 0.28, g: 0.18, b: 0.12, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EdgeColor: {r: 0.35, g: 0.3, b: 0.25, a: 1}
     - _EmissionColor: {r: 1, g: 1, b: 1, a: 1}
@@ -114,6 +118,6 @@ Material:
     - _ShadowWarm: {r: 1, g: 1, b: 1, a: 1}
     - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
     - _SpecularColor: {r: 0.66, g: 0.63, b: 0.56, a: 1}
-    - _TopColor: {r: 0.4157, g: 0.3569, b: 0.2941, a: 1}
+    - _TopColor: {r: 0.62, g: 0.48, b: 0.34, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

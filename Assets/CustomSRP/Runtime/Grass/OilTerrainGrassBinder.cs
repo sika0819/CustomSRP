@@ -138,8 +138,21 @@ namespace CustomSRP
         Vector4[][] _windowPackUpload;
         readonly Stopwatch _grassWork = new Stopwatch();
         bool _windowRebuiltThisFrame;
+        bool _submittedGrassThisFrame;
         bool _shrinkQueued;
         int _shrinkCursor;
+        /// <summary>
+        /// DrawIndirect 之后不能立刻 Release：真机 hitch 后帧计数不够，
+        /// 墙钟延后才安全（揭罩同窗 SEGV 实测 Unlock+30ms）。
+        /// </summary>
+        const float BufferReleaseDelaySec = 2.5f;
+        readonly List<PendingBufferRelease> _pendingBufferReleases = new List<PendingBufferRelease>(8);
+
+        struct PendingBufferRelease
+        {
+            public ComputeBuffer Buffer;
+            public float ReleaseAtRealtime;
+        }
         int[] _pendingPackedV = new int[OilTerrainGrassBladeMesh.TopologyCount];
         int[][] _packOffsetsV;
         int[][] _packCountsV;
@@ -382,6 +395,8 @@ namespace CustomSRP
         {
             if (_gpuReleased || cam == null || !DebugDrawEnabled || !_bakeLoaded)
                 return;
+            if (!BootLoadingService.EntryGpuSettled)
+                return;
             EnsureGpu();
             if (!_gpuReady || _packedCount <= 0)
                 return;
@@ -400,7 +415,9 @@ namespace CustomSRP
         {
             using (MarkerLateUpdate.Auto())
             {
+                TickPendingBufferReleases();
                 _windowRebuiltThisFrame = false;
+                _submittedGrassThisFrame = false;
                 _grassWork.Restart();
                 try
                 {
@@ -408,7 +425,7 @@ namespace CustomSRP
                 }
                 finally
                 {
-                    TryShrinkOneGrassPiece();
+                    // 岛内禁止 Shrink→Release：进岛只画，ReleaseGpu 只出岛。
                 }
             }
         }
@@ -416,6 +433,13 @@ namespace CustomSRP
         void TickGrass()
         {
             if (_gpuReleased || !DebugDrawEnabled || !_bakeLoaded)
+            {
+                LastVisibleCount = 0;
+                return;
+            }
+
+            // 揭罩 PostUncover 未安定：禁止 CullAndDraw（Adreno + Unlock 同窗 SEGV）。
+            if (!BootLoadingService.EntryGpuSettled)
             {
                 LastVisibleCount = 0;
                 return;
@@ -505,6 +529,7 @@ namespace CustomSRP
             _farMeshOwned = null;
             _ownsBladeMesh = false;
 
+            FlushPendingBufferReleasesNow();
             ReleaseBuffers();
 
             atlasTexture = null;
@@ -1201,6 +1226,7 @@ namespace CustomSRP
                 Graphics.DrawMeshInstancedProcedural(
                     mesh, 0, mat, renderBound, proceduralCount,
                     _grassMpb, ShadowCastingMode.Off, false, 0, _bindDrawCamera);
+                _submittedGrassThisFrame = true;
                 return;
             }
 
@@ -1209,6 +1235,7 @@ namespace CustomSRP
             Graphics.DrawMeshInstancedIndirect(
                 mesh, 0, mat, renderBound, args,
                 0, _grassMpb, ShadowCastingMode.Off, false, 0, _bindDrawCamera);
+            _submittedGrassThisFrame = true;
         }
 
         void ReplayLastGrassDraw()
@@ -1340,12 +1367,15 @@ namespace CustomSRP
                 return false;
             if (!_valhallChecked)
             {
-                string gpu = SystemInfo.graphicsDeviceName;
-                if (string.IsNullOrEmpty(gpu))
-                    return true;
+                string gpu = SystemInfo.graphicsDeviceName ?? string.Empty;
                 _valhallChecked = true;
-                // 闺蜜机等非 Valhall 仍走 GPU 剔除 + indirect；Valhall 才改 CPU + procedural。
-                _forceCpuCullValhall = IsValhallMaliGpu(gpu);
+                // 移动端一律 CPU + procedural：Adreno DrawIndirect 揭罩同窗 SEGV（小米实测）。
+                // Valhall / Immortalis 同路径。编辑器 / 主机仍可 GPU cull。
+                _forceCpuCullValhall = Application.isMobilePlatform
+                    || IsValhallMaliGpu(gpu)
+                    || IsAdrenoGpu(gpu);
+                if (_forceCpuCullValhall)
+                    Log.Info("[OilTerrainGrass] force CPU cull gpu=" + gpu);
             }
 
             return !_forceCpuCullValhall;
@@ -1360,6 +1390,13 @@ namespace CustomSRP
                 || gpu.IndexOf("Mali-G71", System.StringComparison.Ordinal) >= 0
                 || gpu.IndexOf("Mali-G72", System.StringComparison.Ordinal) >= 0
                 || gpu.IndexOf("Immortalis", System.StringComparison.Ordinal) >= 0;
+        }
+
+        static bool IsAdrenoGpu(string gpu)
+        {
+            if (string.IsNullOrEmpty(gpu))
+                return false;
+            return gpu.IndexOf("Adreno", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>与 CSMainAdd 同一套株型远裁和远距抽稀，srcId 是该株型 packed 下标。</summary>
@@ -1570,6 +1607,7 @@ namespace CustomSRP
 
         /// <summary>
         /// 计算着色器和材质还握着旧 buffer 时直接 Release，驱动不会把显存还回来。
+        /// 真机：DrawIndirect 后同帧 Release → UnityGfxDeviceW SEGV；先解绑，Release 延后几帧。
         /// </summary>
         void ReleaseReplacing(ref ComputeBuffer buffer)
         {
@@ -1595,9 +1633,47 @@ namespace CustomSRP
                 _grassMpb.SetBuffer(VisibleInstanceOnlyTransformId, stub);
             }
 
-            if (buffer.IsValid())
-                buffer.Release();
+            QueueBufferRelease(buffer);
             buffer = null;
+        }
+
+        void QueueBufferRelease(ComputeBuffer buffer)
+        {
+            if (buffer == null)
+                return;
+            _pendingBufferReleases.Add(new PendingBufferRelease
+            {
+                Buffer = buffer,
+                ReleaseAtRealtime = Time.realtimeSinceStartup + BufferReleaseDelaySec,
+            });
+        }
+
+        void TickPendingBufferReleases()
+        {
+            float now = Time.realtimeSinceStartup;
+            for (int i = _pendingBufferReleases.Count - 1; i >= 0; i--)
+            {
+                PendingBufferRelease item = _pendingBufferReleases[i];
+                if (now < item.ReleaseAtRealtime)
+                    continue;
+
+                ComputeBuffer buf = item.Buffer;
+                _pendingBufferReleases.RemoveAt(i);
+                if (buf != null && buf.IsValid())
+                    buf.Release();
+            }
+        }
+
+        void FlushPendingBufferReleasesNow()
+        {
+            for (int i = 0; i < _pendingBufferReleases.Count; i++)
+            {
+                ComputeBuffer buf = _pendingBufferReleases[i].Buffer;
+                if (buf != null && buf.IsValid())
+                    buf.Release();
+            }
+
+            _pendingBufferReleases.Clear();
         }
 
         void TryShrinkOneGrassPiece()
@@ -2017,7 +2093,8 @@ namespace CustomSRP
             _keepOutCell = data.WorldSize / data.Res;
             _keepOutEnabled = _keepOutRes > 0 && _keepOutCell > 1e-4f;
             _keepOutLoadTried = true;
-            if (_forceCpuCullValhall)
+            // CPU cull 不建 KeepOut ComputeBuffer；移动端揭罩同窗禁止同步 Release。
+            if (_forceCpuCullValhall || Application.isMobilePlatform)
             {
                 Log.Info(
                     $"[OilTerrainGrass] KeepOut cpu res={_keepOutRes} cell={_keepOutCell:F2} " +
@@ -2033,8 +2110,7 @@ namespace CustomSRP
             if (_keepOutGrid != null)
             {
                 UnbindComputeToStub();
-                if (_keepOutGrid.IsValid())
-                    _keepOutGrid.Release();
+                QueueBufferRelease(_keepOutGrid);
                 _keepOutGrid = null;
             }
 

@@ -8,6 +8,7 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Game.Editor.BuildTool
 {
@@ -496,6 +497,10 @@ namespace Game.Editor.BuildTool
                 if (!BuildGradleProject(gradleRoot, config))
                     return 1;
 
+                // graphicsJobs=false 在 6000.6.4 Android Vulkan 上不改 boot.config，
+                // 导出仍是 gfx-threading-mode=4。这里覆盖成线程渲染、无 Graphics Jobs。
+                ForceThreadedGfxBootConfig(gradleRoot);
+
                 string unityLibrary = Path.Combine(gradleRoot, "unityLibrary");
                 if (!Directory.Exists(unityLibrary))
                 {
@@ -643,6 +648,8 @@ namespace Game.Editor.BuildTool
             if (!string.IsNullOrEmpty(config.AndroidKeyPass))
                 PlayerSettings.Android.keyaliasPass = config.AndroidKeyPass;
 
+            ApplyAdrenoVulkanDenyFallback();
+
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
             // TerrainLayer (class ID 1953259897) only appears in YooAsset bundles. Strip Engine
             // Code drops it → Instantiate IslandTerrain fails → no splat textures / collision.
@@ -673,6 +680,70 @@ namespace Game.Editor.BuildTool
             {
                 PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
             }
+        }
+
+        /// <summary>
+        /// Android 图形 API：Vulkan only。
+        /// RCA：GLES3-only 挡 Adreno Vulkan timeout 后，TerrainOilNPR/OilNPR 在 Adreno GLES
+        /// 上报 BufferBlock/Sampler location exceeds → Linking failed → 整岛空白。
+        /// Vulkan 路径地形可链；Prefill hardCap + 揭罩重排压 VK_TIMEOUT。禁止再塞 GLES 进 API 列表。
+        /// </summary>
+        static void ApplyAdrenoVulkanDenyFallback()
+        {
+            PlayerSettings.SetGraphicsAPIs(
+                BuildTarget.Android,
+                new[] { GraphicsDeviceType.Vulkan });
+#pragma warning disable CS0618 // AndroidDeviceFilterData → VulkanDeviceFilterLists
+            PlayerSettings.Android.androidVulkanDenyFilterList =
+                System.Array.Empty<AndroidDeviceFilterData>();
+#pragma warning restore CS0618
+            // Native graphics jobs (boot.config gfx-threading-mode=4, ClientWorkerNativeJobs)
+            // free small blocks onto UnityGfxDeviceW's mimalloc thread-free list. On this
+            // Adreno pad that list was walked with a smashed next pointer inside
+            // GfxDeviceVK::SetRenderTargets → SIGSEGV. Threaded worker stays on; jobs stay off.
+            // SetGraphicsJobsForPlatform is internal on 6000.6. graphicsJobs writes the
+            // active target; Export/APK already require activeBuildTarget == Android.
+            PlayerSettings.graphicsJobs = false;
+            // Unique fingerprint — pack scripts grep this after export.
+            // 6000.6.4 still writes gfx-threading-mode=4 after this; ForceThreadedGfxBootConfig
+            // rewrites the exported boot.config to mode 2.
+            Debug.Log("[BoluoCI] Android graphics APIs=Vulkan-only jobs=off TERRAIN_FIX_20261102");
+        }
+
+        /// <summary>
+        /// 2 = kGfxThreadingModeThreaded. Mode 4 (ClientWorkerNativeJobs) frees small
+        /// blocks onto the gfx-worker mimalloc list; on this Adreno pad the next
+        /// pointer becomes 0x18c000000000 and the main thread SIGSEGV's in
+        /// mi_page_free_collect during PlayerLoop (same fault as UnityGfxDeviceW
+        /// SetRenderTargets).
+        /// </summary>
+        static void ForceThreadedGfxBootConfig(string gradleRoot)
+        {
+            string boot = Path.Combine(
+                gradleRoot, "unityLibrary", "src", "main", "assets", "bin", "Data", "boot.config");
+            if (!File.Exists(boot))
+            {
+                Debug.LogWarning("[BoluoCI] boot.config missing, cannot force gfx-threading-mode: " + boot);
+                return;
+            }
+
+            const string threaded = "gfx-threading-mode=2";
+            string text = File.ReadAllText(boot);
+            string patched = Regex.Replace(
+                text,
+                @"^gfx-threading-mode=\d+",
+                threaded,
+                RegexOptions.Multiline);
+            if (patched.IndexOf(threaded, StringComparison.Ordinal) < 0)
+                patched = threaded + "\n" + patched;
+            if (patched == text)
+            {
+                Debug.Log("[BoluoCI] boot.config already " + threaded);
+                return;
+            }
+
+            File.WriteAllText(boot, patched);
+            Debug.Log("[BoluoCI] boot.config forced " + threaded + " (native graphics jobs off)");
         }
 
         static void ApplyScreenOrientation(CIConfig config)

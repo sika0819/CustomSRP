@@ -177,7 +177,7 @@ namespace Game
             float s = size / RefIcon;
             // Equalizer bars are mesh (HudEqualizerBars) — no ScaleChild layout anim.
             ScaleChild(host.Q("volumeTrack"), 0f, 0f, 108f, 108f, s);
-            // Fills: full track width; volume anim uses scale.x from left origin.
+            // Fills start on the gray track's left (x=24). Volume then sets width from that edge.
             ScaleChild(host.Q("volumeTrack1"), 24f, 33f, 60f, 12f, s);
             ScaleChild(host.Q("volumeTrack2"), 24f, 63f, 60f, 12f, s);
             // Dots: park at minX (24); volume anim uses translate.

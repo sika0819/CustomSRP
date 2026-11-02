@@ -41,11 +41,15 @@ Material:
         m_Texture: {fileID: 2800000, guid: e64396a97cad4145a95cdde3549ae2b9, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _PaintNormal:
+        m_Texture: {fileID: 2800000, guid: a9c3e7b14d2f48a0b6e15c8d0f3a7b52, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _AlbedoBoost: 0.85
-    - _BumpScale: 0.12
-    - _BumpTile: 10
+    - _BumpScale: 0.18
+    - _BumpTile: 40
     - _DstBlend: 10
     - _GlintStrength: 1.2
     - _GlintTile: 10
@@ -56,11 +60,11 @@ Material:
     - _IntersectionLength: 1.15
     - _IntersectionSpeed: 0.3
     - _IntersectionTiling: 0.28
-    - _PaintContrast: 3
-    - _PaintRelief: 0.17
+    - _PaintContrast: 1.1
+    - _PaintRelief: 0.623
     - _PaintTile: 20
     - _PremulAlpha: 1
-    - _ReflectStrength: 0.62
+    - _ReflectStrength: 0.48
     - _ShadeSteps: 3
     - _ShoreFoamWidth: 1.46
     - _SpecularThreshold: 1
@@ -71,8 +75,8 @@ Material:
     - _ZWrite: 0
     m_Colors:
     - _BaseColor: {r: 0.52156866, g: 0.7921569, b: 0.9647059, a: 1}
-    - _BumpScroll: {r: 0.02, g: -0.12, b: 0, a: 0}
-    - _BumpTiling: {r: 1, g: 4, b: 0, a: 0}
+    - _BumpScroll: {r: 0, g: 0, b: 0, a: 0}
+    - _BumpTiling: {r: 1, g: 5, b: 1, a: 1}
     - _GlintColor: {r: 0.92, g: 0.78, b: 0.42, a: 1}
     - _MeshFlowScale: {r: 50, g: -100, b: 0, a: 0}
     - _ShallowColor: {r: 0.4, g: 0.38, b: 0.28, a: 0.88}

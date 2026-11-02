@@ -10,7 +10,12 @@ namespace Game
 {
     /// <summary>
     /// Boluo BootLoadingService subset over <see cref="LoadingForm"/>.
-    /// Progress never goes backward; world spawn only reports; uncover fades the cover.
+    /// <para>
+    /// 进岛契约：Show 罩 → 加载 ReportProgress → FadeHide/Hide → SoftStop + Disarm（Conceal）。
+    /// 禁止进岛/揭罩路径：ReleaseAllUnused、罩视频 RT Release、草 ReleaseGpu。
+    /// 上述释放只走出岛（<see cref="ReleaseCoverGpuNow"/> / <see cref="ReleaseUnusedUiPool"/> /
+    /// IslandGpuLeave / IslandGrassService.Release）。
+    /// </para>
     /// </summary>
     public static class BootLoadingService
     {
@@ -33,10 +38,25 @@ namespace Game
         static Coroutine _fade;
         static Coroutine _poolRelease;
         static Coroutine _extinguish;
+        /// <summary>揭罩后安静再卸视频 RT（防泄漏）；Show 时取消。</summary>
+        static Coroutine _coverGpuRelease;
         static LoadingCoverLatch _latch;
 
         public static bool Suppressed { get; private set; }
         static LoadingForm _form;
+
+        /// <summary>
+        /// PostUncoverRelock 结束后才 true。揭罩同窗禁止铺草 / DrawIndirect（真机 Adreno UnityGfx SEGV）。
+        /// </summary>
+        public static bool EntryGpuSettled { get; private set; }
+
+        public static void MarkEntryGpuSettled()
+        {
+            if (EntryGpuSettled)
+                return;
+            EntryGpuSettled = true;
+            Log.Info("[BootLoadingService] EntryGpuSettled");
+        }
 
         public static bool IsVisible =>
             _visible && !_hiding && (AliveForm() != null || BootEarlyCover.IsShowing);
@@ -76,7 +96,9 @@ namespace Game
             _fade = null;
             _poolRelease = null;
             _extinguish = null;
+            _coverGpuRelease = null;
             _form = null;
+            EntryGpuSettled = false;
             Suppressed = false;
         }
 
@@ -108,7 +130,9 @@ namespace Game
             // 把 GuestLogin / 二次进岛刚 Show 的罩拆掉 → 真机「卡在加载界面」。
             StopRoutines();
             StopExtinguish();
+            StopCoverGpuRelease();
             Suppressed = false;
+            EntryGpuSettled = false;
             _hiding = false;
             // 关掉的 Document 不算活罩。先丢掉引用，再按 UIManager 里仍打开的实例恢复。
             if (!IsCoverLive(_form))
@@ -210,7 +234,21 @@ namespace Game
             _hiding = false;
             _shownProgress = 0f;
             _targetProgress = 0f;
+            // 等透明帧画出去再 Disarm Document（不 Close）：Close/卸池会 SEGV；
+            // Document 不关则会挡住 IslandMain 摇杆 UITK 命中。
+            ScheduleExtinguish();
             Log.Info("[Hitch] BootLoading Hide ms=" + sw.ElapsedMilliseconds);
+        }
+
+        /// <summary>
+        /// 揭罩后立刻让出 UITK 命中：藏树 + 关 Loading Document，不 Close 界面
+        ///（Close/卸池会撞 UnityGfxDeviceW SEGV；下次 Show 走 RestoreCover）。
+        /// </summary>
+        public static void UnblockInputAfterHide()
+        {
+            UnblockInputAfterHideCore();
+            if (_extinguish == null)
+                ScheduleExtinguish();
         }
 
         /// <summary>
@@ -326,18 +364,14 @@ namespace Game
 
             var uiForm = GameEntry.UI.GetUIForm(UiAssets.LoadingForm);
             _form = uiForm?.Logic as LoadingForm;
-            // HasUIForm 但 Logic 已毁：先关组再开；勿 Destroy（会毒化 UI 实例池）。
+            // HasUIForm 但 Logic 已毁：不要在揭罩同场景里 CloseGroup（UnityGfxDeviceW SEGV）。
+            // 放着占位；下帧 Open 若失败，EnsureForm 会再试。
             if (_form == null && GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
-            {
-                UiAssets.CloseGroup("Loading");
                 uiForm = null;
-            }
 
             if (_form == null)
             {
-                // 清掉池里已毁 Target（旧 ForceDestroy 遗留），否则同步 Spawn → CreateUIForm 报 invalid。
-                ReleaseUnusedUiInstancesNow();
-                // Close 同帧可能仍 HasUIForm：仍尝试 Open；GF 对同 asset 重复 Open 会失败并打日志，下帧 EnsureForm 再试。
+                // 进岛禁止 ReleaseAllUnused（揭罩同场景 SEGV）。脏池出岛再清。
                 if (!GameEntry.UI.HasUIForm(UiAssets.LoadingForm)
                     && !GameEntry.UI.IsLoadingUIForm(UiAssets.LoadingForm))
                 {
@@ -446,7 +480,7 @@ namespace Game
         {
             // Update 里藏树之后，要等本帧 DrawUIOverlay 把透明结果画出去，再关 Document。
             yield return new WaitForEndOfFrame();
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 2; i++)
             {
                 if (_visible && !_hiding)
                 {
@@ -458,11 +492,57 @@ namespace Game
                 yield return new WaitForEndOfFrame();
             }
 
-            if (!_visible || _hiding)
-                Log.Info("[BootLoadingService] cover stayed transparent, skip disarm");
+            if (_visible && !_hiding)
+            {
+                _extinguish = null;
+                yield break;
+            }
+
+            // 揭罩终点：只 SoftStop + Conceal/Disarm。RT / 池 / 草 GPU 全部出岛再卸。
+            UnblockInputAfterHideCore();
+            DisarmCoverDocuments();
             _extinguish = null;
         }
 
+        static void StopCoverGpuRelease()
+        {
+            MonoBehaviour host = GameEntry.Base;
+            if (host != null && _coverGpuRelease != null)
+                host.StopCoroutine(_coverGpuRelease);
+            _coverGpuRelease = null;
+        }
+
+        /// <summary>
+        /// 卸加载视频 RT + 硬解缓冲。仅离岛 / 退登调用；揭罩路径禁止。
+        /// </summary>
+        public static void ReleaseCoverGpuNow()
+        {
+            StopCoverGpuRelease();
+            LoadingForm[] forms = Object.FindObjectsByType<LoadingForm>(FindObjectsInactive.Include);
+            for (int i = 0; i < forms.Length; i++)
+            {
+                if (forms[i] != null)
+                    forms[i].ReleasePlaybackForLeave();
+            }
+
+            Log.Info("[BootLoadingService] ReleaseCoverGpuNow (leave-only)");
+        }
+
+        static void UnblockInputAfterHideCore()
+        {
+            ExtinguishOnce();
+            LoadingForm[] forms = Object.FindObjectsByType<LoadingForm>(FindObjectsInactive.Include);
+            for (int i = 0; i < forms.Length; i++)
+            {
+                if (forms[i] != null)
+                    forms[i].DisarmDocument();
+            }
+        }
+
+        /// <summary>
+        /// 揭罩熄灭：只 Disarm Document / 早期罩。禁止 CloseUIForm、CloseGroup、Destroy、
+        /// ReleaseAllUnused —— 与 Custom SRP / UITK 同帧会撞 UnityGfxDeviceW SEGV。
+        /// </summary>
         static void DisarmCoverDocuments()
         {
             BootEarlyCover.Instance?.Disarm();
@@ -473,21 +553,7 @@ namespace Game
                     forms[i].DisarmDocument();
             }
 
-            if (GameEntry.UI != null)
-            {
-                if (GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
-                {
-                    var uiForm = GameEntry.UI.GetUIForm(UiAssets.LoadingForm);
-                    if (uiForm != null)
-                        GameEntry.UI.CloseUIForm(uiForm.SerialId);
-                }
-
-                UiAssets.CloseGroup("Loading");
-            }
-
-            DestroyOrphanLoadingForms();
-            ScheduleReleaseUnusedUiInstances();
-            Log.Info("[BootLoadingService] disarm after paint");
+            Log.Info("[BootLoadingService] disarm after paint (keep form, no Close/Release)");
         }
 
         /// <summary>

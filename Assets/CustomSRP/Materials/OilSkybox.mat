@@ -32,6 +32,10 @@ Material:
         m_Texture: {fileID: 2800000, guid: a7c8d9e0f1a20314253647586970b1c2, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _OilCanvasNormal:
+        m_Texture: {fileID: 2800000, guid: e7c4a91b2d8f4c0e8a6b3d5f1c9e7a24, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _StarsTex:
         m_Texture: {fileID: 2800000, guid: 0d5734a227dc4716a8d66106796ea4c3, type: 3}
         m_Scale: {x: 1, y: 1}
@@ -43,10 +47,10 @@ Material:
     m_Ints: []
     m_Floats:
     - _BrushContrast: 2.48
-    - _BrushRelief: 1
+    - _BrushRelief: 0.78
     - _BrushScale: 8
-    - _BrushStrength: 0.593
-    - _Period: 0.25
+    - _BrushStrength: 0.85
+    - _Period: 1.1666666
     - _StarDensity: 2
     - _StarSize: 1.5
     m_Colors: []

@@ -204,11 +204,23 @@ namespace Game
                         if (prop != null)
                         {
                             cam.SetPitchDegrees(prop.rotx);
-                            cam.Teleport(
-                                new Vector3(prop.posx, prop.posy, prop.posz),
-                                prop.roty);
-                            Log.Info(
-                                $"[IslandPlayerPosSave] restored pos=({prop.posx:F1},{prop.posy:F1},{prop.posz:F1}) yaw={prop.roty:F1}");
+                            var eye = new Vector3(prop.posx, prop.posy, prop.posz);
+                            cam.Teleport(eye, prop.roty);
+                            // 用钳制前的落点比落差。禁水钳制会把桥底抬到水面附近，
+                            // 和存档眼位只差一两米，保住眼位失败后胶囊会从桥底被顶上桥面。
+                            if (NamedDeckSpawnPolicy.ShouldKeepSavedEye(eye.y, cam.SampledTeleportEyeY))
+                            {
+                                cam.TeleportEye(eye, prop.roty, prop.rotx);
+                                Log.Info(
+                                    $"[IslandPlayerPosSave] restored eye kept (deck pending?) " +
+                                    $"saved=({prop.posx:F1},{prop.posy:F1},{prop.posz:F1}) " +
+                                    $"afterTeleport={cam.transform.position.ToString("F1")}");
+                            }
+                            else
+                            {
+                                Log.Info(
+                                    $"[IslandPlayerPosSave] restored pos=({prop.posx:F1},{prop.posy:F1},{prop.posz:F1}) yaw={prop.roty:F1}");
+                            }
                             return;
                         }
                     }

@@ -58,7 +58,7 @@ Shader "CustomSRP/TerrainOilNPR"
         _RidgeRockMap ("Ridge Rock", 2D) = "gray" {}
         _RidgeAmount ("Ridge Rock Amount", Range(0, 1)) = 0
         _TerrainHeight ("Terrain Height (m)", Float) = 1185
-        _OilDetail ("Oil Detail", Range(0, 1)) = 0.2
+        _OilDetail ("Oil Detail", Range(0, 1)) = 0.42
 
         [Toggle(_RECEIVE_SHADOWS)] _ReceiveShadows ("Receive Shadows", Float) = 1
     }

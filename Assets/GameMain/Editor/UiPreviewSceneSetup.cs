@@ -35,6 +35,7 @@ namespace Game.Editor
             "Download/RequestDownloadForm",
             "Download/DownloadProgressForm",
             "Download/MobileDataConfirmForm",
+            "Download/WifiConfirmForm",
             "Download/InsufficientStorageForm",
             "Download/NoNetworkForm",
             "LoadingForm",

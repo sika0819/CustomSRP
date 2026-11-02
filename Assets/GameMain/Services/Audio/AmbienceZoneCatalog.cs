@@ -40,9 +40,24 @@ namespace Game
     /// <summary>Static shore/forest/lake anchors + MapItem river/campfire/waterfall.</summary>
     public static class AmbienceZoneCatalog
     {
+        /// <summary>
+        /// 内陆爬高后掐海浪（xz 仍可能贴着内湾）。
+        /// 贴岸带内（见 <see cref="OceanHeightGateMinShellMeters"/>）不生效，避免堤岸/悬崖路径忽大忽小。
+        /// </summary>
         public const float OceanMaxPlayerY = 18f;
+        /// <summary>
+        /// 水平离岸线小于该值时忽略 <see cref="OceanMaxPlayerY"/>。
+        /// 沿海岸走常高于 18m，硬门控会 SoftStop↔Start。
+        /// 约 <see cref="OceanAttenuationMeters"/>×0.6（boluo-main Ocean_RD 可听圈放大后同步）。
+        /// </summary>
+        public const float OceanHeightGateMinShellMeters = 75f;
         /// <summary>海面高度。岸线发射器贴在这层，不跟胖盒中心的 Y。</summary>
         public const float OceanSurfaceY = 5.7f;
+        /// <summary>
+        /// 最近岸点 sticky 偏置（米）。离散 8m 网格在 Voronoi 边界会抖，
+        /// 对齐 Boluo <c>WanosBoxHelper</c> sticky collider。
+        /// </summary>
+        public const float OceanShoreStickBiasMeters = 6f;
         /// <summary>
         /// 高于海面这么多才算可走陆地（岸线采样 / 走路禁海共用）。
         /// 海平面附近平坦海底不再当路。
@@ -51,29 +66,63 @@ namespace Game
         public const float LakeMinPlayerY = 20f;
         public const float LakeMaxPlayerY = 50f;
 
-        // 可听 / 进出半径：对齐「3D区域声景」听感常量（催加载体积本工程合并进 Enter）。
-        /// <summary>河开播半径（贴着河岸约几米必进区；原 20 偏紧）。</summary>
-        public const float RiverAttenuationMeters = 30f;
-        public const float OceanAttenuationMeters = 60f;
+        // 开播 / 停播 / 卸载：一律对齐 boluo-main <c>WanosAudio.prefab</c>。
+        // Enter≈CurveForGain radius；Exit≈SphereCollider；Unload≈unloadwaittime。
+        // 河/海/瀑距离量「水面/岸线 shell」，不是固定钉点——贴岸贴瀑即可触发。
+        /// <summary>
+        /// boluo-main <c>River_Sound_1/2/3</c> CurveForGain radius=40
+        ///（Sound_0/Rs 为 25；取多数声道 40）。
+        /// </summary>
+        public const float RiverAttenuationMeters = 40f;
+        /// <summary>boluo-main <c>River_Sound_0</c> SphereCollider：停播球 60。</summary>
+        public const float RiverExitMeters = 60f;
+        /// <summary>boluo-main <c>River_Sound_0</c> unloadwaittime=0（走路 KeepBank）。</summary>
+        public const float RiverUnloadDelaySeconds = 0f;
+        /// <summary>
+        /// boluo-main <c>Ocean_RD</c> CurveForGain 远端 ≈125。
+        /// 整段海岸 shell 内可听，不必走到 Ocean_Audio 钉点。
+        /// </summary>
+        public const float OceanAttenuationMeters = 125f;
+        /// <summary>boluo-main <c>Ocean_RD</c> SphereCollider：停播球 ≈167。</summary>
+        public const float OceanExitMeters = 166.97f;
+        /// <summary>boluo-main <c>Ocean_RD</c> unloadwaittime=0（走路 KeepBank）。</summary>
+        public const float OceanUnloadDelaySeconds = 0f;
         /// <summary>
         /// Boluo <c>NearTriggerMeters</c>：物理已空但人仍贴桥/岸时禁止立刻 Stop/UnLoad。
-        /// 近岸海 / Forest / 草地出球宽限共用。
+        /// Forest / 草地出球宽限共用。河/海停播已用 SphereCollider，不再叠进 Exit。
         /// </summary>
         public const float NearSurfaceMeters = 12f;
-        /// <summary>近岸海已播后再加约 12m 宽限（河不加 near 进停播半径；宽限时间仍用 ExitGrace）。</summary>
+        /// <summary>近岸海时间宽限用；Exit 已是 SphereCollider，不再加进停播半径。</summary>
         public const float OceanNearSurfaceMeters = NearSurfaceMeters;
-        public const float LakeAttenuationMeters = 20f;
+        /// <summary>boluo-main <c>lake_0</c> CurveForGain 远端 ≈48m。</summary>
+        public const float LakeAttenuationMeters = 48f;
+        /// <summary>boluo-main <c>Lake_Audio</c> SphereCollider：停播球 ≈62。</summary>
+        public const float LakeExitMeters = 62.21f;
+        /// <summary>boluo-main <c>Lake_Audio</c> unloadwaittime=2。</summary>
+        public const float LakeUnloadDelaySeconds = 2f;
+        /// <summary>boluo-main <c>CampFire_0/1_Audio</c> CurveForGain radius=30。</summary>
         public const float CampfireAttenuationMeters = 30f;
-        /// <summary>大瀑开播半径。</summary>
-        public const float WaterfallBigEnterMeters = 42f;
-        /// <summary>大瀑停播半径。</summary>
-        public const float WaterfallBigExitMeters = 50f;
-        /// <summary>大瀑在篝火旁的静音圈。</summary>
-        public const float WaterfallCampfireMuteMeters = 22f;
-        /// <summary>小瀑开播半径。</summary>
+        /// <summary>boluo-main <c>CampFire_0/1_Audio</c> SphereCollider：停播球 50。</summary>
+        public const float CampfireExitMeters = 50f;
+        /// <summary>
+        /// boluo-main <c>WaterFall_Sound_Big_1</c> radius=80（Big_0 为 50；取较大声道，
+        /// 观瀑点 / 瀑边壳距都能进区，不必踩到 Big_0 钉点）。
+        /// </summary>
+        public const float WaterfallBigEnterMeters = 80f;
+        /// <summary>boluo-main <c>WaterFall_Audio</c> SphereCollider：停播球 117.8。</summary>
+        public const float WaterfallBigExitMeters = 117.8f;
+        /// <summary>boluo-main <c>WaterFall_Audio</c> unloadwaittime=2。</summary>
+        public const float WaterfallBigUnloadDelaySeconds = 2f;
+        /// <summary>
+        /// 大瀑在篝火旁的静音圈。产品要火边同听河/瀑，保持 0（Boluo 原值 22）。
+        /// </summary>
+        public const float WaterfallCampfireMuteMeters = 0f;
+        /// <summary>boluo-main <c>WaterFall_Sound_Small_*</c> / <c>WaterFall_S_Audio</c> radius=50。</summary>
         public const float WaterfallSmallEnterMeters = 50f;
-        /// <summary>小瀑停播半径。</summary>
-        public const float WaterfallSmallExitMeters = 72f;
+        /// <summary>boluo-main 小瀑无更大停播球：Exit=Enter。</summary>
+        public const float WaterfallSmallExitMeters = 50f;
+        /// <summary>boluo-main <c>WaterFall_S_Audio</c> unloadwaittime=0。</summary>
+        public const float WaterfallSmallUnloadDelaySeconds = 0f;
         /// <summary>Boluo Forest_Audio SphereCollider：3D 半径 150 才是进出区，曲线 160 只衰减。</summary>
         public const float ForestEnterMeters = 150f;
         /// <summary>Boluo <c>NearTriggerMeters</c>：刚出球仍贴表面时继续播。</summary>
@@ -100,8 +149,9 @@ namespace Game
         public const float PlateauEnterMeters = 350f;
         public const float PlateauAttenuationMeters = 316f;
         public const float PlateauUnloadDelaySeconds = 2f;
+        /// <summary>boluo-main <c>CampFire_*_BankLoader</c> unloadwaittime=5。</summary>
         public const float CampfireUnloadDelaySeconds = 5f;
-        /// <summary>点源（河/岸）进出区滞回；瀑用显式 Enter/Exit；biome 用固定 Enter/Exit。</summary>
+        /// <summary>无显式 Sphere 时的点源进出滞回兜底；河/海/湖/火/瀑已用 prefab 球。</summary>
         public const float AttenuationExitScale = 1.1f;
 
         /// <summary>
@@ -116,9 +166,8 @@ namespace Game
             // 湖在岛 preset 7 那一侧（出生点 504.67 / 463.85），补一个锚点，
             // 玩家走到湖边才听得到湖面声。
             Lake("Lake_Audio_Preset7", 504.6723f, 38.82f, 463.8487f),
-            // 灵感唤醒湖边观瀑点：落点离 WaterfallSplash ~86m，探针瀑进不了 42m 圈。
-            // 固定锚在观景点朝瀑方向约 20m，开播用 catalog 距离（见 FixedWorldAnchor）。
-            ScenicWaterfallOverlook(),
+            // 观瀑：boluo-main WaterFall_Sound_Big_0/1 双落点（见 AmbienceQuadChannelLayout）；
+            // 可听距用特征∪瀑面壳∪瀑盆河，Enter=80 盖观景点与瀑边。
             Grassland("GrassLand_Audio", 419.46387f, 41.16188f, 362.95004f, GrasslandEnterMeters),
             Grassland("GrassLand_S_Audio", 503.9f, 17.36f, 667.1f, GrasslandSecondaryEnterMeters),
             Plateau("Plateau_Audio", 171.5f, 50.5f, 583.7f),
@@ -145,7 +194,8 @@ namespace Game
                     item.Pos,
                     small ? WaterfallSmallEnterMeters : WaterfallBigEnterMeters,
                     small ? WaterfallSmallExitMeters : WaterfallBigExitMeters);
-                spec.UseXzDistance = false;
+                // Boluo DistanceToWaterfallFeature：水平距离；发射器仍钉在水面最近点（Y 保留）。
+                spec.UseXzDistance = true;
                 spec.RiverCatalogIndex = catalogIndex;
                 spec.RiverMeshName = prefab;
                 return true;
@@ -161,8 +211,10 @@ namespace Game
                     "Play_River_L",
                     "Stop_River",
                     item.Pos,
-                    RiverAttenuationMeters);
-                spec.UseXzDistance = false;
+                    RiverAttenuationMeters,
+                    RiverExitMeters);
+                // Boluo HorizontalRibbonDistance：忽略桥面高度；3D 会把站桥判成区外。
+                spec.UseXzDistance = true;
                 spec.RiverCatalogIndex = catalogIndex;
                 spec.RiverMeshName = prefab;
                 return true;
@@ -177,8 +229,10 @@ namespace Game
                     "Play_Campfire_Start_Loop",
                     "Stop_Campfire_End",
                     item.Pos,
-                    CampfireAttenuationMeters);
-                spec.UseXzDistance = false;
+                    CampfireAttenuationMeters,
+                    CampfireExitMeters);
+                // 水平距离：下坡时 3D 会先出可听圈，桥面/坡上仍应算在火边。
+                spec.UseXzDistance = true;
                 return true;
             }
 
@@ -189,12 +243,18 @@ namespace Game
         {
             if (add == null)
                 return;
+            // 北段河床网格原点（本工程 InlandWater）；boluo-main 无对应 River_Sound 钉点。
             add(Native("River_01", AmbienceEmitterKind.River, new Vector3(238.85437f, 101.538124f, 637.07263f), false));
-            add(Native("River_02", AmbienceEmitterKind.River, new Vector3(435.38004f, 22.099998f, 424.85004f), false));
-            add(Native("River_03", AmbienceEmitterKind.River, new Vector3(352.2f, 64.2f, 435.9f), false));
-            // 瀑音锚在 WaterfallSplash（听感位置），River_04 mesh 原点离飞溅点约 70m，
-            // 用 42m Enter 会「贴着瀑布特效也没声」。
-            add(Native("WaterfallSplash", AmbienceEmitterKind.Waterfall, new Vector3(423.81f, 66.34f, 457.4f), true));
+            // boluo-main River_Audio 跟点中心（主河道）。
+            add(Native("River_02", AmbienceEmitterKind.River, new Vector3(424.6952f, 68.49596f, 455.1803f), false));
+            // boluo-main River_3。
+            add(Native("River_03", AmbienceEmitterKind.River, new Vector3(336.0276f, 84.09204f, 418.66925f), false));
+            // Boluo WaterFall_Audio 原点；Big_0/Big_1 相对偏移在 AmbienceQuadChannelLayout。
+            add(Native(
+                "WaterFall_Audio",
+                AmbienceEmitterKind.Waterfall,
+                AmbienceQuadChannelLayout.WaterfallBigRoot,
+                true));
         }
 
         static AmbienceEmitterSpec Native(string name, AmbienceEmitterKind kind, Vector3 pos, bool waterfall)
@@ -216,8 +276,10 @@ namespace Game
                     "Play_River_L",
                     "Stop_River",
                     pos,
-                    RiverAttenuationMeters);
-            spec.UseXzDistance = false;
+                    RiverAttenuationMeters,
+                    RiverExitMeters);
+            // 河/瀑：水平距离（桥面/观景点高度不得挤出可听圈）。Point 默认已是 true。
+            spec.UseXzDistance = true;
             spec.RiverMeshName = name;
             return spec;
         }
@@ -228,6 +290,10 @@ namespace Game
                 return false;
             if (prefab.Equals("River_04", System.StringComparison.Ordinal))
                 return true;
+            // Mist 是湖边视觉雾，不是瀑音特征：当成瀑布会把最近点拽到湖侧，
+            // 再被湖↔瀑互斥掐掉 → 路过瀑布「没声」。
+            if (prefab.IndexOf("WaterfallMist", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
             return prefab.IndexOf("Waterfall", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
@@ -354,19 +420,30 @@ namespace Game
         /// </summary>
         public static bool TryNearestOceanShore(Vector3 worldPos, out Vector3 shorePoint, out float shellDist)
         {
+            int sticky = -1;
+            return TryNearestOceanShore(worldPos, ref sticky, out shorePoint, out shellDist);
+        }
+
+        /// <summary>
+        /// 带 sticky 的最近岸点：抑制 8m 网格 Voronoi 抖；邻点线段投影让沿海岸距离连续。
+        /// <paramref name="stickyIndex"/> 传入上次命中下标（无则 -1），成功后写回。
+        /// </summary>
+        public static bool TryNearestOceanShore(
+            Vector3 worldPos, ref int stickyIndex, out Vector3 shorePoint, out float shellDist)
+        {
             shorePoint = worldPos;
             shellDist = float.PositiveInfinity;
             if (_liveShoreCount <= 0)
+            {
+                stickyIndex = -1;
                 return false;
+            }
 
             float bestSq = float.PositiveInfinity;
             int best = -1;
             for (int i = 0; i < _liveShoreCount; i++)
             {
-                Vector3 p = _liveShore[i];
-                float dx = worldPos.x - p.x;
-                float dz = worldPos.z - p.z;
-                float sq = dx * dx + dz * dz;
+                float sq = HorizontalSq(worldPos, _liveShore[i]);
                 if (sq >= bestSq)
                     continue;
                 bestSq = sq;
@@ -374,11 +451,88 @@ namespace Game
             }
 
             if (best < 0)
+            {
+                stickyIndex = -1;
                 return false;
-            shellDist = Mathf.Sqrt(bestSq);
-            shorePoint = _liveShore[best];
+            }
+
+            // Sticky：旧点只要还在偏置内，就别跳到隔壁采样点（发射器沿岸来回甩）。
+            if ((uint)stickyIndex < (uint)_liveShoreCount)
+            {
+                float stickySq = HorizontalSq(worldPos, _liveShore[stickyIndex]);
+                float bias = OceanShoreStickBiasMeters;
+                if (stickySq <= bestSq + bias * bias)
+                {
+                    best = stickyIndex;
+                    bestSq = stickySq;
+                }
+            }
+
+            stickyIndex = best;
+            Vector3 bestPt = _liveShore[best];
+            bestPt.y = OceanSurfaceY;
+
+            // 邻点线段投影：沿连续岸边走时 shell 不再在格子中心之间阶跃。
+            const float neighborMax = 12f;
+            float neighborMaxSq = neighborMax * neighborMax;
+            float bestDist = Mathf.Sqrt(bestSq);
+            Vector3 bestShore = bestPt;
+            for (int i = 0; i < _liveShoreCount; i++)
+            {
+                if (i == best)
+                    continue;
+                if (HorizontalSq(bestPt, _liveShore[i]) > neighborMaxSq)
+                    continue;
+                Vector3 other = _liveShore[i];
+                other.y = OceanSurfaceY;
+                if (!TryProjectToSegmentXZ(worldPos, bestPt, other, out Vector3 proj, out float d))
+                    continue;
+                if (d >= bestDist)
+                    continue;
+                bestDist = d;
+                bestShore = proj;
+            }
+
+            shorePoint = bestShore;
             shorePoint.y = OceanSurfaceY;
+            shellDist = bestDist;
             return true;
+        }
+
+        static float HorizontalSq(Vector3 a, Vector3 b)
+        {
+            float dx = a.x - b.x;
+            float dz = a.z - b.z;
+            return dx * dx + dz * dz;
+        }
+
+        static bool TryProjectToSegmentXZ(
+            Vector3 listener, Vector3 a, Vector3 b, out Vector3 proj, out float dist)
+        {
+            float abx = b.x - a.x;
+            float abz = b.z - a.z;
+            float abLenSq = abx * abx + abz * abz;
+            float t = 0f;
+            if (abLenSq > 1e-6f)
+            {
+                float apx = listener.x - a.x;
+                float apz = listener.z - a.z;
+                t = Mathf.Clamp01((apx * abx + apz * abz) / abLenSq);
+            }
+
+            proj = new Vector3(a.x + abx * t, OceanSurfaceY, a.z + abz * t);
+            float dx = listener.x - proj.x;
+            float dz = listener.z - proj.z;
+            dist = Mathf.Sqrt(dx * dx + dz * dz);
+            return true;
+        }
+
+        /// <summary>贴岸带内不因绝对高度掐海浪；更远才用 <see cref="OceanMaxPlayerY"/>。</summary>
+        public static bool IsOceanMutedByPlayerHeight(Vector3 listener, float shellDistMeters)
+        {
+            if (listener.y <= OceanMaxPlayerY)
+                return false;
+            return shellDistMeters > OceanHeightGateMinShellMeters;
         }
 
         static AmbienceEmitterSpec Ocean(string id, float x, float y, float z)
@@ -392,7 +546,7 @@ namespace Game
                 StopEvent = "Stop_Boluodao_Ocean",
                 Position = new Vector3(x, y, z),
                 EnterRadius = OceanAttenuationMeters,
-                ExitRadius = OceanAttenuationMeters + OceanNearSurfaceMeters,
+                ExitRadius = OceanExitMeters,
                 UseXzDistance = true,
             };
         }
@@ -424,31 +578,9 @@ namespace Game
                 StopEvent = "Stop_Lake",
                 Position = new Vector3(x, y, z),
                 EnterRadius = LakeAttenuationMeters,
-                ExitRadius = LakeAttenuationMeters * AttenuationExitScale,
+                ExitRadius = LakeExitMeters,
                 UseXzDistance = true,
             };
-        }
-
-        /// <summary>
-        /// Preset7 湖边观瀑：锚在观景点（504.67）朝 <c>WaterfallSplash</c> 约 20m，
-        /// 站在灵感唤醒落点即可进大瀑 Enter；与探针瀑床位共用 bank，由最近者独占 Post。
-        /// </summary>
-        static AmbienceEmitterSpec ScenicWaterfallOverlook()
-        {
-            // overlook (504.67, 38.82, 463.85) → splash (423.81, 66.34, 457.4), |d|≈85.7m
-            var pos = new Vector3(485.79f, 45.25f, 462.34f);
-            var spec = Point(
-                "waterfall_scenic_Preset7Overlook",
-                AmbienceEmitterKind.Waterfall,
-                "Waterfall_Big_Quad",
-                "Play_Waterfall_Big_LR",
-                "Stop_Waterfall_Big",
-                pos,
-                WaterfallBigEnterMeters,
-                WaterfallBigExitMeters);
-            spec.UseXzDistance = true;
-            spec.FixedWorldAnchor = true;
-            return spec;
         }
 
         static AmbienceEmitterSpec Grassland(string id, float x, float y, float z, float radiusMeters)

@@ -240,6 +240,15 @@ namespace Game
                     || BootLoadingService.IsVisible))
                 Log.Warning("[IslandWorld] grass wait: cover still up after 45s");
 
+            // 揭罩 PostUncoverRelock 没完就 CullAndDraw → 真机 Unlock 后 ~30ms UnityGfx SEGV。
+            float waitSettled = Time.realtimeSinceStartup;
+            while (!EnvItemStreamerLite.PrefillAbortReleased
+                   && !BootLoadingService.EntryGpuSettled
+                   && Time.realtimeSinceStartup - waitSettled < 45f)
+                yield return null;
+            if (!BootLoadingService.EntryGpuSettled)
+                Log.Warning("[IslandWorld] grass wait: EntryGpuSettled still false after 45s");
+
             yield return null;
 
             IslandGrassService grass = GameEntry.Grass ?? IslandGrassService.Ensure();

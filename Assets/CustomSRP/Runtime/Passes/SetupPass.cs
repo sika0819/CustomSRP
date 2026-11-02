@@ -28,12 +28,18 @@ namespace CustomSRP
         {
             UnsafeCommandBuffer cmd = context.cmd;
             // Planar mirror: keep cached view/proj (Cull must not leave rolled transform).
-            if (_camera != null && _camera.cameraType == CameraType.Reflection)
+            // Do not push a second GPU projection here. SetupCameraProperties already
+            // writes the render-texture matrix; another Y-flip clips the island out.
+            bool mirror = _camera != null && _camera.cameraType == CameraType.Reflection;
+            if (mirror)
             {
                 OilPlanarReflection.ReapplyMatrices(_camera);
             }
 
+            // Render-graph draws ignore GL.invertCulling set outside the pass.
+            cmd.SetInvertCulling(mirror);
             cmd.SetupCameraProperties(_camera);
+
             cmd.SetRenderTarget(
                 _colorAttachment,
                 RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store,

@@ -42,6 +42,7 @@ float OilRiverShoreFoamWidthM()
     float _AlbedoBoost;
     float _ShadeSteps;
     float _SpecularThreshold;
+    #define OIL_REFLECT_STRENGTH_DECLARED
     float _ReflectStrength;
     float _BumpScale;
     float _BumpTile;

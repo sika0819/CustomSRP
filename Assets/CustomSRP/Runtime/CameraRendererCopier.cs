@@ -93,7 +93,13 @@ namespace CustomSRP
                     ? RenderBufferLoadAction.DontCare
                     : RenderBufferLoadAction.Load,
                 RenderBufferStoreAction.Store);
-            buffer.SetViewport(_camera.pixelRect);
+            // A disabled mirror camera's pixelRect is the screen, not the RT.
+            // Blitting with that viewport copies only a corner of the island
+            // into the reflection texture, and the water samples alpha 0.
+            Rect viewport = _camera.targetTexture != null
+                ? new Rect(0f, 0f, _camera.pixelWidth, _camera.pixelHeight)
+                : _camera.pixelRect;
+            buffer.SetViewport(viewport);
             buffer.DrawProcedural(
                 Matrix4x4.identity, _material, 0, MeshTopology.Triangles, 3);
             buffer.SetGlobalFloat(SrcBlendId, 1f);

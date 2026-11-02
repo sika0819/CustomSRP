@@ -17,6 +17,18 @@ Shader "CustomSRP/OilNPR"
         _ShadowBrushScale ("Shadow Brush Scale", Range(0.2, 8)) = 1.8
         _AmbientColor ("Ambient", Color) = (0.55, 0.5, 0.44, 1)
 
+        // Oil-paint volume (leaf): 草叶色/草根色作相对暗部色相；亮部保留原 albedo。
+        _TopColor ("Volume Top", Color) = (0.50196, 0.74118, 0.18039, 1)
+        _BottomColor ("Volume Bottom", Color) = (0.23922, 0.43922, 0.10196, 1)
+        _GradientOffset ("Volume Y Offset", Range(-0.5, 0.5)) = 0
+        _GradientSmoothness ("Volume Softness", Range(0.02, 0.5)) = 0.16
+        // Height = mesh Y span; YMin = mesh bounds.min.y (OilFoliageVolumeFit MPB).
+        _FoliageHeight ("Volume Height Span (OS.y)", Float) = 12
+        _FoliageYMin ("Volume Y Min (OS.y)", Float) = 0
+        [HideInInspector] [Toggle] _OilFoliage ("Oil Foliage Lighting", Float) = 0
+        // 树干：更硬的油画色块 + 圆柱明暗；不用叶片绿体积色。
+        [HideInInspector] [Toggle] _OilBark ("Oil Bark Lighting", Float) = 0
+
         // 0=Mesh UV, 1=World triplanar, 2=Object triplanar（与旧 Boluo LitStrokeRock 枚举一致）
         // 单向三向：单张 _BaseMap 从 X/Y/Z 三轴采样后按 |N| 混合。
         [Enum(Mesh UV,0,World,1,Object,2)] _WorldTriplanar ("Triplanar", Float) = 0
@@ -26,7 +38,8 @@ Shader "CustomSRP/OilNPR"
         [HideInInspector] [Toggle] _OilCrossBillboard ("Tree Cross Billboard", Float) = 0
         [HideInInspector] [Toggle] _OilYBillboard ("Tree Y Billboard", Float) = 0
         [NoScaleOffset] _BumpMap ("Billboard Baked Normal (RGB)", 2D) = "bump" {}
-        _NormalStrength ("Billboard Normal Strength", Range(0, 1)) = 0.85
+        // Lower default: vertical cards must bias toward up or noon sun lit them as walls.
+        _NormalStrength ("Billboard Normal Strength", Range(0, 1)) = 0.35
         _EdgeFade ("Billboard Edge Fade", Range(0, 0.5)) = 0.12
 
         [Toggle(_RECEIVE_SHADOWS)] _ReceiveShadows ("Receive Shadows", Float) = 1

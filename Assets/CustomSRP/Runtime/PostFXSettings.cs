@@ -121,7 +121,9 @@ namespace CustomSRP
         ColorAdjustmentsSettings colorAdjustments = new ColorAdjustmentsSettings
         {
             enabled = false,
-            colorFilter = Color.white
+            contrast = 18f,
+            colorFilter = Color.white,
+            saturation = 10f
         };
 
         public ColorAdjustmentsSettings ColorAdjustments => colorAdjustments;
@@ -138,7 +140,9 @@ namespace CustomSRP
         [SerializeField]
         WhiteBalanceSettings whiteBalance = new WhiteBalanceSettings
         {
-            enabled = false
+            enabled = false,
+            temperature = 6f,
+            tint = 2f
         };
 
         public WhiteBalanceSettings WhiteBalance => whiteBalance;
@@ -240,7 +244,7 @@ namespace CustomSRP
         [Serializable]
         public struct OilFilterSettings
         {
-            [Tooltip("Edge wet-oil: fwidth edge + 4 diagonal taps (low cost).")]
+            [Tooltip("Edge wet-oil: fwidth edge + 4 diagonal taps (low cost). Editor capture can boost to 16-tap HQ.")]
             public bool enabled;
 
             [Tooltip("Blend multiplier on top of resolution-based strength. Keep >0 so the dab stays visible.")]
@@ -252,7 +256,7 @@ namespace CustomSRP
         OilFilterSettings oilFilter = new OilFilterSettings
         {
             enabled = true,
-            strength = 0.45f
+            strength = 0.62f
         };
 
         public OilFilterSettings OilFilter => oilFilter;
@@ -260,7 +264,7 @@ namespace CustomSRP
         [Serializable]
         public struct OilWarpSettings
         {
-            [Tooltip("Immersive full-screen oil UV warp (breath-driven). Off when strength is 0.")]
+            [Tooltip("Immersive full-screen oil UV warp (breath-driven). Kept off — immersion no longer uses warp.")]
             public bool enabled;
 
             [Tooltip("Caps immersive breath×weight strength.")]
@@ -279,10 +283,10 @@ namespace CustomSRP
         [SerializeField]
         OilWarpSettings oilWarp = new OilWarpSettings
         {
-            enabled = true,
-            maxStrength = 0.55f,
-            scale = 1.05f,
-            maxTexels = 5f
+            enabled = false,
+            maxStrength = 0.68f,
+            scale = 1.12f,
+            maxTexels = 6.5f
         };
 
         public OilWarpSettings OilWarp => oilWarp;
@@ -301,6 +305,7 @@ namespace CustomSRP
         }
 
         [SerializeField]
+        // Off by default: procedural weave reads dirty on phone and adds little oil.
         CanvasSettings canvas = new CanvasSettings
         {
             enabled = false,

@@ -24,6 +24,13 @@ description: >-
 
 另：河岸 / 近岸海若 停播还卸引擎资源，走回再解码全局恢复，也会刺啦——所以后来改成「只停播、常保留 bank」。
 
+贴岸 / 沿河走路另一种刺啦：已播时每 tick 把 Ocean/River 发射器硬跟到最近点，近场空间化拉链。
+修法见 `AmbienceOceanPosePolicy`：听者离当前声道落点不足 8m 不改 pose，够远才跳；增益仍用 shell 距离。
+
+沿河「一会儿大一会儿小」：河探针离散样点无 sticky/线段投影时，水平距离在 Voronoi 边界阶跃，
+增益曲线跟着泵。修法见 `WaterSurfaceProbe.TryNearestShell` / `ResolveShell`（对齐海岸
+`TryNearestOceanShore`：sticky + 邻点 XZ 投影；邻点半径 24m 覆盖疏采样）。
+
 ## 怎么解决的
 
 本工程**没有** Boluo `WanosBankLoader` Trigger；等价落在 `AmbienceZoneService` 距离轮询 + `WanosBankStore` Retain/Release：

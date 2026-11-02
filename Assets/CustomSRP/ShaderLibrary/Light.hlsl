@@ -1,6 +1,16 @@
 #ifndef CUSTOM_LIGHT_INCLUDED
 #define CUSTOM_LIGHT_INCLUDED
 
+// Adreno GLES3 only guarantees a handful of SSBO/BufferBlock slots. Oil + terrain
+// shaders previously declared 5–6 StructuredBuffers and failed to link
+// ("BufferBlock location or component exceeds max allowed") → blank island.
+// GLES path packs dir/other lights into CBUFFER mirrors (C# always uploads both).
+#if defined(SHADER_API_GLES3) || defined(SHADER_API_GLES)
+#define CUSTOM_SRP_LIGHT_CBUFFER 1
+#define CUSTOM_SRP_MAX_DIR_LIGHTS 4
+#define CUSTOM_SRP_MAX_OTHER_LIGHTS_GLES 8
+#endif
+
 CBUFFER_START(_CustomLight)
     int _DirectionalLightCount;
     int _OtherLightCount;
@@ -11,14 +21,55 @@ struct DirectionalLightData
     float4 color, directionAndMask, shadowData;
 };
 
-StructuredBuffer<DirectionalLightData> _DirectionalLightData;
-
 struct OtherLightData
 {
     float4 color, position, directionAndMask, spotAngle, shadowData;
 };
 
+#if defined(CUSTOM_SRP_LIGHT_CBUFFER)
+CBUFFER_START(_CustomLightDataMobile)
+    float4 _DirectionalLightColors[CUSTOM_SRP_MAX_DIR_LIGHTS];
+    float4 _DirectionalLightDirectionsAndMasks[CUSTOM_SRP_MAX_DIR_LIGHTS];
+    float4 _DirectionalLightShadowData[CUSTOM_SRP_MAX_DIR_LIGHTS];
+    float4 _OtherLightColors[CUSTOM_SRP_MAX_OTHER_LIGHTS_GLES];
+    float4 _OtherLightPositions[CUSTOM_SRP_MAX_OTHER_LIGHTS_GLES];
+    float4 _OtherLightDirectionsAndMasks[CUSTOM_SRP_MAX_OTHER_LIGHTS_GLES];
+    float4 _OtherLightSpotAngles[CUSTOM_SRP_MAX_OTHER_LIGHTS_GLES];
+CBUFFER_END
+
+DirectionalLightData GetDirectionalLightData(int index)
+{
+    DirectionalLightData data;
+    data.color = _DirectionalLightColors[index];
+    data.directionAndMask = _DirectionalLightDirectionsAndMasks[index];
+    data.shadowData = _DirectionalLightShadowData[index];
+    return data;
+}
+
+OtherLightData GetOtherLightData(int index)
+{
+    OtherLightData data;
+    data.color = _OtherLightColors[index];
+    data.position = _OtherLightPositions[index];
+    data.directionAndMask = _OtherLightDirectionsAndMasks[index];
+    data.spotAngle = _OtherLightSpotAngles[index];
+    data.shadowData = 0.0;
+    return data;
+}
+#else
+StructuredBuffer<DirectionalLightData> _DirectionalLightData;
 StructuredBuffer<OtherLightData> _OtherLightData;
+
+DirectionalLightData GetDirectionalLightData(int index)
+{
+    return _DirectionalLightData[index];
+}
+
+OtherLightData GetOtherLightData(int index)
+{
+    return _OtherLightData[index];
+}
+#endif
 
 struct Light
 {
@@ -35,7 +86,11 @@ int GetDirectionalLightCount()
 
 int GetOtherLightCount()
 {
+#if defined(CUSTOM_SRP_LIGHT_CBUFFER)
+    return min(_OtherLightCount, CUSTOM_SRP_MAX_OTHER_LIGHTS_GLES);
+#else
     return _OtherLightCount;
+#endif
 }
 
 DirectionalShadowData GetDirectionalShadowData(
@@ -50,7 +105,7 @@ DirectionalShadowData GetDirectionalShadowData(
 
 Light GetDirectionalLight(int index, Surface surfaceWS, ShadowData shadowData)
 {
-    DirectionalLightData data = _DirectionalLightData[index];
+    DirectionalLightData data = GetDirectionalLightData(index);
     Light light;
     light.color = data.color.rgb;
     light.direction = data.directionAndMask.xyz;
@@ -76,7 +131,7 @@ OtherShadowData GetOtherShadowData(float4 lightShadowData)
 
 Light GetOtherLight(int index, Surface surfaceWS)
 {
-    OtherLightData data = _OtherLightData[index];
+    OtherLightData data = GetOtherLightData(index);
     Light light;
     light.color = data.color.rgb;
     float3 position = data.position.xyz;

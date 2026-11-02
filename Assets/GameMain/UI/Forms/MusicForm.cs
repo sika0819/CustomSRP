@@ -136,17 +136,21 @@ namespace Game
         IVisualElementScheduledItem _playingAnimSchedule;
         int _playingFrameIndex;
 
-        // Track-row status icons (Boluo MusicNotDownload / MusicLoading / MusicError / MusicRed).
+        // Track-row status icons (Boluo MusicNotDownload / MusicError / MusicRed).
+        // Downloading uses ArcProgressRing (Preset-style), not the soft MusicLoading spin.
+        const int StatusIconsRevision = 2; // PA-1186 crisp / high-contrast
+        static int _loadedStatusIconsRevision;
         static Sprite _iconNotDownload;
-        static Sprite _iconDownloading;
         static Sprite _iconDownloadError;
         static Sprite _iconDownloadSuccess;
         static bool _statusIconsLoaded;
-        IVisualElementScheduledItem _downloadSpinSchedule;
-        float _downloadSpinDegrees;
-        Action<VisualElement> _downloadSpinIcon;
+        IVisualElementScheduledItem _downloadProgressSchedule;
+        Action<VisualElement> _downloadProgressIcon;
         Action<VisualElement> _playingAnimIcon;
-        const float DownloadSpinDegreesPerTick = 6f; // ~180°/s @ 33ms
+        const long DownloadProgressTickMs = 100;
+        // Light-card download ring: playing green fore + dark translucent track.
+        static readonly Color DownloadRingFore = new Color(0f, 0.639f, 0.459f, 1f);
+        static readonly Color DownloadRingTrack = new Color(24f / 255f, 24f / 255f, 25f / 255f, 0.28f);
 
         // -----------------------------------------------------------------------
         // Lifecycle
@@ -194,7 +198,7 @@ namespace Game
             EnsurePlayingFramesLoaded();
             EnsureStatusIconsLoaded();
             StartPlayingAnimLoop();
-            StartDownloadSpinLoop();
+            StartDownloadProgressTick();
 
             if (MusicCatalog.IsReady)
                 SyncOpenToNowPlaying();
@@ -214,7 +218,7 @@ namespace Game
             MusicPlaylist.Instance.TrackChanged -= OnPlaylistTrackChanged;
             MusicCatalog.OnCatalogReady -= OnCatalogReady;
             StopPlayingAnimLoop();
-            StopDownloadSpinLoop();
+            StopDownloadProgressTick();
             UnbindScrollbarReveal();
             UnbindAlbumDrag();
             ClearAlbumClicks();
@@ -1052,8 +1056,7 @@ namespace Game
         }
 
         // Sprite names for the 3 play modes (yy_danqu / yy_list / yy_suiji).
-        // Loaded from `Assets/GameMain/Resources/MusicForm/` (Texture2D fallback —
-        // importer may still be Default, same as status icons).
+        // Loaded from `Assets/GameMain/Resources/MusicForm/` (Sprite; Texture2D fallback).
         static readonly string[] ModeSpriteNames = { "yy_danqu", "yy_list", "yy_suiji" };
         static Sprite[] _modeSprites;
 
@@ -1663,12 +1666,12 @@ namespace Game
             mask.RegisterCallback(marquee.OnGeom);
             mask.userData = marquee;
 
-            // Right-side status icons (Boluo NotDownloaded / Downloading / DownloadError / Playing).
+            // Right-side status icons. Downloading = ArcProgressRing (crisp progress);
+            // NotDownloaded / Failed = high-contrast sprites (PA-1186).
             EnsureStatusIconsLoaded();
             (string name, Sprite sprite)[] rightIcons =
             {
                 ("notdownload", _iconNotDownload),
-                ("downloading", _iconDownloading),
                 ("downloaderror", _iconDownloadError),
                 ("playinganima", null),
             };
@@ -1686,6 +1689,25 @@ namespace Game
                     icon.style.backgroundImage = new StyleBackground(sprite);
                 root.Add(icon);
             }
+
+            var downloadHost = new VisualElement { name = "downloading" };
+            downloadHost.style.position = Position.Absolute;
+            downloadHost.style.right = 84;
+            downloadHost.style.top = 42;
+            downloadHost.style.width = 60;
+            downloadHost.style.height = 60;
+            downloadHost.style.display = DisplayStyle.None;
+            downloadHost.pickingMode = PickingMode.Ignore;
+            var ring = new ArcProgressRing { name = "fill" };
+            ring.style.position = Position.Absolute;
+            ring.style.left = 0;
+            ring.style.top = 0;
+            ring.style.right = 0;
+            ring.style.bottom = 0;
+            ring.ForeColor = DownloadRingFore;
+            ring.TrackColor = DownloadRingTrack;
+            downloadHost.Add(ring);
+            root.Add(downloadHost);
 
             // ICON_PLAYING: 60×60 equalizer sequence (Resources/MusicForm/Playing).
             var playingAnima = root.Q("playinganima");
@@ -1710,7 +1732,11 @@ namespace Game
             int track = index;
 
             MusicItemUiState state = DetermineRowState(album, track);
-            ApplyRowState(element, state);
+            string bankName = null;
+            var tracks = MusicCatalog.GetTracks(album);
+            if (track >= 0 && track < tracks.Count)
+                bankName = tracks[track].BankName;
+            ApplyRowState(element, state, bankName);
 
             var music = GameEntry.Music;
             bool isPlaying = music != null
@@ -1793,25 +1819,20 @@ namespace Game
 
             var trackData = tracks[track];
 
-            // Is this track currently playing?
             var music = GameEntry.Music;
-            if (music != null
+            bool isPlaying = music != null
                 && music.IsPlaying
                 && music.CurrentAlbumIndex == album
-                && music.CurrentTrackIndex == track)
-            {
-                return MusicItemUiState.Playing;
-            }
+                && music.CurrentTrackIndex == track;
 
             string bankName = trackData.BankName;
-
-            // 磁盘优先：已落盘不因 Rest 排队 Pending / 残留 pending 意图显示未下载。
-            if (BankDownloader.IsLocalReady(bankName))
+            bool localReady = BankDownloader.IsLocalReady(bankName);
+            bool showRedDot = false;
+            if (localReady)
             {
                 var albumData = MusicCatalog.GetAlbum(album);
-                if (albumData != null && ShouldShowRedDot(albumData.Name, trackData.MusicName))
-                    return MusicItemUiState.Succeeded;
-                return MusicItemUiState.Ready;
+                showRedDot = albumData != null
+                    && ShouldShowRedDot(albumData.Name, trackData.MusicName);
             }
 
             bool userPending = PendingDownloadIntent.IsMusicMatch(album, track)
@@ -1819,32 +1840,26 @@ namespace Game
                     && _pendingMusic.Value.album == album
                     && _pendingMusic.Value.track == track);
 
-            if (BankDownloader.TryGetActiveItem(bankName, out var item))
-            {
-                switch (item.State)
-                {
-                    case BankDownloadState.Downloading:
-                        return MusicItemUiState.Downloading;
-                    case BankDownloadState.Failed:
-                        return MusicItemUiState.Failed;
-                    case BankDownloadState.Pending:
-                        return userPending
-                            ? MusicItemUiState.Downloading
-                            : MusicItemUiState.NotDownloaded;
-                }
-            }
+            bool hasActive = BankDownloader.TryGetActiveItem(bankName, out var item);
+            BankDownloadState activeState = hasActive && item != null
+                ? item.State
+                : BankDownloadState.Pending;
 
-            if (userPending)
-                return MusicItemUiState.Downloading;
-
-            return MusicItemUiState.NotDownloaded;
+            return MusicRowUiState.Resolve(
+                trackValid: true,
+                isPlaying: isPlaying,
+                localReady: localReady,
+                showRedDot: showRedDot,
+                userPending: userPending,
+                hasActiveItem: hasActive,
+                activeState: activeState);
         }
 
         /// <summary>
         /// Drives the five icon slots to reflect the given state.
         /// All five slots are updated on every call — no state carryover.
         /// </summary>
-        void ApplyRowState(VisualElement element, MusicItemUiState state)
+        void ApplyRowState(VisualElement element, MusicItemUiState state, string bankName = null)
         {
             // Reset all icon slots to hidden.
             ShowIcon(element, "notdownload", false);
@@ -1867,8 +1882,22 @@ namespace Game
                     break;
 
                 case MusicItemUiState.Downloading:
+                {
+                    var host = element.Q("downloading");
+                    bool entering = host != null
+                        && host.resolvedStyle.display == DisplayStyle.None;
+                    if (host != null)
+                        host.userData = bankName;
                     ShowIcon(element, "downloading", true);
+                    var ring = host?.Q<ArcProgressRing>("fill");
+                    if (ring != null)
+                    {
+                        if (entering)
+                            ring.ResetProgress();
+                        ring.FillAmount = ResolveDownloadProgress(bankName);
+                    }
                     break;
+                }
 
                 case MusicItemUiState.Succeeded:
                     ShowIcon(element, "downloadsuccess", true);
@@ -1894,10 +1923,15 @@ namespace Game
             icon.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
             if (show && iconName == "playinganima")
                 ApplyPlayingFrame(icon, _playingFrameIndex);
-            if (show && iconName == "downloading")
-                icon.style.rotate = new Rotate(Angle.Degrees(_downloadSpinDegrees));
-            if (!show && iconName == "downloading")
-                icon.style.rotate = new Rotate(Angle.Degrees(0));
+        }
+
+        static float ResolveDownloadProgress(string bankName)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                return 0f;
+            if (BankDownloader.TryGetActiveItem(bankName, out var item) && item != null)
+                return Mathf.Clamp01(item.Progress);
+            return 0f;
         }
 
         // -----------------------------------------------------------------------
@@ -1960,6 +1994,8 @@ namespace Game
                 banks,
                 new DownloadUiOptions
                 {
+                    // 音乐列表：不开「场景正在下载」进度窗，进度走行内 ArcProgressRing。
+                    SuppressProgressDialog = true,
                     OnCancel = () =>
                     {
                         ClearPendingMusic();
@@ -2099,7 +2135,8 @@ namespace Game
                 {
                     WanosEngine.EnablePlayback("music-download");
                     WanosEngine.StartEngine("music-download");
-                    WanosEngine.Unmute("music-download");
+                    if (!IslandAudioSession.IsYieldHeld)
+                        WanosEngine.Unmute("music-download");
                 }
 
                 var albumData = MusicCatalog.GetAlbum(album);
@@ -2172,23 +2209,25 @@ namespace Game
         }
 
         // -----------------------------------------------------------------------
-        // Status icons (Boluo MusicNotDownload / MusicLoading / MusicError / MusicRed)
+        // Status icons (Boluo MusicNotDownload / MusicError / MusicRed)
+        // Downloading uses ArcProgressRing — soft MusicLoading spin retired (PA-1186).
         // -----------------------------------------------------------------------
 
         static void EnsureStatusIconsLoaded()
         {
-            if (_statusIconsLoaded)
+            if (_statusIconsLoaded && _loadedStatusIconsRevision == StatusIconsRevision)
                 return;
             _statusIconsLoaded = true;
+            _loadedStatusIconsRevision = StatusIconsRevision;
             _iconNotDownload = LoadMusicStatusSprite("MusicNotDownload");
-            _iconDownloading = LoadMusicStatusSprite("MusicLoading");
             _iconDownloadError = LoadMusicStatusSprite("MusicError");
             _iconDownloadSuccess = LoadMusicStatusSprite("MusicRed");
-            if (_iconNotDownload == null || _iconDownloading == null
-                || _iconDownloadError == null || _iconDownloadSuccess == null)
+            if (_iconNotDownload == null
+                || _iconDownloadError == null
+                || _iconDownloadSuccess == null)
             {
                 Log.Warning("[MusicForm] Status icons missing under Resources/MusicForm/ "
-                    + "(MusicNotDownload / MusicLoading / MusicError / MusicRed)");
+                    + "(MusicNotDownload / MusicError / MusicRed)");
             }
         }
 
@@ -2203,34 +2242,38 @@ namespace Game
             return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
         }
 
-        void StartDownloadSpinLoop()
+        void StartDownloadProgressTick()
         {
-            StopDownloadSpinLoop();
+            StopDownloadProgressTick();
             if (Root == null)
                 return;
-            _downloadSpinSchedule = Root.schedule.Execute(TickDownloadSpin).Every(PlayingFrameIntervalMs);
+            _downloadProgressSchedule = Root.schedule
+                .Execute(TickDownloadProgress)
+                .Every(DownloadProgressTickMs);
         }
 
-        void StopDownloadSpinLoop()
+        void StopDownloadProgressTick()
         {
-            _downloadSpinSchedule?.Pause();
-            _downloadSpinSchedule = null;
+            _downloadProgressSchedule?.Pause();
+            _downloadProgressSchedule = null;
         }
 
-        void TickDownloadSpin()
+        void TickDownloadProgress()
         {
             if (_list == null)
                 return;
-            _downloadSpinDegrees = (_downloadSpinDegrees - DownloadSpinDegreesPerTick) % 360f;
-            _downloadSpinIcon ??= ApplyDownloadSpinIcon;
-            _list.Query("downloading").ForEach(_downloadSpinIcon);
+            _downloadProgressIcon ??= ApplyDownloadProgressIcon;
+            _list.Query("downloading").ForEach(_downloadProgressIcon);
         }
 
-        void ApplyDownloadSpinIcon(VisualElement icon)
+        void ApplyDownloadProgressIcon(VisualElement host)
         {
-            if (icon == null || icon.resolvedStyle.display == DisplayStyle.None)
+            if (host == null || host.resolvedStyle.display == DisplayStyle.None)
                 return;
-            icon.style.rotate = new Rotate(Angle.Degrees(_downloadSpinDegrees));
+            var ring = host.Q<ArcProgressRing>("fill");
+            if (ring == null)
+                return;
+            ring.FillAmount = ResolveDownloadProgress(host.userData as string);
         }
 
         // -----------------------------------------------------------------------

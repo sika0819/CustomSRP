@@ -1,0 +1,71 @@
+{
+  "high": "/Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Assets/_scratch/tree_lod_rebuild/GrandFir8/high/GrandFir8_high.obj",
+  "out": "/Users/sika/Desktop/code/BoluoProjectNew/CustomSRP/Assets/_scratch/tree_lod_rebuild/GrandFir8/low/GrandFir8_low.obj",
+  "bark": {
+    "name": "Bark",
+    "before": 180,
+    "after": 70,
+    "ratio": 0.3888888888888889,
+    "skipped": false,
+    "nonmanifold_edges": 190
+  },
+  "leaf": {
+    "name": "Leaf",
+    "before": 1320,
+    "after": 960,
+    "ratio": 0.7272727272727273,
+    "skipped": false,
+    "nonmanifold_edges": 1928
+  },
+  "others_ignored": [],
+  "aabb_high": {
+    "min": [
+      -1.8848438262939453,
+      -2.011434316635132,
+      -1.0079048871994019
+    ],
+    "max": [
+      2.260199546813965,
+      2.4022960662841797,
+      10.63347339630127
+    ],
+    "size": [
+      4.14504337310791,
+      4.4137303829193115,
+      11.641378283500671
+    ],
+    "center": [
+      0.18767786026000977,
+      0.19543087482452393,
+      4.812784254550934
+    ]
+  },
+  "aabb_low": {
+    "min": [
+      -1.8848438262939453,
+      -2.011434316635132,
+      -1.0079379081726074
+    ],
+    "max": [
+      2.260199546813965,
+      2.376157760620117,
+      10.683564186096191
+    ],
+    "size": [
+      4.14504337310791,
+      4.387592077255249,
+      11.691502094268799
+    ],
+    "center": [
+      0.18767786026000977,
+      0.18236172199249268,
+      4.837813138961792
+    ]
+  },
+  "aabb_size_delta_rel": [
+    0.0,
+    -0.005922044029969545,
+    0.004305659480129422
+  ],
+  "ok": true
+}

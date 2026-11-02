@@ -14,6 +14,7 @@
 | `_CanvasMap` | 打包：RG 切线法线、B 厚度；缩放宜 **&lt;1**（织纹更大、更稀） |
 | `_CanvasStrength` | 画布法线（宜 0.08–0.12，过大会发脏） |
 | `_PaintThickness` | `(1-N·V) × B` 边缘亮部（宜偏低） |
+| Impasto（`OilImpastoCore`） | 笔触只调 **明度/脊高光/微法线**，不改暖冷色调；水面 PaintMap 当结构遮罩（`ImpastoStrokeAlbedo`），勿 `lerp` 成灰笔 |
 | `_ShadeSteps` / `_ShadeLift` | 量化阶数；最暗档抬升（防死黑） |
 | `_ShadowTint` / `_ShadowWarm` | 本影冷/暖两层颜料（笔刷在二者间切换） |
 | `_ShadowLift` | 本影颜料强度（宜 ≥0.9，防死黑） |
@@ -75,8 +76,8 @@ Keyword：`_CLIPPING`、`_RECEIVE_SHADOWS`（`multi_compile_local`）。描边�
 | 贴图 `OilGround.png` | 地面油画笔触（大地色/橄榄绿） |
 | 贴图 `OilCanvas.png` | **线性**打包：RG 法线、B 厚度（预览紫灰正常） |
 | 贴图 `OilCanvas_Weave.png` | 织纹参考（sRGB） |
-| `LitMooreaOcean` / `OilOceanNPR` | 岛周海面。`OilOcean.png` 只提供笔触遮罩，水色是 `_DeepColor` / `_MidColor` 海蓝；近岸用浅蓝，浪花跟亮笔。倒影读四张静态立方体（黎明/白天/黄昏/夜晚），按 `_OilSkyPeriod` 混合，`_ReflectStrength` 浅浅盖在笔触上 |
+| `LitMooreaOcean` / `OilOceanNPR` | 岛周海面。`OilOcean.png` 只提供笔触遮罩，水色是 `_BaseColor` / `_ShallowColor` 海蓝；`_StrokeSlice` 切横笔厚涂带，日道 `_SparkleBrush` 叠金黄碎笔。倒影读四张静态立方体（黎明/白天/黄昏/夜晚），按 `_OilSkyPeriod` 混合，`_ReflectStrength` 浅浅盖在笔触上 |
 | `OilRiverNPR` / `Stylized River*.mat` | 岛内湖与河。对齐 Boluo `FlowUvMode=MeshUV`：流向走 `_MeshFlowScale` 网格 UV（勿用世界 XZ）；`OilRiverPaint.png` 莫奈横向笔触、`OilRiverGlint.png` 阳光碎笔；岸缘 = Depth 交线 + `BankUv`（无 FoamMap）；`_OIL_NO_VIOLET_UMBRA`。倒影与海面共用四张时段贴图 |
 | `OilWaterfallNPR` / `Stylized Waterfall.mat` | 瀑布竖帘。对齐 Boluo `_FallSheet`：mesh UV；`OilWaterfallPaint.png` 竖向油画帘、`OilWaterfallMist.png` 底雾（无 FoamMap）；`MeshFlowScale≈(50.9,-3.91)`；Cull Off |
-| `OilSkybox` / `OilSkyboxNPR` | Boluo 架构（方向笔触 + 日/月/星贴图）；`OilSkyboxTime.timeOfDay` 为 0–24 小时（06 黎明 / 12 白天 / 18 黄昏 / 00 夜晚），换算为 `_Period` 后在 Shader 内连续插值；编辑器拖时间会同步天空、环境光与平行光 |
+| `OilSkybox` / `OilCloud` | 天空盒画布脊（`_BrushScale` 宜偏低→大笔）+ 云环厚涂色块；`OilSkyboxTime` 0–24h（06/12/18/00）连续插值，预设海报色对齐 `zhanweitu1–10` |
 | Pipeline | 全局 `copyDepth=1`、`renderScale=1`（笔触不被 0.75 缩放糊掉）。`copyColor` 保持关闭。海/河倒影走反射探针：菜单 **CustomSRP → Bake Water Reflection** 运行时全岛 **Realtime ReflectionProbe（32）**：只在 `OilSkyboxTime.animate` 或 `WeatherService` 时段过渡时每帧刷新，平时冻结；`cullingMask` 剔除 Water 层。编辑器菜单 **CustomSRP → Bake Water Reflection** 仍可烘焙 4 时段静态贴图作备份。Empty 相机仍关 copyDepth |

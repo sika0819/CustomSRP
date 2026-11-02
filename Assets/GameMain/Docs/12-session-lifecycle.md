@@ -98,6 +98,7 @@ Arm 之后 `RunLogin`：
 
 - 真机：`NativeBridgeFacade.Init` → 读 `boot.json` → `EnsureDeviceTokenAsync` → `EnsureUserTokenAsync` → `GuestSession.SyncFromBoluo`。Hybrid 换票失败保持 Arm，下一帧重跑，不回落本地游客。
 - 宿主 Query 无 userToken：清掉 Unity 里残留的用户票并返回失败，不 `POST touristLogin`。独立包没有宿主时才游客登录。
+- 游客票：`Boluo.GuestCache.*` 退登保留；未过期且同设备再次游客直接复用，不重打 `touristLogin`（过期 / 换设备才换票）。岛内进度仍不落盘。
 - Editor：已有正式票或游客票就复用；否则停在「编辑器登录」窗。无网不拦截。
 
 `RunLogin` 结束且 `_finished` 之后才 `WanosEngine.Load`（已创建则 `KeepSilent`，不第二次 `Create`），然后 `BankUpgradeBootstrap.Start` 与 `BankDownloader.ResumeAfterLeave`。本地解压 `EnsureLocalBanksReadyAsync` 跟引擎一起做，那不是 HTTP 下载。
@@ -169,7 +170,7 @@ Editor 没有 Query 20。登录窗直接写 `BoluoSession`。退登清掉用户�
 
 - `Assets/GameMain/Scenes/Launch.unity`：流程类型名序列化在场景 / `GameFramework` 预制体里（`Editor/LaunchSceneSetup.cs`）。
 - `StreamingAssets/Game/boot.json`：包名、版本、playMode。
-- PlayerPrefs：`Boluo.DeviceToken*` 退登保留；`Boluo.UserToken` / `Boluo.UserId` / `Boluo.IsGuest` 退登删除。正式进度键按 `BaseKey.userId` 分桶。
+- PlayerPrefs：`Boluo.DeviceToken*` 退登保留；`Boluo.UserToken` / `Boluo.UserId` / `Boluo.IsGuest` 退登删除；`Boluo.GuestCache.*` 退登保留（过期/换设备作废）。正式进度键按 `BaseKey.userId` 分桶。
 
 ## 日志 tag
 

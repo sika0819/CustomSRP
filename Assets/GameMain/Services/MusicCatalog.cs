@@ -61,7 +61,14 @@ namespace Game
             bool overridingLocal = _albums != null;
             _albums = BuildAlbums(serverData);
             _fromServer = true;
-            Debug.Log($"[MusicCatalog] Set {AlbumCount} albums from server." +
+            var counts = new System.Text.StringBuilder(64);
+            for (int i = 0; i < _albums.Count; i++)
+            {
+                if (i > 0) counts.Append(',');
+                counts.Append(_albums[i].Name).Append('=').Append(_albums[i].TrackCount);
+            }
+            Debug.Log($"[MusicCatalog] Set {AlbumCount} albums from server " +
+                $"tracks=[{counts}]" +
                 (overridingLocal ? " (replaced local JSON catalog)" : string.Empty));
             BroadcastReady();
         }

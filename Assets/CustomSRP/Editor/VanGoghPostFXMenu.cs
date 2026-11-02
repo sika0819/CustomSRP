@@ -37,9 +37,11 @@ namespace CustomSRP.Editor
             SetSmh(so.FindProperty("shadowsMidtonesHighlights"));
             SetTone(so.FindProperty("toneMapping"));
             so.FindProperty("oilFilter.enabled").boolValue = true;
+            so.FindProperty("oilFilter.strength").floatValue = 0.62f;
 
+            // Canvas weave: dirty on phone, weak oil read — keep off.
             SerializedProperty canvas = so.FindProperty("canvas");
-            canvas.FindPropertyRelative("enabled").boolValue = true;
+            canvas.FindPropertyRelative("enabled").boolValue = false;
             canvas.FindPropertyRelative("grain").floatValue = 0.035f;
             canvas.FindPropertyRelative("weave").floatValue = 0.02f;
 

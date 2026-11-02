@@ -9,10 +9,10 @@ namespace Game
 {
     /// <summary>
     /// 用户主动下载统一流水线（区域 / 预设 / 音乐）：
-    /// <see cref="DownloadConsentSession.EnsureReady"/> →（可选）进度窗 → <see cref="BankDownloader"/> → 关窗 →
-    /// <see cref="DownloadCellularGate.RevokeCellularAllow"/>。
+    /// <see cref="DownloadConsentSession.EnsureReady"/> →（可选）进度窗 → <see cref="BankDownloader"/> → 关窗。
     /// 已 <see cref="BankDownloader.IsLocalReady"/> 的 bank 不进同意链 / HTTP。
-    /// 流量窗仅蜂窝弹出；Wi‑Fi 直接开下。预设可 <see cref="DownloadUiOptions.SuppressProgressDialog"/>。
+    /// 流量窗仅蜂窝弹出（本岛会话开闸，离岛复位）；Wi‑Fi 在 AppLaunch 开关开时先确认。
+    /// 预设 / 音乐可 <see cref="DownloadUiOptions.SuppressProgressDialog"/>。
     /// </summary>
     public static class UserBankDownloadFlow
     {
@@ -26,7 +26,7 @@ namespace Game
 
         /// <summary>
         /// 跑同意链；通过后按选项开进度窗并下载。
-        /// <paramref name="onComplete"/> 在关窗 + Revoke 之后调用（成功或失败都调）。
+        /// <paramref name="onComplete"/> 在关窗之后调用（成功或失败都调）。
         /// <paramref name="onBanksDone"/> 在下载 await 返回后、关窗前调用（可空）。
         /// </summary>
         public static void Start(
@@ -160,7 +160,6 @@ namespace Game
                     UiDialogService.CloseDownloadProgress(ticket);
                 if (_activeTicket == ticket)
                     _activeTicket = 0;
-                DownloadCellularGate.RevokeCellularAllow();
                 _busy = false;
                 InvokeSafe(onComplete, "onComplete");
             }
@@ -168,7 +167,7 @@ namespace Game
 
         /// <summary>
         /// 已有批次在跑：并入 <see cref="BankDownloader"/> 队列，复用进度票；
-        /// 不关窗、不清 <see cref="_busy"/>、不 Revoke（由持有进度窗的那一路 finally 负责）。
+        /// 不关窗、不清 <see cref="_busy"/>（由持有进度窗的那一路 finally 负责）。
         /// </summary>
         static async UniTask MergeIntoBusyDownload(
             string[] pending,

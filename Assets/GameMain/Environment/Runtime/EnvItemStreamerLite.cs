@@ -389,6 +389,17 @@ namespace Game
             Current.CatchUpNow();
         }
 
+        /// <summary>
+        /// 编辑器预设截图：无视进岛次数，强制按焦点同步铺满，并把近处片板升为完整树模。
+        /// </summary>
+        public static void ForceCatchUpForCapture()
+        {
+            if (Current == null || Current._released)
+                return;
+            Current.CatchUpNow();
+            Current.UpgradeNearbyBillboardsSync();
+        }
+
         void CatchUpNow()
         {
             IslandJoystickCamera joy = IslandJoystickCamera.Current;
@@ -417,6 +428,48 @@ namespace Game
                 + " filled=" + filled
                 + " spawned=" + _spawnedCount
                 + " inflight=" + _inflightHandles.Count);
+        }
+
+        /// <summary>截图：半径内 Billboard 代理同步换成完整 Prefab，避免「树只有一板」。</summary>
+        void UpgradeNearbyBillboardsSync()
+        {
+            if (_focus == null)
+                return;
+
+            _syncLoads = true;
+            Vector3 p = _focus.position;
+            float full = Mathf.Max(1f, EnvStreamingConfig.TreeFullMeshMaxDist);
+            float fullSq = full * full;
+            int upgraded = 0;
+
+            for (int i = 0; i < _items.Count; i++)
+            {
+                Item item = _items[i];
+                if (item.Go == null || item.LodTier != TierBillboard)
+                    continue;
+                if (!EnvStreamingConfig.IsBigTreeCategory(item.Category))
+                    continue;
+                if (DistSqXZ(item.Pos, p) > fullSq)
+                    continue;
+                if (!TryPrefabImmediate(
+                        item.Location, item.EditorPath, "capture-upgrade", out GameObject prefab))
+                    continue;
+
+                item.PendingTier = TierFull;
+                _items[i] = item;
+                var spawned = CreateInstanceForTier(item, prefab, TierFull);
+                if (spawned.Go == null)
+                    continue;
+                FinalizeSpawned(i, spawned.Go, prefab, TierFull);
+                upgraded++;
+            }
+
+            if (upgraded > 0)
+            {
+                Log.Info(
+                    "[EnvItemStreamerLite] capture billboard→full upgraded=" + upgraded
+                    + " radius=" + full.ToString("F0"));
+            }
         }
 
         /// <summary>缓存命中，或没有未完成异步句柄时同步取出预制体。</summary>
@@ -567,6 +620,15 @@ namespace Game
                 float dbz = _items[b].Pos.z - p.z;
                 return (dax * dax + daz * daz).CompareTo(dbx * dbx + dbz * dbz);
             });
+
+            // 真机硬顶：远的留给揭罩后流送，缩短 ReleaseRenderHold 后首屏 GPU 上传。
+            int hardCap = EnvStreamingConfig.PrefillNearHardCap;
+            if (hardCap > 0 && hardCap < int.MaxValue && near.Count > hardCap)
+            {
+                Log.Info(
+                    $"[EnvItemStreamerLite] prefill near hardCap {near.Count}->{hardCap}");
+                near.RemoveRange(hardCap, near.Count - hardCap);
+            }
 
             int total = near.Count;
             int done = 0;
@@ -1251,6 +1313,10 @@ namespace Game
 
             if (!isBillboard)
             {
+                // Mesh LOD leaf volume: normalize Y per MeshFilter bounds (LOD0/1/2… + 灌木).
+                if (EnvStreamingConfig.IsTreeCategory(item.Category))
+                    EnvStreamerFoliageVolumeFit.ApplyOn(instance);
+
                 if (EnvStreamingConfig.IsBridgeCategory(item.Category))
                 {
                     LogStepBegin("bridge", item.PrefabName);
@@ -1271,10 +1337,9 @@ namespace Game
             {
                 if (isBillboard)
                 {
-                    bool mainCameraOnly = EnvStreamingConfig.ShouldBeMainCameraOnly(
-                        item.Category, item.PrefabName);
+                    // Far cards stay out of the mirror; full meshes use ShouldBeMainCameraOnly.
                     LogStepBegin("native-bb", item.PrefabName);
-                    proto = _native.AddBillboardPrototype(prefab, mainCameraOnly);
+                    proto = _native.AddBillboardPrototype(prefab, true);
                     LogStepEnd("native-bb", item.PrefabName);
                     if (proto >= 0 && _native.TryAddInstance(instance, proto))
                         inNative = true;
@@ -1420,7 +1485,7 @@ namespace Game
             }
         }
 
-        /// <summary>大于 26 米关，小于 22 米开；中间保持当前状态。</summary>
+        /// <summary>超过 ShadowCastMaxDist 关，近于 ShadowCastRestoreDist 开；中间保持当前状态。</summary>
         static bool UpdateShadowRange(ref Item item, float distSq)
         {
             float max = EnvStreamingConfig.ShadowCastMaxDist;

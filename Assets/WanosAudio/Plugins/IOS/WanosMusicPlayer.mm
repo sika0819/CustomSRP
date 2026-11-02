@@ -4,6 +4,7 @@
 #import <QuartzCore/QuartzCore.h>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -26,6 +27,7 @@ extern "C" {
     void BoluoAudioSession_AppendTrail(const char* msg);
     /// 定义于 BoluoMusicPlayerIOS.mm；≥100ms 抛壳侧 BLS 卡顿通知。
     void BoluoNativeAudioJank_ReportPhase(const char *phase, double durationMs, const char *detail);
+    int32_t BoluoAudioSession_IsHostForeground(void);
 }
 
 extern void UnitySendMessage(const char* obj, const char* method, const char* msg);
@@ -191,6 +193,8 @@ static NSString* g_unityObjectName = @"WanosMusicPlayer";
 static NSString* g_stopEventName = @"Stop_Music";
 static NSString* g_breakEventName = @"Break_Music";
 static unsigned long long g_currentInstanceId = 0;
+/// Unity MusicPlaylist PostEvent 的 BGM voice；锁屏 Ended 识别用。
+static unsigned long long g_unityMusicInstanceId = 0;
 static BOOL g_shouldStop = NO;
 static BOOL g_remoteCommandsConfigured = NO;
 static BOOL g_playlistReloadedByCSharp = NO;  // OnBankReady 时 C# 调用 ReloadPlaylistFromFile 后置为 YES，EventCallback 使用后清除
@@ -930,6 +934,103 @@ static void WanosMusicPlayer_EventCallback(EventCallbackInfo* info) {
 
 extern "C" {
 
+void WanosMusicPlayer_NoteUnityMusicVoice(unsigned long long instanceId) {
+    g_unityMusicInstanceId = instanceId;
+    NSLog(@"[WanosMusicPlayer] NoteUnityMusicVoice id=%llu", instanceId);
+}
+
+/// C# MusicPlayMode：1 单曲 / 2 列表 / 3 随机 → 原生 playlist.mode 0/1/2。
+void WanosMusicPlayer_NoteUnityMusicContext(int playMode, int albumIndex, int trackIndex) {
+    if (g_playlist.musicLists.empty()) {
+        NSString *listPath = nil;
+        loadPlaylistFromDefaultLocations(&listPath);
+    }
+    int nativeMode = 0;
+    if (playMode == 2) nativeMode = 1;
+    else if (playMode == 3) nativeMode = 2;
+    g_playlist.mode = nativeMode;
+    if (albumIndex >= 0) g_playlist.currentListIndex = albumIndex;
+    if (trackIndex >= 0) g_playlist.currentMusicIndex = trackIndex;
+    // 重建 indexes，否则 Shuffle/Loop 的 computeNextTrackIndices 可能空转。
+    if (albumIndex >= 0 && albumIndex < (int)g_playlist.musicLists.size()) {
+        const NativeMusicList& list = g_playlist.musicLists[albumIndex];
+        int count = (int)list.musics.size();
+        g_playlist.indexes.clear();
+        if (nativeMode == 0) {
+            int idx = (trackIndex >= 0 && trackIndex < count) ? trackIndex : 0;
+            g_playlist.indexes.push_back(idx);
+        } else {
+            for (int i = 0; i < count; i++) g_playlist.indexes.push_back(i);
+            if (nativeMode == 2) {
+                // 轻量打乱：与 load 路径一致即可，锁屏续播不要求可复现种子。
+                for (int i = count - 1; i > 0; i--) {
+                    int j = (int)(arc4random_uniform((uint32_t)(i + 1)));
+                    std::swap(g_playlist.indexes[i], g_playlist.indexes[j]);
+                }
+            }
+        }
+    }
+    g_playlistReloadedByCSharp = YES;
+    NSLog(@"[WanosMusicPlayer] NoteUnityMusicContext csharpMode=%d nativeMode=%d list=%d music=%d indexes=%zu",
+          playMode, nativeMode, g_playlist.currentListIndex, g_playlist.currentMusicIndex,
+          g_playlist.indexes.size());
+}
+
+/// 锁屏曲终：Unity 回调线程调用。循环/随机切下一首；返回 1=已处理。
+int WanosMusicPlayer_TryHandleBackgroundTrackEnded(unsigned long long instanceId) {
+    // 前台交给 C# MusicPlaylist；仅宿主已进后台时接管。
+    if (BoluoAudioSession_IsHostForeground() != 0) {
+        return 0;
+    }
+    if (WanosMusicPlayer_IsUserPaused()) {
+        NSLog(@"[WanosMusicPlayer] bg Ended ignored: userPaused");
+        return 0;
+    }
+    if (g_shouldStop) {
+        return 0;
+    }
+    // 单曲（native mode 0）不自动下一首。
+    if (g_playlist.mode == 0) {
+        NSLog(@"[WanosMusicPlayer] bg Ended ignored: single mode");
+        return 0;
+    }
+    if (instanceId != 0) {
+        BOOL matchUnity = g_unityMusicInstanceId != 0 && instanceId == g_unityMusicInstanceId;
+        BOOL matchNative = g_currentInstanceId != 0 && instanceId == g_currentInstanceId;
+        if (!matchUnity && !matchNative
+            && (g_unityMusicInstanceId != 0 || g_currentInstanceId != 0)) {
+            NSLog(@"[WanosMusicPlayer] bg Ended ignored stale instance=%llu", instanceId);
+            return 0;
+        }
+    }
+    g_unityMusicInstanceId = 0;
+    g_currentInstanceId = 0;
+
+    int listIdx = g_playlist.currentListIndex;
+    int musicIdx = g_playlist.currentMusicIndex;
+    if (!g_playlistReloadedByCSharp) {
+        NSString *listPath = nil;
+        if (!loadPlaylistFromDefaultLocations(&listPath)) {
+            NSLog(@"[WanosMusicPlayer] bg Ended: playlist unavailable");
+            return 0;
+        }
+    } else {
+        g_playlistReloadedByCSharp = NO;
+    }
+    if (listIdx < 0 || listIdx >= (int)g_playlist.musicLists.size()) return 0;
+    const NativeMusicList& list = g_playlist.musicLists[listIdx];
+    if (list.musics.empty()) return 0;
+    if (musicIdx < 0 || musicIdx >= (int)list.musics.size()) return 0;
+
+    int nextListIdx = listIdx;
+    int nextMusicIdx = musicIdx;
+    computeNextTrackIndices(listIdx, musicIdx, nextListIdx, nextMusicIdx);
+    NSLog(@"[WanosMusicPlayer] bg Ended → auto-next %d/%d -> %d/%d",
+          listIdx, musicIdx, nextListIdx, nextMusicIdx);
+    enqueueNativePlay(nextListIdx, nextMusicIdx);
+    return 1;
+}
+
 void WanosMusicPlayer_NativeSetPaths(const char* persistentDataPath, const char* streamingAssetsPath) {
     if (persistentDataPath) {
         g_persistentDataPath = [NSString stringWithUTF8String:persistentDataPath];
@@ -1034,13 +1135,24 @@ void WanosMusicPlayer_NativeBreak(void) {
     PostEvent(g_objectId, [g_breakEventName UTF8String], nil);
 }
 
-/// obj_id=0，无回调；供 Boluo 与引擎 SetMute 同步派发全局 Pause/Resume 音乐事件
+/// obj_id=0，无回调；供 Boluo 与引擎 SetMute 同步派发全局 Pause/Resume。
+/// 同时 Pause_ALL / Resume_ALL：其它播放器抢焦点时音乐与环境音效一起停/一起恢复
+/// （仅 Pause_Music 时音效会继续响）。
 void WanosMusicPlayer_PostGlobalPauseMusic(void) {
     PostEvent(0, "Pause_Music", nil);
+    PostEvent(0, "Pause_ALL", nil);
 }
 
+/// 定义在 BoluoMusicPlayerIOS.mm。回前台同一事件只发一次。
+int BoluoMusicPlayerIOS_ClaimVoiceResume(const char *eventName);
+
 void WanosMusicPlayer_PostGlobalResumeMusic(void) {
-    PostEvent(0, "Resume_Music", nil);
+    if (BoluoMusicPlayerIOS_ClaimVoiceResume("Resume_ALL")) {
+        PostEvent(0, "Resume_ALL", nil);
+    }
+    if (BoluoMusicPlayerIOS_ClaimVoiceResume("Resume_Music")) {
+        PostEvent(0, "Resume_Music", nil);
+    }
 }
 
 void WanosMusicPlayer_SetNowPlayingInfo(const char* title, const char* artist, const char* album) {

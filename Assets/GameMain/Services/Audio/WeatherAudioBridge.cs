@@ -135,7 +135,7 @@ namespace Game
         {
             if (!_started)
                 return;
-            if (_contentAudioPaused)
+            if (_contentAudioPaused || IslandAudioSession.IsYieldHeld)
                 return;
 
             ClearPlaying();
@@ -183,7 +183,8 @@ namespace Game
 
         void ApplyFromWeather()
         {
-            if (!_started || !WanosInteraction.IsReady || _contentAudioPaused)
+            if (!_started || !WanosInteraction.IsReady || _contentAudioPaused
+                || IslandAudioSession.IsYieldHeld)
                 return;
 
             WeatherService weather = GameEntry.Weather;
@@ -255,7 +256,7 @@ namespace Game
                         RestoreLogicalRtpc(WindParam, wind, ref _windWritten);
                 }
             }
-            else
+            else if (!HoldPlayingThroughFade(_windPlaying, wind, weather))
                 StopLoop(ref _windPlaying, WanosInteraction.WindObjectId, WindStop, ref _windBankHeld, WindBank);
 
             if (wantRain)
@@ -288,7 +289,7 @@ namespace Game
                         _rainPostedAt = rainPostedAt;
                 }
             }
-            else
+            else if (!HoldPlayingThroughFade(_rainPlaying, rain, weather))
             {
                 StopLoop(ref _rainPlaying, WanosInteraction.RainObjectId, RainStop, ref _rainBankHeld, RainBank);
                 _rainPostedAt = float.NaN;
@@ -323,6 +324,19 @@ namespace Game
             ForceWrite(name, logical, ref writtenField);
         }
 
+        /// <summary>
+        /// 切离风/雨时 Kind 已经是目标天气，但 RTPC 仍按面板 2s 从当前档淡到 0。
+        /// 这段时间保持已在播的循环，让音量跟着淡出；淡到 0 再 Stop。
+        /// 0 档不能用来决定要不要起声，只能用来决定要不要把已经在播的停掉。
+        /// </summary>
+        static bool HoldPlayingThroughFade(bool playing, float logicalRtpc, WeatherService weather)
+        {
+            return playing
+                   && logicalRtpc > 0f
+                   && weather != null
+                   && weather.IsWeatherTransitioning;
+        }
+
         bool NeedsLightRainRearm(float rain)
         {
             return _rainPlaying
@@ -355,6 +369,8 @@ namespace Game
             ref bool missing)
         {
             if (playing)
+                return;
+            if (_contentAudioPaused || IslandAudioSession.IsYieldHeld)
                 return;
             if (missing)
                 return;

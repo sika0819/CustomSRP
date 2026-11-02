@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 6598487462514023719}
   - component: {fileID: 5658115543222621214}
   - component: {fileID: 356001593569922380}
+  - component: {fileID: 746252653730741521}
   m_Layer: 0
   m_Name: SM_OakTree_06_LOD1
   m_TagString: Untagged
@@ -375,7 +376,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8748013271896078750}
-  m_Mesh: {fileID: 4515804722784211760, guid: 4b69c4eb89c2f4d7ab7ccc441665af8b, type: 3}
+  m_Mesh: {fileID: 4300000, guid: 8dc13fc925c245908f9bba12e48ecf61, type: 2}
 --- !u!23 &6845434662406761296
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -426,3 +427,16 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+
+--- !u!114 &746252653730741521
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1881321360658719124}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c3e91f4b2d4e6a8c0d1f2e3a4b5c6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 

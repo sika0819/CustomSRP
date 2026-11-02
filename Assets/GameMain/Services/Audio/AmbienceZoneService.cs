@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using GameFramework.Event;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 using WanosAudio;
@@ -56,6 +57,12 @@ namespace Game
         const float WalkSoftStopSeconds = 0.55f;
         /// <summary>First Post starts below target then slews up — avoids enter click.</summary>
         const float SoftEnterStartDb = -36f;
+        /// <summary>Boluo 水域物体级钉正午，避免全局夜间 Time of A Day 把河/瀑/海/湖打到 0。</summary>
+        const string TimeOfDayRtpcName = "Time of A Day";
+        const float WaterAmbienceDaytimeRtpcHours = 12f;
+        /// <summary>贴着瀑特征时禁止被湖互斥抢走（Mist/湖边曾把瀑掐成「没声」）。</summary>
+        const float LakeWaterfallPreferFallWithinMeters =
+            AmbienceWaterSilencePolicy.PreferFallWithinMeters;
 
         /// <summary>
         /// Boluo <c>WanosCurveForGain</c> 编辑器 Y 是「显示 dB」；远端点统一约 -17.25。
@@ -86,30 +93,48 @@ namespace Game
             new Vector2(70.79445f, 0f),
             new Vector2(316.06454f, -17.25f),
         };
+        /// <summary>boluo-main Ocean_RD CurveForGain。</summary>
         static readonly Vector2[] OceanGainCurve =
         {
-            new Vector2(4f, 0f),
-            new Vector2(60f, -17.25f),
+            new Vector2(20.759832f, 0f),
+            new Vector2(79.93804f, -7.508814f),
+            new Vector2(124.90317f, -17.25f),
         };
-        static readonly Vector2[] Point20GainCurve =
+        /// <summary>boluo-main lake_0 CurveForGain（lake_1 略短，取湖心满音更长的一条）。</summary>
+        static readonly Vector2[] LakeGainCurve =
         {
-            new Vector2(4f, 0f),
-            new Vector2(20f, -17.25f),
+            new Vector2(17.46708f, 0f),
+            new Vector2(48.055775f, -17.25f),
         };
+        /// <summary>boluo-main River_Sound_1/2/3 CurveForGain（radius=40）。</summary>
+        static readonly Vector2[] RiverGainCurve =
+        {
+            new Vector2(4.1938047f, 0f),
+            new Vector2(19.856232f, -6.5347075f),
+            new Vector2(31.75719f, -12.866475f),
+            new Vector2(40f, -17.25f),
+        };
+        /// <summary>boluo-main CampFire_0_Audio CurveForGain（radius=30）。</summary>
         static readonly Vector2[] CampfireGainCurve =
         {
-            new Vector2(4f, 0f),
-            new Vector2(30f, -17.25f),
+            new Vector2(7.863383f, 0f),
+            new Vector2(14.868943f, -9.213541f),
+            new Vector2(21.493248f, -17.25f),
         };
+        /// <summary>boluo-main WaterFall_Sound_Big_1 CurveForGain（radius=80，盖观瀑点）。</summary>
         static readonly Vector2[] WaterfallBigGainCurve =
         {
-            new Vector2(4f, 0f),
-            new Vector2(50f, -17.25f),
+            new Vector2(27.473417f, 0f),
+            new Vector2(52.000847f, -5.9664736f),
+            new Vector2(80f, -17.25f),
         };
+        /// <summary>boluo-main WaterFall_Sound_Small_* CurveForGain（radius=50）。</summary>
         static readonly Vector2[] WaterfallSmallGainCurve =
         {
-            new Vector2(4f, 0f),
-            new Vector2(72f, -17.25f),
+            new Vector2(7.6839657f, 0f),
+            new Vector2(23.299768f, -5.0735292f),
+            new Vector2(40f, -12.460581f),
+            new Vector2(50f, -17.25f),
         };
 
         public const string HostName = "AmbienceZones";
@@ -190,6 +215,38 @@ namespace Game
             /// <summary>Raw target distance this eval (pre Distance-RTPC slew).</summary>
             public float LastTargetDistance = float.NaN;
 
+            /// <summary>
+            /// 上一轮 Keep 的距离。走进近场时若仍 Playing 但引擎 voice 已死
+            /// （VoiceStateChanged 未接），用来触发一次强制 Repost。
+            /// </summary>
+            public float LastKeepDistance = float.NaN;
+
+            /// <summary>
+            /// 河/海 Quad：L/Ls/R/Rs 四个世界落点（Boluo WanosBoxHelper 四角）。
+            /// null = 单 emitter 叠轨（旧路径）。
+            /// </summary>
+            public GameObject[] ChannelEmitters;
+
+            /// <summary>四角中心（SmoothDamp 后）。</summary>
+            public Vector3 QuadCenterSlewed;
+
+            /// <summary>Evaluate 给出的河面/岸带目标中心（每帧 SmoothDamp 追它）。</summary>
+            public Vector3 QuadFollowTarget;
+
+            /// <summary>四角中心是否已初始化。</summary>
+            public bool QuadCenterReady;
+
+            public Vector3 QuadCenterVelocity;
+
+            /// <summary>上次 LayoutQuad 时刻，用于 Boluo 式 dt（禁止只塞 Time.deltaTime）。</summary>
+            public float LastQuadLayoutAt = -1f;
+
+            /// <summary>四角各自已写引擎增益（Boluo 每角独立 CurveForGain）。</summary>
+            public float[] ChannelAppliedGainDb;
+
+            /// <summary>四角增益 SmoothDamp 速度。</summary>
+            public float[] ChannelGainSlewVelocity;
+
             /// <summary>Walk-exit: ramp gain to floor before StopEvent (native fade may be stub).</summary>
             public bool SoftStopping;
             public float SoftStopStartedAt;
@@ -203,6 +260,9 @@ namespace Game
 
             /// <summary>True after a successful Retain; walk-stop may KeepBank without Release.</summary>
             public bool BankHeld;
+
+            /// <summary>Ocean 岸点 / River·Waterfall 扁平样点 sticky 下标；-1 表示尚未锁定。</summary>
+            public int StickyShoreIndex = -1;
         }
 
         struct DeferredEmitterRelease
@@ -282,7 +342,7 @@ namespace Game
                 float dist = float.IsNaN(src.LastSlewedDistance)
                     ? (float.IsNaN(src.LastPostedDistance) ? 0f : src.LastPostedDistance)
                     : src.LastSlewedDistance;
-                WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, gainDb);
+                ApplyAttenuationToSourceEmitters(src, dist, gainDb);
             }
         }
 
@@ -298,7 +358,7 @@ namespace Game
         {
             if (!_started || !_catalogBuilt)
                 return;
-            if (_contentAudioPaused)
+            if (_contentAudioPaused || IslandAudioSession.IsYieldHeld)
                 return;
 
             StopAllPlaying(forceReleaseBank: false, keepBank: true);
@@ -337,6 +397,10 @@ namespace Game
             // 订阅 inland water loaded（用于触发首次河/瀑布 Evaluate）
             IslandWorldService.OnInlandWaterReady += OnInlandWaterReady;
 
+            if (GameEntry.Event != null)
+                GameEntry.Event.Subscribe(TimeOfDayChangedEventArgs.EventId, OnTimeOfDayChanged);
+            PushGlobalTimeOfDayFromWeather();
+
             StartAsync().Forget();
         }
 
@@ -346,6 +410,12 @@ namespace Game
             WanosInteraction.VoiceStateChanged -= OnVoiceStateChanged;
             WanosBankStore.OnBankLoaded -= OnBankLoaded;
             IslandWorldService.OnInlandWaterReady -= OnInlandWaterReady;
+            // BeginLeave 与 OnLeave 都会调 IslandAudioSession.Shutdown（文档要求可重入）。
+            // 未订阅时 Unsubscribe 会抛 GameFrameworkException，打断 ChangeState→GuestLogin，
+            // 表现为「退登后再登录进不去岛」。Check 后再退，对齐 IslandMainForm。
+            if (GameEntry.Event != null &&
+                GameEntry.Event.Check(TimeOfDayChangedEventArgs.EventId, OnTimeOfDayChanged))
+                GameEntry.Event.Unsubscribe(TimeOfDayChangedEventArgs.EventId, OnTimeOfDayChanged);
             StopAllPlaying(forceReleaseBank: true);
             FlushDeferredEmitterReleases(force: true);
             Sources.Clear();
@@ -426,6 +496,49 @@ namespace Game
             // 内河就绪 → 重新采样真实水面点（河 / 瀑的最近点来源）。
             GameEntry.World?.WaterProbe.Rebuild();
             EvaluateNow();
+        }
+
+        void OnTimeOfDayChanged(object sender, GameEventArgs e)
+        {
+            if (!_started)
+                return;
+            // 表盘/预设改时刻：先写全局，再把已播水域钉回正午（Boluo GameData.ApplyWanosTimeRtpc）。
+            if (e is TimeOfDayChangedEventArgs tod)
+                WanosEngine.SetGlobalParameter(TimeOfDayRtpcName, tod.Hours);
+            else
+                PushGlobalTimeOfDayFromWeather();
+            PinPostedWaterAmbienceTimeOfDay();
+        }
+
+        void PushGlobalTimeOfDayFromWeather()
+        {
+            WeatherService weather = GameEntry.Weather;
+            float hours = weather != null ? weather.Hours : WaterAmbienceDaytimeRtpcHours;
+            WanosEngine.SetGlobalParameter(TimeOfDayRtpcName, hours);
+        }
+
+        /// <summary>
+        /// 河/瀑/海/湖物体级钉正午。夜间全局 RTPC 会把已 Post 的 voice 打到 0 或明显变小；
+        /// 夜鸟/虫/风仍读全局，不钉。
+        /// </summary>
+        void PinPostedWaterAmbienceTimeOfDay()
+        {
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var src = Sources[i];
+                if (src == null || !src.Playing || src.Emitter == null)
+                    continue;
+                if (!ShouldPinDaytimeTimeOfDayRtpc(src.Spec))
+                    continue;
+                WanosInteraction.SetEmitterParameter(src.Emitter, TimeOfDayRtpcName, WaterAmbienceDaytimeRtpcHours);
+            }
+        }
+
+        static bool ShouldPinDaytimeTimeOfDayRtpc(AmbienceEmitterSpec spec)
+        {
+            if (spec == null || string.IsNullOrEmpty(spec.Bank))
+                return false;
+            return AmbienceWaterSilencePolicy.ShouldPinDaytimeTimeOfDay(spec.Kind);
         }
 
         /// <summary>
@@ -533,18 +646,45 @@ namespace Game
             if (!_started)
                 return;
 
+            // 河 / 瀑来自 AllMapItem，Prefill 后即可建；篝火在 deferred extras，后面再补。
             BuildMapItemSources();
             Log.Info($"[AmbienceZone] map sources={Sources.Count}");
             EnsureEmitterPool();
-            // 新声源（含 extras 篝火）进来时听者可能没动，不能被 still-skip 吃掉。
             InvalidateListenerStill();
 
-            // InlandWaterInstance 可能比 MapItemSpawner 更晚就绪（异步加载顺序）。
-            // 若 water 已就绪（包括事件早于订阅时的兜底），立即 Evaluate；否则等 OnInlandWaterReady。
             if (IslandWorldService.InlandWaterReady)
                 Evaluate();
             else
                 Log.Debug("[AmbienceZone] inland water pending — will Evaluate on OnInlandWaterReady");
+
+            // Huodui 只在 MapItemExtras；IsReady 时 LoadedItems 往往还空。
+            // 等 ExtrasSettled 再 Append，否则委屈泛滥等篝火预设永远没有 Campfire 声源。
+            for (int i = 0; i < 1800; i++)
+            {
+                if (!_started)
+                    return;
+                var spawner = GameEntry.World?.MapItemSpawner;
+                if (spawner == null || spawner.ExtrasSettled)
+                    break;
+                await UniTask.DelayFrame(1);
+            }
+
+            if (!_started)
+                return;
+
+            int before = Sources.Count;
+            AppendCampfireExtras();
+            if (Sources.Count > before)
+            {
+                Log.Info($"[AmbienceZone] map sources after campfire={Sources.Count}");
+                EnsureEmitterPool();
+                InvalidateListenerStill();
+                Evaluate();
+            }
+            else
+            {
+                Log.Info("[AmbienceZone] no campfire sources after ExtrasSettled");
+            }
         }
 
         void EnsureHost()
@@ -567,8 +707,20 @@ namespace Game
             EnsureHost();
             if (_emitterPool == null || _emitterPool.Length != Sources.Count)
             {
+                // 篝火 extras 后补会拉长 Sources；扩容时保留已占用的 emitter，别整表换掉。
+                var oldPool = _emitterPool;
+                var oldInUse = _emitterInUse;
                 _emitterPool = new GameObject[Sources.Count];
                 _emitterInUse = new bool[Sources.Count];
+                if (oldPool != null)
+                {
+                    int copy = Mathf.Min(oldPool.Length, Sources.Count);
+                    for (int i = 0; i < copy; i++)
+                    {
+                        _emitterPool[i] = oldPool[i];
+                        _emitterInUse[i] = oldInUse != null && i < oldInUse.Length && oldInUse[i];
+                    }
+                }
             }
             for (int i = 0; i < Sources.Count; i++)
             {
@@ -650,9 +802,18 @@ namespace Game
         /// <summary>
         /// Huodui 只在 MapItemExtras，不在 AllMapItem。不扫这份表就没有篝火声源。
         /// 只收 Campfire：河/瀑的 catalogIndex 会指回 AllMapItem 行。
+        /// 可在 Prefill 后再调一次；已有 <c>campfire_extra_*</c> 则跳过，避免重复锚点。
         /// </summary>
         void AppendCampfireExtras()
         {
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                AmbienceEmitterSpec s = Sources[i].Spec;
+                if (s != null && s.Kind == AmbienceEmitterKind.Campfire
+                    && s.Id != null && s.Id.StartsWith("campfire_extra_", System.StringComparison.Ordinal))
+                    return;
+            }
+
             IReadOnlyList<MapItemData> extras = GameEntry.MapItemExtras != null
                 ? GameEntry.MapItemExtras.LoadedItems
                 : null;
@@ -671,8 +832,7 @@ namespace Game
                 added++;
             }
 
-            if (added > 0)
-                Log.Info("[AmbienceZone] campfire extras=" + added);
+            Log.Info("[AmbienceZone] campfire extras=" + added);
         }
 
         void AddSource(AmbienceEmitterSpec spec)
@@ -688,7 +848,7 @@ namespace Game
             TickSoftStops();
             if (!_started || !_catalogBuilt || !WanosInteraction.IsReady)
                 return;
-            if (_contentAudioPaused)
+            if (_contentAudioPaused || IslandAudioSession.IsYieldHeld)
                 return;
             if (_presetTransitionHeld)
                 return;
@@ -736,8 +896,8 @@ namespace Game
                 {
                     // Emitter 跟真实水面 / 外海水线最近点。增益用这个距离：
                     // 海是到水线的水平距离（贴岸响，60m 收到底），不是两个落点圆。
-                    // 河 / 瀑必须用表面最近点，否则沿河远离 catalog 原点时
-                    // gainDist 上百米 → -96dB，贴着河也听不见。
+                    // 河 / 瀑：EvaluateWaterSource 已返回 shell 投影点（sticky+线段），
+                    // 再量一次 XZ 与 shell 一致；禁止退回 catalog 原点（会 -96dB）。
                     pos = EvaluateWaterSource(src, listener, out want);
                     float gainDist = Distance(spec, listener, pos);
                     _wantScratch[i] = want;
@@ -778,7 +938,7 @@ namespace Game
                         CancelSoftStop(src);
                     if (!src.Playing)
                         Log.Info($"[AmbienceZone] want->keep id={src.Spec.Id} bank={src.Spec.Bank} event={src.Spec.PlayEvent}");
-                    KeepSourcePlaying(src, _posScratch[i], _distScratch[i]);
+                    KeepSourcePlaying(src, listener, _posScratch[i], _distScratch[i]);
                 }
                 else if (src.Playing && !src.SoftStopping)
                 {
@@ -788,6 +948,54 @@ namespace Game
                     BeginSoftStop(src, WalkSoftStopSeconds);
                 }
             }
+
+            // 走路「贴着却没声」诊断：林/草 3D 日志会抢槽，点源单独心跳。
+            LogPointSourceHeartbeat(listener, n);
+        }
+
+        float _nextPointSourceLogTime;
+
+        void LogPointSourceHeartbeat(Vector3 listener, int n)
+        {
+            if (Time.realtimeSinceStartup < _nextPointSourceLogTime)
+                return;
+            _nextPointSourceLogTime = Time.realtimeSinceStartup + 2f;
+
+            var sb = new System.Text.StringBuilder(256);
+            sb.Append("[AmbienceZone] point-hb listener=(")
+                .Append(listener.x.ToString("F1")).Append(',')
+                .Append(listener.y.ToString("F1")).Append(',')
+                .Append(listener.z.ToString("F1")).Append(')');
+            int logged = 0;
+            for (int i = 0; i < n; i++)
+            {
+                var src = Sources[i];
+                var kind = src.Spec.Kind;
+                if (kind != AmbienceEmitterKind.Waterfall
+                    && kind != AmbienceEmitterKind.River
+                    && kind != AmbienceEmitterKind.Campfire
+                    && kind != AmbienceEmitterKind.Lake)
+                    continue;
+                if (!_wantScratch[i] && !src.Playing && !src.SoftStopping)
+                    continue;
+                float gain = float.IsNaN(src.LastAppliedGainDb) ? -999f : src.LastAppliedGainDb;
+                float target = float.IsNaN(src.LastTargetGainDb) ? -999f : src.LastTargetGainDb;
+                sb.Append(" | ").Append(src.Spec.Id)
+                    .Append(" want=").Append(_wantScratch[i] ? 1 : 0)
+                    .Append(" play=").Append(src.Playing ? 1 : 0)
+                    .Append(" soft=").Append(src.SoftStopping ? 1 : 0)
+                    .Append(" dist=").Append(_distScratch[i].ToString("F1"))
+                    .Append(" gain=").Append(gain.ToString("F1"))
+                    .Append('/').Append(target.ToString("F1"))
+                    .Append(" v=").Append(src.VoiceIds.Count)
+                    .Append(" pos=(")
+                    .Append(_posScratch[i].x.ToString("F0")).Append(',')
+                    .Append(_posScratch[i].z.ToString("F0")).Append(')');
+                logged++;
+            }
+            if (logged == 0)
+                sb.Append(" | (none)");
+            Log.Info(sb.ToString());
         }
 
         void EnsureEvalScratch(int n)
@@ -877,7 +1085,7 @@ namespace Game
         /// Lake ↔ Waterfall mutual exclusion: only the nearer side keeps want=true.
         /// Sticky hysteresis so the lake/fall boundary does not flip-flop Stop↔Play.
         /// Stop path KeepBank so exclusivity never unloads the suppressed side's bank.
-        /// <see cref="AmbienceEmitterSpec.FixedWorldAnchor"/> 观景点瀑不参与互斥（可与湖同播）。
+        /// 固定锚瀑（若有）不参与湖↔瀑互斥；大瀑现靠 Big_0/1，仍与湖互斥。
         /// </summary>
         void ApplyLakeWaterfallExclusion(int n)
         {
@@ -921,13 +1129,15 @@ namespace Game
             if (bestLake < 0 || bestFall < 0)
                 return;
 
-            bool preferLake = bestLakeDist <= bestFallDist;
-            if (lakePlaying && !fallPlaying
-                && bestLakeDist <= bestFallDist + ExclusiveShareHysteresisMeters)
-                preferLake = true;
-            else if (fallPlaying && !lakePlaying
-                && bestFallDist <= bestLakeDist + ExclusiveShareHysteresisMeters)
-                preferLake = false;
+            // 人已经贴在瀑上（飞溅/瀑口）时禁止湖抢：湖原点离 Mist 约 20m，
+            // sticky 曾把「路过瀑布」收成只有湖声或两边都掐。
+            bool preferLake = AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
+                bestLakeDist,
+                bestFallDist,
+                lakePlaying,
+                fallPlaying,
+                LakeWaterfallPreferFallWithinMeters,
+                ExclusiveShareHysteresisMeters);
 
             for (int i = 0; i < n; i++)
             {
@@ -999,6 +1209,20 @@ namespace Game
             }
 
             to.Emitter = emitter;
+            to.ChannelEmitters = from.ChannelEmitters;
+            to.QuadCenterSlewed = from.QuadCenterSlewed;
+            to.QuadFollowTarget = from.QuadFollowTarget;
+            to.QuadCenterReady = from.QuadCenterReady;
+            to.QuadCenterVelocity = from.QuadCenterVelocity;
+            to.LastQuadLayoutAt = from.LastQuadLayoutAt;
+            to.ChannelAppliedGainDb = from.ChannelAppliedGainDb;
+            to.ChannelGainSlewVelocity = from.ChannelGainSlewVelocity;
+            from.ChannelEmitters = null;
+            from.QuadCenterReady = false;
+            from.QuadCenterVelocity = Vector3.zero;
+            from.LastQuadLayoutAt = -1f;
+            from.ChannelAppliedGainDb = null;
+            from.ChannelGainSlewVelocity = null;
             to.VoiceIds.Clear();
             for (int i = 0; i < from.VoiceIds.Count; i++)
                 to.VoiceIds.Add(from.VoiceIds[i]);
@@ -1023,12 +1247,15 @@ namespace Game
             to.LastSlewedDistance = from.LastSlewedDistance;
             to.LastTargetDistance = from.LastTargetDistance;
             to.LastPostedDistance = from.LastPostedDistance;
+            // 河/海岸 sticky：床位切换后继续沿同一壳走，禁止 sticky 重置造成 shell 跳变。
+            to.StickyShoreIndex = from.StickyShoreIndex;
             from.LastAppliedGainDb = float.NaN;
             from.LastTargetGainDb = float.NaN;
             from.GainSlewVelocity = 0f;
             from.LastSlewedDistance = float.NaN;
             from.LastTargetDistance = float.NaN;
             from.LastPostedDistance = float.NaN;
+            from.StickyShoreIndex = -1;
 
             if (to.Emitter != null)
             {
@@ -1040,12 +1267,17 @@ namespace Game
                 float jump = float.IsNaN(to.LastSlewedDistance)
                     ? float.PositiveInfinity
                     : Mathf.Abs(toDist - to.LastSlewedDistance);
-                if (jump > TeleportGainSnapMeters)
+                bool forceSnap = jump > TeleportGainSnapMeters;
+                if (forceSnap)
                 {
                     Log.Info(
                         $"[AmbienceZone] transfer-snap bank={to.Spec.Bank} id={to.Spec.Id} Δdist={jump:F1}m");
                 }
-                PushSlewedAttenuation(to, toDist, GainDbForDistance(to.Spec, toDist));
+                PushSlewedAttenuation(
+                    to, toDist, GainDbForDistance(to.Spec, toDist), forceSnap);
+                if (ShouldPinDaytimeTimeOfDayRtpc(to.Spec))
+                    WanosInteraction.SetEmitterParameter(
+                        to.Emitter, TimeOfDayRtpcName, WaterAmbienceDaytimeRtpcHours);
                 EnsureAttenuationDrive();
             }
         }
@@ -1087,21 +1319,13 @@ namespace Game
         /// <summary>
         /// River / Waterfall / Ocean / Lake：算出该床位的代表点 + 是否该播。
         /// - River/Waterfall：用 <see cref="WaterSurfaceProbe"/> 查场景里真实水面最近点。
-        /// - Ocean：到地形外海水线的水平距离，整段岸线 60m 内都播，发射器落在最近岸点。
+        /// - Ocean：到地形外海水线的水平距离，整段岸线可听圈内都播，发射器落在最近岸点。
         /// - Lake：catalog 里的湖点（xz 距离）。
         /// </summary>
         Vector3 EvaluateWaterSource(RuntimeSource src, Vector3 listener, out bool want)
         {
             var spec = src.Spec;
 
-            // Ocean / Lake 高度门控：原先只在 ShouldPlay（biome 路径）里，岸线网格路径漏了，
-            // 导致进岛爬高后海声仍按 xz 贴岸衰减「一直响」。
-            if (spec.Kind == AmbienceEmitterKind.Ocean
-                && listener.y > AmbienceZoneCatalog.OceanMaxPlayerY)
-            {
-                want = false;
-                return ResolveEmitterPosition(spec);
-            }
             if (spec.Kind == AmbienceEmitterKind.Lake
                 && (listener.y < AmbienceZoneCatalog.LakeMinPlayerY
                     || listener.y > AmbienceZoneCatalog.LakeMaxPlayerY))
@@ -1112,10 +1336,18 @@ namespace Game
 
             if (spec.Kind == AmbienceEmitterKind.Ocean)
             {
-                if (!AmbienceZoneCatalog.TryNearestOceanShore(listener, out Vector3 shore, out float shell))
+                if (!AmbienceZoneCatalog.TryNearestOceanShore(
+                        listener, ref src.StickyShoreIndex, out Vector3 shore, out float shell))
                 {
                     want = false;
                     return ResolveEmitterPosition(spec);
+                }
+
+                // 高度门控：只挡「离岸较远的内陆爬高」；贴岸悬崖/堤路不掐（否则忽大忽小）。
+                if (AmbienceZoneCatalog.IsOceanMutedByPlayerHeight(listener, shell))
+                {
+                    want = false;
+                    return shore;
                 }
 
                 float oceanEnter = spec.EnterRadius;
@@ -1139,35 +1371,165 @@ namespace Game
                 return anchor;
             }
 
-            if ((spec.Kind == AmbienceEmitterKind.River || spec.Kind == AmbienceEmitterKind.Waterfall)
-                && (_inlandWaterReady || IslandWorldService.InlandWaterReady))
+            // 大瀑：固定特征（Big_0/1/Splash）∪ 瀑面探针 ∪ 瀑盆内河面。
+            // 禁止只认 Big_1——观瀑点才响、瀑底一圈河不响。
+            if (spec.Kind == AmbienceEmitterKind.Waterfall
+                && AmbienceQuadChannelLayout.IsWaterfallBig(spec))
             {
-                var kind = spec.Kind == AmbienceEmitterKind.River
-                    ? WaterSurfaceProbe.SurfaceKind.River
-                    : WaterSurfaceProbe.SurfaceKind.Waterfall;
+                TryWaterfallProbeShells(
+                    listener,
+                    ref src.StickyShoreIndex,
+                    out float fallShell,
+                    out Vector3 fallPt,
+                    out bool hasFall,
+                    out float riverShell,
+                    out Vector3 riverPt,
+                    out bool hasRiver);
+                float dFall = AmbienceQuadChannelLayout.DistanceToWaterfallAudible(
+                    listener,
+                    fallShell,
+                    fallPt,
+                    hasFall,
+                    riverShell,
+                    riverPt,
+                    hasRiver,
+                    out Vector3 nearestFall);
+                bool mutedFall = IsWaterfallMutedByCampfire(spec, listener);
+                want = !mutedFall && KeepPlayingWithExitGrace(src, dFall, enter, exit, nearExtra);
+                return nearestFall;
+            }
 
-                // 场景里还没内河（还没加载完）时探针没数据，先按 catalog / MapItem 单点走。
+            // 小瀑：MapItem 根 + Small_0/1，再并瀑面探针。
+            if (spec.Kind == AmbienceEmitterKind.Waterfall)
+            {
+                Vector3 root = ResolveEmitterPosition(spec);
+                AmbienceQuadChannelLayout.WaterfallDualWorldPoints(
+                    root, big: false, out Vector3 lsRs, out Vector3 lr);
+                float dFall = Distance(spec, listener, root);
+                Vector3 nearestFall = root;
+                float d0 = Distance(spec, listener, lsRs);
+                float d1 = Distance(spec, listener, lr);
+                if (d0 < dFall) { dFall = d0; nearestFall = lsRs; }
+                if (d1 < dFall) { dFall = d1; nearestFall = lr; }
                 WaterSurfaceProbe probe = GameEntry.World?.WaterProbe;
-                if (probe != null && probe.TryNearestAny(kind, listener, out Vector3 nearest, out float dWater))
+                int sticky = src.StickyShoreIndex;
+                if (probe != null
+                    && probe.TryNearestShell(
+                        WaterSurfaceProbe.SurfaceKind.Waterfall,
+                        listener,
+                        ref sticky,
+                        out Vector3 fallPt,
+                        out float fallShell)
+                    && fallShell < dFall)
                 {
-                    bool muted = IsWaterfallMutedByCampfire(spec, listener);
-                    want = !muted && KeepPlayingWithExitGrace(src, dWater, enter, exit, nearExtra);
+                    dFall = fallShell;
+                    nearestFall = fallPt;
+                    src.StickyShoreIndex = sticky;
+                }
+                bool mutedFall = IsWaterfallMutedByCampfire(spec, listener);
+                want = !mutedFall && KeepPlayingWithExitGrace(src, dFall, enter, exit, nearExtra);
+                return nearestFall;
+            }
+
+            if (spec.Kind == AmbienceEmitterKind.River)
+            {
+                // 河：优先整网水面 shell（贴河就播），禁止只量本床 catalog 原点
+                // （否则必须走到 River_01/02/03 钉点才响）。
+                WaterSurfaceProbe probe = GameEntry.World?.WaterProbe;
+                if (probe != null
+                    && probe.TryNearestShell(
+                        WaterSurfaceProbe.SurfaceKind.River,
+                        listener,
+                        ref src.StickyShoreIndex,
+                        out Vector3 nearest,
+                        out float shell))
+                {
+                    want = KeepPlayingWithExitGrace(src, shell, enter, exit, nearExtra);
                     return nearest;
+                }
+
+                // 探针未建好：所有河床位原点取最近，仍按「附近有河」而不是本床钉点。
+                if (TryNearestRiverCatalogPoint(listener, out Vector3 catPt, out float catDist))
+                {
+                    want = KeepPlayingWithExitGrace(src, catDist, enter, exit, nearExtra);
+                    return catPt;
                 }
             }
 
             // 降级：catalog / MapItem 单点
             Vector3 fallback = ResolveEmitterPosition(spec);
             float d = Distance(spec, listener, fallback);
-            bool mutedFb = IsWaterfallMutedByCampfire(spec, listener);
-            want = !mutedFb && KeepPlayingWithExitGrace(src, d, enter, exit, nearExtra);
+            want = KeepPlayingWithExitGrace(src, d, enter, exit, nearExtra);
             return fallback;
+        }
+
+        void TryWaterfallProbeShells(
+            Vector3 listener,
+            ref int stickyIndex,
+            out float fallShell,
+            out Vector3 fallPt,
+            out bool hasFall,
+            out float riverShell,
+            out Vector3 riverPt,
+            out bool hasRiver)
+        {
+            fallShell = float.PositiveInfinity;
+            fallPt = listener;
+            hasFall = false;
+            riverShell = float.PositiveInfinity;
+            riverPt = listener;
+            hasRiver = false;
+            WaterSurfaceProbe probe = GameEntry.World?.WaterProbe;
+            if (probe == null)
+                return;
+
+            int fallSticky = stickyIndex;
+            if (probe.TryNearestShell(
+                    WaterSurfaceProbe.SurfaceKind.Waterfall,
+                    listener,
+                    ref fallSticky,
+                    out fallPt,
+                    out fallShell))
+            {
+                hasFall = true;
+                stickyIndex = fallSticky;
+            }
+
+            int riverSticky = -1;
+            if (probe.TryNearestShell(
+                    WaterSurfaceProbe.SurfaceKind.River,
+                    listener,
+                    ref riverSticky,
+                    out riverPt,
+                    out riverShell))
+                hasRiver = true;
+        }
+
+        /// <summary>探针未就绪时：所有河床位世界点取最近（含 native / MapItem）。</summary>
+        bool TryNearestRiverCatalogPoint(Vector3 listener, out Vector3 nearest, out float dist)
+        {
+            nearest = default;
+            dist = float.MaxValue;
+            bool any = false;
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var s = Sources[i].Spec;
+                if (s == null || s.Kind != AmbienceEmitterKind.River)
+                    continue;
+                Vector3 p = ResolveEmitterPosition(s);
+                float d = Distance(s, listener, p);
+                if (d >= dist)
+                    continue;
+                dist = d;
+                nearest = p;
+                any = true;
+            }
+            return any;
         }
 
         float EffectiveExitRadius(AmbienceEmitterSpec spec)
         {
-            if (spec.Kind == AmbienceEmitterKind.Ocean)
-                return Mathf.Max(spec.ExitRadius, spec.EnterRadius + AmbienceZoneCatalog.OceanNearSurfaceMeters);
+            // 河/海/湖/火/瀑 Exit 已是 boluo-main SphereCollider，不再叠 NearSurface。
             return spec.ExitRadius;
         }
 
@@ -1175,7 +1537,7 @@ namespace Game
         {
             if (spec.Kind != AmbienceEmitterKind.Waterfall)
                 return false;
-            // Big waterfall only (enter ~42); small keeps full radius.
+            // 仅大瀑受篝火静音圈；Enter 明显大于 Big 常量的（旧观景代理）跳过。
             if (spec.EnterRadius > AmbienceZoneCatalog.WaterfallBigEnterMeters + 0.5f)
                 return false;
             return IsInsideCampfireWaterfallMute(listener);
@@ -1200,14 +1562,57 @@ namespace Game
         {
             if (spec.FixedWorldAnchor)
                 return ResolveEmitterPosition(spec);
-            if (spec.Kind == AmbienceEmitterKind.River || spec.Kind == AmbienceEmitterKind.Waterfall)
+            if (spec.Kind == AmbienceEmitterKind.Waterfall
+                && AmbienceQuadChannelLayout.IsWaterfallBig(spec))
             {
-                var kind = spec.Kind == AmbienceEmitterKind.River
-                    ? WaterSurfaceProbe.SurfaceKind.River
-                    : WaterSurfaceProbe.SurfaceKind.Waterfall;
+                int sticky = -1;
+                TryWaterfallProbeShells(
+                    listener,
+                    ref sticky,
+                    out float fallShell,
+                    out Vector3 fallPt,
+                    out bool hasFall,
+                    out float riverShell,
+                    out Vector3 riverPt,
+                    out bool hasRiver);
+                AmbienceQuadChannelLayout.DistanceToWaterfallAudible(
+                    listener,
+                    fallShell,
+                    fallPt,
+                    hasFall,
+                    riverShell,
+                    riverPt,
+                    hasRiver,
+                    out Vector3 nearest);
+                return nearest;
+            }
+            if (spec.Kind == AmbienceEmitterKind.Waterfall)
+            {
+                Vector3 root = ResolveEmitterPosition(spec);
+                AmbienceQuadChannelLayout.WaterfallDualWorldPoints(
+                    root, big: false, out Vector3 lsRs, out Vector3 lr);
+                float dRoot = Distance(spec, listener, root);
+                float d0 = Distance(spec, listener, lsRs);
+                float d1 = Distance(spec, listener, lr);
+                if (d0 <= dRoot && d0 <= d1)
+                    return lsRs;
+                if (d1 <= dRoot)
+                    return lr;
+                return root;
+            }
+            if (spec.Kind == AmbienceEmitterKind.River)
+            {
                 WaterSurfaceProbe probe = GameEntry.World?.WaterProbe;
-                if (probe != null && probe.TryNearestAny(kind, listener, out Vector3 anchor, out _))
+                int sticky = -1;
+                if (probe != null && probe.TryNearestShell(
+                        WaterSurfaceProbe.SurfaceKind.River,
+                        listener,
+                        ref sticky,
+                        out Vector3 anchor,
+                        out _))
                     return anchor;
+                if (TryNearestRiverCatalogPoint(listener, out Vector3 catPt, out _))
+                    return catPt;
             }
             return ResolveEmitterPosition(spec);
         }
@@ -1218,7 +1623,9 @@ namespace Game
             if (spec.Kind == AmbienceEmitterKind.Campfire
                 && (AtmospherePropService.Instance == null || !AtmospherePropService.Instance.IsVisuallyIgnited))
                 return false;
-            if (spec.Kind == AmbienceEmitterKind.Ocean && listener.y > AmbienceZoneCatalog.OceanMaxPlayerY)
+            if (spec.Kind == AmbienceEmitterKind.Ocean
+                && AmbienceZoneCatalog.IsOceanMutedByPlayerHeight(
+                    listener, Distance(spec, listener, emitterPos)))
                 return false;
             if (spec.Kind == AmbienceEmitterKind.Lake &&
                 (listener.y < AmbienceZoneCatalog.LakeMinPlayerY || listener.y > AmbienceZoneCatalog.LakeMaxPlayerY))
@@ -1234,10 +1641,17 @@ namespace Game
             return KeepPlayingWithExitGrace(src, dist, enter, exit, nearExtra);
         }
 
-        /// <summary>Big waterfall muted inside campfire 22m silence ring.</summary>
+        /// <summary>
+        /// 大瀑静音圈（水平距离）。半径 ≤ 0 时不静音：火边河/瀑与篝火同播。
+        /// </summary>
         bool IsInsideCampfireWaterfallMute(Vector3 listener)
         {
             float mute = AmbienceZoneCatalog.WaterfallCampfireMuteMeters;
+            if (mute <= 0f)
+                return false;
+            if (AtmospherePropService.Instance == null
+                || !AtmospherePropService.Instance.IsVisuallyIgnited)
+                return false;
             float muteSq = mute * mute;
             for (int i = 0; i < Sources.Count; i++)
             {
@@ -1246,19 +1660,18 @@ namespace Game
                     continue;
                 Vector3 c = ResolveEmitterPosition(s);
                 float dx = listener.x - c.x;
-                float dy = listener.y - c.y;
                 float dz = listener.z - c.z;
-                if (dx * dx + dy * dy + dz * dz <= muteSq)
+                if (dx * dx + dz * dz <= muteSq)
                     return true;
             }
             return false;
         }
 
         /// <summary>
-        /// River：不加 near（可听带与停播带已拆开）。Ocean / Forest / Grassland / Plateau：
-        /// 出球后贴表面 <see cref="AmbienceZoneCatalog.NearSurfaceMeters"/> 继续播，
-        /// 再远仍有 <see cref="AmbienceZoneCatalog.ExitGraceSeconds"/> 时间宽限
-        /// （对齐 Boluo Trigger Exit→Enter 抖动，避免 UnLoad↔Play 刺啦）。
+        /// 河/海/湖/火/瀑：Exit 已是 boluo-main SphereCollider，不再叠 NearSurface。
+        /// Forest / Grassland / Plateau：出球后贴表面
+        /// <see cref="AmbienceZoneCatalog.NearSurfaceMeters"/> 继续播，
+        /// 再远仍有 <see cref="AmbienceZoneCatalog.ExitGraceSeconds"/> 时间宽限。
         /// </summary>
         float NearMetersForExitGrace(AmbienceEmitterSpec spec)
         {
@@ -1267,16 +1680,14 @@ namespace Game
             switch (spec.Kind)
             {
                 case AmbienceEmitterKind.River:
-                    return 0f;
                 case AmbienceEmitterKind.Ocean:
-                    // EffectiveExitRadius 已含 OceanNearSurface；时间宽限仍要，near 不再叠一层。
-                    return 0f;
                 case AmbienceEmitterKind.Lake:
                 case AmbienceEmitterKind.Waterfall:
+                case AmbienceEmitterKind.Campfire:
+                    return 0f;
                 case AmbienceEmitterKind.Forest:
                 case AmbienceEmitterKind.Grassland:
                 case AmbienceEmitterKind.Plateau:
-                case AmbienceEmitterKind.Campfire:
                     return AmbienceZoneCatalog.NearSurfaceMeters;
                 default:
                     return AmbienceZoneCatalog.NearSurfaceMeters;
@@ -1333,19 +1744,48 @@ namespace Game
 
         float _nextAttenuationLogTime;
 
-        void KeepSourcePlaying(RuntimeSource src, Vector3 pos, float dist)
+        void KeepSourcePlaying(RuntimeSource src, Vector3 listener, Vector3 pos, float dist)
         {
             var spec = src.Spec;
+            // 走进近场：本地 Playing+VoiceIds 仍在，但引擎 voice 可能已死（无 Stopped 回调），
+            // 走路贴着河/瀑/火却没声；切预设 Clear+EvaluateNow 能好。近场上升沿强制重 Post。
+            float prevKeepDist = src.LastKeepDistance;
+            src.LastKeepDistance = dist;
+            if (src.Playing
+                && src.VoiceIds.Count > 0
+                && IsPointSourceKind(spec.Kind)
+                && dist <= 12f
+                && !float.IsNaN(prevKeepDist)
+                && prevKeepDist > 18f)
+            {
+                Log.Info(
+                    $"[AmbienceZone] near-field heal id={spec.Id} bank={spec.Bank} {prevKeepDist:F1}→{dist:F1}m");
+                HealRepostSource(src, pos, dist);
+                return;
+            }
+
             // Already audible: never re-Load / re-Post (Boluo「已播禁止再 Loading」).
             // Only pose + attenuation. Voice-empty while Playing → Repost once.
             if (src.Playing && src.VoiceIds.Count > 0)
             {
-                if (src.Emitter != null)
+                if (src.Emitter != null || HasSpatialChannels(src))
                 {
-                    // Water nearest-point / catalog handoff can jump tens of meters per Eval.
-                    pos = ClampEmitterStep(src.Emitter.transform.position, pos);
-                    src.Emitter.transform.position = pos;
-                    WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
+                    // 河/海：Boluo 四角分轨 +「河→人」朝向（转头不甩 L/R）。
+                    // 瀑：Boluo Big_0/Big_1 固定双落点。
+                    // 旧单点叠轨：转头时整团 3D 甩耳，左右切换过快。
+                    if (AmbienceQuadChannelLayout.UsesQuadChannels(spec.Kind))
+                    {
+                        src.QuadFollowTarget = pos;
+                        LayoutQuadChannels(src, listener, pos, forceSnap: false);
+                    }
+                    else if (AmbienceQuadChannelLayout.UsesWaterfallDualChannels(spec.Kind))
+                        LayoutWaterfallDualChannels(src, forceSnap: false);
+                    else
+                    {
+                        pos = ClampEmitterStep(src.Emitter.transform.position, pos);
+                        src.Emitter.transform.position = pos;
+                        WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
+                    }
 
                     // 每 tick 都推增益（不靠 MinPostDistanceDelta）：Post 后引擎可能重置 gain enable。
                     float targetDb = GainDbForDistance(spec, dist);
@@ -1356,14 +1796,15 @@ namespace Game
                     if (!float.IsNaN(prevDist) && Mathf.Abs(dist - prevDist) > TeleportGainSnapMeters)
                     {
                         Log.Info(
-                            $"[AmbienceZone] dist-jump id={spec.Id} {prevDist:F1}→{dist:F1}m (snap/slew)");
+                            $"[AmbienceZone] dist-jump id={spec.Id} {prevDist:F1}→{dist:F1}m (slew)");
                     }
 
                     if (Time.realtimeSinceStartup >= _nextAttenuationLogTime)
                     {
                         _nextAttenuationLogTime = Time.realtimeSinceStartup + 1f;
                         ulong oid = 0;
-                        WanosInteraction.TryGetEmitterObjectId(src.Emitter, out oid);
+                        if (src.Emitter != null)
+                            WanosInteraction.TryGetEmitterObjectId(src.Emitter, out oid);
                         float posted = float.IsNaN(src.LastSlewedDistance) ? dist : src.LastSlewedDistance;
                         Log.Info(
                             $"[AmbienceZone] 3D id={spec.Id} bank={spec.Bank} dist={dist:F1}m posted={posted:F1}m gain={gainDb:F1}dB target={targetDb:F1}dB obj={oid} voices={src.VoiceIds.Count}");
@@ -1410,41 +1851,34 @@ namespace Game
                 case AmbienceEmitterKind.Ocean:
                     return OceanGainCurve;
                 case AmbienceEmitterKind.Lake:
+                    return LakeGainCurve;
                 case AmbienceEmitterKind.River:
-                    return Point20GainCurve;
+                    return RiverGainCurve;
                 case AmbienceEmitterKind.Campfire:
                     return CampfireGainCurve;
                 case AmbienceEmitterKind.Waterfall:
-                    // Big enter 42 / exit 50；Small enter 50 / exit 72.
-                    return spec.ExitRadius >= 70f ? WaterfallSmallGainCurve : WaterfallBigGainCurve;
+                    return AmbienceQuadChannelLayout.IsWaterfallBig(spec)
+                        ? WaterfallBigGainCurve
+                        : WaterfallSmallGainCurve;
                 default:
                     return OceanGainCurve;
             }
         }
 
         /// <summary>
-        /// Boluo CurveForGain 折线：距离 → 显示 Y → <see cref="GainInvTransform"/>。
-        /// Forest 在 79m 内显示 Y=0（满音量）是 Boluo 原曲线，不是 bug；走出 100m+ 才明显掉。
-        /// 河 / 瀑 / 湖：不用 display→engine 变换（远端会压到 -96dB 听感「没声」），
-        /// 改成直接引擎 dB：4m 内满音，到 Exit 半径 -24dB，靠近必能听见。
+        /// boluo-main CurveForGain 折线：距离 → 显示 Y → <see cref="GainInvTransform"/>。
+        /// 海/河/瀑/湖/篝火与 prefab 同节点；远端显示 −17.25 → 引擎约 −96dB（对齐停播）。
+        /// 林/草/高原整体压低，避免盖住水声。
         /// </summary>
         float GainDbForDistance(AmbienceEmitterSpec spec, float distMeters)
         {
-            if (spec != null
-                && (spec.Kind == AmbienceEmitterKind.River
-                    || spec.Kind == AmbienceEmitterKind.Waterfall
-                    || spec.Kind == AmbienceEmitterKind.Lake))
-            {
-                float far = spec.ExitRadius > 1f ? spec.ExitRadius : Mathf.Max(1f, spec.EnterRadius);
-                if (distMeters <= 4f)
-                    return 0f;
-                float t = Mathf.Clamp01(Mathf.InverseLerp(4f, far, distMeters));
-                return Mathf.Lerp(0f, -24f, t);
-            }
-
             Vector2[] curve = GainCurveForSpec(spec);
             float displayY = EvaluateGainCurveDisplayY(curve, distMeters);
-            return GainInvTransform(displayY);
+            float engineDb = GainInvTransform(displayY);
+            // 鸟叫/虫鸣/风床：相对河瀑略退后，避免贴水时生物声压过水声。
+            if (spec != null && IsBiomeKind(spec.Kind))
+                engineDb -= 5f;
+            return engineDb;
         }
 
         float EvaluateGainCurveDisplayY(Vector2[] curve, float distMeters)
@@ -1466,6 +1900,8 @@ namespace Game
 
         void StartSource(RuntimeSource src, Vector3 pos, float dist)
         {
+            if (_contentAudioPaused || IslandAudioSession.IsYieldHeld)
+                return;
             var spec = src.Spec;
             Log.Info($"[AmbienceZone] StartSource enter id={spec.Id} bank={spec.Bank}");
 
@@ -1497,8 +1933,7 @@ namespace Game
             {
                 EnsureHost();
                 src.Emitter = AcquireEmitterForSource(src) ?? CreateEmitter(pos);
-                src.Emitter.transform.position = pos;
-                WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
+                LayoutSpatialChannelsOrPoint(src, pos, forceSnap: true);
                 src.NeedsRepost = true;
                 // 先 Post，再 enable+gain（Boluo CurveForGain 也是 voice 起来后持续推）。
                 PostSourceEvents(src, plays);
@@ -1509,7 +1944,7 @@ namespace Game
                 src.GainSlewVelocity = 0f;
                 src.LastSlewedDistance = dist;
                 src.LastTargetDistance = dist;
-                float gainDb = WriteDuckedGain(src, dist, src.LastAppliedGainDb);
+                float gainDb = WriteDuckedGain(src, dist, src.LastAppliedGainDb, forceSnap: true);
                 src.Playing = true;
                 EnsureAttenuationDrive();
                 Log.Info(
@@ -1524,14 +1959,15 @@ namespace Game
 
         void RepostSource(RuntimeSource src, Vector3 pos, float dist)
         {
+            if (_contentAudioPaused || IslandAudioSession.IsYieldHeld)
+                return;
             var spec = src.Spec;
             if (src.Emitter == null)
             {
                 EnsureHost();
                 src.Emitter = AcquireEmitterForSource(src) ?? CreateEmitter(pos);
             }
-            src.Emitter.transform.position = pos;
-            WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
+            LayoutSpatialChannelsOrPoint(src, pos, forceSnap: true);
 
             string[] plays = ResolvePlayEventsForSingleEmitter(spec);
             if (plays.Length == 0)
@@ -1544,9 +1980,49 @@ namespace Game
             src.GainSlewVelocity = 0f;
             src.LastSlewedDistance = dist;
             src.LastTargetDistance = dist;
-            WriteDuckedGain(src, dist, src.LastAppliedGainDb);
+            WriteDuckedGain(src, dist, src.LastAppliedGainDb, forceSnap: true);
             src.NeedsRepost = true;
             EnsureAttenuationDrive();
+        }
+
+        /// <summary>
+        /// 近场治愈：重 Post 但跳过 SoftEnter −36dB，直接贴目标增益，避免贴着河/火时先闷一下。
+        /// </summary>
+        void HealRepostSource(RuntimeSource src, Vector3 pos, float dist)
+        {
+            if (_contentAudioPaused || IslandAudioSession.IsYieldHeld)
+                return;
+            var spec = src.Spec;
+            if (src.Emitter == null)
+            {
+                EnsureHost();
+                src.Emitter = AcquireEmitterForSource(src) ?? CreateEmitter(pos);
+            }
+            LayoutSpatialChannelsOrPoint(src, pos, forceSnap: true);
+
+            string[] plays = ResolvePlayEventsForSingleEmitter(spec);
+            if (plays.Length == 0)
+                return;
+
+            PostSourceEvents(src, plays);
+            float targetDb = GainDbForDistance(spec, dist);
+            src.LastTargetGainDb = targetDb;
+            src.LastAppliedGainDb = targetDb;
+            src.GainSlewVelocity = 0f;
+            src.LastSlewedDistance = dist;
+            src.LastTargetDistance = dist;
+            WriteDuckedGain(src, dist, targetDb, forceSnap: true);
+            src.NeedsRepost = true;
+            EnsureAttenuationDrive();
+        }
+
+        static bool IsPointSourceKind(AmbienceEmitterKind kind)
+        {
+            return kind == AmbienceEmitterKind.River
+                || kind == AmbienceEmitterKind.Waterfall
+                || kind == AmbienceEmitterKind.Campfire
+                || kind == AmbienceEmitterKind.Lake
+                || kind == AmbienceEmitterKind.Ocean;
         }
 
         /// <summary>
@@ -1590,34 +2066,306 @@ namespace Game
                 VoiceToSource.Remove(src.VoiceIds[i]);
             src.VoiceIds.Clear();
 
-            if (src.Emitter == null)
+            bool spatial = HasSpatialChannels(src);
+            if (!spatial && src.Emitter == null)
                 return;
 
+            bool quad = HasQuadChannels(src);
+            bool dual = HasWaterfallDualChannels(src);
             int srcIdx = Sources.IndexOf(src);
             for (int i = 0; i < plays.Length; i++)
             {
                 string play = plays[i];
                 if (string.IsNullOrEmpty(play))
                     continue;
-                ulong id = WanosInteraction.PostEvent(play, src.Emitter);
+                GameObject target = src.Emitter;
+                if (quad)
+                {
+                    int corner = AmbienceQuadChannelLayout.CornerIndexForPlayEvent(play);
+                    if (corner >= 0 && corner < src.ChannelEmitters.Length)
+                        target = src.ChannelEmitters[corner];
+                }
+                else if (dual)
+                {
+                    int ch = AmbienceQuadChannelLayout.ChannelIndexForWaterfallPlayEvent(play);
+                    if (ch >= 0 && ch < src.ChannelEmitters.Length)
+                        target = src.ChannelEmitters[ch];
+                }
+                if (target == null)
+                    continue;
+                ulong id = WanosInteraction.PostEvent(play, target);
                 if (id != 0)
                 {
                     src.VoiceIds.Add(id);
                     VoiceToSource[id] = srcIdx;
                 }
             }
+
+            // Post 后再钉：部分 bank 起声时会吃全局夜间 Time of A Day。
+            if (ShouldPinDaytimeTimeOfDayRtpc(src.Spec))
+                PinDaytimeOnSourceEmitters(src);
+        }
+
+        void LayoutSpatialChannelsOrPoint(RuntimeSource src, Vector3 pos, bool forceSnap)
+        {
+            var spec = src.Spec;
+            if (AmbienceQuadChannelLayout.UsesQuadChannels(spec.Kind)
+                && WanosInteraction.TryGetListenerPosition(out Vector3 listenerNow))
+            {
+                src.QuadFollowTarget = pos;
+                LayoutQuadChannels(src, listenerNow, pos, forceSnap);
+                return;
+            }
+
+            if (AmbienceQuadChannelLayout.UsesWaterfallDualChannels(spec.Kind))
+            {
+                LayoutWaterfallDualChannels(src, forceSnap);
+                return;
+            }
+
+            src.Emitter.transform.position = pos;
+            WanosInteraction.EnsureEmitter(src.Emitter, pos, spec.EnterRadius);
+        }
+
+        static bool HasSpatialChannels(RuntimeSource src) =>
+            HasQuadChannels(src) || HasWaterfallDualChannels(src);
+
+        static bool HasQuadChannels(RuntimeSource src) =>
+            src != null
+            && src.ChannelEmitters != null
+            && src.ChannelEmitters.Length == 4
+            && src.ChannelEmitters[0] != null;
+
+        static bool HasWaterfallDualChannels(RuntimeSource src) =>
+            src != null
+            && src.ChannelEmitters != null
+            && src.ChannelEmitters.Length == 2
+            && src.ChannelEmitters[0] != null;
+
+        void EnsureQuadChannelObjects(RuntimeSource src)
+        {
+            if (src.ChannelEmitters != null && src.ChannelEmitters.Length == 4)
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    if (src.ChannelEmitters[i] != null)
+                    {
+                        src.ChannelEmitters[i].SetActive(true);
+                        continue;
+                    }
+                    src.ChannelEmitters[i] = CreateQuadChannelObject(src, i);
+                }
+                return;
+            }
+
+            src.ChannelEmitters = new GameObject[4];
+            for (int i = 0; i < 4; i++)
+                src.ChannelEmitters[i] = CreateQuadChannelObject(src, i);
+        }
+
+        GameObject CreateQuadChannelObject(RuntimeSource src, int corner)
+        {
+            string id = src.Spec != null ? src.Spec.Id : "q";
+            var go = new GameObject($"AmbQ_{id}_{corner}");
+            go.transform.SetParent(_root, false);
+            return go;
         }
 
         /// <summary>
-        /// 出区都走 Release → UnloadBank，河海湖瀑不再只停播。
-        /// 原生 UnloadBank 目前卸不掉；<see cref="WanosAudio.WanosBankStore"/> 仍调用卸载，
-        /// 但不把 stem 从 Loaded 去掉，避免再 Load 叠一份。
+        /// 河/海四角：对齐 Boluo WanosBoxHelper —
+        /// 中心持续 SmoothDamp（moveThreshold=100 才闪现）；朝向=特征→听者（转头不改四角）。
+        /// </summary>
+        void LayoutQuadChannels(
+            RuntimeSource src, Vector3 listener, Vector3 targetCenter, bool forceSnap)
+        {
+            EnsureHost();
+            EnsureQuadChannelObjects(src);
+            var spec = src.Spec;
+            float half = AmbienceQuadChannelLayout.HalfMetersFor(spec.Kind);
+
+            float now = Time.realtimeSinceStartup;
+            float dt;
+            if (forceSnap || !src.QuadCenterReady || src.LastQuadLayoutAt < 0f)
+                dt = AmbienceQuadChannelLayout.LayoutMinDeltaSeconds;
+            else
+                dt = Mathf.Max(now - src.LastQuadLayoutAt, 1f / 120f);
+            src.LastQuadLayoutAt = now;
+
+            Vector3 center;
+            float jump = src.QuadCenterReady
+                ? Vector3.Distance(src.QuadCenterSlewed, targetCenter)
+                : 0f;
+            bool snap = forceSnap
+                || !src.QuadCenterReady
+                || jump > AmbienceQuadChannelLayout.MoveThresholdMeters;
+            if (snap)
+            {
+                center = targetCenter;
+                src.QuadCenterVelocity = Vector3.zero;
+                src.QuadCenterReady = true;
+            }
+            else
+            {
+                // Boluo：目标每 refresh 更新，中心用 centerSmoothTime 追，禁止 8m 粘门控。
+                center = Vector3.SmoothDamp(
+                    src.QuadCenterSlewed,
+                    targetCenter,
+                    ref src.QuadCenterVelocity,
+                    AmbienceQuadChannelLayout.CenterSmoothSeconds,
+                    Mathf.Infinity,
+                    dt);
+            }
+            src.QuadCenterSlewed = center;
+            src.QuadFollowTarget = targetCenter;
+
+            Vector3 fwd = AmbienceQuadChannelLayout.StableFacingFromFeatureToListener(
+                center, listener, Vector3.forward);
+            Vector3 right = Vector3.Cross(Vector3.up, fwd);
+            if (right.sqrMagnitude < 1e-6f)
+                right = Vector3.right;
+            else
+                right.Normalize();
+
+            AmbienceQuadChannelLayout.ComputeEdges(
+                center, fwd, right, half, half,
+                out Vector3 e0, out Vector3 e1, out Vector3 e2, out Vector3 e3);
+            Vector3[] edges = { e0, e1, e2, e3 };
+            for (int i = 0; i < 4; i++)
+            {
+                GameObject ch = src.ChannelEmitters[i];
+                if (ch == null)
+                    continue;
+                ch.transform.position = edges[i];
+                WanosInteraction.EnsureEmitter(ch, edges[i], spec.EnterRadius);
+            }
+
+            if (src.Emitter != null)
+            {
+                src.Emitter.transform.position = center;
+                WanosInteraction.EnsureEmitter(src.Emitter, center, spec.EnterRadius);
+            }
+        }
+
+        /// <summary>
+        /// 瀑双轨：钉在 Boluo Big_0/Big_1（或 Small_0/1），不跟听者转。
+        /// </summary>
+        void LayoutWaterfallDualChannels(RuntimeSource src, bool forceSnap)
+        {
+            EnsureHost();
+            EnsureWaterfallDualChannelObjects(src);
+            var spec = src.Spec;
+            bool big = AmbienceQuadChannelLayout.IsWaterfallBig(spec);
+            Vector3 root = big
+                ? AmbienceQuadChannelLayout.WaterfallBigRoot
+                : ResolveEmitterPosition(spec);
+            AmbienceQuadChannelLayout.WaterfallDualWorldPoints(
+                root, big, out Vector3 lsRs, out Vector3 lr);
+            Vector3[] points = { lsRs, lr };
+            for (int i = 0; i < 2; i++)
+            {
+                GameObject ch = src.ChannelEmitters[i];
+                if (ch == null)
+                    continue;
+                Vector3 p = points[i];
+                if (!forceSnap && src.QuadCenterReady)
+                    p = ClampEmitterStep(ch.transform.position, p);
+                ch.transform.position = p;
+                WanosInteraction.EnsureEmitter(ch, p, spec.EnterRadius);
+            }
+
+            if (src.Emitter != null)
+            {
+                src.Emitter.transform.position = root;
+                WanosInteraction.EnsureEmitter(src.Emitter, root, spec.EnterRadius);
+            }
+            src.QuadCenterSlewed = root;
+            src.QuadCenterReady = true;
+            src.QuadCenterVelocity = Vector3.zero;
+        }
+
+        void EnsureWaterfallDualChannelObjects(RuntimeSource src)
+        {
+            if (src.ChannelEmitters != null && src.ChannelEmitters.Length == 2)
+            {
+                for (int i = 0; i < 2; i++)
+                {
+                    if (src.ChannelEmitters[i] != null)
+                    {
+                        src.ChannelEmitters[i].SetActive(true);
+                        continue;
+                    }
+                    src.ChannelEmitters[i] = CreateQuadChannelObject(src, i);
+                }
+                return;
+            }
+
+            // 曾当四角用过：先丢掉再建成双轨。
+            if (src.ChannelEmitters != null && src.ChannelEmitters.Length != 2)
+                ReleaseQuadChannels(src);
+
+            src.ChannelEmitters = new GameObject[2];
+            for (int i = 0; i < 2; i++)
+                src.ChannelEmitters[i] = CreateQuadChannelObject(src, i);
+        }
+
+        void PinDaytimeOnSourceEmitters(RuntimeSource src)
+        {
+            if (src.Emitter != null)
+                WanosInteraction.SetEmitterParameter(
+                    src.Emitter, TimeOfDayRtpcName, WaterAmbienceDaytimeRtpcHours);
+            if (src.ChannelEmitters == null)
+                return;
+            for (int i = 0; i < src.ChannelEmitters.Length; i++)
+            {
+                if (src.ChannelEmitters[i] != null)
+                    WanosInteraction.SetEmitterParameter(
+                        src.ChannelEmitters[i], TimeOfDayRtpcName, WaterAmbienceDaytimeRtpcHours);
+            }
+        }
+
+        void ReleaseQuadChannels(RuntimeSource src)
+        {
+            if (src.ChannelEmitters == null)
+                return;
+            for (int i = 0; i < src.ChannelEmitters.Length; i++)
+            {
+                GameObject ch = src.ChannelEmitters[i];
+                if (ch == null)
+                    continue;
+                DeferredEmitterReleases.Add(new DeferredEmitterRelease
+                {
+                    Go = ch,
+                    ReleaseAt = Time.realtimeSinceStartup + EmitterReleaseDelaySeconds,
+                });
+                src.ChannelEmitters[i] = null;
+            }
+            src.ChannelEmitters = null;
+            src.QuadCenterReady = false;
+            src.QuadCenterVelocity = Vector3.zero;
+            src.LastQuadLayoutAt = -1f;
+            src.ChannelAppliedGainDb = null;
+            src.ChannelGainSlewVelocity = null;
+        }
+
+        /// <summary>
+        /// 走路出区：河/海/湖/瀑只停播、保留引擎 bank（Boluo ShouldKeepRiver/OceanEngineBank）。
+        /// 立刻 UnLoad 再走进可听圈会重新解码 + Post，桥边听感刺啦。
+        /// 预设瞬移仍走 forceReleaseBank，不跟走路混用。
         /// </summary>
         bool ShouldKeepBankOnWalkStop(AmbienceEmitterSpec spec)
         {
             if (spec == null)
                 return false;
-            return false;
+            switch (spec.Kind)
+            {
+                case AmbienceEmitterKind.Ocean:
+                case AmbienceEmitterKind.River:
+                case AmbienceEmitterKind.Lake:
+                case AmbienceEmitterKind.Waterfall:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         float UnloadDelaySecondsFor(AmbienceEmitterSpec spec)
@@ -1636,6 +2384,16 @@ namespace Game
                     return AmbienceZoneCatalog.PlateauUnloadDelaySeconds;
                 case AmbienceEmitterKind.Campfire:
                     return AmbienceZoneCatalog.CampfireUnloadDelaySeconds;
+                case AmbienceEmitterKind.River:
+                    return AmbienceZoneCatalog.RiverUnloadDelaySeconds;
+                case AmbienceEmitterKind.Ocean:
+                    return AmbienceZoneCatalog.OceanUnloadDelaySeconds;
+                case AmbienceEmitterKind.Lake:
+                    return AmbienceZoneCatalog.LakeUnloadDelaySeconds;
+                case AmbienceEmitterKind.Waterfall:
+                    return AmbienceQuadChannelLayout.IsWaterfallBig(spec)
+                        ? AmbienceZoneCatalog.WaterfallBigUnloadDelaySeconds
+                        : AmbienceZoneCatalog.WaterfallSmallUnloadDelaySeconds;
                 default:
                     return WanosBankStore.DefaultUnloadDelaySeconds;
             }
@@ -1648,15 +2406,17 @@ namespace Game
         /// 3. 释放 emitter
         /// 4. 按策略 Release bank（或 KeepBank）
         /// </summary>
-        float PushSlewedAttenuation(RuntimeSource src, float dist, float targetDb)
+        float PushSlewedAttenuation(
+            RuntimeSource src, float dist, float targetDb, bool forceSnap = false)
         {
             src.LastTargetGainDb = targetDb;
             src.LastTargetDistance = dist;
 
             float prevDist = src.LastSlewedDistance;
-            bool snap = float.IsNaN(src.LastAppliedGainDb)
-                || float.IsNaN(prevDist)
-                || Mathf.Abs(dist - prevDist) > TeleportGainSnapMeters;
+            // 走路岸线抖 >8m 时禁止硬贴增益（听感忽大忽小）；瞬移/交接显式 forceSnap。
+            bool snap = forceSnap
+                || float.IsNaN(src.LastAppliedGainDb)
+                || float.IsNaN(prevDist);
 
             float slewedDist;
             float slewedGain;
@@ -1679,19 +2439,96 @@ namespace Game
 
             src.LastSlewedDistance = slewedDist;
             src.LastAppliedGainDb = slewedGain;
-            return WriteDuckedGain(src, slewedDist, slewedGain);
+            return WriteDuckedGain(src, slewedDist, slewedGain, forceSnap: snap);
         }
 
-        float WriteDuckedGain(RuntimeSource src, float dist, float preDuckGainDb)
+        float WriteDuckedGain(RuntimeSource src, float dist, float preDuckGainDb, bool forceSnap = false)
         {
             // dist here is the Distance RTPC actually written (already slewed by caller).
             src.LastPostedDistance = dist;
             if (float.IsNaN(src.LastSlewedDistance))
                 src.LastSlewedDistance = dist;
             float ducked = Mathf.Lerp(GainFloorDb, preDuckGainDb, _session.Duck.Level01);
-            if (src.Emitter != null)
-                WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, ducked);
+            ApplyAttenuationToSourceEmitters(src, dist, ducked, forceSnap);
             return ducked;
+        }
+
+        void EnsureChannelGainState(RuntimeSource src, int count)
+        {
+            if (src.ChannelAppliedGainDb != null && src.ChannelAppliedGainDb.Length == count
+                && src.ChannelGainSlewVelocity != null && src.ChannelGainSlewVelocity.Length == count)
+                return;
+            src.ChannelAppliedGainDb = new float[count];
+            src.ChannelGainSlewVelocity = new float[count];
+            for (int i = 0; i < count; i++)
+            {
+                src.ChannelAppliedGainDb[i] = float.NaN;
+                src.ChannelGainSlewVelocity[i] = 0f;
+            }
+        }
+
+        void ApplyAttenuationToSourceEmitters(
+            RuntimeSource src, float dist, float gainDb, bool forceSnapChannels = false)
+        {
+            if (src.Emitter != null)
+                WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, gainDb);
+
+            if (src.ChannelEmitters == null)
+                return;
+
+            // 河/海：Boluo 每角独立 CurveForGain（听者→该角距离）+ 0.15s SmoothDamp。
+            // 禁止四角共用 shell 距离——走几步 / 转圈时整团同响同静，3D 过渡发硬。
+            if (HasQuadChannels(src)
+                && src.Spec != null
+                && AmbienceQuadChannelLayout.UsesQuadChannels(src.Spec.Kind)
+                && WanosInteraction.TryGetListenerPosition(out Vector3 listener))
+            {
+                EnsureChannelGainState(src, 4);
+                float dt = Mathf.Max(Time.deltaTime, 1f / 120f);
+                float duck01 = _session.Duck.Level01;
+                // SoftEnter：中心仍远低于目标时，四角跟中心静音起步，再各自追 CurveForGain。
+                bool softEnterHold = !float.IsNaN(src.LastTargetGainDb)
+                    && gainDb < src.LastTargetGainDb - 1f;
+                for (int i = 0; i < 4; i++)
+                {
+                    GameObject ch = src.ChannelEmitters[i];
+                    if (ch == null)
+                        continue;
+                    float dx = listener.x - ch.transform.position.x;
+                    float dz = listener.z - ch.transform.position.z;
+                    float chDist = Mathf.Sqrt(dx * dx + dz * dz);
+                    float targetDb = GainDbForDistance(src.Spec, chDist);
+                    targetDb = Mathf.Lerp(GainFloorDb, targetDb, duck01);
+                    if (softEnterHold)
+                        targetDb = Mathf.Min(targetDb, gainDb);
+                    float applied;
+                    if (forceSnapChannels || float.IsNaN(src.ChannelAppliedGainDb[i]))
+                    {
+                        applied = softEnterHold ? gainDb : targetDb;
+                        src.ChannelGainSlewVelocity[i] = 0f;
+                    }
+                    else
+                    {
+                        applied = Mathf.SmoothDamp(
+                            src.ChannelAppliedGainDb[i],
+                            targetDb,
+                            ref src.ChannelGainSlewVelocity[i],
+                            GainSmoothTimeSeconds,
+                            Mathf.Infinity,
+                            dt);
+                    }
+                    src.ChannelAppliedGainDb[i] = applied;
+                    WanosInteraction.ApplyEmitterDistanceAttenuation(ch, chDist, applied);
+                }
+                return;
+            }
+
+            for (int i = 0; i < src.ChannelEmitters.Length; i++)
+            {
+                if (src.ChannelEmitters[i] != null)
+                    WanosInteraction.ApplyEmitterDistanceAttenuation(
+                        src.ChannelEmitters[i], dist, gainDb);
+            }
         }
 
         /// <summary>
@@ -1711,17 +2548,35 @@ namespace Game
             while (gen == _attenuationDriveGen && _started)
             {
                 TickAttenuationSlews();
-                if (!AnyGainSlewPending() && !AnyDistanceSlewPending())
+                // 河/海四角在播时每帧追中心 + 角点 CurveForGain（Boluo BoxHelper 持续 refresh）。
+                if (!AnyGainSlewPending()
+                    && !AnyDistanceSlewPending()
+                    && !AnyPlayingQuadChannels())
                     return;
                 await UniTask.Yield(PlayerLoopTiming.Update);
             }
         }
 
+        bool AnyPlayingQuadChannels()
+        {
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var src = Sources[i];
+                if (!src.Playing || src.SoftStopping || src.Spec == null)
+                    continue;
+                if (AmbienceQuadChannelLayout.UsesQuadChannels(src.Spec.Kind) && src.QuadCenterReady)
+                    return true;
+            }
+            return false;
+        }
+
         void TickAttenuationSlews()
         {
-            if (!_started || !_catalogBuilt || _contentAudioPaused || _presetTransitionHeld)
+            if (!_started || !_catalogBuilt || _contentAudioPaused || _presetTransitionHeld
+                || IslandAudioSession.IsYieldHeld)
                 return;
             float dt = Mathf.Max(Time.deltaTime, 1f / 120f);
+            bool hasListener = WanosInteraction.TryGetListenerPosition(out Vector3 listener);
             for (int i = 0; i < Sources.Count; i++)
             {
                 var src = Sources[i];
@@ -1730,11 +2585,20 @@ namespace Game
                 if (float.IsNaN(src.LastTargetGainDb) || float.IsNaN(src.LastTargetDistance))
                     continue;
 
+                // 河/海：每帧追四角（Boluo refresh≈0.1–0.2s SmoothDamp），禁止只靠 4Hz Evaluate。
+                if (hasListener
+                    && src.Spec != null
+                    && AmbienceQuadChannelLayout.UsesQuadChannels(src.Spec.Kind)
+                    && src.QuadCenterReady)
+                {
+                    LayoutQuadChannels(src, listener, src.QuadFollowTarget, forceSnap: false);
+                }
+
                 float targetDist = src.LastTargetDistance;
                 float targetGain = src.LastTargetGainDb;
                 float prevDist = float.IsNaN(src.LastSlewedDistance) ? targetDist : src.LastSlewedDistance;
-                bool snap = float.IsNaN(src.LastAppliedGainDb)
-                    || Mathf.Abs(targetDist - prevDist) > TeleportGainSnapMeters;
+                // 帧驱动只做平滑；硬贴只发生在 PushSlewedAttenuation(forceSnap) / 首帧 NaN。
+                bool snap = float.IsNaN(src.LastAppliedGainDb);
 
                 float slewedDist;
                 float slewedGain;
@@ -1755,7 +2619,7 @@ namespace Game
 
                 src.LastSlewedDistance = slewedDist;
                 src.LastAppliedGainDb = slewedGain;
-                WriteDuckedGain(src, slewedDist, slewedGain);
+                WriteDuckedGain(src, slewedDist, slewedGain, forceSnap: snap);
             }
         }
 
@@ -1889,12 +2753,12 @@ namespace Game
             for (int i = 0; i < Sources.Count; i++)
             {
                 var src = Sources[i];
-                if (!src.Playing || src.Emitter == null)
+                if (!src.Playing || (src.Emitter == null && !HasQuadChannels(src)))
                     continue;
                 src.LastTargetGainDb = GainFloorDb;
                 src.LastAppliedGainDb = GainFloorDb;
                 float dist = float.IsNaN(src.LastPostedDistance) ? 0f : src.LastPostedDistance;
-                WanosInteraction.ApplyEmitterDistanceAttenuation(src.Emitter, dist, GainFloorDb);
+                ApplyAttenuationToSourceEmitters(src, dist, GainFloorDb);
             }
         }
 
@@ -1908,12 +2772,14 @@ namespace Game
             src.Playing = false;
             src.NeedsRepost = false;
             src.OutsideSince = -1f;
+            src.StickyShoreIndex = -1;
             src.LastPostedDistance = float.NaN;  // 重置距离状态，下次 Start 时重新推送
             src.LastTargetGainDb = float.NaN;
             src.LastAppliedGainDb = float.NaN;
             src.GainSlewVelocity = 0f;
             src.LastSlewedDistance = float.NaN;
             src.LastTargetDistance = float.NaN;
+            src.LastKeepDistance = float.NaN;
             CancelSoftStop(src);
             
             Log.Info($"[AmbienceZone] StopSource id={spec.Id} voiceCount={src.VoiceIds.Count}");
@@ -1927,10 +2793,23 @@ namespace Game
             }
             src.VoiceIds.Clear();
 
+            string stop = AmbienceEventCatalog.ResolveStopEvent(spec.Bank, spec.StopEvent);
+            if (HasQuadChannels(src))
+            {
+                // 2. 四角各自 StopEvent（voice 挂在分轨上）。
+                if (!string.IsNullOrEmpty(stop))
+                {
+                    for (int i = 0; i < src.ChannelEmitters.Length; i++)
+                    {
+                        if (src.ChannelEmitters[i] != null)
+                            WanosInteraction.PostEvent(stop, src.ChannelEmitters[i]);
+                    }
+                }
+                ReleaseQuadChannels(src);
+            }
+
             if (src.Emitter != null)
             {
-                // 2. 发 StopEvent（object 仍注册，引擎才能把循环停掉）
-                string stop = AmbienceEventCatalog.ResolveStopEvent(spec.Bank, spec.StopEvent);
                 if (!string.IsNullOrEmpty(stop))
                     WanosInteraction.PostEvent(stop, src.Emitter);
 
@@ -2003,10 +2882,26 @@ namespace Game
                 bool live = false;
                 for (int s = 0; s < Sources.Count; s++)
                 {
-                    if (Sources[s].Emitter == go && Sources[s].Playing)
+                    var src = Sources[s];
+                    if (!src.Playing)
+                        continue;
+                    if (src.Emitter == go)
                     {
                         live = true;
                         break;
+                    }
+                    if (src.ChannelEmitters != null)
+                    {
+                        for (int c = 0; c < src.ChannelEmitters.Length; c++)
+                        {
+                            if (src.ChannelEmitters[c] == go)
+                            {
+                                live = true;
+                                break;
+                            }
+                        }
+                        if (live)
+                            break;
                     }
                 }
 
@@ -2014,7 +2909,23 @@ namespace Game
                     continue;
 
                 WanosInteraction.ReleaseEmitter(go);
-                ReturnEmitter(go);
+                // 池内 host → 还池；四角临时 GO → Destroy。
+                bool pooled = false;
+                if (_emitterPool != null)
+                {
+                    for (int p = 0; p < _emitterPool.Length; p++)
+                    {
+                        if (_emitterPool[p] == go)
+                        {
+                            pooled = true;
+                            break;
+                        }
+                    }
+                }
+                if (pooled)
+                    ReturnEmitter(go);
+                else
+                    UnityEngine.Object.Destroy(go);
             }
         }
     }

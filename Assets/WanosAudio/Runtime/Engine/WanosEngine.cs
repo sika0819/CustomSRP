@@ -306,7 +306,16 @@ namespace WanosAudio
         }
 
         public static void PauseAll() => WanosNative.Instance.PostEvent(0, "Pause_ALL");
-        public static void ResumeAll() => WanosNative.Instance.PostEvent(0, "Resume_ALL");
+
+        public static void ResumeAll()
+        {
+            // 回前台 Unity 和原生焦点回调都会补 Resume。第二发打在已经 Started 的曲子上会把曲子打成 Ended，听感停一拍。
+            if (!BoluoAndroidEngineNative.ClaimVoiceResume("Resume_ALL"))
+                return;
+            if (!BoluoAudioSessionNative.ClaimVoiceResume("Resume_ALL"))
+                return;
+            WanosNative.Instance.PostEvent(0, "Resume_ALL");
+        }
         public static void StopAll() => WanosNative.Instance.PostEvent(0, "Stop_All");
 
         /// <summary>

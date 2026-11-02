@@ -180,6 +180,9 @@ namespace Game
             _musicVoiceId = voiceId;
             _breakPostedForVoice = false;
             int gen = ++_voiceGeneration;
+            BoluoPlatformMusicBridge.NoteUnityMusicVoice(voiceId);
+            BoluoPlatformMusicBridge.NoteUnityMusicContext(
+                PlayMode, CurrentAlbumIndex, CurrentTrackIndex);
 
             // 不在 Attach 立刻 Break：引擎可能尚未 Playing，过早 Break 会被吞，
             // 且 _breakPostedForVoice 会挡住真正的 Playing→Break。
@@ -197,6 +200,7 @@ namespace Game
                 _musicVoiceId = 0;
             _breakPostedForVoice = false;
             _voiceGeneration++;
+            BoluoPlatformMusicBridge.ClearUnityMusicVoice();
         }
 
         // -----------------------------------------------------------------------
@@ -217,9 +221,31 @@ namespace Game
 
         public void SetMusicVolume(float value)
         {
+            float prev = MusicVolume;
             MusicVolume = Mathf.Clamp01(value);
             PushVolumesToEngine();
             ApplyGroupVolumes();
+            // 存档/上次退出 bgm=0 时揭罩仍会 Play_*（Music_Volume=0）。引擎对近静音
+            // music voice 会虚声杀掉；之后只把 RTPC 拉到 100 仍无声。与定时结束恢复同款：重起。
+            MaybeRestartMusicAfterLeavingSilence(prev, MusicVolume);
+        }
+
+        void MaybeRestartMusicAfterLeavingSilence(float prev01, float next01)
+        {
+            const float silent = 0.001f;
+            if (prev01 > silent || next01 <= silent)
+                return;
+            if (!IsPlaying || !HasRestorableTrack)
+                return;
+            if (NowPlayingService.UserManuallyPaused)
+                return;
+            if (!WanosEngine.IsPlaybackEnabled || IslandAudioSession.IsYieldHeld)
+                return;
+
+            Log.Info(
+                $"[MusicPlaylist] volume {prev01:F3}→{next01:F3} after near-silent — restart " +
+                $"{CurrentAlbumIndex}/{CurrentTrackIndex}");
+            PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
         }
 
         public void SetEffectVolume(float value)
@@ -265,6 +291,8 @@ namespace Game
                 return;
 
             PlayMode = mode;
+            BoluoPlatformMusicBridge.NoteUnityMusicContext(
+                PlayMode, CurrentAlbumIndex, CurrentTrackIndex);
 
             // Loop/Shuffle：只发 Break，等本曲播完再 Ended→Next（不中途 Stop）。
             // Single：不 Break，引擎继续自循环。voice 还没挂上时由 Attach 后的 fallback 补 Break。
@@ -315,6 +343,8 @@ namespace Game
             bool same = albumIndex == CurrentAlbumIndex && trackIndex == CurrentTrackIndex && IsPlaying;
             CurrentAlbumIndex = albumIndex;
             CurrentTrackIndex = trackIndex;
+            BoluoPlatformMusicBridge.NoteUnityMusicContext(
+                PlayMode, CurrentAlbumIndex, CurrentTrackIndex);
 
             if (same && !restart)
                 return;
@@ -413,18 +443,14 @@ namespace Game
 
             // Advance within the current album.
             var tracks = MusicCatalog.GetTracks(CurrentAlbumIndex);
-            if (tracks.Count == 0)
+            // 空专辑，或 Loop 下仅 1 首（服务器目录裁薄）：跨专辑，否则负一屏/下一首原地打转。
+            if (tracks.Count == 0
+                || (PlayMode == MusicPlayMode.Loop && tracks.Count == 1))
             {
-                // Try next non-empty album.
-                for (int i = 1; i < MusicCatalog.AlbumCount; i++)
-                {
-                    int idx = (CurrentAlbumIndex + i) % MusicCatalog.AlbumCount;
-                    if (MusicCatalog.GetTracks(idx).Count > 0)
-                    {
-                        PlayIndex(idx, 0, restart: true);
-                        return;
-                    }
-                }
+                if (TryPlayAdjacentAlbum(+1))
+                    return;
+                if (tracks.Count == 1)
+                    PlayIndex(CurrentAlbumIndex, 0, restart: true);
                 return;
             }
 
@@ -447,10 +473,40 @@ namespace Game
             }
 
             var tracks = MusicCatalog.GetTracks(CurrentAlbumIndex);
+            if (tracks.Count == 0
+                || (PlayMode == MusicPlayMode.Loop && tracks.Count == 1))
+            {
+                if (TryPlayAdjacentAlbum(-1))
+                    return;
+                if (tracks.Count == 1)
+                    PlayIndex(CurrentAlbumIndex, 0, restart: true);
+                return;
+            }
+
             int prev = CurrentTrackIndex - 1;
             if (prev < 0)
                 prev = PlayMode == MusicPlayMode.Loop ? tracks.Count - 1 : 0;
             PlayIndex(CurrentAlbumIndex, prev, restart: true);
+        }
+
+        /// <summary>Loop 跨专辑：找相邻非空专辑的首/末曲。</summary>
+        bool TryPlayAdjacentAlbum(int direction)
+        {
+            if (MusicCatalog.AlbumCount <= 1)
+                return false;
+            for (int i = 1; i < MusicCatalog.AlbumCount; i++)
+            {
+                int idx = (CurrentAlbumIndex + direction * i) % MusicCatalog.AlbumCount;
+                if (idx < 0)
+                    idx += MusicCatalog.AlbumCount;
+                var t = MusicCatalog.GetTracks(idx);
+                if (t.Count <= 0)
+                    continue;
+                int track = direction > 0 ? 0 : t.Count - 1;
+                PlayIndex(idx, track, restart: true);
+                return true;
+            }
+            return false;
         }
 
         void PickShuffle(out int albumIndex, out int trackIndex)
@@ -485,8 +541,7 @@ namespace Game
         // Voice Playing / Ended → Break + auto-next (Boluo WanosMusicPlayer.PlayState)
         // -----------------------------------------------------------------------
 
-        static bool IsListAdvanceMode(int mode) =>
-            mode == MusicPlayMode.Loop || mode == MusicPlayMode.Shuffle;
+        static bool IsListAdvanceMode(int mode) => MusicPlayMode.IsListAdvanceMode(mode);
 
         void EnsureVoiceHook()
         {
@@ -613,6 +668,10 @@ namespace Game
             if (!MusicCatalog.IsReady)
                 return;
 
+            // 列表循环 / 随机的自动下一首不走点击。点歌才会 MarkHeard，
+            // 播完切走后行从 Playing 回到未听，红点会留下来。切歌前先记已听。
+            MarkCurrentTrackHeard();
+
             if (PlayMode == MusicPlayMode.Single)
             {
                 // Should rarely hit (Single usually never Ends). Restart same track.
@@ -622,6 +681,23 @@ namespace Game
             }
 
             Next();
+        }
+
+        /// <summary>
+        /// 本曲已自然播完（Ended / 曲长兜底）。与点歌同一套 key，红点此后不再亮。
+        /// </summary>
+        void MarkCurrentTrackHeard()
+        {
+            if (CurrentAlbumIndex < 0 || CurrentTrackIndex < 0)
+                return;
+
+            var album = MusicCatalog.GetAlbum(CurrentAlbumIndex);
+            var track = MusicCatalog.GetTrack(CurrentAlbumIndex, CurrentTrackIndex);
+            if (album == null || track == null)
+                return;
+
+            DownloadedUnplayedManager.MarkPlayed(
+                DownloadedUnplayedManager.MusicKey(album.Name, track.Value.MusicName));
         }
 
         // -----------------------------------------------------------------------
@@ -697,8 +773,14 @@ namespace Game
                 Debug.LogWarning($"[MusicPlaylist] Resume_Music failed: {ex.Message}");
             }
             IsPlaying = CurrentAlbumIndex >= 0 && CurrentTrackIndex >= 0 && !_stoppedByUser;
-            WanosEngine.Unmute("music-resume");
-            IslandAudioSession.Instance?.SetContentAudioPaused(false);
+            if (WanosEngine.Unmute("music-resume"))
+            {
+                IslandAudioSession.ClearYieldHold();
+                IslandAudioSession.NoteAudibleCommitted();
+                IslandAudioSession.Instance?.SetContentAudioPaused(false);
+            }
+            else
+                IslandAudioSession.HoldYield("music-resume-denied");
 #if UNITY_ANDROID && !UNITY_EDITOR
             // 定时取消依赖此路径出声：原生 pauseForTimerEnd 已 mute，须补抢焦点 + unmute。
             BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
@@ -744,6 +826,7 @@ namespace Game
             {
                 Debug.LogWarning($"[MusicPlaylist] Resume_ALL failed: {ex.Message}");
             }
+            IslandAudioSession.ClearYieldHold();
             IslandAudioSession.Instance?.SetContentAudioPaused(false);
 
             if (!HasRestorableTrack)
@@ -811,8 +894,14 @@ namespace Game
             }
             IsPlaying = true;
             NowPlayingService.NoteUserPaused(false);
-            WanosEngine.Unmute("music-restore");
-            IslandAudioSession.Instance?.SetContentAudioPaused(false);
+            if (WanosEngine.Unmute("music-restore"))
+            {
+                IslandAudioSession.ClearYieldHold();
+                IslandAudioSession.NoteAudibleCommitted();
+                IslandAudioSession.Instance?.SetContentAudioPaused(false);
+            }
+            else
+                IslandAudioSession.HoldYield("music-restore-denied");
             PushVolumesToEngine();
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
@@ -865,11 +954,21 @@ namespace Game
                 return false;
             }
 
+            if (IslandAudioSession.IsYieldHeld)
+            {
+                Debug.Log("[MusicPlaylist] skip play — audio yielded");
+                PublishNowPlaying();
+                return false;
+            }
+
             _musicSerialId = GameEntry.Sound.PlaySound(asset, MusicGroup);
             IsPlaying = _musicSerialId >= 0;
             if (IsPlaying)
             {
-                WanosEngine.Unmute("music-play");
+                if (WanosEngine.Unmute("music-play"))
+                    IslandAudioSession.NoteAudibleCommitted();
+                else
+                    IslandAudioSession.HoldYield("music-play-denied");
                 // Push user volume again after PlaySound (agent may have written RTPC too).
                 PushVolumesToEngine();
 #if UNITY_ANDROID && !UNITY_EDITOR

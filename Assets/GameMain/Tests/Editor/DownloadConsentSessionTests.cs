@@ -23,6 +23,7 @@ namespace Game.Tests
             DownloadCellularGate.EditorSimulateMobilePlatform = true;
             DownloadCellularGate.EditorReachabilityOverride =
                 NetworkReachability.ReachableViaCarrierDataNetwork;
+            BoluoAppLaunchCache.EditorClearOverride();
             BankDownloader.InvalidateLocalReadyCache();
         }
 
@@ -32,6 +33,7 @@ namespace Game.Tests
             DownloadConsentSession.ResetForLeaveIsland();
             DownloadCellularGate.EditorClearReachabilityOverride();
             DownloadCellularGate.ResetForNewSession();
+            BoluoAppLaunchCache.EditorClearOverride();
             BankDownloader.InvalidateLocalReadyCache();
         }
 
@@ -190,7 +192,7 @@ namespace Game.Tests
         }
 
         [Test]
-        public void SecondUserDownload_Cellular_PromptsAgainAfterRevoke()
+        public void SecondUserDownload_Cellular_SkipsPromptWhileSessionAllowed()
         {
             int first = 0;
             int second = 0;
@@ -202,19 +204,15 @@ namespace Game.Tests
             Assert.AreEqual(1, first);
             Assert.IsTrue(DownloadCellularGate.AllowMobileNetwork);
 
-            // 批次结束撤销开闸（Flow finally 同款）。
-            DownloadCellularGate.RevokeCellularAllow();
-            Assert.IsFalse(DownloadCellularGate.AllowMobileNetwork);
-
+            // 本岛会话开闸保留：再次 EnsureReady 不再弹流量窗。
             DownloadConsentSession.EnsureReady(banks, onReady: () => second++);
-            Assert.AreEqual("MobileConfirm", DownloadConsentSession.EditorPhaseName);
-            Assert.AreEqual(0, second);
-            DownloadConsentSession.EditorInvokeMobileAllow();
             Assert.AreEqual(1, second);
+            Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
+            Assert.IsTrue(DownloadCellularGate.AllowMobileNetwork);
         }
 
         [Test]
-        public void EnsureReady_RevokesPriorAllow_SoNeedsPromptAgain()
+        public void EnsureReady_KeepsPriorAllow_NoSecondMobilePrompt()
         {
             DownloadCellularGate.UserAllowCellularAlways();
             Assert.IsFalse(DownloadCellularGate.NeedsMobileDataPrompt());
@@ -224,9 +222,99 @@ namespace Game.Tests
                 new List<string> { PendingBank },
                 onReady: () => ready++);
 
-            // EnsureReady 开头 Revoke → 蜂窝仍需确认。
-            Assert.AreEqual("MobileConfirm", DownloadConsentSession.EditorPhaseName);
+            Assert.AreEqual(1, ready);
+            Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
+        }
+
+        [Test]
+        public void EnsureReady_Wifi_FeatureOn_ShowsWifiConfirm()
+        {
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOn;
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaLocalAreaNetwork;
+
+            int ready = 0;
+            int later = 0;
+            DownloadConsentSession.EnsureReady(
+                new List<string> { PendingBank },
+                onReady: () => ready++,
+                new DownloadUiOptions { OnWifiConfirmLater = () => later++ });
+
             Assert.AreEqual(0, ready);
+            Assert.AreEqual("WifiConfirm", DownloadConsentSession.EditorPhaseName);
+            DownloadConsentSession.EditorInvokeWifiConfirm();
+            Assert.AreEqual(1, ready);
+            Assert.IsTrue(DownloadConsentSession.EditorWifiConfirmAccepted);
+
+            // 本会话已确认：再次 EnsureReady 直接过。
+            int second = 0;
+            DownloadConsentSession.EnsureReady(
+                new List<string> { PendingBank },
+                onReady: () => second++);
+            Assert.AreEqual(1, second);
+            Assert.AreEqual(0, later);
+        }
+
+        [Test]
+        public void EnsureReady_Wifi_FeatureOn_Later_Cancels()
+        {
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOn;
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaLocalAreaNetwork;
+
+            int ready = 0;
+            int later = 0;
+            int cancel = 0;
+            DownloadConsentSession.EnsureReady(
+                new List<string> { PendingBank },
+                onReady: () => ready++,
+                new DownloadUiOptions
+                {
+                    OnCancel = () => cancel++,
+                    OnWifiConfirmLater = () => later++,
+                });
+
+            Assert.AreEqual("WifiConfirm", DownloadConsentSession.EditorPhaseName);
+            DownloadConsentSession.EditorInvokeWifiLater();
+            Assert.AreEqual(0, ready);
+            Assert.AreEqual(1, later);
+            Assert.AreEqual(1, cancel);
+            Assert.IsFalse(DownloadConsentSession.EditorWifiConfirmAccepted);
+        }
+
+        [Test]
+        public void EnsureReady_Wifi_FeatureOff_FiresReady()
+        {
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOff;
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaLocalAreaNetwork;
+
+            int ready = 0;
+            DownloadConsentSession.EnsureReady(
+                new List<string> { PendingBank },
+                onReady: () => ready++);
+
+            Assert.AreEqual(1, ready);
+            Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
+        }
+
+        [Test]
+        public void FeatureOff_Cellular_StillShowsMobileConfirm()
+        {
+            // 关 §4.6 Wi‑Fi 确认 ≠ 免流量窗；两层独立。
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOff;
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaCarrierDataNetwork;
+
+            int ready = 0;
+            DownloadConsentSession.EnsureReady(
+                new List<string> { PendingBank },
+                onReady: () => ready++);
+
+            Assert.AreEqual(0, ready);
+            Assert.AreEqual("MobileConfirm", DownloadConsentSession.EditorPhaseName);
+            DownloadConsentSession.EditorInvokeMobileAllow();
+            Assert.AreEqual(1, ready);
         }
 
         [Test]

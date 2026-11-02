@@ -279,7 +279,9 @@ WanosEngine.SetVolumeParameter(WanosEngine.FxVolumeParam, ui01);
 | 回前台听不到 / 音量回到默认 | 引擎 mute 未解 / RTPC 被重置 | 走 `WanosEngine.RestoreForeground`（内部 `ReapplyVolumes`） |
 | 后台切歌崩溃（SIGABRT） | 给 native 塞了坏 bank（BKHD / 半截文件） | Java `looksLikeWanosBank` 必须拦住；C# 侧只推 `TryResolve` 成功的 path |
 | 暂停一个音效后 BGM 也停了 | `WanosSoundAgentHelper.Pause` 对非音乐资源调 `WanosEngine.PauseAll()`（整个引擎） | 已知设计缺陷，避免对 SFX 用 GF 的 Pause/Resume |
-| 环境音只有一个河流在响 | 共享 bank（`River_ADD`）只保留最近的一床 | 设计如此（exclusive share） |
+| 环境音只有一个河流在响 | 共享 bank（`River_ADD` / `River_Quad`）只保留最近的一床 | 设计如此（exclusive share） |
+| 站桥上听不到河声 | 曾用探针 **3D** 距离；桥面高于水面被判出区 | 河/瀑 `UseXzDistance` + want 用 `Distance`（对齐 Boluo 水平丝带） |
+| 瀑布/河流完全没声 | ① 缺物体级钉正午 `Time of A Day`（夜间全局会掐水域）② `WaterfallMist` 被当瀑特征 → 湖↔瀑互斥 | Post/每 tick 钉 12h；Mist 不进音频分类；贴瀑 28m 内优先瀑 |
 | 环境音越走越小声到突然换位置 | `TransferExclusiveSharedPlays` 交接所有权 | 听 `[AmbienceZone] transfer bank=` 日志 |
 | 雨声突然不再触发 | `RainWaterProximityService._bankMissing` 是一次性熔断，bank 加载失败后整个雨季都不再恢复 | 需要 `ReleaseBank`（雨停）才复位 |
 | 河声音效位置很怪 | `WaterSurfaceProbe` 只采样**直接子节点**；单 prefab 内陆水路径下采样不到 | 用 `WaterSurfaceProbe.Rebuild()` 看 `[WaterProbe] rebuilt surfaces=…` |

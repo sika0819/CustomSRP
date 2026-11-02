@@ -18,7 +18,7 @@ float4 _OilCloudHorizon;
 float4 _OilCloudAmbientSky;
 float4 _OilCloudAmbientEquator;
 float4 _OilCloudAmbientGround;
-float4 _OilCloudParams; // x moonBlend, y coverage, z unused, w unused
+float4 _OilCloudParams; // x moonBlend, y coverage, z unused, w sunrise 0-1
 float4 _OilCloudWind;   // x yaw speed, y yaw radians, z cell disturb, w wind 0-1
 float _OilCloudDawn;
 float _OilCloudNight;

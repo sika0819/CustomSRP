@@ -26,6 +26,11 @@ namespace Game
         public float FogDensity { get; private set; } = 0.003f;
         public bool IsTimeTransitioning => _timeLerpActive;
 
+        /// <summary>0–1 SmoothStep of the active period blend. 1 when the clock is settled.</summary>
+        public float TimeLerp01 => _timeLerpActive
+            ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_timeLerpElapsed / TimeSwitchLerpSeconds))
+            : 1f;
+
         /// <summary>
         /// Panel gesture lock, and the weather visual blend length.
         /// Preset apply clears the lock and is never refused.

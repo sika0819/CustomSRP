@@ -100,11 +100,16 @@ half3 OilVegetationAmbient(half3 n, half lightLum)
     return amb;
 }
 
-// Lighting normal for vegetation: in dark, bias toward up so far BB matches grass fill.
+// Lighting normal for vegetation.
+// Night: bias up so grass / leaves / BB share fill.
+// Noon: MUST still cap mesh detail — lightLum≈1 used to keepDetail≈1, and
+// LOD0/LOD1/LOD2 (different card normals) blew apart on N·L while oil Y paint matched.
 half3 OilVegetationLitNormal(half3 n, half lightLum)
 {
     half3 up = half3(0.0h, 1.0h, 0.0h);
-    half keepDetail = saturate(0.18h + lightLum * 2.6h);
+    half keepDetail = saturate(0.12h + lightLum * 0.85h);
+    // Hard cap: oil volume Y carries the crown→base band; lighting stays LOD-stable.
+    keepDetail = min(keepDetail, 0.30h);
     return normalize(lerp(up, normalize(n), keepDetail));
 }
 
@@ -121,7 +126,44 @@ half3 OilVegetationDirect(
     // Half-Lambert: dusk low sun still warms up-facing grass (matches terrain NPR wrap).
     half ndotl = saturate(dot(N, L) * 0.5h + 0.5h);
     half att = saturate(attenuation);
-    return albedo * (lightColor * ndotl * att + ambient);
+    // Soften key vs fill a touch so noon LOD mesh N noise can't chalk the oil bands.
+    half key = ndotl * att;
+    key = lerp(key, 1.0h, 0.22h);
+    return albedo * (lightColor * key + ambient);
+}
+
+// Oil-paint volume bands: softstep then 3-step quantize. t01 already normalized.
+// Lit (q→1) keeps original albedo; shade uses bottom/top as a relative hue darken
+// (not absolute palette multiply — that crushed grass/leaves ~×0.5).
+// Material-specific wrappers live in OilNPRLighting (need OilNPR CBUFFER).
+half3 OilVolumePaintAlbedo(
+    half3 albedo,
+    float t01,
+    half3 top,
+    half3 bottom,
+    float smoothness)
+{
+    float h = saturate(t01);
+    float s = max(smoothness, 1e-3);
+    // Widen softstep around mid: larger smoothness → softer band edges.
+    float q = smoothstep(0.0, 1.0, saturate((h - 0.5) / s + 0.5));
+    // Soft 3-band posterize for oil-block feel (not pure continuous).
+    float bands = 3.0;
+    float scaled = q * bands;
+    float cell = floor(scaled);
+    float fracPart = saturate((scaled - cell) / max(s * bands * 0.35, 0.08));
+    q = (cell + fracPart * 0.35) / bands;
+    q = saturate(q);
+
+    half3 topSafe = max(top, half3(1e-3h, 1e-3h, 1e-3h));
+    half3 relDark = saturate(bottom / topSafe);
+    // Mild shade: full palette ratio (~0.5) is too hard; keep same green family.
+    half3 shadeMul = lerp(half3(1.0h, 1.0h, 1.0h), relDark, 0.55h);
+    half3 midMul = lerp(shadeMul, half3(1.0h, 1.0h, 1.0h), 0.50h);
+    half3 mul = q < 0.5
+        ? lerp(shadeMul, midMul, (half)(q * 2.0))
+        : lerp(midMul, half3(1.0h, 1.0h, 1.0h), (half)((q - 0.5) * 2.0));
+    return albedo * mul;
 }
 
 // BoluoNightKeepFoliage: soft night floor only — keep crowns from crushing, not glowing.
@@ -136,9 +178,9 @@ half3 OilVegetationNightKeep(half3 lit, half3 albedo, half3 n, half lightLum)
     half3 period = (half3)_OilPeriodAmbient.rgb;
     fill = max(fill, period * 0.45h);
 
-    // Mild luminance floor (period night oilFill ≈ 0.05); old 0.11–0.18 washed foliage.
+    // Mild luminance floor. 0.035–0.055 still read as a lit blue night.
     half fillLum = max(dot(fill, half3(0.2126h, 0.7152h, 0.0722h)), 1e-3h);
-    half wantLum = max(fillLum, lerp(0.035h, 0.055h, nightAmt));
+    half wantLum = max(fillLum, lerp(0.018h, 0.030h, nightAmt));
     fill *= wantLum / fillLum;
 
     // Extra cool only after dusk; warm oilFill periods keep amber NightKeep.

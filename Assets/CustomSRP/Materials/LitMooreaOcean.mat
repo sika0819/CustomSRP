@@ -37,6 +37,10 @@ Material:
         m_Texture: {fileID: 2800000, guid: e64396a97cad4145a95cdde3549ae2b9, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _PaintNormal:
+        m_Texture: {fileID: 2800000, guid: a9c3e7b14d2f48a0b6e15c8d0f3a7b52, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _SparkleBrush:
         m_Texture: {fileID: 2800000, guid: 6af26b362ad64f439ba2bc20d968cbf4, type: 3}
         m_Scale: {x: 1, y: 1}
@@ -61,27 +65,27 @@ Material:
     - _PremulAlpha: 1
     - _ReflectDistort: 0.35
     - _ReflectSteps: 3
-    - _ReflectStrength: 0.8
+    - _ReflectStrength: 0.52
     - _RefractionStrength: 1
     - _ShadeSteps: 3
     - _ShoreFoamWidth: 8
     - _SrcBlend: 1
-    - _StrokeBands: 46.7
+    - _StrokeBands: 52
     - _StrokeSlice: 0
-    - _StrokeWarp: 0
-    - _SunPathStrength: 2.4
-    - _SunPathWidth: 4.5
-    - _TintStrength: 0.4
+    - _StrokeWarp: 1.05
+    - _SunPathStrength: 2.85
+    - _SunPathWidth: 4.2
+    - _TintStrength: 0.36
     - _ZWrite: 0
     m_Colors:
-    - _BaseColor: {r: 0.14, g: 0.18, b: 0.36, a: 0.96}
-    - _BumpScroll: {r: 0.03, g: -0.02, b: -0.025, a: 0.018}
+    - _BaseColor: {r: 0.12, g: 0.2, b: 0.34, a: 0.96}
+    - _BumpScroll: {r: 0.015, g: -0.01, b: -0.025, a: 0.018}
     - _BumpTiling: {r: 1, g: 2, b: 2, a: 1}
     - _FoamColor: {r: 0.94, g: 0.97, b: 1, a: 1}
-    - _GlintColor: {r: 1, g: 0.8666667, b: 0.44313726, a: 1}
-    - _ShallowColor: {r: 0.22, g: 0.24, b: 0.42, a: 0.9}
-    - _TintDeep: {r: 0.28, g: 0.24, b: 0.42, a: 1}
+    - _GlintColor: {r: 1, g: 0.9, b: 0.42, a: 1}
+    - _ShallowColor: {r: 0.2, g: 0.28, b: 0.4, a: 0.9}
+    - _TintDeep: {r: 0.22, g: 0.28, b: 0.4, a: 1}
     - _TintHighlight: {r: 0.8851015, g: 0.9263436, b: 0.9622642, a: 1}
-    - _TintShallow: {r: 0.5372549, g: 0.7019608, b: 0.8980392, a: 1}
+    - _TintShallow: {r: 0.48, g: 0.72, b: 0.88, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

@@ -407,7 +407,7 @@ namespace CustomSRP.Editor
                 AssetDatabase.LoadAssetAtPath<PostFXSettings>(
                     "Assets/CustomSRP/Settings/PostFXSettings.asset");
             settings.FindPropertyRelative("renderScaleMode").enumValueIndex = 2;
-            // Runtime IslandCameraSrpSetup overrides by device (GMJ 1/0.75, else 0.5/0.375).
+            // Runtime IslandCameraSrpSetup overrides by device (tablet/GMJ standing 0.75, phone 0.5).
             settings.FindPropertyRelative("renderScale").floatValue = 1f;
             settings.FindPropertyRelative("allowFXAA").boolValue = false;
             settings.FindPropertyRelative("keepAlpha").boolValue = false;
@@ -460,7 +460,7 @@ namespace CustomSRP.Editor
             layer.ringScale = 1.85f;
             layer.followSeaLevel = true;
             layer.seaLevel = 0f;
-            layer.ringHeight = 0f;
+            layer.ringHeight = 180f;
             layer.highRing = true;
             layer.Apply();
         }

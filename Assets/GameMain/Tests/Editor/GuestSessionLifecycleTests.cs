@@ -23,6 +23,10 @@ namespace Game.Tests
             "Boluo.UserId",
             "Boluo.IsGuest",
             "Boluo.SaveLocal",
+            "Boluo.GuestCache.Token",
+            "Boluo.GuestCache.UserId",
+            "Boluo.GuestCache.Expire",
+            "Boluo.GuestCache.DeviceId",
             "Game.UserToken",
             "Game.UserId",
             "Game.IsGuest",
@@ -48,6 +52,7 @@ namespace Game.Tests
             }
 
             GuestSession.Clear();
+            BoluoSession.ClearGuestCache();
             BoluoSession.ClearDeviceToken();
             HostIslandEntryGate.Reset();
         }
@@ -56,6 +61,7 @@ namespace Game.Tests
         public void TearDown()
         {
             GuestSession.Clear();
+            BoluoSession.ClearGuestCache();
             BoluoSession.ClearDeviceToken();
             HostIslandEntryGate.Reset();
 
@@ -176,6 +182,40 @@ namespace Game.Tests
             Assert.IsTrue(GuestSession.IsLoggedIn);
             Assert.AreEqual(firstToken, GuestSession.UserToken);
             Assert.AreEqual(firstId, GuestSession.UserId);
+        }
+
+        [Test]
+        public void GuestLogin_Clear_ReusesCachedToken_SameDevice()
+        {
+            const string jwt = "guest_jwt_cached";
+            const string userId = "guest_cached_u";
+
+            GuestSession.ApplyUserSession(jwt, userId, isGuest: true, saveLocal: false);
+            Assert.IsFalse(PlayerPrefs.HasKey("Boluo.UserToken"));
+            Assert.IsTrue(PlayerPrefs.HasKey("Boluo.GuestCache.Token"));
+            Assert.AreEqual(jwt, PlayerPrefs.GetString("Boluo.GuestCache.Token", ""));
+
+            GuestSession.Clear();
+            Assert.IsFalse(GuestSession.IsLoggedIn);
+            Assert.AreEqual(jwt, PlayerPrefs.GetString("Boluo.GuestCache.Token", ""));
+
+            Assert.IsTrue(
+                BoluoSession.TryHydrateReusableGuest(UnityEngine.SystemInfo.deviceUniqueIdentifier));
+            Assert.IsTrue(GuestSession.IsLoggedIn);
+            Assert.IsTrue(GuestSession.IsGuest);
+            Assert.AreEqual(jwt, GuestSession.UserToken);
+            Assert.AreEqual(userId, GuestSession.UserId);
+        }
+
+        [Test]
+        public void GuestCache_Cleared_WhenDeviceChanges()
+        {
+            GuestSession.ApplyUserSession("guest_jwt_dev", "guest_dev", isGuest: true, saveLocal: false);
+            GuestSession.Clear();
+            Assert.IsFalse(
+                BoluoSession.TryHydrateReusableGuest("other_device_id_for_test"));
+            Assert.IsFalse(PlayerPrefs.HasKey("Boluo.GuestCache.Token"));
+            Assert.IsFalse(GuestSession.IsLoggedIn);
         }
 
         [Test]

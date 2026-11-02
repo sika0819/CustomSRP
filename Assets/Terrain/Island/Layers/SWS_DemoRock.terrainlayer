@@ -8,16 +8,16 @@ TerrainLayer:
   m_PrefabAsset: {fileID: 0}
   m_Name: SWS_DemoRock
   m_DiffuseTexture: {fileID: 2800000, guid: 1276df9c90dcd457dbb0f236bf310fa4, type: 3}
-  m_NormalMapTexture: {fileID: 2800000, guid: e6a05ca7b82849d1bf10c9f15e6b8596, type: 3}
-  m_MaskMapTexture: {fileID: 2800000, guid: 6534338dbb9344a7a05b085b94bd3d2c, type: 3}
-  m_TileSize: {x: 5, y: 5}
+  m_NormalMapTexture: {fileID: 2800000, guid: e7c4a91b2d8f4c0e8a6b3d5f1c9e7a24, type: 3}
+  m_MaskMapTexture: {fileID: 2800000, guid: 4c29d52436964d228981eeb9f2c2fcb7, type: 3}
+  m_TileSize: {x: 10, y: 10}
   m_TileOffset: {x: 0, y: 0}
   m_Specular: {r: 0, g: 0, b: 0, a: 0}
   m_Metallic: 0
   m_Smoothness: 0
-  m_NormalScale: 1
+  m_NormalScale: 0.7
   m_DiffuseRemapMin: {x: 0, y: 0, z: 0, w: 0}
   m_DiffuseRemapMax: {x: 1, y: 1, z: 1, w: 1}
   m_MaskMapRemapMin: {x: 0, y: 0, z: 0, w: 0}
   m_MaskMapRemapMax: {x: 1, y: 1, z: 1, w: 1}
-  m_SmoothnessSource: 1
+  m_SmoothnessSource: 0

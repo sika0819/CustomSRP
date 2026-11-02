@@ -8,7 +8,7 @@
 
 游戏运行起点 [`Assets/GameMain/Scenes/Launch.unity`](../Assets/GameMain/Scenes/Launch.unity) —— `EditorBuildSettings` 第 0 位,`Build And Run` 从这里开始。  
 油画风格主验：[Oil NPR](oil-npr.md)（`Empty`）、[Terrain](terrain.md)（`MooreaTerrain`）。  
-预设无 UI 截图：菜单 **GameMain → Boluo → 截图 → 各预设 4K 无 UI**（见根 README）。  
+预设无 UI 截图：菜单 **GameMain → Boluo → 截图 → 各预设 4K 无 UI** / **各预设占位图封面（264 圆角）**（见根 README；编辑器截图强制 16-tap 油画）。  
 下表其余条目是 SRP 单点验证场景,菜单 `Create*Scene` 生成,只验管线能力,不参与发布。
 
 ## 场景

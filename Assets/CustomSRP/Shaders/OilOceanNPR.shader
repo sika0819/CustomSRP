@@ -2,7 +2,7 @@ Shader "CustomSRP/OilOceanNPR"
 {
     Properties
     {
-        // 深灰蓝水体；近岸叠色略暖，高光鹅黄/橘。
+        // 深灰蓝水体。昼夜两套 Deep 由 OilOceanSurface 写入，这里只收当前色。
         _BaseColor ("Deep", Color) = (0.14, 0.18, 0.36, 0.96)
         _ShallowColor ("Shallow", Color) = (0.22, 0.24, 0.42, 0.90)
         _FoamColor ("Titanium White", Color) = (0.94, 0.97, 1.0, 1)
@@ -14,7 +14,8 @@ Shader "CustomSRP/OilOceanNPR"
         // 与河 _GlintMap 相同：单列竖带光痕，勿用横笔印章。
         _SparkleBrush ("Sun Glint Column", 2D) = "black" {}
         _PaintMap ("Water Paint (Monet)", 2D) = "gray" {}
-        _PaintTile ("Paint Tile (m)", Range(80, 800)) = 280
+        _PaintNormal ("Paint Normal", 2D) = "bump" {}
+        _PaintTile ("Paint Tile (m)", Range(20, 800)) = 280
         _PaintContrast ("Paint Contrast", Range(0.5, 3)) = 1.45
         _PaintRelief ("Paint Relief", Range(0, 1)) = 0.78
         _StrokeSlice ("Horizontal Slice", Range(0, 1)) = 0.72
@@ -27,7 +28,7 @@ Shader "CustomSRP/OilOceanNPR"
         _BumpTile ("Bump Tile (m)", Range(20, 200)) = 80
         // 只采 xy 一层。zw 留在向量里给旧材质，不再单独做交叉混合。
         _BumpTiling ("Bump Tiling (xy)", Vector) = (1, 2, 2, 1)
-        _BumpScroll ("Bump Scroll (xy)", Vector) = (0.03, -0.02, -0.025, 0.018)
+        _BumpScroll ("Bump Scroll (xy)", Vector) = (0.015, -0.01, -0.025, 0.018)
 
         // 对齐河：Intersection Noise × Depth × Shore Clip 画岸沫（无 Foam 笔刷贴图）。
         _IntersectionNoise ("Intersection Noise", 2D) = "white" {}

@@ -9,8 +9,9 @@ namespace Game
 {
     /// <summary>
     /// 下载同意会话：唯一弹窗所有者（经 GameFramework UI Form）。
-    /// 流量窗只由用户主动 <see cref="EnsureReady"/>（区域 / 预设 / 音乐 / Critical 点下载）弹出；
+    /// 流量窗只由用户主动 <see cref="EnsureReady"/>（区域 / 预设 / 音乐 / Critical / Rest 确认）弹出；
     /// Rest / RunLoop 的 <see cref="NotifyNeedCellularConsent"/> 只静默记账，绝不开窗。
+    /// 门禁：无网 → 存储 → 蜂窝 →（AppLaunch Wi‑Fi 确认开关）→ Ready。
     /// </summary>
     public static class DownloadConsentSession
     {
@@ -20,6 +21,7 @@ namespace Game
             RequestPrompt,
             Checking,
             MobileConfirm,
+            WifiConfirm,
             StorageBlock,
             OfflineToast,
         }
@@ -28,14 +30,18 @@ namespace Game
         static readonly List<string> _banks = new List<string>(16);
         static Action _onReady;
         static Action _onCancel;
+        static Action _onWifiLater;
         static bool _lockMove;
         static bool _moveLockedByUs;
         /// <summary>用户点了「切 Wi‑Fi」：静默/RunLoop 不再弹，直到离开蜂窝需确认态；用户 EnsureReady 会清。</summary>
         static bool _declinedCellularUntilWifi;
+        /// <summary>本岛会话已点过 Wi‑Fi 确认「立即下载」；离岛复位。</summary>
+        static bool _wifiConfirmAccepted;
 
         /// <summary>
-        /// 用户主动下（岛门 / 预设 / 音乐 / Critical 点下载）。
-        /// 无网 → 存储 → 流量（文案体积按 bank 实算）→ 过闸后 <paramref name="onReady"/>（只调一次）。
+        /// 用户主动下（岛门 / 预设 / 音乐 / Critical / Rest 确认）。
+        /// 无网 → 存储 → 流量 →（可选 Wi‑Fi 确认）→ 过闸后 <paramref name="onReady"/>（只调一次）。
+        /// 蜂窝「继续下载」为本岛会话级开闸，直到离岛 / 退登 <see cref="DownloadCellularGate.ResetForNewSession"/>。
         /// </summary>
         public static void EnsureReady(
             IList<string> banks,
@@ -43,9 +49,12 @@ namespace Game
             DownloadUiOptions opts = default)
         {
             _declinedCellularUntilWifi = false;
-            // 每次用户点下载都重新要流量确认（清掉上次批次的 AllowAlways）。
-            DownloadCellularGate.RevokeCellularAllow();
-            Capture(banks, onReady, opts.OnCancel, opts.LockMoveDuringPrompt);
+            Capture(
+                banks,
+                onReady,
+                opts.OnCancel,
+                opts.OnWifiConfirmLater,
+                opts.LockMoveDuringPrompt);
 
             if (_lockMove)
                 ApplyMoveLock(true);
@@ -102,9 +111,18 @@ namespace Game
             _banks.Clear();
             _onReady = null;
             _onCancel = null;
+            _onWifiLater = null;
             _lockMove = false;
             _declinedCellularUntilWifi = false;
+            _wifiConfirmAccepted = false;
             ReleaseMoveLock();
+        }
+
+        /// <summary>Wi‑Fi 确认窗 Form.OnClose。</summary>
+        public static void NotifyWifiDialogClosed()
+        {
+            if (_phase == Phase.WifiConfirm)
+                _phase = Phase.Idle;
         }
 
         /// <summary>岛门后退结束等：放掉会话持有的平移锁。</summary>
@@ -131,6 +149,10 @@ namespace Game
 
         public static void EditorInvokeMobileWifiOnly() => OnMobileWifiOnly();
 
+        public static void EditorInvokeWifiConfirm() => OnWifiConfirmDownload();
+
+        public static void EditorInvokeWifiLater() => OnWifiConfirmLater();
+
         /// <summary>单测：模拟申请窗点「立即下载」后的门禁链（跳过 UI）。</summary>
         public static void EditorInvokeRequestConfirmed() => OnRequestConfirmed();
 
@@ -138,13 +160,15 @@ namespace Game
 
         public static IReadOnlyList<string> EditorBanks => _banks;
 
+        public static bool EditorWifiConfirmAccepted => _wifiConfirmAccepted;
+
         /// <summary>单测：不弹 UI，只挂 continue / bank（假装流量窗已开）。</summary>
         public static void EditorArmMobilePending(
             IList<string> banks,
             Action onReady,
             Action onCancel = null)
         {
-            Capture(banks, onReady, onCancel, lockMove: false);
+            Capture(banks, onReady, onCancel, onWifiLater: null, lockMove: false);
             _phase = Phase.MobileConfirm;
         }
 #endif
@@ -155,8 +179,10 @@ namespace Game
         {
             if (!DownloadCellularGate.IsOffline())
                 return false;
-            UiDialogService.ShowErrorToast(DownloadDialogCopy.OfflineToast);
-            onConfirm?.Invoke();
+            if (GameEntry.UI != null)
+                UiDialogService.ShowNoNetwork(onConfirm);
+            else
+                onConfirm?.Invoke();
             return true;
         }
 
@@ -202,6 +228,7 @@ namespace Game
                     onWifiOnly?.Invoke();
                     onBlockedRetreat?.Invoke();
                 },
+                onWifiLater: null,
                 lockMove: false);
 
             if (_phase == Phase.MobileConfirm || IsMobileConfirmPresent())
@@ -228,7 +255,7 @@ namespace Game
                 return false;
 
             if (onAllowContinue != null || onWifiOnly != null)
-                Capture(banks, onAllowContinue, onWifiOnly, lockMove: false);
+                Capture(banks, onAllowContinue, onWifiOnly, onWifiLater: null, lockMove: false);
             else
                 MergeBanks(banks);
 
@@ -246,6 +273,7 @@ namespace Game
             IList<string> banks,
             Action onReady,
             Action onCancel,
+            Action onWifiLater,
             bool lockMove)
         {
             _banks.Clear();
@@ -253,6 +281,8 @@ namespace Game
             _onReady = onReady;
             if (onCancel != null)
                 _onCancel = onCancel;
+            if (onWifiLater != null)
+                _onWifiLater = onWifiLater;
             if (lockMove)
                 _lockMove = true;
         }
@@ -309,8 +339,14 @@ namespace Game
             {
                 _phase = Phase.OfflineToast;
                 if (GameEntry.UI != null)
-                    UiDialogService.ShowErrorToast(DownloadDialogCopy.OfflineToast);
-                OnCancelled();
+                {
+                    UiDialogService.ShowNoNetwork(OnCancelled);
+                }
+                else
+                {
+                    OnCancelled();
+                }
+
                 return;
             }
 
@@ -339,6 +375,7 @@ namespace Game
                 }
             }
 
+            // 蜂窝流量窗与 AppLaunch §4.6 Wi‑Fi 确认无关：开关关仍要弹。
             if (DownloadCellularGate.NeedsMobileDataPrompt())
             {
                 // 已在弹 / 异步 Open 中：只更新 continue，不叠窗。
@@ -349,6 +386,21 @@ namespace Game
                 }
 
                 ShowMobileConfirm();
+                return;
+            }
+
+            // 仅 Wi‑Fi/有线 + 开关开：插 §4.6 确认；蜂窝路径到这里已处理完。
+            if (BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled()
+                && !_wifiConfirmAccepted
+                && DownloadCellularGate.IsWifiOrLan())
+            {
+                if (_phase == Phase.WifiConfirm || IsWifiConfirmPresent())
+                {
+                    _phase = Phase.WifiConfirm;
+                    return;
+                }
+
+                ShowWifiConfirm();
                 return;
             }
 
@@ -376,6 +428,7 @@ namespace Game
         {
             BankDownloader.PriorityBanks(_banks);
             DownloadCellularGate.UserAllowCellularAlways();
+            // 蜂窝确认后不再叠 Wi‑Fi 确认窗（文案是「已连 Wi‑Fi」）。
             FireReady();
         }
 
@@ -386,12 +439,48 @@ namespace Game
             OnCancelled();
         }
 
+        static void ShowWifiConfirm()
+        {
+            _phase = Phase.WifiConfirm;
+            string size = DownloadNetworkGate.FormatSizeMb(_banks);
+            Log.Info(
+                "[DownloadConsent] wifi confirm size=" + size + " banks=" + _banks.Count);
+            // 禁止 UI 未就绪时静默 Ready（旧现网 defer→自动 Resume 会把 §4.6 吃掉）。
+            if (GameEntry.UI == null)
+            {
+                Log.Warning(
+                    "[DownloadConsent] wifi confirm deferred — GameEntry.UI null; " +
+                    "waiting Bootstrap uncover patrol / next EnsureReady");
+                return;
+            }
+
+            UiDialogService.ShowWifiDownloadConfirm(
+                size,
+                OnWifiConfirmDownload,
+                OnWifiConfirmLater);
+        }
+
+        static void OnWifiConfirmDownload()
+        {
+            _wifiConfirmAccepted = true;
+            FireReady();
+        }
+
+        static void OnWifiConfirmLater()
+        {
+            Action wifiLater = _onWifiLater;
+            _onWifiLater = null;
+            wifiLater?.Invoke();
+            OnCancelled();
+        }
+
         static void FireReady()
         {
             Action ready = _onReady;
             _phase = Phase.Idle;
             _onReady = null;
             _onCancel = null;
+            _onWifiLater = null;
             _banks.Clear();
             bool lockMove = _lockMove;
             _lockMove = false;
@@ -424,6 +513,7 @@ namespace Game
             _phase = Phase.Idle;
             _onReady = null;
             _onCancel = null;
+            _onWifiLater = null;
             _banks.Clear();
             _lockMove = false;
             // 有 OnCancel（岛门）时由对方在后退后解锁；否则会话自己放。
@@ -461,6 +551,13 @@ namespace Game
             if (GameEntry.UI == null)
                 return false;
             return GameEntry.UI.HasUIForm(UiAssets.MobileDataConfirmForm);
+        }
+
+        static bool IsWifiConfirmPresent()
+        {
+            if (GameEntry.UI == null)
+                return false;
+            return GameEntry.UI.HasUIForm(UiAssets.WifiConfirmForm);
         }
 
         static bool IsRequestPromptPresent()

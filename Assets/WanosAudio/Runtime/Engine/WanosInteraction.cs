@@ -296,6 +296,11 @@ namespace WanosAudio
                 return 0;
             if (!WanosNative.Instance.IsCreated)
                 return 0;
+            // 与 ResumeAll 同一窗口：原生已经续过就不要再发，避免回前台把正在响的曲子掐一下。
+            if ((eventName == "Resume_ALL" || eventName == "Resume_Music")
+                && (!BoluoAndroidEngineNative.ClaimVoiceResume(eventName)
+                    || !BoluoAudioSessionNative.ClaimVoiceResume(eventName)))
+                return 0;
             EnsureObject(MusicObjectId, "Music");
             return callback != null
                 ? WanosNative.Instance.PostEvent(MusicObjectId, eventName, callback)

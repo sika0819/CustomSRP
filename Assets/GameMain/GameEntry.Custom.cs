@@ -94,6 +94,20 @@ namespace Game
             MusicCatalog.LoadAsync();
             DevicePresetShotHelper.Ensure();
             EnsureEntityGroups();
+            HideDebuggerOnPad();
+        }
+
+        /// <summary>
+        /// Pad / 横屏包（<c>BOLUO_PAD</c>）不显示 GameFramework 调试浮窗（FPS 角标）。
+        /// </summary>
+        static void HideDebuggerOnPad()
+        {
+#if BOLUO_PAD
+            var debugger = UnityGameFramework.Runtime.GameEntry
+                .GetComponent<UnityGameFramework.Runtime.DebuggerComponent>();
+            if (debugger != null)
+                debugger.ActiveWindow = false;
+#endif
         }
 
         /// <summary>

@@ -11,10 +11,6 @@ TEXTURE2D(_Normal0);
 TEXTURE2D(_Normal1);
 TEXTURE2D(_Normal2);
 TEXTURE2D(_Normal3);
-TEXTURE2D(_Mask0);
-TEXTURE2D(_Mask1);
-TEXTURE2D(_Mask2);
-TEXTURE2D(_Mask3);
 SAMPLER(sampler_Control);
 SAMPLER(sampler_Splat0);
 
@@ -30,6 +26,13 @@ float4 _MaskMapRemapScale0, _MaskMapRemapScale1, _MaskMapRemapScale2, _MaskMapRe
 float4 _MaskMapRemapOffset0, _MaskMapRemapOffset1, _MaskMapRemapOffset2, _MaskMapRemapOffset3;
 float _LayerHasMask0, _LayerHasMask1, _LayerHasMask2, _LayerHasMask3;
 
+// OIL_MOBILE_PERF: drop mask/ridge/brush plates so Control+4 splat+4 normal+shadow
+// atlas stays under Adreno GLES sampler location limit (~16). Desktop keeps full set.
+#if !defined(OIL_MOBILE_PERF)
+TEXTURE2D(_Mask0);
+TEXTURE2D(_Mask1);
+TEXTURE2D(_Mask2);
+TEXTURE2D(_Mask3);
 TEXTURE2D(_RidgeRockMap);
 SAMPLER(sampler_RidgeRockMap);
 
@@ -37,6 +40,7 @@ TEXTURE2D(_OutlineBrushMap);
 SAMPLER(sampler_OutlineBrushMap);
 float4 _OutlineBrushMap_ST;
 float _ShadowBrushScale;
+#endif
 
 CBUFFER_START(UnityPerMaterial)
     float4 _BaseColor;
@@ -53,13 +57,16 @@ CBUFFER_START(UnityPerMaterial)
     float _HeightTransition;
 CBUFFER_END
 
+#if !defined(OIL_MOBILE_PERF)
 #include "OilShadowBrush.hlsl"
+#endif
 
 float2 TransformTerrainUV(float2 uv, float4 st)
 {
     return uv * st.xy + st.zw;
 }
 
+#if !defined(OIL_MOBILE_PERF)
 // R metallic, G AO, B height, A smoothness. Layers without a mask keep AO at the remap
 // sum (identity → 1) instead of the 0.5 placeholder.
 half4 SampleLayerMask(TEXTURE2D_PARAM(tex, samp), float2 uv, float hasMask, float4 scale, float4 offset)
@@ -99,6 +106,7 @@ float4 TerrainHeightBlend(float4 control, float4 height)
     float4 weight = saturate((h - maxH + transition) / transition) * control;
     return weight / max(dot(weight, 1.0), 1e-5);
 }
+#endif
 
 // Splat UV +U is terrain +X. Tangent follows that, so the layer normal sits on the
 // height-derived geometric normal and does not revive patch-border shade lines.

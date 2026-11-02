@@ -54,13 +54,29 @@ namespace Game
             };
         }
 
+        /// <summary>
+        /// Wi‑Fi 下载确认（AppLaunch <c>feature.cancelAccount == 1</c>）。
+        /// </summary>
+        public static DialogCopy Wifi(string size)
+        {
+            size = NormalizeSize(size, fallback: "若干");
+            return new DialogCopy
+            {
+                Title = "温馨提示",
+                Body = $"需要下载约 {size} MB音频资源，当前已连接Wi-Fi，可放心下载",
+                PrimaryLabel = "立即下载",
+                SecondaryLabel = "稍后",
+                ShowSecondary = true,
+            };
+        }
+
         public static DialogCopy Storage(string size)
         {
             size = NormalizeSize(size, fallback: "500");
             return new DialogCopy
             {
                 Title = "温馨提示",
-                Body = $"设备存储空间不足，需至少预留{size}MB空间才能下载，建议清理存储空间后重试”，无法启动下载。",
+                Body = $"设备存储空间不足，需至少预留{size}MB空间才能下载，建议清理存储空间后重试",
                 PrimaryLabel = "我知道了",
                 ShowSecondary = false,
             };
@@ -79,7 +95,7 @@ namespace Game
 
         /// <summary>
         /// 前缀 + 已下载数字 + 体积/速度，拼成整句。
-        /// 速度用 0.##，未知时为「速度--MB/秒」；无速度时 Eta 为空（界面保持上次有效剩余，不写「剩余--」）；
+        /// 速度用 0.#（一位小数，少闪），未知时为「速度--MB/秒」；无速度时 Eta 为空（界面保持上次有效剩余，不写「剩余--」）；
         /// 完成显示「完成」；超过 60 秒用「剩余Nm」，封顶 60。
         /// </summary>
         public static ProgressCopy Progress(
@@ -91,7 +107,7 @@ namespace Game
             int downloaded = UnityEngine.Mathf.RoundToInt(UnityEngine.Mathf.Max(0f, downloadedMb));
             int total = UnityEngine.Mathf.RoundToInt(UnityEngine.Mathf.Max(0f, totalMb));
             string speedText = speedMbps > 0.001f
-                ? speedMbps.ToString("0.##", CultureInfo.InvariantCulture)
+                ? speedMbps.ToString("0.#", CultureInfo.InvariantCulture)
                 : "--";
 
             const string Lead = "正在为你下载资源：";

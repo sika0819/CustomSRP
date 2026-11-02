@@ -1,8 +1,10 @@
 #ifndef CUSTOM_OIL_WATERFALL_NPR_PASS_INCLUDED
 #define CUSTOM_OIL_WATERFALL_NPR_PASS_INCLUDED
 
+#define OIL_NPR_NO_OTHER_LIGHTS
 #include "OilNPRLighting.hlsl"
 #include "OilPaintNoise.hlsl"
+#include "OilWaterReflect.hlsl"
 
 TEXTURE2D(_MistMap);
 SAMPLER(sampler_MistMap);
@@ -60,35 +62,19 @@ half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
     OilBakeClipAboveWater(input.positionWS);
 
     float t = _Time.y;
-    half crest;
-    half3 sheetN = WaterfallSheetNormal(input.flowUv, t, crest);
-    half3 geoN = normalize((half3)input.normalWS);
-    // 双面帘：背面翻转几何法线再与波纹混合。
-    if (dot(geoN, (half3)(_WorldSpaceCameraPos - input.positionWS)) < 0.0h)
-    {
-        geoN = -geoN;
-    }
-    half3 normalWS = normalize(lerp(geoN, sheetN, 0.55h));
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
-
-    // 顶缘偏深蓝，帘身偏浅白蓝（对齐参考油画）。
     half v = (half)saturate(input.meshUv.y);
-    half3 sheet = lerp(_BaseColor.rgb, _ShallowColor.rgb, v * 0.55h + 0.2h);
-    sheet *= (half)_AlbedoBoost;
+
+    half3 sheet = OilInlandWaterPigment();
 
     float2 paintSt = WaterfallMonetPaintUv(
         input.flowUv, t, _PaintTile, _StrokeBands);
     half3 paint = SampleWaterfallPaint(paintSt);
-    half stroke = PaintStroke(PaintLuma(paint), (half)_PaintContrast);
-    half relief = saturate((half)_PaintRelief);
-    sheet = lerp(sheet, paint, relief);
-    sheet = ImpastoDeviation(sheet, stroke, relief * 0.5h);
+    half stroke = PaintStroke(PaintLuma(paint), 3.0h);
+    sheet = ImpastoStrokeAlbedo(sheet, paint, stroke, 0.55h);
 
-    // 白齿：亮笔拉成竖向钛白条（来自 PaintMap，不是 FoamMap）。
     half teeth = saturate((PaintLuma(paint) - 0.55h) * 2.4h);
     teeth *= lerp(0.65h, 1.2h, stroke) * (half)_TeethStrength;
-    half3 whiteTeeth = half3(0.94h, 0.97h, 0.99h);
-    sheet = lerp(sheet, whiteTeeth, teeth * 0.55h);
 
     half topBand = 1.0h - smoothstep(0.0h, 0.18h, v);
     half botBand = smoothstep(0.72h, 1.0h, v);
@@ -97,14 +83,14 @@ half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
     half feather = (half)max(_MistFeather, 0.05);
     half mistFade = smoothstep(0.0h, feather, v)
         * smoothstep(0.0h, feather, 1.0h - v);
-    // 底雾更重，顶缘轻薄喷溅。
     half mistZone = max(botBand * 1.15h, topBand * 0.35h);
     half mist = saturate(mistTex * mistZone * mistFade * (half)_MistStrength);
 
     Surface s;
     s.position = input.positionWS;
-    s.normal = (float3)normalWS;
-    s.interpolatedNormal = input.normalWS;
+    // 和河面一样朝上受光。竖帘法线会把侧光收成另一套时段色。
+    s.normal = float3(0.0, 1.0, 0.0);
+    s.interpolatedNormal = s.normal;
     s.viewDirection = (float3)viewDir;
     s.depth = -TransformWorldToView(input.positionWS).z;
     s.color = (float3)sheet;
@@ -126,9 +112,9 @@ half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
         s,
         sheet,
         OilNPRAmbient(s),
-        (half3)_SpecularColor.rgb,
-        (half)_SpecularThreshold,
-        max((half)_ShadeSteps, 3.0h),
+        half3(0.78h, 0.74h, 0.52h),
+        1.0h,
+        3.0h,
         0.0h,
         stroke,
         0.0h,
@@ -137,31 +123,35 @@ half4 OilWaterfallNPRPassFragment(Varyings input) : SV_TARGET
         s.smoothness,
         fragment.screenUV);
 
-    color = ImpastoDeviation(color, stroke, relief * 0.4h);
+    color = ImpastoDeviation(color, stroke, 0.45h);
 #if !defined(OIL_MOBILE_PERF)
-    color = OilWeaveTint(color, paintSt * 5.0);
+    color = OilWeaveTint(color, paintSt * 6.0);
 #endif
-    color = lerp(color, whiteTeeth, teeth * 0.28h);
-    color = lerp(color, _MistColor.rgb, mist * _MistColor.a);
 
-    if (GetDirectionalLightCount() > 0)
-    {
-        half3 L = (half3)_DirectionalLightData[0].directionAndMask.xyz;
-        half sunY = saturate((half)L.y + 0.05h);
-        half3 H = normalize(L + viewDir);
-        half spec = pow(saturate(dot(normalWS, H)), 72.0h);
-        half specMask = smoothstep(
-            (half)_SpecularThreshold - 0.06h,
-            (half)_SpecularThreshold,
-            spec) * sunY * (topBand + teeth * 0.35h);
-        color += (half3)_SpecularColor.rgb * specMask * 0.55h;
-    }
-
+    float depth = s.depth;
 #if defined(OIL_MOBILE_PERF)
-    color = (half3)ApplyOilFog((float3)color, s.depth, stroke);
+    color = (half3)ApplyOilFog((float3)color, depth, stroke);
 #else
-    color = (half3)ApplyOilFog((float3)color, s.depth, stroke, input.positionWS);
+    color = (half3)ApplyOilFog((float3)color, depth, stroke, input.positionWS);
 #endif
+
+    half night = OilWaterNightWeight(_OilSkyPeriod);
+    half3 pigment = OilInlandWaterPigment();
+    color = ApplyOilWaterReflectionEx(
+        color,
+        input.positionWS,
+        half3(0.0h, 1.0h, 0.0h),
+        viewDir,
+        stroke,
+        1.0h,
+        fragment.screenUV,
+        0.35h,
+        3.0h,
+        lerp(0.78h, 0.40h, night),
+        pigment,
+        pigment,
+        true);
+    color = OilInlandWaterHoldHue(color, pigment);
 
     half alpha = lerp((half)_BaseColor.a, (half)_ShallowColor.a, v * 0.5h);
     alpha = saturate(alpha + teeth * 0.18h);

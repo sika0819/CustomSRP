@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <string.h>
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
 #import <MediaPlayer/MediaPlayer.h>
@@ -167,6 +168,45 @@ static const float kBoluoTransientDuckGainFactor = 0.4f;
 /// 冷启动记账 isMuted=YES 只是桥接初始值，引擎未必硬静音；若对已在播流做
 /// gain→0 + SetMute(false) 爬坡，会先闷一下再爬满 = 启动电流音。
 static BOOL sBoluoEngineHardMuted = NO;
+
+/// Resume_ALL / Resume_Music 短窗口只发一次。第二发打在已 Started 的曲子上会 Ended，回前台听感停一拍。
+static const CFTimeInterval kBoluoVoiceResumeCoalesceSeconds = 0.35;
+static CFTimeInterval sBoluoLastResumeAllTime = -1.0;
+static CFTimeInterval sBoluoLastResumeMusicTime = -1.0;
+
+static CFTimeInterval *BoluoVoiceResumeSlot(const char *eventName) {
+    if (eventName != NULL && strcmp(eventName, "Resume_ALL") == 0) {
+        return &sBoluoLastResumeAllTime;
+    }
+    if (eventName != NULL && strcmp(eventName, "Resume_Music") == 0) {
+        return &sBoluoLastResumeMusicTime;
+    }
+    return NULL;
+}
+
+int BoluoMusicPlayerIOS_ClaimVoiceResume(const char *eventName) {
+    CFTimeInterval *slot = BoluoVoiceResumeSlot(eventName);
+    if (slot == NULL) {
+        return 1;
+    }
+    CFTimeInterval now = CACurrentMediaTime();
+    if (*slot >= 0.0 && (now - *slot) < kBoluoVoiceResumeCoalesceSeconds) {
+        BoluoAudioLog(@"[BoluoAudioResume] claimVoiceResume skip %s age=%.3f",
+              eventName, now - *slot);
+        return 0;
+    }
+    *slot = now;
+    return 1;
+}
+
+int BoluoMusicPlayerIOS_WasVoiceResumeClaimedRecently(void) {
+    CFTimeInterval now = CACurrentMediaTime();
+    BOOL all = sBoluoLastResumeAllTime >= 0.0
+        && (now - sBoluoLastResumeAllTime) < kBoluoVoiceResumeCoalesceSeconds;
+    BOOL music = sBoluoLastResumeMusicTime >= 0.0
+        && (now - sBoluoLastResumeMusicTime) < kBoluoVoiceResumeCoalesceSeconds;
+    return (all || music) ? 1 : 0;
+}
 /// 护栏已 dip、尚未落地 SetMute(true) 的窗口。unmute NOOP 若在此窗内把增益拉回 1.0，
 /// 护栏仍会落地硬 mute → 满能量电流音（微信发语音 / 快切）。
 static BOOL sBoluoGuardedMuteInFlight = NO;
@@ -364,7 +404,20 @@ static void BoluoTryDelayedUnmute(NSInteger ownerEpoch) {
         });
         return;
     }
+    // Unity 回前台已经 Resume 过：再把增益压到 0 再 Resume 一次，听感就是停一拍。
+    if (BoluoMusicPlayerIOS_WasVoiceResumeClaimedRecently()) {
+        sBoluoEngineHardMuted = NO;
+        unsigned long long followObjId = WanosMusicPlayer_GetConfiguredObjectId();
+        if (followObjId != 0) {
+            BoluoApplyMusicGain(1.0f, false, @"unmute_follow_existing_resume");
+        }
+        SetMute(false);
+        BoluoAudioLog(@"[BoluoAudioResume] BoluoSetMute unmute follow existing resume (no dip)");
+        return;
+    }
     // unmute 爬坡护栏：先把音乐对象增益压到 0 再 SetMute(false)，随后 ~0.15s 内三步回满。
+    // Resume 在 SetMute 之后由 PostGlobalResume 占窗口。SetMute 若泵 RunLoop 让 Unity 先 Resume，
+    // 这里的第二次会被窗口丢掉，不会把刚续上的曲子打成 Ended。
     unsigned long long guardObjId = WanosMusicPlayer_GetConfiguredObjectId();
     if (guardObjId != 0) {
         BoluoApplyMusicGain(kBoluoGuardedMuteGainFactor, true, @"unmute_ramp_dip");

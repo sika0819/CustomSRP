@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 1812290900928405323}
   - component: {fileID: 8031503616449506700}
   - component: {fileID: 3157288249354836505}
+  - component: {fileID: 359493545037075574}
   m_Layer: 0
   m_Name: Bush 1_LOD0
   m_TagString: Untagged
@@ -144,3 +145,16 @@ LODGroup:
     - renderer: {fileID: 3157288249354836505}
   m_Enabled: 1
   m_GlobalIlluminationLOD: 0
+
+--- !u!114 &359493545037075574
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 122629683801721199}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c3e91f4b2d4e6a8c0d1f2e3a4b5c6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 

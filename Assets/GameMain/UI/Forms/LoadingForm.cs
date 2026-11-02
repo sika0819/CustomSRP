@@ -174,7 +174,8 @@ namespace Game
             if (_coverRoot != null)
             {
                 _coverRoot.style.backgroundColor = Color.black;
-                _coverRoot.pickingMode = PickingMode.Position;
+                // 淡出已开始：勿再 Position 挡 IslandMain 摇杆 UITK 命中。
+                _coverRoot.pickingMode = PickingMode.Ignore;
             }
         }
 
@@ -223,43 +224,92 @@ namespace Game
 
         public void ForceVeilOff()
         {
+            // 揭罩只停播+藏树，不卸 RT。PostUncoverRelock 会再次进来；
+            // 同帧 Release/Destroy 会在真机 UnityGfxDeviceW 上 SEGV。
+            SoftStopVideo();
+            ConcealTree();
+            if (_dismissing)
+                return;
             _dismissing = true;
             _coverAlpha = 0f;
-            ReleaseVideoNow();
-            ConcealTree();
         }
 
         /// <summary>退登卸 GPU 前调用。硬解和目标 RT 不能留到下一趟进岛。</summary>
         public void ReleasePlaybackForLeave() => ReleaseVideoNow();
 
+        void SoftStopVideo()
+        {
+            if (_video != null)
+                _video.style.backgroundImage = new StyleBackground(StyleKeyword.None);
+
+            if (_player == null)
+                return;
+            _player.Stop();
+            _player.clip = null;
+            // 勿清 targetTexture：Android 硬解 Surface 解绑会延迟 Surface.release，撞 Gfx SEGV。
+        }
+
         /// <summary>
         /// Stop 不够：Android 硬解和目标 RT 会留到 OnClose。罩不关界面时解码器就叠到下一趟进岛上。
+        /// UITK / VideoPlayer 先摘引用；Release+Destroy 都延后到画完，避免 UnityGfxDeviceW 还在采时 SEGV。
         /// </summary>
         void ReleaseVideoNow()
         {
+            SoftStopVideo();
             if (_player != null)
-            {
-                _player.Stop();
-                _player.clip = null;
                 _player.targetTexture = null;
-            }
 
-            if (_texture != null)
+            if (_texture == null)
+                return;
+
+            RenderTexture rt = _texture;
+            _texture = null;
+            DestroyRenderTextureDeferred(rt);
+        }
+
+        void DestroyRenderTextureDeferred(RenderTexture rt)
+        {
+            if (rt == null)
+                return;
+            MonoBehaviour host = GameEntry.Base;
+            if (host != null && host.isActiveAndEnabled)
+                host.StartCoroutine(DestroyRtAfterPaint(rt));
+            else
             {
-                _texture.Release();
-                Destroy(_texture);
-                _texture = null;
+                // 无宿主：已无 UITK 引用，尽量安全地立刻卸。
+                if (rt.IsCreated())
+                    rt.Release();
+                Destroy(rt);
             }
+        }
 
-            if (_video != null)
-                _video.style.backgroundImage = new StyleBackground(StyleKeyword.None);
+        static IEnumerator DestroyRtAfterPaint(RenderTexture rt)
+        {
+            // 多等几帧：真机 Custom SRP / UITK 可能跨帧仍采着这张 RT。
+            // Release 也必须在这里——同帧 Release 会把 GPU 页抽掉，Destroy 延后救不了。
+            yield return new WaitForEndOfFrame();
+            yield return null;
+            yield return new WaitForEndOfFrame();
+            if (rt == null)
+                yield break;
+            if (rt.IsCreated())
+                rt.Release();
+            Destroy(rt);
         }
 
         public void DisarmDocument()
         {
             _dismissing = true;
-            DisableDocumentNow();
+            SoftStopVideo();
+            ConcealTree();
+            // 禁止 DisableDocumentNow / RemoveFromHierarchy：Custom SRP + UITK 真机会 SEGV。
+            // ConcealTree 已 display:None + picking Ignore，摇杆可点。
+            if (_documentDisarmed)
+                return;
+            _documentDisarmed = true;
         }
+
+        bool _documentDisarmed;
 
         void ConcealTree()
         {
@@ -310,6 +360,7 @@ namespace Game
         public void RestoreCover()
         {
             _dismissing = false;
+            _documentDisarmed = false;
             gameObject.SetActive(true);
             UIDocument document = GetComponent<UIDocument>();
             VisualElement tree = null;
@@ -385,18 +436,11 @@ namespace Game
             {
                 _player.prepareCompleted -= OnPrepared;
                 _player.started -= OnVideoStarted;
-                _player.Stop();
-                _player.targetTexture = null;
             }
 
-            if (_texture != null)
-            {
-                _texture.Release();
-                Destroy(_texture);
-                _texture = null;
-            }
-
+            // OnClose 视为出岛/卸载；揭罩不走 Close。进岛只 SoftStop。
             ForceVeilOff();
+            ReleaseVideoNow();
             base.OnClose(isShutdown, userData);
         }
 
@@ -432,17 +476,22 @@ namespace Game
                 return;
             }
 
-            // RT follows clip / design (2436×1125 landscape, 1125×2436 portrait).
-            // Old 1920×1080 RT letterboxed the 2436×1124 landscape clip → top/bottom gaps.
+            // RT follows clip pixels (landscape 1920×1080 闺蜜机 16:9, portrait 1080×2338).
+            // 16:9 matches preset screenshots; UITK stretch-to-fill handles the screen aspect.
             ResolveTargetSize(clip, landscape, out int tw, out int th);
             bool rebuildRt = _texture == null || _landscape != landscape
                 || _texture.width != tw || _texture.height != th;
             if (rebuildRt)
             {
+                // 先摘 UITK / player 引用，旧 RT 走延后 Release（同帧 Release 会 SEGV）。
+                if (_video != null)
+                    _video.style.backgroundImage = new StyleBackground(StyleKeyword.None);
+                _player.targetTexture = null;
                 if (_texture != null)
                 {
-                    _texture.Release();
-                    Destroy(_texture);
+                    RenderTexture old = _texture;
+                    _texture = null;
+                    DestroyRenderTextureDeferred(old);
                 }
 
                 _landscape = landscape;
@@ -513,8 +562,9 @@ namespace Game
         }
 
         /// <summary>
-        /// Design landscape d = 2436/1125. Prefer clip pixels when available so Stretch
-        /// into RT is 1:1; screen aspect then only stretches at the UITK layer.
+        /// Prefer clip pixels so Stretch into RT is 1:1.
+        /// Landscape fallback is the 闺蜜机 panel 1920×1080; portrait fallback is the 1125×2436 design.
+        /// Screen aspect is applied later by UITK stretch-to-fill.
         /// </summary>
         static void ResolveTargetSize(VideoClip clip, bool landscape, out int width, out int height)
         {
@@ -525,8 +575,8 @@ namespace Game
                 return;
             }
 
-            width = landscape ? 2436 : 1125;
-            height = landscape ? 1125 : 2436;
+            width = landscape ? 1920 : 1125;
+            height = landscape ? 1080 : 2436;
         }
     }
 }

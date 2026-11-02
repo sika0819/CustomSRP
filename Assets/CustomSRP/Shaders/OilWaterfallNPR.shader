@@ -11,6 +11,7 @@ Shader "CustomSRP/OilWaterfallNPR"
         _MeshFlowScale ("Mesh Flow Scale (m per UV)", Vector) = (50.9, -3.91, 0, 0)
 
         _PaintMap ("Sheet Paint (Monet)", 2D) = "gray" {}
+        _PaintNormal ("Paint Normal", 2D) = "bump" {}
         _MistMap ("Mist / Spray", 2D) = "black" {}
 
         _PaintTile ("Paint Tile (m)", Range(5, 120)) = 28
@@ -69,7 +70,6 @@ Shader "CustomSRP/OilWaterfallNPR"
             #pragma target 3.5
             #pragma multi_compile _ OIL_MOBILE_PERF
             #pragma shader_feature_local _PREMULTIPLY_ALPHA
-            #pragma shader_feature_local _OIL_NO_VIOLET_UMBRA
             #pragma vertex OilWaterfallNPRPassVertex
             #pragma fragment OilWaterfallNPRPassFragment
             #include "OilWaterfallNPRPass.hlsl"

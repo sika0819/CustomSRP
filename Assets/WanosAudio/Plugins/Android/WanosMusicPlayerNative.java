@@ -50,15 +50,35 @@ public class WanosMusicPlayerNative {
 
     private String persistentDataPath = "";
     private String streamingAssetsPath = "";
+    /**
+     * 与 C# {@code WanosInteraction.MusicObjectId} 对齐。
+     * Play / Break_Music / Stop_Music 必须同一 game object，否则曲终不 Ended、后台切歌无声。
+     */
+    private static final long DEFAULT_MUSIC_OBJECT_ID = 101L;
     private long objectId = 0;
     private String stopEventName = "Stop_Music";
     private String breakEventName = "Break_Music";
     private String unityObjectName = "WanosMusicPlayer";
 
+    /** configure 未设 objectId 时回落 101，避免传输计划起播落在 0。 */
+    private long musicObjectId() {
+        return objectId != 0 ? objectId : DEFAULT_MUSIC_OBJECT_ID;
+    }
+
     private volatile boolean shouldStop = false;
     /** 用户经通知栏/锁屏主动暂停：置位后焦点回归等自动路径不得擅自续播，与 iOS userManuallyPaused 对齐。 */
     private volatile boolean userPaused = false;
     private long currentInstanceId = 0;
+    /**
+     * Unity MusicPlaylist PostEvent 起播的 BGM voice。
+     * CustomSRP 不走 nativePlayTrackAt，currentInstanceId 常为 0；靠此识别后台曲终与 keepPlaying 活实例。
+     */
+    private volatile long unityMusicInstanceId = 0;
+    /**
+     * 后台曲终但传输计划尚未就绪时暂存；PublishPlan / keepPlayingObserve 再切。
+     * 0 = 无 pending。
+     */
+    private volatile long pendingUnityMusicEndedId = 0;
     /** forceStop 刚拆掉的 instance：Ended 回调在 sleep 窗口内不得再自动下一曲盖掉负一屏 skip。 */
     private volatile long lastStoppedInstanceId = 0;
     /** 与 iOS g_playGeneration 对齐：切歌/停止时自增，decode 等待期间若已变则放弃 Post。 */
@@ -108,6 +128,11 @@ public class WanosMusicPlayerNative {
      */
     private volatile boolean musicEngineMuted = true;
     /**
+     * focus_pause 已发 Pause_Music+Pause_ALL：回焦不能只 unmute，否则音效停在 Pause。
+     * unity_pause / unity_resume 护栏 mute 不置此旗（未 Pause 内容声）。
+     */
+    private volatile boolean voicesPausedForFocusLoss = false;
+    /**
      * 取证开关，默认关，关时与改前同一条路径。
      * C：已出声则不 setMute(false)、不清 musicEngineMuted。
      * D：native_play 且已出声时从 0.05 爬坡，不直接满增益。两者都开即 E。
@@ -153,6 +178,14 @@ public class WanosMusicPlayerNative {
     private volatile boolean playlistReloadedByCSharp = false;
     /** 护栏 mute/unmute 世代：新决策作废已排队的 dip/爬坡。 */
     private volatile long guardedMuteGeneration = 0;
+    /**
+     * Resume_ALL / Resume_Music 短窗口只发一次。
+     * 回前台 Unity 与焦点回调都会补；第二发打在已 Started 的曲子上会 Ended，听感停一拍。
+     */
+    private final Object voiceResumeLock = new Object();
+    private long lastResumeAllElapsedMs = 0L;
+    private long lastResumeMusicElapsedMs = 0L;
+    private static final long VOICE_RESUME_COALESCE_MS = 350L;
 
     // ---------------------------------------------------------------------------
     // 后台传输计划（Unity 在后台被 pause，UnitySendMessage 无法被处理）
@@ -534,6 +567,10 @@ public class WanosMusicPlayerNative {
      * Unity pause 之后：允许后台播则保持当前增益（禁止 mute/unmute 爬坡，否则 HOME 停顿）。
      * 只补标后台 + 拉 FGS，并武装 self_gone 看门狗（MTK 约 11s 拆 GAME 轨）。
      * 禁后台播时本方法不应被用来恢复出声。
+     * <p>
+     * 禁止在「其它播放器已抢焦点」时解 mute：focus_pause 先把 Music gain 压到 0 再 SetMute，
+     * 解 mute 后 BGM 仍静音，但 Pause_ALL 盖不住的 3D 声景会继续响
+     * （启动期切 QQ 音乐 / 抖音的典型症状）。
      */
     public void restoreAudibleAfterUnityPause() {
         crackleProbe("restoreAudible.enter", null, true);
@@ -548,6 +585,23 @@ public class WanosMusicPlayerNative {
         }
         startMediaPlaybackForegroundService();
         cancelDeferredMusicBankUnload();
+
+        boolean foreign = audioFocusManager.hasForeignMedia();
+        boolean lostFocus = voicesPausedForFocusLoss
+                || foreign
+                || (musicEngineMuted && !audioFocusManager.hasAudioFocus());
+        if (lostFocus) {
+            // 保持 mute；看门狗若 Resume_ALL 会把声景又拉起来。
+            Log.i(TAG, "restoreAudibleAfterUnityPause keep muted focusLoss="
+                    + voicesPausedForFocusLoss
+                    + " foreign=" + foreign
+                    + " muted=" + musicEngineMuted
+                    + " hasFocus=" + audioFocusManager.hasAudioFocus());
+            cancelKeepPlayingAliveWatch();
+            crackleProbe("restoreAudible.exit", "branch=focusLoss", false);
+            return;
+        }
+
         // CustomSRP 起播走 Unity PostEvent，currentInstanceId 常为 0；
         // Unity pause 还会让 getPlaybackState 短暂离开 Started。
         // 这两条都会让旧逻辑每次 HOME 都 Resume_ALL，把正在响的曲子打成 Ended、雨声断一下。
@@ -638,8 +692,17 @@ public class WanosMusicPlayerNative {
     }
 
     /**
+     * Unity / 宿主回前台：是否仍因丢焦护栏停着（须 Resume_ALL + Resume_Music + unmute）。
+     * C# <c>CanKeepAudibleAcrossLifecycle</c> 用来避免误跳过完整恢复。
+     */
+    public boolean needsForegroundVoiceRestore() {
+        return voicesPausedForFocusLoss || musicEngineMuted;
+    }
+
+    /**
      * Unity {@code OnApplicationFocus(true)} → 回前台强制抢焦点（对齐 iOS becomeActive reclaim）。
      * 未 userPaused 且有恢复意图时发起；成败以系统 {@code requestAudioFocus} 为准。
+     * 丢焦曾 Pause 音乐/声景时，即使已持焦 / reclaim NOOP，也要补 Resume + unmute。
      */
     public void reclaimFocusOnForeground() {
         if (userPaused || shouldStop) {
@@ -650,25 +713,29 @@ public class WanosMusicPlayerNative {
         // 抢焦点可能因已持焦 / debounce 直接返回，卡片仍要重推。
         reassertNowPlayingOnForeground();
         // 后台续播：禁止 reclaim→Reset。HOME 期间误调会把自己拆静音。
-        if (shouldSuppressTransientPauseInBackground()) {
+        // 例外：丢焦护栏仍 latch 时必须抢焦并恢复（切 QQ 音乐再回波萝）。
+        if (shouldSuppressTransientPauseInBackground() && !needsForegroundVoiceRestore()) {
             Log.i(TAG, "reclaimFocusOnForeground skip: keep playing in background");
             return;
         }
         boolean engineStarted = WIAEngineJNI.getPlaybackState() == PlaybackState_Started;
-        boolean hasInstance = currentInstanceId != 0;
+        boolean hasInstance = hasLiveMusicInstance();
+        boolean needsVoiceRestore = needsForegroundVoiceRestore();
         // 标准版不能滑动续播：系统打断后回前台必须自动续。
-        // pending / 拆轨 / duck / 未持焦 / 引擎未 Started 都算恢复意图。
+        // pending / 拆轨 / duck / 未持焦 / 引擎未 Started / 丢焦 Pause 过 都算恢复意图。
         boolean hasResumeIntent = audioFocusManager.isPendingResume()
                 || audioFocusManager.needsPlaybackReopen()
                 || audioFocusManager.isDucked()
                 || (!audioFocusManager.hasAudioFocus() && (engineStarted || hasInstance))
-                || (hasInstance && !engineStarted);
+                || (hasInstance && !engineStarted)
+                || needsVoiceRestore;
         long now = SystemClock.elapsedRealtime();
-        // 已持焦但 duck/拆轨/pending 时禁止 debounce 跳过，否则标准版回前台无法自动续
+        // 已持焦但 duck/拆轨/pending/丢焦 Pause 时禁止 debounce 跳过，否则标准版回前台无法自动续
         if (audioFocusManager.hasAudioFocus()
                 && !audioFocusManager.isPendingResume()
                 && !audioFocusManager.needsPlaybackReopen()
                 && !audioFocusManager.isDucked()
+                && !needsVoiceRestore
                 && now - lastReclaimAttemptElapsedMs < RECLAIM_DEBOUNCE_MS) {
             Log.i(TAG, "reclaimFocusOnForeground debounced interval="
                     + (now - lastReclaimAttemptElapsedMs) + "ms");
@@ -680,9 +747,26 @@ public class WanosMusicPlayerNative {
                 + " engineStarted=" + engineStarted
                 + " hasInstance=" + hasInstance
                 + " hasResumeIntent=" + hasResumeIntent
+                + " needsVoiceRestore=" + needsVoiceRestore
                 + " reopen_reason=" + audioFocusManager.peekReopenReason()
                 + " trace=" + BoluoAudioStutterProbe.traceId());
         audioFocusManager.reclaimOnForeground(userPaused, hasResumeIntent);
+        // reclaim 可能 NOOP（已持焦且 pending 已清），仍补 Resume_ALL + Resume_Music + unmute。
+        if (needsForegroundVoiceRestore()) {
+            final long gen = foregroundResumeGeneration;
+            playbackExecutor.execute(() -> {
+                if (gen != foregroundResumeGeneration || userPaused || shouldStop) {
+                    return;
+                }
+                if (!needsForegroundVoiceRestore()) {
+                    return;
+                }
+                resumeVoicesAfterFocusIfNeeded("reclaim_foreground_fallback");
+                runGuardedUnmuteOnCurrentThread("reclaim_foreground_fallback");
+                mainHandler.post(this::updateNowPlayingForCurrentTrack);
+                Log.i(TAG, "reclaimFocusOnForeground fallback Resume+unmute");
+            });
+        }
     }
 
     /**
@@ -1022,10 +1106,18 @@ public class WanosMusicPlayerNative {
     /**
      * 系统丢焦护栏静音：先同步压对象增益到 0，短缓冲后再 SetMute。
      * 禁止满音量硬 mute（切微信/QQ/B 站电流音）。mute 后保持衰减，由 unmute 爬坡回满。
+     * <p>
+     * {@code focus_pause} 额外 Pause_Music + Pause_ALL：仅压音乐增益时环境/天气音效仍会响
+     * （产品：其它播放器起播时音乐与音效一起停，回前台一起恢复）。
      */
     private void applyGuardedSystemMute(String reason) {
         final long gen = ++guardedMuteGeneration;
         final long obj = objectId;
+        final boolean pauseVoices = "focus_pause".equals(reason);
+        // 先闩旗：80ms 护栏窗内 Unity onPause → restoreAudible 不得解 mute。
+        if (pauseVoices) {
+            voicesPausedForFocusLoss = true;
+        }
         playbackExecutor.execute(() -> {
             applyMusicGainSafe(obj, 0f, true);
             Log.i(TAG, "guarded mute dip reason=" + reason + " obj=" + obj + " gen=" + gen);
@@ -1041,7 +1133,14 @@ public class WanosMusicPlayerNative {
             }
             musicEngineMuted = true;
             probeSetMute(true);
-            Log.i(TAG, "guarded mute landed reason=" + reason);
+            if (pauseVoices) {
+                // 对齐 pauseForTimerEnd / 前台 MusicPlaylist.Pause：BGM + 内容声一起停。
+                postMusicControlEvent("Pause_Music");
+                postMusicControlEvent("Pause_ALL");
+                voicesPausedForFocusLoss = true;
+            }
+            Log.i(TAG, "guarded mute landed reason=" + reason
+                    + " pauseVoices=" + pauseVoices);
         });
     }
 
@@ -1767,9 +1866,85 @@ public class WanosMusicPlayerNative {
     /**
      * 当前 BGM 实例是否还在。全局 getPlaybackState() 会把雨/风/脚步算进 Started，
      * 不能当作「歌还在」——负一屏暂停 forceStop 后实例已没，场景音仍让引擎 Started。
+     * Unity 直发 PostEvent 时认 {@link #unityMusicInstanceId}。
      */
     private boolean hasLiveMusicInstance() {
-        return currentInstanceId != 0;
+        return currentInstanceId != 0 || unityMusicInstanceId != 0;
+    }
+
+    /** Unity AttachMusicVoice / Detach：登记或清空后台曲终用的 voice。 */
+    public void noteUnityMusicVoice(long instanceId) {
+        unityMusicInstanceId = instanceId;
+        // CustomSRP 不走 configure(objectId=101)；在此钉死，后台 Stop/Play/Break 才与 C# 同对象。
+        if (objectId == 0) {
+            objectId = DEFAULT_MUSIC_OBJECT_ID;
+        }
+        Log.i(TAG, "noteUnityMusicVoice id=" + instanceId + " musicObj=" + musicObjectId());
+    }
+
+    /**
+     * C# 引擎回调线程经 {@code AndroidJNI.InvokeAttached} 直调（勿用 AndroidJavaObject）。
+     * Unity pause 后 PlayerLoop 停，只有这条能在锁屏曲终切下一首。
+     */
+    public static boolean tryHandleBackgroundMusicEndedStatic(long instanceId) {
+        try {
+            return getInstance().tryHandleBackgroundMusicEnded(instanceId);
+        } catch (Throwable t) {
+            Log.w(TAG, "tryHandleBackgroundMusicEndedStatic: " + t.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 锁屏曲终（Unity 回调线程经 JNI）：循环/随机按传输计划切下一首。
+     * @return true 已处理（C# 勿再入队 Advance）
+     */
+    public boolean tryHandleBackgroundMusicEnded(long instanceId) {
+        if (!appInBackground) {
+            return false;
+        }
+        if (userPaused || shouldStop) {
+            Log.i(TAG, "bg Ended ignored userPaused=" + userPaused + " shouldStop=" + shouldStop);
+            return false;
+        }
+        if (!transportPlanValid) {
+            // 计划稍后由 PublishPlan 补上；pending 给 observe / 下次 SetPlan 再切。
+            pendingUnityMusicEndedId = instanceId;
+            Log.w(TAG, "bg Ended deferred: no transport plan id=" + instanceId);
+            return false;
+        }
+        // C# MusicPlayMode：1 单曲自循环不切；2 列表 / 3 随机才自动下一首。
+        if (transportMode != 2 && transportMode != 3) {
+            Log.i(TAG, "bg Ended ignored: single mode=" + transportMode);
+            return false;
+        }
+        if (instanceId != 0) {
+            boolean matchUnity = unityMusicInstanceId != 0 && instanceId == unityMusicInstanceId;
+            boolean matchNative = currentInstanceId != 0 && instanceId == currentInstanceId;
+            if (!matchUnity && !matchNative
+                    && (unityMusicInstanceId != 0 || currentInstanceId != 0)) {
+                Log.d(TAG, "bg Ended ignored stale instance=" + instanceId
+                        + " unity=" + unityMusicInstanceId + " native=" + currentInstanceId);
+                return false;
+            }
+        }
+        pendingUnityMusicEndedId = 0;
+        unityMusicInstanceId = 0;
+        if (currentInstanceId != 0 && (instanceId == 0 || instanceId == currentInstanceId)) {
+            lastStoppedInstanceId = currentInstanceId;
+            currentInstanceId = 0;
+        }
+        Log.i(TAG, "bg Ended → transport auto-next mode=" + transportMode
+                + " current=" + transportCurrent + " musicObj=" + musicObjectId());
+        mainHandler.post(() -> playTransportTrackRelative(+1, "bg_ended"));
+        return true;
+    }
+
+    /** 供调试 / 外部登记「后台曲终待切」；observe / PublishPlan 消费。 */
+    public static void notePendingUnityMusicEnded(long instanceId) {
+        WanosMusicPlayerNative inst = getInstance();
+        inst.pendingUnityMusicEndedId = instanceId;
+        Log.i(TAG, "notePendingUnityMusicEnded id=" + instanceId);
     }
 
     public void refreshSelfMixerAsync() {
@@ -1851,6 +2026,16 @@ public class WanosMusicPlayerNative {
         if (!shouldSuppressTransientPauseInBackground()) {
             cancelKeepPlayingAliveWatch();
             return;
+        }
+        // C# 曲终 JNI 若未即时切歌，消费 pending，避免锁屏后只剩声景直到开屏。
+        long pendingEnded = pendingUnityMusicEndedId;
+        if (pendingEnded != 0) {
+            pendingUnityMusicEndedId = 0;
+            if (tryHandleBackgroundMusicEnded(pendingEnded)) {
+                Log.i(TAG, "[CWPA-audio] keepPlayingObserve drained pending Ended → auto-next");
+                keepPlayingHandler.postDelayed(keepPlayingObserve, KEEP_PLAYING_OBSERVE_INTERVAL_MS);
+                return;
+            }
         }
         final boolean selfActive = audioFocusManager.scanSelfMediaPlaybackActive();
         final int state = WIAEngineJNI.getPlaybackState();
@@ -2016,9 +2201,13 @@ public class WanosMusicPlayerNative {
         probeSetMute(false);
         try {
             if (hasLiveMusicInstance()) {
-                WIAEngineJNI.postEvent(0, "Resume_ALL");
+                WIAEngineJNI.postEvent(musicObjectId(), "Resume_ALL");
                 runGuardedUnmuteOnCurrentThread("keep_playing_l1");
                 Log.i(TAG, "[CWPA-audio] keepPlayingRecover L1 Resume_ALL after reset");
+            } else if (transportPlanValid) {
+                // CustomSRP Java playlist 空，必须走传输计划，不能 nativePlayTrackAt。
+                playTransportTrackRelative(0, "keep_playing_l1");
+                Log.i(TAG, "[CWPA-audio] keepPlayingRecover L1 transport replay after reset");
             } else {
                 nativePlayTrackAt(playlist.currentListIndex, playlist.currentMusicIndex);
                 Log.i(TAG, "[CWPA-audio] keepPlayingRecover L1 replay after reset");
@@ -2026,7 +2215,11 @@ public class WanosMusicPlayerNative {
         } catch (Exception e) {
             Log.w(TAG, "keepPlayingRecover L1 replay: " + e.getMessage());
             try {
-                nativePlayTrackAt(playlist.currentListIndex, playlist.currentMusicIndex);
+                if (transportPlanValid) {
+                    playTransportTrackRelative(0, "keep_playing_l1_fallback");
+                } else {
+                    nativePlayTrackAt(playlist.currentListIndex, playlist.currentMusicIndex);
+                }
             } catch (Exception e2) {
                 Log.w(TAG, "keepPlayingRecover L1 nativePlay: " + e2.getMessage());
             }
@@ -2101,9 +2294,24 @@ public class WanosMusicPlayerNative {
         // 对齐 handleTransportInBackground：先内容声再 BGM，再 unmute 爬坡。
         postMusicControlEvent("Resume_ALL");
         postMusicControlEvent("Resume_Music");
+        voicesPausedForFocusLoss = false;
         runGuardedUnmuteOnCurrentThread(reason);
         mainHandler.post(this::updateNowPlayingForCurrentTrack);
         return true;
+    }
+
+    /**
+     * 丢焦曾 Pause_Music+Pause_ALL 时，回焦不能只 unmute（音效会停在 Pause）。
+     * 曲已 Pause_Music 非 Started，Resume_ALL 不会踩活实例 Ended 切歌坑。
+     */
+    private void resumeVoicesAfterFocusIfNeeded(String reason) {
+        if (!voicesPausedForFocusLoss) {
+            return;
+        }
+        postMusicControlEvent("Resume_ALL");
+        postMusicControlEvent("Resume_Music");
+        voicesPausedForFocusLoss = false;
+        Log.i(TAG, "resumeVoicesAfterFocusIfNeeded reason=" + reason);
     }
 
     /**
@@ -2128,7 +2336,8 @@ public class WanosMusicPlayerNative {
             int state = WIAEngineJNI.getPlaybackState();
             boolean started = state == PlaybackState_Started;
             if (trySkipKeepPlayingReset(reopenReason, started)) {
-                if (hasLiveMusicInstance()) {
+                if (hasLiveMusicInstance() || voicesPausedForFocusLoss) {
+                    resumeVoicesAfterFocusIfNeeded("focus_resume_skip_reset");
                     runGuardedUnmuteOnCurrentThread("focus_resume_skip_reset");
                     mainHandler.post(this::updateNowPlayingForCurrentTrack);
                     notifyUnityTrackChanged(playlist.currentListIndex, playlist.currentMusicIndex);
@@ -2136,17 +2345,21 @@ public class WanosMusicPlayerNative {
                 return;
             }
             if (hasLiveMusicInstance() && started && !reopenDevice) {
+                boolean didResumeVoices = voicesPausedForFocusLoss;
+                resumeVoicesAfterFocusIfNeeded("focus_resume");
                 runGuardedUnmuteOnCurrentThread("focus_resume");
-                Log.i(TAG, "resumeAfterFocusRegained: music instance live, unmute only");
+                Log.i(TAG, "resumeAfterFocusRegained: music instance live, unmute"
+                        + (didResumeVoices ? "+Resume" : " only"));
                 mainHandler.post(this::updateNowPlayingForCurrentTrack);
                 notifyUnityTrackChanged(playlist.currentListIndex, playlist.currentMusicIndex);
                 return;
             }
             if (hasLiveMusicInstance() && !reopenDevice) {
+                resumeVoicesAfterFocusIfNeeded("focus_resume");
                 runGuardedUnmuteOnCurrentThread("focus_resume");
                 int after = WIAEngineJNI.getPlaybackState();
                 if (after == PlaybackState_Started) {
-                    Log.i(TAG, "resumeAfterFocusRegained: music instance live, unmute only");
+                    Log.i(TAG, "resumeAfterFocusRegained: music instance live, unmuted");
                     mainHandler.post(this::updateNowPlayingForCurrentTrack);
                     notifyUnityTrackChanged(playlist.currentListIndex, playlist.currentMusicIndex);
                     return;
@@ -2164,11 +2377,18 @@ public class WanosMusicPlayerNative {
                 }
                 if (hasLiveMusicInstance()
                         && WIAEngineJNI.getPlaybackState() == PlaybackState_Started) {
-                    Log.i(TAG, "resumeAfterFocusRegained: unmute-only after state flicker");
+                    Log.i(TAG, "resumeAfterFocusRegained: unmuted after state flicker");
                     mainHandler.post(this::updateNowPlayingForCurrentTrack);
                     notifyUnityTrackChanged(playlist.currentListIndex, playlist.currentMusicIndex);
                     return;
                 }
+            }
+            // 启动期可能尚无 BGM 实例，但 focus_pause 已 Pause_ALL 了环境音效。
+            if (voicesPausedForFocusLoss && !reopenDevice) {
+                resumeVoicesAfterFocusIfNeeded("focus_resume_no_music");
+                runGuardedUnmuteOnCurrentThread("focus_resume_no_music");
+                mainHandler.post(this::updateNowPlayingForCurrentTrack);
+                return;
             }
             Log.i(TAG, "resumeAfterFocusRegained: reopen device instanceLive="
                     + hasLiveMusicInstance() + " started=" + started + " reopen=" + reopenDevice
@@ -2275,6 +2495,15 @@ public class WanosMusicPlayerNative {
             Log.i(TAG, "setBackgroundTransportPlan tracks=" + list.size()
                     + " current=" + current + " mode=" + mode
                     + " valid=" + transportPlanValid);
+            // 曲终时计划还没到：补计划后立刻切下一首（锁屏 Unity 已 pause）。
+            if (transportPlanValid && appInBackground) {
+                long pending = pendingUnityMusicEndedId;
+                if (pending != 0) {
+                    pendingUnityMusicEndedId = 0;
+                    final long endedId = pending;
+                    mainHandler.post(() -> tryHandleBackgroundMusicEnded(endedId));
+                }
+            }
         } catch (Exception e) {
             Log.w(TAG, "setBackgroundTransportPlan failed: " + e.getMessage());
             clearBackgroundTransportPlan();
@@ -2403,28 +2632,44 @@ public class WanosMusicPlayerNative {
         }
         lastSkipElapsedMs = now;
         lastSkipDirection = direction;
+        return playTransportTrackRelative(direction, "bg_skip");
+    }
 
+    /**
+     * 后台传输计划起播：postEventWithCallback，后续曲终继续走原生 Ended 链。
+     * 循环/随机在 Playing 时补 Break_Music（与前台 MusicPlaylist 一致）。
+     */
+    private boolean playTransportTrackRelative(int direction, String reason) {
+        if (!transportPlanValid) {
+            Log.w(TAG, "transport play ignored: no plan reason=" + reason);
+            return false;
+        }
         int target = resolveTransportTargetIndex(direction);
         if (target < 0) {
-            Log.w(TAG, "bg skip no target dir=" + direction + " current=" + transportCurrent);
+            Log.w(TAG, "transport play no target dir=" + direction
+                    + " current=" + transportCurrent + " reason=" + reason);
             return true;
         }
         TransportTrack t = transportTracks.get(target);
         if (!ensureTransportBankLoaded(t)) {
-            Log.w(TAG, "bg skip bank not ready, keep current dir=" + direction
+            Log.w(TAG, "transport play bank not ready reason=" + reason
                     + " bank=" + t.bankName);
             return true;
         }
 
         userPaused = false;
+        unityMusicInstanceId = 0;
+        long musicObj = musicObjectId();
         postMusicControlEvent("Stop_Music");
-        long instance = WIAEngineJNI.postEvent(0, t.eventName);
+        // 必须与 C# MusicObjectId 同对象，否则 Break_Music 打不中、下一首又曲终不了。
+        currentInstanceId = WIAEngineJNI.postEventWithCallback(musicObj, t.eventName);
         transportCurrent = target;
         updateTransportNowPlaying(true);
         notifyUnityPlaybackState(true);
         notifyUnityTrackChanged(-1, target);
-        Log.i(TAG, "bg skip dir=" + direction + " -> index=" + target
-                + " event=" + t.eventName + " instance=" + instance);
+        Log.i(TAG, "transport play reason=" + reason + " -> index=" + target
+                + " event=" + t.eventName + " instance=" + currentInstanceId
+                + " musicObj=" + musicObj);
         return true;
     }
 
@@ -2522,11 +2767,48 @@ public class WanosMusicPlayerNative {
         }
     }
 
+    /**
+     * Unity 与本类共用。true：这次应该 Post。false：窗口内已经发过，跳过。
+     */
+    public boolean claimVoiceResume(String eventName) {
+        if (eventName == null) {
+            return true;
+        }
+        boolean all = "Resume_ALL".equals(eventName);
+        boolean music = "Resume_Music".equals(eventName);
+        if (!all && !music) {
+            return true;
+        }
+        synchronized (voiceResumeLock) {
+            long now = SystemClock.elapsedRealtime();
+            long last = all ? lastResumeAllElapsedMs : lastResumeMusicElapsedMs;
+            if (now - last < VOICE_RESUME_COALESCE_MS) {
+                Log.i(TAG, "claimVoiceResume skip " + eventName
+                        + " ageMs=" + (now - last));
+                return false;
+            }
+            if (all) {
+                lastResumeAllElapsedMs = now;
+            } else {
+                lastResumeMusicElapsedMs = now;
+            }
+            return true;
+        }
+    }
+
     /** 音乐控制事件统一走 objId 0，与 C# WanosNative.PostEvent(0, ...) 一致。 */
     private void postMusicControlEvent(String eventName) {
+        if (("Resume_ALL".equals(eventName) || "Resume_Music".equals(eventName))
+                && !claimVoiceResume(eventName)) {
+            return;
+        }
         try {
-            WIAEngineJNI.postEvent(0, eventName);
-            Log.i(TAG, "post control event=" + eventName);
+            // Pause_ALL 等全局事件 obj=0 也行；Stop/Break/Resume_Music 必须打在 MusicObjectId。
+            long obj = "Pause_ALL".equals(eventName) || "Resume_ALL".equals(eventName)
+                    ? 0L
+                    : musicObjectId();
+            WIAEngineJNI.postEvent(obj, eventName);
+            Log.i(TAG, "post control event=" + eventName + " obj=" + obj);
         } catch (Throwable e) {
             Log.w(TAG, "post control event failed " + eventName + ": " + e.getMessage());
         }
@@ -2800,9 +3082,18 @@ public class WanosMusicPlayerNative {
             } else {
                 updateNowPlayingForCurrentTrack();
             }
-            if ((playlist.mode == 1 || playlist.mode == 2) && !shouldStop) {
-                Log.d(TAG, "EventCallback Playing -> Sending Break (mode=" + playlist.mode + ")");
-                playbackExecutor.execute(() -> WIAEngineJNI.postEvent(objectId, breakEventName));
+            // 原生 playlist.mode：1/2；传输计划 transportMode：C# 2/3。后台 transport 起播也要 Break。
+            boolean breakForPlaylist = (playlist.mode == 1 || playlist.mode == 2);
+            boolean breakForTransport = transportPlanValid
+                    && (transportMode == 2 || transportMode == 3)
+                    && currentInstanceId != 0
+                    && instanceId == currentInstanceId;
+            if ((breakForPlaylist || breakForTransport) && !shouldStop) {
+                final long breakObj = musicObjectId();
+                Log.d(TAG, "EventCallback Playing -> Sending Break playlistMode="
+                        + playlist.mode + " transportMode=" + transportMode
+                        + " musicObj=" + breakObj);
+                playbackExecutor.execute(() -> WIAEngineJNI.postEvent(breakObj, breakEventName));
             }
             return;
         }
@@ -2814,7 +3105,18 @@ public class WanosMusicPlayerNative {
                     + playGeneration);
             lastStoppedInstanceId = instanceId;
             currentInstanceId = 0;
+            unityMusicInstanceId = 0;
             mainHandler.post(() -> updateNowPlayingPlayingState(false));
+            return;
+        }
+        // 后台传输计划优先：锁屏曲终 / 原生 transport 起播后的下一首。
+        if (appInBackground && transportPlanValid
+                && (transportMode == 2 || transportMode == 3)) {
+            Log.i(TAG, "EventCallback Ended → transport auto-next (bg) instance=" + instanceId);
+            lastStoppedInstanceId = instanceId;
+            currentInstanceId = 0;
+            unityMusicInstanceId = 0;
+            playbackExecutor.execute(() -> playTransportTrackRelative(+1, "native_ended"));
             return;
         }
         if (currentInstanceId == 0) {

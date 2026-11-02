@@ -12,6 +12,35 @@ namespace Game
     /// </summary>
     public static class BackgroundTransportSync
     {
+        /// <summary>
+        /// 推后台传输计划：Single/Loop = 当前专辑；Shuffle = 全部专辑可播曲。
+        /// 无曲目 / 当前曲 bank 未就绪 → Clear。
+        /// </summary>
+        public static void PublishPlan()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            PublishPlanAndroid();
+#endif
+        }
+
+        public static void ClearPlan()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            AndroidBackgroundTransport.ClearPlan();
+#endif
+        }
+
+        /// <summary>
+        /// 回前台对账：原生可能在后台切过歌 / 改过暂停态。
+        /// 用 event 名对齐 C# 当前曲；paused 同步到 <see cref="NowPlayingService"/>.
+        /// </summary>
+        public static void ResyncFromNative()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            ResyncFromNativeAndroid();
+#endif
+        }
+
 #if UNITY_ANDROID && !UNITY_EDITOR
         static readonly StringBuilder Sb = new StringBuilder(1024);
         static readonly List<PlanEntry> Scratch = new List<PlanEntry>(32);
@@ -25,17 +54,9 @@ namespace Game
             public string Path;
             public bool Loaded;
         }
-#endif
 
-        /// <summary>
-        /// 推后台传输计划：Single/Loop = 当前专辑；Shuffle = 全部专辑可播曲。
-        /// 无曲目 / 当前曲 bank 未就绪 → Clear。
-        /// </summary>
-        public static void PublishPlan()
+        static void PublishPlanAndroid()
         {
-#if !UNITY_ANDROID || UNITY_EDITOR
-            return;
-#else
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
             if (music == null || !MusicCatalog.IsReady)
             {
@@ -54,20 +75,11 @@ namespace Game
             Scratch.Clear();
             int currentInPlan = -1;
             bool shuffleAll = music.PlayMode == MusicPlayMode.Shuffle;
+            int catalogInAlbum = MusicCatalog.GetTracks(album).Count;
 
             if (shuffleAll)
             {
-                for (int a = 0; a < MusicCatalog.AlbumCount; a++)
-                {
-                    var albumTracks = MusicCatalog.GetTracks(a);
-                    for (int i = 0; i < albumTracks.Count; i++)
-                    {
-                        if (!TryAppendPlanTrack(albumTracks[i], out int addedAt))
-                            continue;
-                        if (a == album && i == track)
-                            currentInPlan = addedAt;
-                    }
-                }
+                AppendAllAlbumsReady(album, track, ref currentInPlan);
             }
             else
             {
@@ -79,10 +91,30 @@ namespace Game
                     if (i == track)
                         currentInPlan = addedAt;
                 }
+
+                // 当前专辑可推计划 < 2（服务器目录裁成单曲 / 仅一首 bank 就绪）时，
+                // 负一屏 Loop 切歌会 (0+1)%1=0 原地打转。扩到全库已就绪曲才能真下一切。
+                if (Scratch.Count < 2 || currentInPlan < 0)
+                {
+                    int before = Scratch.Count;
+                    Scratch.Clear();
+                    currentInPlan = -1;
+                    AppendAllAlbumsReady(album, track, ref currentInPlan);
+                    if (Scratch.Count > before)
+                    {
+                        Log.Warning(
+                            $"[BackgroundTransportSync] album plan too thin " +
+                            $"album={album} catalog={catalogInAlbum} readyWas={before} → " +
+                            $"expanded all-albums ready={Scratch.Count} current={currentInPlan}");
+                    }
+                }
             }
 
             if (Scratch.Count == 0 || currentInPlan < 0)
             {
+                Log.Warning(
+                    $"[BackgroundTransportSync] ClearPlan album={album} track={track} " +
+                    $"catalogInAlbum={catalogInAlbum} ready={Scratch.Count} currentInPlan={currentInPlan}");
                 ClearPlan();
                 return;
             }
@@ -107,11 +139,23 @@ namespace Game
             Sb.Append("]}");
 
             AndroidBackgroundTransport.SetPlan(Sb.ToString());
-#endif
         }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
-        /// <returns>false if track skipped; <paramref name="indexInScratch"/> is Scratch index when added.</returns>
+        static void AppendAllAlbumsReady(int curAlbum, int curTrack, ref int currentInPlan)
+        {
+            for (int a = 0; a < MusicCatalog.AlbumCount; a++)
+            {
+                var albumTracks = MusicCatalog.GetTracks(a);
+                for (int i = 0; i < albumTracks.Count; i++)
+                {
+                    if (!TryAppendPlanTrack(albumTracks[i], out int addedAt))
+                        continue;
+                    if (a == curAlbum && i == curTrack)
+                        currentInPlan = addedAt;
+                }
+            }
+        }
+
         static bool TryAppendPlanTrack(MusicTrack t, out int indexInScratch)
         {
             indexInScratch = -1;
@@ -119,7 +163,6 @@ namespace Game
                 return false;
             if (!WanosBankPaths.Instance.TryResolve(t.BankName, out string path))
                 return false;
-            // 与 Java looksLikeWanosBank / 原生 loadBank 门禁对齐：坏文件不进计划
             if (!WanosBankStore.IsLikelyValidBankFile(path))
                 return false;
 
@@ -135,24 +178,9 @@ namespace Game
             });
             return true;
         }
-#endif
 
-        public static void ClearPlan()
+        static void ResyncFromNativeAndroid()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
-            AndroidBackgroundTransport.ClearPlan();
-#endif
-        }
-
-        /// <summary>
-        /// 回前台对账：原生可能在后台切过歌 / 改过暂停态。
-        /// 用 event 名对齐 C# 当前曲；paused 同步到 <see cref="NowPlayingService"/>.
-        /// </summary>
-        public static void ResyncFromNative()
-        {
-#if !UNITY_ANDROID || UNITY_EDITOR
-            return;
-#else
             string json = AndroidBackgroundTransport.GetStateJson();
             if (string.IsNullOrEmpty(json))
                 return;
@@ -166,27 +194,20 @@ namespace Game
             if (music == null)
                 return;
 
-            // 暂停态先同步给 C#（AdoptTrack 路径可能提前 return）；
-            // RestoreForegroundAudio 在 Resync 之后会再清一次（覆盖负一屏暂停）。
             NowPlayingService.NoteUserPaused(paused);
 
             if (!MusicCatalog.TryFindByEventName(eventName, out int albumIdx, out int trackIdx))
             {
                 Log.Warning($"[BackgroundTransportSync] Resync: unknown event={eventName}");
-                // 即便曲名对不上，负一屏暂停也要闩住内容声，避免 Unity 醒后音效自行重起。
                 music.ApplyNativePausedLatch(paused);
                 return;
             }
 
-            // 同曲也对账：重挂 voice + Loop/Shuffle Break（等本曲播完再自动下一首）。
             music.AdoptTrack(albumIdx, trackIdx);
-            // AdoptTrack 会把 IsPlaying=true；若原生仍是暂停，立刻闩回，并停内容声闸。
             music.ApplyNativePausedLatch(paused);
             Log.Info($"[BackgroundTransportSync] Resync adopted album={albumIdx} track={trackIdx} event={eventName} paused={paused}");
-#endif
         }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
         static bool TryParseState(string json, out string eventName, out bool paused, out bool valid)
         {
             eventName = "";

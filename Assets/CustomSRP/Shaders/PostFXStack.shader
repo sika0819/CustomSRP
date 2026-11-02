@@ -200,5 +200,16 @@ Shader "Hidden/CustomSRP/Post FX Stack"
             #pragma fragment OilWarpPassFragment
             ENDHLSL
         }
+
+        Pass
+        {
+            Name "Oil Filter HQ"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment OilFilterHqPassFragment
+            ENDHLSL
+        }
     }
 }

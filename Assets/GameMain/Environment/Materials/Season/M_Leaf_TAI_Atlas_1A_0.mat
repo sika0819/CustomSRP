@@ -77,9 +77,13 @@ Material:
     - _TriplanarTiling: 0.25
     - _WorldTriplanar: 0
     - _ZWrite: 1
+    - _FoliageHeight: 12
+    - _GradientSmoothness: 0.16
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BottomColor: {r: 0.23921568627450981, g: 0.4392156862745098, b: 0.10196078431372549, a: 1.0}
+    - _TopColor: {r: 0.5019607843137255, g: 0.7411764705882353, b: 0.1803921568627451, a: 1.0}
     - _EdgeColor: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
     - _ShadowTint: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
     - _ShadowWarm: {r: 0.6588235, g: 0.7490196, b: 0.4705882, a: 1}

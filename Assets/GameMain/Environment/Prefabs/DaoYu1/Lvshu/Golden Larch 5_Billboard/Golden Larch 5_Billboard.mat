@@ -72,7 +72,7 @@ Material:
     - _NearFade: 0
     - _NearFadeDistance: 1
     - _NearFadeRange: 1
-    - _NormalStrength: 0.85
+    - _NormalStrength: 0.35
     - _OilCrossBillboard: 0
     - _OilFoliage: 0
     - _OilFoliageSkipDay: 0
@@ -95,16 +95,18 @@ Material:
     - _VertexColors: 0
     - _WorldTriplanar: 0
     - _ZWrite: 1
+    - _GradientSmoothness: 0.16
+    - _FoliageHeight: 15.68
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
-    - _BaseColor: {r: 0.8801332, g: 1, b: 0.6179246, a: 1}
-    - _BottomColor: {r: 0.380392, g: 0.478431, b: 0.34902, a: 1}
+    - _BaseColor: {r: 1.063921, g: 1.068381, b: 1.009202, a: 1.0}
+    - _BottomColor: {r: 0.23921568627450981, g: 0.4392156862745098, b: 0.10196078431372549, a: 1.0}
     - _Color: {r: 1.063921, g: 1.068381, b: 1.009202, a: 1}
     - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}
     - _ShadowTint: {r: 0.380392, g: 0.478431, b: 0.34902, a: 1}
     - _ShadowWarm: {r: 0.658824, g: 0.74902, b: 0.470588, a: 1}
     - _SpecColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
     - _SpecularColor: {r: 0.658824, g: 0.74902, b: 0.470588, a: 1}
-    - _TopColor: {r: 0.658824, g: 0.74902, b: 0.470588, a: 1}
+    - _TopColor: {r: 0.5019607843137255, g: 0.7411764705882353, b: 0.1803921568627451, a: 1.0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

@@ -87,9 +87,22 @@ namespace CustomSRP.Editor
             PlayerSettings.gcIncremental = true;
             // Keep TerrainLayer for AssetBundle IslandTerrain (class ID 1953259897).
             PlayerSettings.stripEngineCode = false;
+            // 验证包硬切 GLES3（deny  alone 在 PLE110 上不够）。
             PlayerSettings.SetGraphicsAPIs(
                 BuildTarget.Android,
-                new[] { GraphicsDeviceType.Vulkan, GraphicsDeviceType.OpenGLES3 });
+                new[] { GraphicsDeviceType.OpenGLES3 });
+#pragma warning disable CS0618
+            PlayerSettings.Android.androidVulkanDenyFilterList = new[]
+            {
+                new AndroidDeviceFilterData
+                {
+                    vendorName = "Qualcomm",
+                    deviceName = "[A|a]dreno",
+                    vulkanApiVersionString = "99.0.0",
+                    driverVersionString = "99.0.0",
+                },
+            };
+#pragma warning restore CS0618
             PlayerSettings.MTRendering = true;
 #if UNITY_2023_1_OR_NEWER || UNITY_6000_0_OR_NEWER
             PlayerSettings.Android.optimizedFramePacing = true;

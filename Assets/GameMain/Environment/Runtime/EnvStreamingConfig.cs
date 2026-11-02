@@ -107,17 +107,24 @@ namespace Game
         public static int SpawnPerFrameBudget = 24;
         public static int DespawnPerFrameBudget = 16;
 
-        /// <summary>揭罩后几秒内压低每帧生成，避免和操作叠在同一段帧上。</summary>
+        /// <summary>揭罩后几秒内压低每帧生成，避免和操作/音频叠在同一段帧上。</summary>
         const int PostUncoverSpawnBudget = 4;
-        const float PostUncoverSpawnThrottleSeconds = 4f;
+        const int PostUncoverSpawnBudgetStrict = 2;
+        const float PostUncoverSpawnThrottleSeconds = 7f;
+        const float PostUncoverSpawnStrictSeconds = 2f;
         static float _spawnThrottleUntil;
+        static float _spawnStrictUntil;
 
         public static void BeginPostUncoverSpawnThrottle()
         {
 #if !UNITY_EDITOR
-            float until = Time.realtimeSinceStartup + PostUncoverSpawnThrottleSeconds;
+            float now = Time.realtimeSinceStartup;
+            float until = now + PostUncoverSpawnThrottleSeconds;
             if (until > _spawnThrottleUntil)
                 _spawnThrottleUntil = until;
+            float strictUntil = now + PostUncoverSpawnStrictSeconds;
+            if (strictUntil > _spawnStrictUntil)
+                _spawnStrictUntil = strictUntil;
 #endif
         }
 
@@ -127,7 +134,10 @@ namespace Game
             {
                 int budget = SpawnPerFrameBudget;
 #if !UNITY_EDITOR
-                if (Time.realtimeSinceStartup < _spawnThrottleUntil)
+                float now = Time.realtimeSinceStartup;
+                if (now < _spawnStrictUntil)
+                    budget = Mathf.Min(budget, PostUncoverSpawnBudgetStrict);
+                else if (now < _spawnThrottleUntil)
                     budget = Mathf.Min(budget, PostUncoverSpawnBudget);
 #endif
                 return budget;
@@ -166,14 +176,20 @@ namespace Game
         public static float RockColliderMinWorldExtent = 2.5f;
 
         /// <summary>
-        /// Prefill 大树最少铺装半径。标准版对齐 TreeBillboardKeepRadius（180），
-        /// 配合隔株，避免首装空林又不过密。
+        /// Prefill 大树最少铺装半径。编辑器对齐 Keep 180；
+        /// 真机 High 在 <see cref="ApplyMobileTierDefaults"/> 收到 110，配合隔株压首屏 GPU。
         /// </summary>
         public static float PrefillTreeBoostRadius = 180f;
 
         /// <summary>
+        /// Prefill 按距离排序后的硬顶件数。编辑器不截；真机 ~90，远的留给揭罩后流送。
+        /// </summary>
+        public static int PrefillNearHardCap = int.MaxValue;
+
+        /// <summary>
         /// 可投射物体超过此距离关闭 ShadowCasting。与 CRP / Quality shadowDistance 对齐。
         /// 必须在流送轮询里走近后再打开，不能只在生成时关一次。
+        /// 平板在 <see cref="ApplyMobileTierDefaults"/> 里抬到 40，手机与闺蜜机保持 26。
         /// </summary>
         public static float ShadowCastMaxDist = 26f;
 
@@ -465,22 +481,16 @@ namespace Game
         }
 
         /// <summary>
-        /// Planar mirror probe (CameraType.Reflection) inherits source.cullingMask,
-        /// so anything in the native instancing batch that <see cref="Graphics.DrawMeshInstanced"/>
-        /// queues will show up in the reflection unless we mark it main-camera-only.
-        /// Grass (small veg) and clutter shouldn't reflect in water — they're cheap
-        /// to skip and look wrong blurred into the surface.
-        /// Rocks already skip native (<see cref="ShouldForceSkipNativeInstancing"/>),
-        /// so they're handled separately via the reflection culling layer mask.
+        /// Grass and clutter stay off the planar mirror. Near trees, rocks that
+        /// still instance, and buildings return false so the water can pick up a
+        /// faint silhouette. Far tree cards are forced main-camera-only at the
+        /// billboard spawn site; this helper does not see the LOD tier.
         /// </summary>
         public static bool ShouldBeMainCameraOnly(string category, string prefabName)
         {
             if (IsSmallVegCategory(category))
                 return true;
             if (IsClutterCategory(category))
-                return true;
-            // Far tree billboard batches must not pollute planar water reflections.
-            if (IsBigTreeCategory(category))
                 return true;
             return false;
         }
@@ -636,13 +646,21 @@ namespace Game
         }
 
         /// <summary>
-        /// 真机套 Boluo 标准版（Non4K FillBound）树环：R0=70/90，R1=117/143，keep=180，隔株 stride=6。
+        /// 真机套 Boluo 标准版（Non4K FillBound）树环：R0=70/90，R1=117/143，keep=180；
+        /// Prefill 树半径 110 + 隔株 min80/stride4 + near 硬顶 90，压揭罩 GPU 尖峰。
         /// 近树是完整 Prefab，远处是 Prefab 自己的片树，最远留到 Keep 180。
         /// 非树物件仍略收半径保帧。
         /// </summary>
         public static void ApplyMobileTierDefaults()
         {
 #if !UNITY_EDITOR
+            // 投射距离跟 CRP：平板 40，手机与闺蜜机 26。滞后仍留 4 米。
+            if (IslandMobileTune.UseTabletShadowDistance)
+            {
+                ShadowCastMaxDist = IslandMobileTune.TabletShadowDistance;
+                ShadowCastRestoreDist = IslandMobileTune.TabletShadowDistance - 4f;
+            }
+
             // 非树环：略收（Lite 无格子驻留，需比 Boluo 通用环紧一点控 fill）。
             Ring0EnterRadius = 60f;
             Ring0ExitRadius = 78f;
@@ -659,9 +677,11 @@ namespace Game
             TreeBillboardKeepRadius = 180f;
             TreeFullMeshMaxDist = 160f * TreeBillboardDistanceScale;
             TreeFullMeshHysteresis = 12f;
-            FillBoundFarTreeSilhouetteMinDistance = 120f;
-            FillBoundFarTreeSilhouetteStride = 6;
-            PrefillTreeBoostRadius = 180f;
+            // High 档也收 Prefill：180→110 + 隔株更密，砍 sync 近场树尖峰（Vulkan dequeue timeout）。
+            FillBoundFarTreeSilhouetteMinDistance = 80f;
+            FillBoundFarTreeSilhouetteStride = 4;
+            PrefillTreeBoostRadius = 110f;
+            PrefillNearHardCap = 90;
 
             FarResidentShowDistance = 180f;
             FarResidentHideDistance = 240f;

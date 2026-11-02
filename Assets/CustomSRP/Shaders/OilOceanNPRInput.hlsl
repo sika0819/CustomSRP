@@ -31,6 +31,7 @@ CBUFFER_START(UnityPerMaterial)
     float _StrokeBands;
     float _AlbedoBoost;
     float _ShoreFoamWidth;
+    #define OIL_REFLECT_STRENGTH_DECLARED
     float _ReflectStrength;
     float _ReflectDistort;
     float _ReflectSteps;
@@ -42,13 +43,14 @@ CBUFFER_START(UnityPerMaterial)
 CBUFFER_END
 
 // 海面 Monet / 日道 Glint 共用世界滚动（向后漂）.
-#define OCEAN_PAINT_SCROLL float2(-0.045, 0.12)
+#define OCEAN_PAINT_SCROLL float2(-0.022, 0.06)
 
-// 海面横笔：world XZ；Z 向切片成横纹带（画圆极坐标已撤回）.
+// 贴图笔触沿 U。U 铺到世界 Z（横向），V 铺到世界 X（纵向）。
+// 主滚动留在 V 上，纹路横着，水流顺着视线前后走。
 float2 OceanMonetPaintUv(float2 worldXZ, float t, float tileMeters, float bands)
 {
-    float tile = max(tileMeters, 80.0);
-    float2 st = worldXZ / tile;
+    float tile = max(tileMeters, 20.0);
+    float2 st = worldXZ.yx / tile;
     st += OCEAN_PAINT_SCROLL * t;
 
     float b = max(bands, 8.0);

@@ -3,6 +3,7 @@
 
 #include "OilNPRLighting.hlsl"
 #include "OilPaintNoise.hlsl"
+#include "OilImpastoCore.hlsl"
 #include "TerrainOilNPRInput.hlsl"
 #include "TerrainInstancing.hlsl"
 
@@ -43,6 +44,8 @@ Varyings TerrainOilNPRPassVertex(Attributes input)
 
 // Coarser mip. Scenic cameras sit hundreds of meters up; full-res splats only burn bandwidth.
 #define TERRAIN_ALBEDO_BIAS 1.0
+// Stroke normals are broad ridges. Keep them a mip sharper than the albedo or the bevel flattens.
+#define TERRAIN_NORMAL_BIAS 0.2
 
 struct TerrainOilSample
 {
@@ -75,13 +78,36 @@ void AccumulateTerrainLayer(
 
     half w = (half)weight;
     albedo += (half3)SAMPLE_TEXTURE2D_BIAS(splat, samp, uv, TERRAIN_ALBEDO_BIAS).rgb * w;
+#if defined(OIL_MOBILE_PERF)
+    half ao = (half)(remapScale.g + remapOffset.g);
+    half sm = (half)smoothnessConstant;
+#else
     half ao = hasMask > 0.5 ? mask.g : (half)(remapScale.g + remapOffset.g);
     half sm = hasMask > 0.5 ? mask.a : (half)smoothnessConstant;
+#endif
     occlusion += ao * w;
     smoothness += sm * w;
-    // Same mip as the paint. A sharper normal only aliases on this GPU and misses cache.
+    // _OilDetail thickens the authored smear. Half-Lambert bands hide a scale of 1.
+    float oilScale = normalScale * lerp(1.2, 1.85, saturate(_OilDetail));
     normalTS += (half3)DecodeNormal(
-        SAMPLE_TEXTURE2D_BIAS(normalMap, normalSamp, uv, TERRAIN_ALBEDO_BIAS), normalScale) * w;
+        SAMPLE_TEXTURE2D_BIAS(normalMap, normalSamp, uv, TERRAIN_NORMAL_BIAS), oilScale) * w;
+}
+
+// Geometric normal stays the shadow bias. This term is only the paint bevel:
+// the face of a stroke toward the sun lifts, the far shoulder digs in.
+half3 ApplyOilStrokeFlank(half3 color, half3 normalWS, half3 geomNormalWS)
+{
+    half bump = saturate((half)_OilDetail);
+    if (bump < 0.001h || GetDirectionalLightCount() <= 0)
+    {
+        return color;
+    }
+
+    half3 geomN = normalize(geomNormalWS);
+    half3 L = (half3)GetDirectionalLightData(0).directionAndMask.xyz;
+    half flank = dot(normalWS - geomN, L);
+    flank = clamp(flank, -0.55h, 0.55h);
+    return color * max(0.0h, 1.0h + flank * bump * 1.7h);
 }
 
 // Control once. A layer is sampled only while its weight can change the blend.
@@ -100,16 +126,23 @@ TerrainOilSample SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 
     float sum4 = dot(control, 1.0);
     control /= max(sum4, 1e-5);
 
-    // Continuous value noise — floor(cell) left hard UV seams every ~50m.
+    // Continuous value noise — break splat tiling without a second brush plate.
     float n0 = OilValueNoise(positionWS.xz * 0.02);
     float n1 = OilValueNoise(positionWS.xz * 0.02 + float2(19.1, 7.3));
-    float2 wobble = (float2(n0, n1) - 0.5) * 0.16;
+    float n2 = OilValueNoise(positionWS.xz * 0.007 + float2(3.7, 11.2));
+    float2 wobble = (float2(n0, n1) - 0.5) * 0.22 + (float2(n2, 1.0 - n2) - 0.5) * 0.10;
 
     float2 uv0 = TransformTerrainUV(controlUV, _Splat0_ST) + wobble;
     float2 uv1 = TransformTerrainUV(controlUV, _Splat1_ST) + wobble.yx;
     float2 uv2 = TransformTerrainUV(controlUV, _Splat2_ST) + wobble;
     float2 uv3 = TransformTerrainUV(controlUV, _Splat3_ST) + wobble.yx;
 
+#if defined(OIL_MOBILE_PERF)
+    half4 m0 = half4(0.5h, 1.0h, 0.5h, (half)_Smoothness0);
+    half4 m1 = half4(0.5h, 1.0h, 0.5h, (half)_Smoothness1);
+    half4 m2 = half4(0.5h, 1.0h, 0.5h, (half)_Smoothness2);
+    half4 m3 = half4(0.5h, 1.0h, 0.5h, (half)_Smoothness3);
+#else
     half4 m0 = SampleLayerMaskWeighted(control.r, uv0, _LayerHasMask0, _MaskMapRemapScale0, _MaskMapRemapOffset0, TEXTURE2D_ARGS(_Mask0, sampler_Splat0));
     half4 m1 = SampleLayerMaskWeighted(control.g, uv1, _LayerHasMask1, _MaskMapRemapScale1, _MaskMapRemapOffset1, TEXTURE2D_ARGS(_Mask1, sampler_Splat0));
     half4 m2 = SampleLayerMaskWeighted(control.b, uv2, _LayerHasMask2, _MaskMapRemapScale2, _MaskMapRemapOffset2, TEXTURE2D_ARGS(_Mask2, sampler_Splat0));
@@ -121,6 +154,7 @@ TerrainOilSample SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 
     {
         control = TerrainHeightBlend(control, float4(m0.b, m1.b, m2.b, m3.b));
     }
+#endif
 
     half3 albedo = 0.0h;
     half3 nTS = 0.0h;
@@ -144,6 +178,7 @@ TerrainOilSample SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 
         TEXTURE2D_ARGS(_Splat3, sampler_Splat0), TEXTURE2D_ARGS(_Normal3, sampler_Splat0));
 
     float3 geomN = normalize(geomNormalWS);
+#if !defined(OIL_MOBILE_PERF)
     if (_RidgeAmount > 0.001)
     {
         float rockW = saturate((1.0 - sum4) * _RidgeAmount);
@@ -161,11 +196,11 @@ TerrainOilSample SampleTerrainCheap(float2 controlUV, float3 positionWS, float3 
             albedo = lerp(albedo, rock, (half)ridgeWeight);
         }
     }
+#endif
 
+    // Value climate only — keep splat hue (厚涂不改色调).
     half climate = (half)OilValueNoise(positionWS.xz * 0.002);
-    half3 warm = albedo * half3(1.06h, 1.02h, 0.9h);
-    half3 cool = albedo * half3(0.9h, 0.97h, 1.05h);
-    albedo = lerp(cool, warm, climate);
+    albedo *= lerp(0.94h, 1.07h, climate);
     albedo *= occlusion;
     nTS.z += 1e-4h;
     s.occlusion = occlusion;
@@ -201,10 +236,30 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
     surface.renderingLayerMask = asuint(unity_RenderingLayer.x);
 
 #if defined(OIL_MOBILE_PERF)
-    // LightingEx ignores brush; SoftFogStroke(0.5) is identity — skip OutlineBrush tap.
     half brush = 0.5h;
 #else
+    // Shadow-edge wobble only — never drive albedo/height (tiling reads as fake brush stamps).
     half brush = SampleOilShadowBrushCheap(input.positionWS, input.controlUV, 0.25);
+#endif
+    // Bump-map style relief: splat luma + fine world noise. No OilBrush height plate.
+    half stroke = PaintStroke(PaintLuma(albedo), 1.25h);
+#if !defined(OIL_MOBILE_PERF)
+    half micro = (half)OilValueNoise(input.positionWS.xz * 0.14 + float2(7.3, 2.1));
+    half fine = (half)OilValueNoise(input.positionWS.xz * 0.37 + float2(1.9, 4.6));
+    stroke = saturate(stroke * 0.82h + micro * 0.12h + fine * 0.06h);
+#endif
+    // Mild value climate only — keep splat paint readable, not stacked slabs.
+    half relief = saturate((half)_OilDetail) * 0.38h;
+    albedo = ImpastoDeviation(albedo, stroke, relief);
+    surface.color = (float3)albedo;
+#if !defined(OIL_MOBILE_PERF)
+    {
+        // Screen-space height → normal tilt, like a detail normal map (small amplitude).
+        half strokeDx = (half)ddx((float)stroke);
+        half strokeDz = (half)ddy((float)stroke);
+        normalWS = ImpastoTiltNormal(normalWS, strokeDx, strokeDz, relief * 0.55h);
+        surface.normal = (float3)normalWS;
+    }
 #endif
     Fragment fragment = GetFragmentScreen(input.positionCS_SS);
     half3 color = OilNPRLighting(
@@ -221,22 +276,30 @@ half4 TerrainOilNPRPassFragment(Varyings input) : SV_TARGET
         brush,
         (half)_ShadowWobble,
         (half)_OilDetail,
-        terrain.smoothness,
+        // Kill glossy response — terrain oil should be matte pigment.
+        terrain.smoothness * 0.15h,
         fragment.screenUV);
+    color = ApplyOilStrokeFlank(color, normalWS, (half3)input.normalWS);
 
-#if !defined(OIL_MOBILE_PERF)
-    if (terrain.smoothness > 0.02h && GetDirectionalLightCount() > 0)
-    {
-        half3 L = (half3)_DirectionalLightData[0].directionAndMask.xyz;
-        half3 H = normalize(L + viewDir);
-        half spec = pow(saturate(dot(normalWS, H)), lerp(24.0h, 96.0h, terrain.smoothness));
-        color += spec * terrain.smoothness * (half3)_SpecularColor.rgb * 0.28h;
-    }
-
-    color = OilWeaveTint(color, input.positionWS.xz * 0.15);
-    color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);
-#else
+#if defined(OIL_MOBILE_PERF)
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush);
+#else
+    // No ImpastoPaintStack / RidgeSpec on terrain — those were the repeating fake stamps
+    // and the blown specular. Splat normals + mild tilt already carry the 凹凸.
+    if (terrain.smoothness > 0.08h && GetDirectionalLightCount() > 0)
+    {
+        half3 L = (half3)GetDirectionalLightData(0).directionAndMask.xyz;
+        half3 H = normalize(L + viewDir);
+        half spec = pow(saturate(dot(normalWS, H)), lerp(32.0h, 96.0h, terrain.smoothness));
+        color += spec * terrain.smoothness * (half3)_SpecularColor.rgb * 0.06h;
+    }
+    // Mild canvas tooth only — full OilWeaveTint was too stripey on large ground.
+    {
+        float2 p = input.positionWS.xz * 0.15;
+        half w = (half)sin(p.x * 1.7 + p.y * 0.8) * 0.5h + 0.5h;
+        color *= lerp(0.97h, 1.03h, w);
+    }
+    color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);
 #endif
     return half4(saturate(color), 1.0h);
 }

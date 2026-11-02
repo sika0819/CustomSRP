@@ -43,7 +43,7 @@ bool OilOceanResolveSun(out float3 L)
         return false;
     }
 
-    L = _DirectionalLightData[0].directionAndMask.xyz;
+    L = GetDirectionalLightData(0).directionAndMask.xyz;
     return length(L) > 0.05;
 }
 
@@ -104,7 +104,8 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
 
     float u = saturate(lat / max(halfW * 2.4, 1e-3) * 0.5 + 0.5);
     float tileM = max(_SunPathWidth * 8.0, 28.0);
-    float2 scrollDir = normalize(OCEAN_PAINT_SCROLL);
+    // 与底纹同一条世界流向，符号跟底纹的相位一致，不反着漂。
+    float2 scrollDir = normalize(float2(OCEAN_PAINT_SCROLL.y, OCEAN_PAINT_SCROLL.x));
     float alongPaint = dot(positionWS.xz, scrollDir);
     float glintSpeed = 0.05 + max(_OilOceanWindStrength, 0.0) * 0.12;
     float v = frac(alongPaint / tileM + t * glintSpeed);
@@ -124,10 +125,25 @@ half OilOceanSunGlint(float3 positionWS, half3 normalWS, float t, half stroke, h
         g = max(g0, g1 * 0.7h);
     }
 #endif
-    half dab = saturate((PaintLuma(g) - 0.10h) * 2.8h);
-    dab *= lerp(0.55h, 1.15h, stroke);
+    half hC = PaintLuma(g);
+    half hU = PaintLuma((half3)SAMPLE_TEXTURE2D_LOD(
+        _SparkleBrush, sampler_SparkleBrush, st + float2(0.018, 0.0), glintMip).rgb);
+    half hV = PaintLuma((half3)SAMPLE_TEXTURE2D_LOD(
+        _SparkleBrush, sampler_SparkleBrush, st + float2(0.0, 0.014), glintMip).rgb);
+    float3 nTS = normalize(float3((float)(hC - hU) * 5.0, (float)(hC - hV) * 5.0, 1.0));
+    float3 flankT = float3(side.x, 0.0, side.y);
+    float3 flankB = float3(alongDir.x, 0.0, alongDir.y);
+    float3 flankN = normalize(flankT * nTS.x + flankB * nTS.y + float3(0.0, 1.0, 0.0));
+    half nd = saturate(dot((half3)flankN, (half3)normalize(L)) * 0.55h + 0.45h);
+    // 日道笔触：受光面是颜料，背光面压暗，不是一条均匀的亮带。
+    half dabFlank = lerp(0.22h, 1.0h, nd);
+    // Harder dab gate — yellow/white paint stamps on the sun path (zhanweitu1).
+    half dab = saturate((hC - 0.16h) * 3.4h);
+    dab = dab * dab * (3.0h - 2.0h * dab);
+    dab *= dabFlank;
+    dab *= lerp(0.62h, 1.28h, stroke);
     dab *= (1.0h - foam * 0.85h);
-    dab *= lerp(1.45h, 0.95h, (half)elev);
+    dab *= lerp(1.55h, 1.00h, (half)elev);
     dab *= (half)saturate((4800.0 - dist) / 2800.0);
     return dab * lane * (half)max(_SunPathStrength, 0.0);
 }
@@ -200,9 +216,9 @@ void SampleShoreBrush(
 
 half3 SineWaveNormal(float2 worldXZ, out half crest)
 {
-    float2 p = worldXZ * 0.045 + _Time.y * float2(0.35, -0.22);
+    float2 p = worldXZ * 0.045 + _Time.y * float2(0.18, -0.11);
     half s0 = (half)sin(p.x * 1.6 + p.y * 0.45);
-    half s1 = (half)sin(p.y * 1.35 - p.x * 0.7 + _Time.y * 0.8);
+    half s1 = (half)sin(p.y * 1.35 - p.x * 0.7 + _Time.y * 0.4);
     crest = s0 * 0.5h + 0.5h;
     return normalize(half3(s0 * 0.16h, 1.0h, s1 * 0.12h));
 }
@@ -213,12 +229,11 @@ half3 OilOceanBumpNormal(float2 worldXZ, half3 baseN)
     float tile = max(_BumpTile, 20.0);
     float2 tilingA = max(_BumpTiling.xy, float2(0.01, 0.01));
     float2 scrollA = _BumpScroll.xy;
-    // 同 Monet 底纹：world XZ.
-    float2 uvA = (worldXZ / tile) * tilingA + scrollA * _Time.y;
+    // 浪纹沿贴图 U。U→世界 Z，波峰横着；法线 x→世界 Z，y→世界 X。
+    float2 uvA = (worldXZ.yx / tile) * tilingA + scrollA.yx * _Time.y;
     half3 nA = (half3)DecodeNormal(
         SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvA), _BumpScale);
-    // Horizontal sea: tangent ≈ X, bitangent ≈ Z.
-    half3 bumpN = normalize(half3(nA.x, 1.0h, nA.y));
+    half3 bumpN = normalize(half3(nA.y, 1.0h, nA.x));
     return normalize(lerp(baseN, bumpN, saturate((half)_BumpScale)));
 }
 
@@ -378,7 +393,7 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
 #endif
     normalWS = ApplyRainRippleNormal(normalWS, input.positionWS);
 
-    // 光照仍 flat，避免 cascade 圆影；bump 只喂反射/折射/glint。
+    // Start flat (no cascade disc). Stroke height tilts lightN after paint sample.
     half3 lightN = half3(0.0h, 1.0h, 0.0h);
     half overlook = (half)smoothstep(120.0, 420.0, camDist);
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
@@ -388,16 +403,19 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
 
     half relief = saturate((half)_PaintRelief);
     half3 paint;
+    float3 paintNTS;
     {
 #if defined(OIL_MOBILE_PERF)
         // Same one tap. Bias keeps Monet strokes out of the half-res mip.
         paint = (half3)SAMPLE_TEXTURE2D_BIAS(_PaintMap, sampler_PaintMap, paintSt, -1.25).rgb;
+        paintNTS = LoadOilPaintNormalBias(paintSt, 1.0);
 #else
         float2 paintDx = ddx(paintSt);
         float2 paintDy = ddy(paintSt);
         half3 c0 = (half3)SAMPLE_TEXTURE2D_GRAD(
             _PaintMap, sampler_PaintMap, paintSt, paintDx, paintDy).rgb;
         paint = c0;
+        paintNTS = LoadOilPaintNormalGrad(paintSt, paintDx, paintDy, 1.0);
         // 半张图的接缝混合只在近处看得见。地平线上海面不再第二采。
         [branch]
         if (camDist < 320.0)
@@ -408,12 +426,23 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
             half3 c1 = (half3)SAMPLE_TEXTURE2D_GRAD(
                 _PaintMap, sampler_PaintMap, paintSt + 0.5, paintDx, paintDy).rgb;
             paint = lerp(c1, c0, w);
+            float3 n1 = LoadOilPaintNormalGrad(paintSt + 0.5, paintDx, paintDy, 1.0);
+            paintNTS = BlendOilPaintNormal(paintNTS, n1, w);
         }
 #endif
     }
     half stroke = PaintStroke(PaintLuma(paint), (half)_PaintContrast);
-    albedo = lerp(albedo, paint, relief);
-    albedo = ImpastoDeviation(albedo, stroke, relief * 0.55h);
+    // Stroke structure only — keep deep/shallow palette (docs: paint = 笔触遮罩).
+    half oceanRelief = saturate(max(relief, 0.85h));
+    albedo = ImpastoStrokeAlbedo(albedo, paint, stroke, oceanRelief);
+    half strokeDx = 0.0h;
+    half strokeDz = 0.0h;
+#if !defined(OIL_MOBILE_PERF)
+    strokeDx = (half)ddx((float)stroke);
+    strokeDz = (half)ddy((float)stroke);
+    // Paint-height normals drive lit bands (cascade still forced off below).
+    lightN = ImpastoTiltNormal(lightN, strokeDx, strokeDz, oceanRelief);
+#endif
 
     float column = OceanColumnFromDepth(fragment);
 #if defined(OIL_MOBILE_PERF)
@@ -478,8 +507,15 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
         surface.smoothness,
         fragment.screenUV);
 
-    color = ImpastoDeviation(color, stroke, relief * 0.45h);
-#if !defined(OIL_MOBILE_PERF)
+    color = ImpastoDeviation(color, stroke, oceanRelief);
+#if defined(OIL_MOBILE_PERF)
+    color = ImpastoPaintStackCheap(color, stroke, oceanRelief);
+#else
+    half3 seaL = GetDirectionalLightCount() > 0
+        ? (half3)GetDirectionalLightData(0).directionAndMask.xyz
+        : half3(0.35h, 0.85h, 0.25h);
+    // 横笔颜料堆叠：暗槽和受光面都是水色，不加高光。
+    color = ImpastoPaintStack(color, stroke, oceanRelief, seaL, strokeDx, strokeDz);
     color = OilWeaveTint(color, paintSt * 6.0);
 #endif
 
@@ -525,6 +561,20 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     // 海面铺满画面。雾画布是两次世界空间采样，水上只留 stroke 软雾（与移动端同一条）。
     color = (half3)ApplyOilFog((float3)color, surface.depth, stroke);
 
+    // 凹凸打在水色上。倒影釉面叠在后面，不再把天空和岸影乘成颜料侧面。
+    {
+        half nearPaint = (half)(1.0 - smoothstep(480.0, 1500.0, camDist));
+        half bumpAmt = oceanRelief * lerp(0.7h, 1.0h, nearPaint);
+        float3 sunL;
+        OilOceanResolveSun(sunL);
+        float3 paintT;
+        float3 paintB;
+        float3 geoN = normalize((float3)input.normalWS);
+        // +U = 世界 Z，+V = 世界 X，和底纹采样同一套轴，厚涂侧面才还在笔触上。
+        OilPaintFrame(geoN, float3(0.0, 0.0, 1.0), float3(1.0, 0.0, 0.0), paintT, paintB);
+        color = ImpastoPigmentFlank(color, paintNTS, paintT, paintB, geoN, (half3)sunL, bumpAmt);
+    }
+
     color = ApplyOilWaterReflection(
         color,
         input.positionWS,
@@ -557,7 +607,7 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
         color += glintCol * glint;
     }
 
-    // 钛白岸沫：直接靠向 _FoamColor，避免深蓝紫水体把沫染灰。
+    // 钛白岸沫盖在倒影上面。
     half3 foamCol = (half3)_FoamColor.rgb;
     half foamNight = lerp(1.0h, 0.7h, night);
     half foamMix = saturate(shoreWash * 0.18h + shoreMask * 0.95h) * foamNight;

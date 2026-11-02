@@ -32,6 +32,11 @@ namespace Game.Editor
             ("用户 Token (Boluo.UserToken)", "Boluo.UserToken", null),
             ("用户 Id (Boluo.UserId)", "Boluo.UserId", null),
             ("是否游客 (Boluo.IsGuest)", "Boluo.IsGuest", "int 0/1"),
+            ("游客缓存 Token (Boluo.GuestCache.Token)", "Boluo.GuestCache.Token", "退登保留；过期/换设备作废"),
+            ("游客缓存 UserId", "Boluo.GuestCache.UserId", null),
+            ("游客缓存过期", "Boluo.GuestCache.Expire", null),
+            ("游客缓存设备 Id", "Boluo.GuestCache.DeviceId", null),
+            ("Editor 已听红点 JSON", "Boluo.Editor.DownloadedUnplayed", "Editor 游客已听落盘；真机不写"),
         };
 
         // PlayerPrefs · 旧版字符串字面量（GuestSession.DeleteAll 用的）

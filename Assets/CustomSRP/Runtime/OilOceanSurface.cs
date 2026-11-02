@@ -34,6 +34,12 @@ namespace CustomSRP
         public float waveHeight = 0.2f;
         public float boundsPadding = 4f;
 
+        [Header("Deep")]
+        [Tooltip("清晨、白天、黄昏共用。")]
+        public Color deepDay = new Color(0.12f, 0.2f, 0.34f, 0.96f);
+        [Tooltip("夜晚。跟时段拨盘的 2 秒过渡一起变。")]
+        public Color deepNight = new Color(0.04f, 0.06f, 0.28f, 0.98f);
+
         const string MeshName = "OilOceanGrid";
 
         /// <summary>
@@ -44,6 +50,7 @@ namespace CustomSRP
 
         static readonly int WaveHeightId = Shader.PropertyToID("_OilOceanWaveHeight");
         static readonly int WindStrengthId = Shader.PropertyToID("_OilOceanWindStrength");
+        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         float _lastWindStrength = float.NaN;
 
@@ -55,6 +62,15 @@ namespace CustomSRP
         int indexCount;
         float _lastWaveHeight = float.NaN;
         static int enableDepth;
+
+        MeshRenderer oceanRenderer;
+        MaterialPropertyBlock deepBlock;
+        OilSkyboxTime skyClock;
+        Color shownDeep;
+        Color deepLerpFrom;
+        bool deepReady;
+        bool followingTimeLerp;
+        bool deepLerpToNight;
 
         public float Level => transform.position.y;
         public float GridScale => gridScale;
@@ -97,6 +113,7 @@ namespace CustomSRP
 
         void OnDisable()
         {
+            ClearDeepOverride();
             if (Application.isPlaying)
             {
                 IslandSceneComponent.Active?.UnregisterSea(this);
@@ -151,6 +168,85 @@ namespace CustomSRP
 
             ApplyWaveHeight();
             PushWind();
+            ApplyDeepColor();
+        }
+
+        /// <summary>
+        /// 白天和夜晚各用一套 Deep。着色器只读当前 _BaseColor。
+        /// 拨盘切时段时跟 <see cref="WeatherService.TimeLerp01"/> 一起过渡，进岛和预设是直接切。
+        /// </summary>
+        void ApplyDeepColor()
+        {
+            bool night = ResolveNight();
+            Color target = night ? deepNight : deepDay;
+            WeatherService weather = Application.isPlaying ? WeatherService.Ensure() : null;
+            bool transitioning = weather != null && weather.IsTimeTransitioning;
+            if (transitioning)
+            {
+                if (!followingTimeLerp)
+                {
+                    followingTimeLerp = true;
+                    deepLerpFrom = deepReady ? shownDeep : target;
+                    deepLerpToNight = night;
+                }
+
+                Color to = deepLerpToNight ? deepNight : deepDay;
+                shownDeep = Color.Lerp(deepLerpFrom, to, weather.TimeLerp01);
+                deepReady = true;
+                PushDeep();
+                return;
+            }
+
+            followingTimeLerp = false;
+            if (deepReady && shownDeep == target)
+                return;
+
+            shownDeep = target;
+            deepReady = true;
+            PushDeep();
+        }
+
+        bool ResolveNight()
+        {
+            if (Application.isPlaying)
+            {
+                WeatherService weather = WeatherService.Ensure();
+                if (weather != null)
+                    return weather.Period == IslandTimePeriod.Night;
+            }
+
+            if (skyClock == null)
+                skyClock = FindFirstObjectByType<OilSkyboxTime>();
+            if (skyClock == null)
+                return false;
+
+            float hours = Mathf.Repeat(skyClock.timeOfDay, 24f);
+            float nightHour = WeatherService.NightMinutes / 60f;
+            float morningHour = WeatherService.MorningMinutes / 60f;
+            return hours >= nightHour || hours < morningHour;
+        }
+
+        void PushDeep()
+        {
+            if (oceanRenderer == null)
+                oceanRenderer = GetComponent<MeshRenderer>();
+            if (oceanRenderer == null)
+                return;
+
+            deepBlock ??= new MaterialPropertyBlock();
+            oceanRenderer.GetPropertyBlock(deepBlock);
+            deepBlock.SetColor(BaseColorId, shownDeep);
+            oceanRenderer.SetPropertyBlock(deepBlock);
+        }
+
+        void ClearDeepOverride()
+        {
+            if (oceanRenderer == null)
+                oceanRenderer = GetComponent<MeshRenderer>();
+            if (oceanRenderer != null)
+                oceanRenderer.SetPropertyBlock(null);
+            deepReady = false;
+            followingTimeLerp = false;
         }
 
         void PushWind()

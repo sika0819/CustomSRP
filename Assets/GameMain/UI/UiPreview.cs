@@ -113,6 +113,7 @@ namespace Game
             return title == "申请下载"
                 || title == "下载进度"
                 || title == "蜂窝下载"
+                || title == "WiFi确认"
                 || title == "存储不足"
                 || title == "无网络";
         }
@@ -216,6 +217,7 @@ namespace Game
             DownloadDialogCopy.DialogCopy copy = title switch
             {
                 "蜂窝下载" => DownloadDialogCopy.Mobile("500"),
+                "WiFi确认" => DownloadDialogCopy.Wifi("500"),
                 "存储不足" => DownloadDialogCopy.Storage("600"),
                 "无网络" => DownloadDialogCopy.Offline(),
                 _ => DownloadDialogCopy.Request("128"),

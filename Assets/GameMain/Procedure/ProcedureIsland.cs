@@ -248,6 +248,7 @@ namespace Game
             }
             // Force path: wipe leftover Panel/Dialog from a stuck prior session once.
             UnlockLocomotionAfterUncover(closeLoadingCover: false, clearOverlayForms: true);
+            BootLoadingService.MarkEntryGpuSettled();
             IslandEntryLog.Ok("island", "forceReady");
             NativeBridgeFacade.NotifyIslandReady();
         }
@@ -303,6 +304,11 @@ namespace Game
             System.Threading.Interlocked.Exchange(ref _alive, 0);
             // 任意离开岛流程都作废揭罩，避免延迟 Hide 打到 GuestLogin 的加载罩。
             System.Threading.Interlocked.Increment(ref _uncoverGeneration);
+
+            // 出岛统一卸：罩 RT、草 GPU、UI 闲置池。进岛/揭罩路径禁止这些。
+            BootLoadingService.ReleaseCoverGpuNow();
+            (GameEntry.Grass ?? IslandGrassService.Active)?.Release();
+            BootLoadingService.ReleaseUnusedUiPool();
 
             if (_worldLoadRoutine != null && GameEntry.Base != null)
             {
@@ -604,16 +610,15 @@ namespace Game
                 IslandJoystickCamera.Current.ForceUnlockLocomotion();
                 IslandJoystickCamera.Current.enabled = false;
             }
+            // 先抬加载罩，再延后拆 Main/Panel——同帧 Close UITK + Show 会撞 UnityGfxDeviceW。
+            BootLoadingService.Show("登录中", BootLoadingService.LoginStart);
             if (GameEntry.UI != null)
             {
-                UiAssets.CloseGroup("Main");
-                UiAssets.CloseGroup("Panel");
-                UiAssets.CloseGroup("Dialog");
-                UiAssets.CloseGroup(UiAssets.TipGroup);
+                UiAssets.CloseGroupDeferred("Main", endOfFramePasses: 2);
+                UiAssets.CloseGroupDeferred("Panel", endOfFramePasses: 2);
+                UiAssets.CloseGroupDeferred("Dialog", endOfFramePasses: 2);
+                UiAssets.CloseGroupDeferred(UiAssets.TipGroup, endOfFramePasses: 2);
             }
-
-            // 卸岛空窗仍有罩，但档位是下一次登录，不是岛内 0.70。
-            BootLoadingService.Show("登录中", BootLoadingService.LoginStart);
             // 不拆世界、不卸场景。再 Instantiate 会把活动链表走成环，二次进岛主线程不再回来。
             // 实例保持第一次进岛时的激活状态。流送先闩住，再进岛按新出生点恢复距离检查，不整表 Relink。
 
@@ -890,18 +895,34 @@ namespace Game
 
                     if (!_hudOpened)
                     {
-                        _hudOpened = true;
-                        // 二次进岛：先拆可能残留的旧 Main，避免双 IslandMainForm 双订 Preset 事件。
+                        // 二次进岛：旧 Main 若 Logic 还活着直接复用；Logic 已毁才延后 Close，
+                        // 禁止同帧 Close+Open（真机 UnityGfxDeviceW SEGV）。
                         if (GameEntry.UI.HasUIForm(UiAssets.IslandMainForm))
                         {
-                            Log.Warning("[ProcedureIsland] stale IslandMainForm — CloseGroup Main before reopen");
-                            UiAssets.CloseGroup("Main");
+                            var existing = GameEntry.UI.GetUIForm(UiAssets.IslandMainForm);
+                            if (existing?.Logic is IslandMainForm)
+                            {
+                                _hudOpened = true;
+                                GameEntry.Weather?.PushVisuals();
+                                UiTipToast.EnsureHost();
+                                Log.Info("[ProcedureIsland] reuse IslandMainForm");
+                            }
+                            else
+                            {
+                                Log.Warning(
+                                    "[ProcedureIsland] stale IslandMainForm — deferred CloseGroup Main");
+                                UiAssets.CloseGroupDeferred("Main", endOfFramePasses: 2);
+                                break;
+                            }
                         }
-                        // 不再 ApplyLocalClock：Services 已 Restore；此处只推视觉。
-                        GameEntry.Weather?.PushVisuals();
-                        Log.Info("[ProcedureIsland] OpenUIForm IslandMainForm");
-                        GameEntry.UI.OpenUIForm(UiAssets.IslandMainForm, "Main");
-                        UiTipToast.EnsureHost();
+                        else
+                        {
+                            _hudOpened = true;
+                            GameEntry.Weather?.PushVisuals();
+                            Log.Info("[ProcedureIsland] OpenUIForm IslandMainForm");
+                            GameEntry.UI.OpenUIForm(UiAssets.IslandMainForm, "Main");
+                            UiTipToast.EnsureHost();
+                        }
                     }
 
                     if (!GameEntry.UI.HasUIForm(UiAssets.IslandMainForm))
@@ -966,8 +987,26 @@ namespace Game
                 return true;
             }
 
-            // 起播（StartEngine 约 0.4–0.6s、封面解码）在罩下做完再 FadeHide。
-            // 与远场 Prefill 叠在揭罩帧上时，主线程会打出可见卡顿。
+            // Prefill 已在更早阶段 sync 做完。先放渲染 + look warmup 让 Surface 稳定出几帧，
+            // 再起播/切歌，避免揭罩窗口叠音频解码尖峰触发 Vulkan dequeue timeout。
+            // 罩还是不透明的：用已经加载的地形把眼睛贴到落点，再开始淡出。
+            if (IslandJoystickCamera.Current != null)
+                IslandPlayerPosSave.ReplantAfterTerrainReady(IslandJoystickCamera.Current);
+
+            // 二次进岛 Prefill 抢主线程时，揭罩前整包 PSO 会把「即将进入」拖成几十秒。
+            // 这里只在罩下扫出生朝向左右几帧（墙钟 1.5s 封顶），把侧面变体和走路档 RT 提前画掉。
+            // 淡出前不要关 Loading。Close 会拆掉罩，接着再打开就会整页闪一次。
+            // 只放渲染。流送留到草地和 extras 结束，避免和淡出抢同一帧。
+            EnvItemStreamerLite.ReleaseRenderHold();
+            if (IslandJoystickCamera.Current != null)
+            {
+                await IslandJoystickCamera.Current.WarmupEntryLookAsync(
+                    () => gen != _uncoverGeneration);
+            }
+
+            if (Stale("afterLookWarmup"))
+                return;
+
             try
             {
                 UniTask audio = StartAudioBeforeUncover(gen);
@@ -988,24 +1027,6 @@ namespace Game
             }
 
             if (Stale("afterAudio"))
-                return;
-
-            // 罩还是不透明的：用已经加载的地形把眼睛贴到落点，再开始淡出。
-            if (IslandJoystickCamera.Current != null)
-                IslandPlayerPosSave.ReplantAfterTerrainReady(IslandJoystickCamera.Current);
-
-            // 先放行触摸，再淡出罩。二次进岛 Prefill 抢主线程时，揭罩前整包 PSO 会把「即将进入」拖成几十秒。
-            // 这里只在罩下扫出生朝向左右几帧（墙钟 1.5s 封顶），把侧面变体和走路档 RT 提前画掉。
-            // 淡出前不要关 Loading。Close 会拆掉罩，接着再打开就会整页闪一次。
-            // 只放渲染。流送留到草地和 extras 结束，避免和淡出抢同一帧。
-            EnvItemStreamerLite.ReleaseRenderHold();
-            if (IslandJoystickCamera.Current != null)
-            {
-                await IslandJoystickCamera.Current.WarmupEntryLookAsync(
-                    () => gen != _uncoverGeneration);
-            }
-
-            if (Stale("afterLookWarmup"))
                 return;
 
             // 淡出前清一次残留 Panel/Dialog。此后用户已可点 HUD，再关会把刚打开的预设弹走。
@@ -1068,12 +1089,15 @@ namespace Game
             await UniTask.Delay(200, DelayType.UnscaledDeltaTime);
             if (gen != _uncoverGeneration)
                 return;
-            // 只松行走闩 / 关 Loading 残留；勿 CloseGroup Panel——揭罩后用户常已点开预设。
-            UnlockLocomotionAfterUncover();
+            // 只再松行走闩。勿再 closeLoadingCover：Loading 已 Disarm，
+            // 再 Unblock→ForceVeilOff/Disarm 会在真机 UnityGfxDeviceW 上 SEGV（实测 ~24ms）。
+            // 勿 CloseGroup Panel——揭罩后用户常已点开预设。
+            UnlockLocomotionAfterUncover(closeLoadingCover: false);
             await UniTask.Delay(600, DelayType.UnscaledDeltaTime);
             if (gen != _uncoverGeneration)
                 return;
-            UnlockLocomotionAfterUncover();
+            UnlockLocomotionAfterUncover(closeLoadingCover: false);
+            BootLoadingService.MarkEntryGpuSettled();
             Log.Info(
                 "[Hitch] PostUncoverRelock end wallMs="
                 + ((Time.realtimeSinceStartup - wallStart) * 1000f).ToString("F0"));
@@ -1120,13 +1144,22 @@ namespace Game
                 && WanosAudio.BoluoAudioSessionNative.AllowUnmuteNow()
                 && WanosAudio.BoluoAndroidEngineNative.TryArmFocusBeforeAudible();
             if (allowAudible)
-                WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover");
+            {
+                IslandAudioSession.ClearYieldHold();
+                if (WanosAudio.WanosEngine.Unmute("ProcedureIsland.Uncover"))
+                {
+                    WanosAudio.WanosEngine.ClearInterrupted("startup-audible");
+                    IslandAudioSession.NoteAudibleCommitted();
+                    AudioAppLifecycle.NoteForegroundAudibleStarted();
+                }
+                else
+                    IslandAudioSession.HoldYield("startup-unmute-denied");
+            }
             else
             {
-                // 记成打断：回波萝走完整恢复，解 mute 并补负一屏。
-                // 不记的话回前台会当成「后台一直在播」直接跳过。
-                WanosAudio.WanosEngine.KeepSilent("startup-no-audio-focus");
-                WanosAudio.WanosEngine.MarkInterrupted("startup-no-audio-focus");
+                // 人已经切走或焦点被拒：音乐保持静音，声景同一道闸。
+                // 回前台 AudioAppLifecycle 解 mute 并重起。
+                IslandAudioSession.HoldYield("startup-no-audio-focus");
             }
             GameEntry.Music?.ApplySavedVolumes();
             Log.Info("[Hitch] audio Unmute+volumes ms=" + sw.ElapsedMilliseconds
@@ -1136,11 +1169,14 @@ namespace Game
 
             sw.Restart();
             IslandAudioSession.Instance?.StartAfterUncover();
+            // Start 是异步的：让出旗必须在首轮 Evaluate 之前就在，盖住随后 Post 的环境/天气。
+            if (!allowAudible || IslandAudioSession.IsYieldHeld || AudioAppLifecycle.IsInBackground)
+                IslandAudioSession.HoldYield("startup-content");
             Log.Info("[Hitch] audio interaction ms=" + sw.ElapsedMilliseconds);
             if (gen != _uncoverGeneration)
                 return;
             sw.Restart();
-            if (allowAudible)
+            if (allowAudible && !IslandAudioSession.IsYieldHeld && !AudioAppLifecycle.IsInBackground)
                 NowPlayingService.PublishPlayingForced();
             Log.Info("[Hitch] audio PublishPlayingForced ms=" + sw.ElapsedMilliseconds
                 + " allowAudible=" + allowAudible);
@@ -1170,13 +1206,16 @@ namespace Game
                 {
                     if (clearOverlayForms)
                     {
-                        UiAssets.CloseGroup("Panel");
-                        UiAssets.CloseGroup("Dialog");
+                        // 揭罩同窗禁止同步 Close：延后到画完再拆 Panel/Dialog。
+                        UiAssets.CloseGroupDeferred("Panel", endOfFramePasses: 2);
+                        UiAssets.CloseGroupDeferred("Dialog", endOfFramePasses: 2);
                     }
 
-                    // Loading 残留会挡 UITK 命中 → 摇杆收不到指针。淡出进行中不能关，否则罩会被拆掉再打开。
+                    // Loading 残留会挡 UITK 命中 → 摇杆收不到指针。
+                    // 只 Disarm Document 立刻让命中；同步 CloseGroup 会在真机 UnityGfxDeviceW 上 SEGV
+                    //（PostUncoverRelock 实测 Close 后 ~18ms 崩）。真正 Close 由 BootLoadingService 画完后再做。
                     if (closeLoadingCover && GameEntry.UI.HasUIForm(UiAssets.LoadingForm))
-                        UiAssets.CloseGroup("Loading");
+                        BootLoadingService.UnblockInputAfterHide();
                 }
                 Native.NativeOverlayGate.Apply(present: 0, touchEnabled: 1, bottomHidden: 0);
                 NativeBridgeFacade.SyncOverlayFromGate();

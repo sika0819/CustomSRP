@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 5996376777308678364}
   - component: {fileID: 4108250385601138351}
   - component: {fileID: 8792790279482619896}
+  - component: {fileID: 409646629899594980}
   m_Layer: 0
   m_Name: TAI_Palm_Tree_03A_LOD2
   m_TagString: Untagged
@@ -234,3 +235,16 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+
+--- !u!114 &409646629899594980
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1770176168070713402}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c3e91f4b2d4e6a8c0d1f2e3a4b5c6d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 

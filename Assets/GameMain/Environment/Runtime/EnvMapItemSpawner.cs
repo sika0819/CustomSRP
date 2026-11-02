@@ -46,6 +46,12 @@ namespace Game
 
         public bool IsReady { get; private set; }
 
+        /// <summary>
+        /// Prefill 后的氛围 extras（含 Huodui）已结束，或本局不需要铺。
+        /// Ambience 篝火锚点读 <see cref="EnvMapItemExtras.LoadedItems"/>，必须等这个再扫。
+        /// </summary>
+        public bool ExtrasSettled { get; private set; }
+
         public IEnumerator Run(Transform focus, System.Action<float, string> reportProgress)
         {
             if (_started)
@@ -96,9 +102,11 @@ namespace Game
             // 近场就绪由 Prefill 空等一帧之后抬。extras 等草地结束再铺，不在这里 Instantiate。
             IsReady = true;
             _extrasPending = ShouldSpawnExtras();
+            ExtrasSettled = !_extrasPending;
             Log.Info(
                 $"[MapItem] prefill ready items={_allMapItems.Count} spawned={SpawnedCount} " +
-                $"streaming={EnvStreamingConfig.ResolveStreamingEnabled()} extras=deferred");
+                $"streaming={EnvStreamingConfig.ResolveStreamingEnabled()} extras=" +
+                (ExtrasSettled ? "none" : "deferred"));
             reportProgress?.Invoke(fillMax, "正在进入岛屿...");
             yield return null;
             Log.Info("[MapItem] prefill frame resumed");
@@ -139,9 +147,11 @@ namespace Game
             if (_released || this == null)
             {
                 Log.Info("[MapItem] deferred extras aborted (released)");
+                ExtrasSettled = true;
                 yield break;
             }
 
+            ExtrasSettled = true;
             Log.Info(
                 $"[MapItem] ready items={_allMapItems.Count} spawned={SpawnedCount} " +
                 $"extras={_extrasSpawnedCount} streaming={EnvStreamingConfig.ResolveStreamingEnabled()}");
@@ -222,6 +232,7 @@ namespace Game
             _extrasSpawnedCount = 0;
             _extrasPending = false;
             _extrasStarted = false;
+            ExtrasSettled = false;
             IsReady = false;
             _started = false;
         }

@@ -32,18 +32,18 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _NoiseMap:
-        m_Texture: {fileID: 2800000, guid: c8d2b0f15e3a4b7d9f1c2e4a6b810293, type: 3}
+        m_Texture: {fileID: 2800000, guid: 604892b3a6834480989ee1f69c4af113, type: 3}
         m_Scale: {x: 0.32, y: 0.32}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _EdgeIntensity: 1.55
+    - _EdgeIntensity: 2.2
     - _SdfMax: 0.9
     - _SdfMin: 0.48
-    - _SdfSoftness: 0.14
-    - _TopHighlight: 0.92
+    - _SdfSoftness: 0.08
+    - _TopHighlight: 1
     - _TopShadow: 1
-    - _UVDisturbance: 0.04
+    - _UVDisturbance: 0.028
     m_Colors: []
   m_BuildTextureStacks: []
   m_AllowLocking: 1

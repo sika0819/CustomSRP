@@ -106,6 +106,8 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _FoliageHeight: 12
+    - _FoliageYMin: 0
     - _OilFoliage: 1
     - _AlphaClip: 0.5
     - _AlphaCutoff: 0.5
@@ -129,7 +131,7 @@ Material:
     - _Glossiness: 0.5
     - _GlossyReflections: 1
     - _GradientAmount: 0.3
-    - _GradientOffset: 0.33
+    - _GradientOffset: 0
     - _GradientSmoothness: 0.48
     - _GrassMode: 0
     - _InternalEdge: 0
@@ -172,7 +174,7 @@ Material:
     m_Colors:
     - _AmbientColor: {r: 0.55, g: 0.58, b: 0.48, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
-    - _BottomColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BottomColor: {r: 0.23921568627450981, g: 0.4392156862745098, b: 0.10196078431372549, a: 1.0}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EdgeColor: {r: 0.27999997, g: 0.19999996, b: 0.15999997, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
@@ -182,7 +184,7 @@ Material:
     - _ShadowTint: {r: 0.42, g: 0.36, b: 0.3, a: 1}
     - _ShadowWarm: {r: 0.45, g: 0.5, b: 0.38, a: 1}
     - _SpecularColor: {r: 0.54999995, g: 0.47999996, b: 0.39999998, a: 1}
-    - _TopColor: {r: 1, g: 1, b: 1, a: 1}
+    - _TopColor: {r: 0.5019607843137255, g: 0.7411764705882353, b: 0.1803921568627451, a: 1.0}
     - _WindDirection: {r: 1, g: 0, b: 1, a: 0}
     - _WindStrength: {r: 0, g: 0, b: 0, a: 0}
     - _WindStrengthVec: {r: 0.2, g: 0, b: 0.2, a: 0}

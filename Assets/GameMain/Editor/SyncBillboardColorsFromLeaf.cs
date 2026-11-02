@@ -14,10 +14,16 @@ namespace Game
         const string PrefabsRoot = "Assets/GameMain/Environment/Prefabs/DaoYu1";
         static readonly string[] Folders = { "Songshu", "Lvshu" };
 
-        static readonly string[] SyncProps =
+        static readonly string[] SyncColorProps =
         {
             "_TopColor", "_BottomColor", "_AmbientColor", "_ShadowTint", "_ShadowWarm",
             "_SpecularColor"
+        };
+
+        // Volume band must match near leaf or LOD pop changes crown→base paint.
+        static readonly string[] SyncFloatProps =
+        {
+            "_FoliageHeight", "_GradientOffset", "_GradientSmoothness"
         };
 
         const float AlphaThreshold = 0.35f;
@@ -41,6 +47,8 @@ namespace Game
         {
             int updated = 0;
             var seen = new HashSet<string>();
+            // Shared leaf mats: keep the tallest LOD0 leaf OS.y so no tree clamps mid-crown.
+            var leafHeightMax = new Dictionary<Material, float>();
 
             foreach (string folder in Folders)
             {
@@ -59,6 +67,12 @@ namespace Game
                     {
                         if (!TryGetLeafAndBillboardMats(root, out Material leaf, out List<Material> billboards))
                             continue;
+
+                        if (TryLod0LeafMaxY(root, out float maxY))
+                        {
+                            if (!leafHeightMax.TryGetValue(leaf, out float prev) || maxY > prev)
+                                leafHeightMax[leaf] = maxY;
+                        }
 
                         for (int i = 0; i < billboards.Count; i++)
                         {
@@ -84,7 +98,114 @@ namespace Game
                 }
             }
 
+            foreach (var kv in leafHeightMax)
+            {
+                Material leaf = kv.Key;
+                float h = Mathf.Max(0.5f, kv.Value);
+                if (!leaf.HasProperty("_FoliageHeight"))
+                    continue;
+                if (Mathf.Abs(leaf.GetFloat("_FoliageHeight") - h) <= 0.02f)
+                    continue;
+                leaf.SetFloat("_FoliageHeight", h);
+                EditorUtility.SetDirty(leaf);
+                updated++;
+                Debug.Log($"[SyncBillboardColors] {leaf.name} _FoliageHeight={h:F2} (LOD0 leaf max Y)");
+            }
+
+            // Re-copy height onto every BB so near/far share the same band scale.
+            seen.Clear();
+            foreach (string folder in Folders)
+            {
+                string dir = Path.Combine(PrefabsRoot, folder).Replace('\\', '/');
+                if (!Directory.Exists(dir))
+                    continue;
+                foreach (string file in Directory.GetFiles(dir, "*.prefab", SearchOption.AllDirectories))
+                {
+                    string path = file.Replace('\\', '/');
+                    var root = PrefabUtility.LoadPrefabContents(path);
+                    if (root == null)
+                        continue;
+                    try
+                    {
+                        if (!TryGetLeafAndBillboardMats(root, out Material leaf, out List<Material> billboards))
+                            continue;
+                        if (!leaf.HasProperty("_FoliageHeight"))
+                            continue;
+                        float h = leaf.GetFloat("_FoliageHeight");
+                        for (int i = 0; i < billboards.Count; i++)
+                        {
+                            Material bb = billboards[i];
+                            if (bb == null || !bb.HasProperty("_FoliageHeight"))
+                                continue;
+                            string assetPath = AssetDatabase.GetAssetPath(bb);
+                            if (string.IsNullOrEmpty(assetPath) || !seen.Add(assetPath))
+                                continue;
+                            if (Mathf.Abs(bb.GetFloat("_FoliageHeight") - h) <= 0.02f)
+                                continue;
+                            bb.SetFloat("_FoliageHeight", h);
+                            EditorUtility.SetDirty(bb);
+                            updated++;
+                        }
+                    }
+                    finally
+                    {
+                        PrefabUtility.UnloadPrefabContents(root);
+                    }
+                }
+            }
+
             return updated;
+        }
+
+        /// <summary>Local-space max Y of LOD0 leaf mesh (pivot at ground → crown height).</summary>
+        static bool TryLod0LeafMaxY(GameObject root, out float maxY)
+        {
+            maxY = 0f;
+            var lod = root.GetComponentInChildren<LODGroup>(true);
+            if (lod == null)
+                return false;
+            LOD[] lods = lod.GetLODs();
+            if (lods == null || lods.Length == 0 || lods[0].renderers == null)
+                return false;
+
+            bool found = false;
+            for (int i = 0; i < lods[0].renderers.Length; i++)
+            {
+                var r = lods[0].renderers[i];
+                if (r == null)
+                    continue;
+                var mf = r.GetComponent<MeshFilter>();
+                if (mf == null || mf.sharedMesh == null)
+                    continue;
+
+                var mr = r as MeshRenderer;
+                if (mr == null || mr.sharedMaterials == null)
+                    continue;
+                bool leafish = false;
+                for (int m = 0; m < mr.sharedMaterials.Length; m++)
+                {
+                    var mat = mr.sharedMaterials[m];
+                    if (mat == null)
+                        continue;
+                    string n = mat.name;
+                    if (n.Contains("Leaf") || n.Contains("Vegetation"))
+                    {
+                        leafish = true;
+                        break;
+                    }
+                }
+
+                if (!leafish)
+                    continue;
+
+                Bounds b = mf.sharedMesh.bounds;
+                float y = b.center.y + b.extents.y;
+                if (y > maxY)
+                    maxY = y;
+                found = true;
+            }
+
+            return found && maxY > 0.01f;
         }
 
         static bool TryGetLeafAndBillboardMats(
@@ -144,9 +265,9 @@ namespace Game
         static bool CopyColors(Material leaf, Material bb)
         {
             bool dirty = false;
-            for (int i = 0; i < SyncProps.Length; i++)
+            for (int i = 0; i < SyncColorProps.Length; i++)
             {
-                string p = SyncProps[i];
+                string p = SyncColorProps[i];
                 if (!leaf.HasProperty(p) || !bb.HasProperty(p))
                     continue;
                 Color src = leaf.GetColor(p);
@@ -154,6 +275,19 @@ namespace Game
                 if (ColorsNearlyEqual(src, dst))
                     continue;
                 bb.SetColor(p, src);
+                dirty = true;
+            }
+
+            for (int i = 0; i < SyncFloatProps.Length; i++)
+            {
+                string p = SyncFloatProps[i];
+                if (!leaf.HasProperty(p) || !bb.HasProperty(p))
+                    continue;
+                float src = leaf.GetFloat(p);
+                float dst = bb.GetFloat(p);
+                if (Mathf.Abs(src - dst) <= 1e-4f)
+                    continue;
+                bb.SetFloat(p, src);
                 dirty = true;
             }
 
@@ -187,15 +321,23 @@ namespace Game
                 ClampTint(leafBase.b * leafMean.b / Mathf.Max(bbMean.b, 1e-3f)),
                 1f);
 
+            // OilNPR multiplies _BaseColor only; keep _Color/_MainColor in sync as leftovers.
             Color cur = bb.GetColor("_BaseColor");
-            if (ColorsNearlyEqual(cur, tint))
-                return false;
-
-            bb.SetColor("_BaseColor", tint);
-            if (bb.HasProperty("_Color"))
+            bool dirty = !ColorsNearlyEqual(cur, tint);
+            if (dirty)
+                bb.SetColor("_BaseColor", tint);
+            if (bb.HasProperty("_Color") && !ColorsNearlyEqual(bb.GetColor("_Color"), tint))
+            {
                 bb.SetColor("_Color", tint);
-            if (bb.HasProperty("_MainColor"))
+                dirty = true;
+            }
+            if (bb.HasProperty("_MainColor") && !ColorsNearlyEqual(bb.GetColor("_MainColor"), tint))
+            {
                 bb.SetColor("_MainColor", tint);
+                dirty = true;
+            }
+            if (!dirty)
+                return false;
 
             Debug.Log(
                 $"[SyncBillboardColors] base tint {bb.name}: " +

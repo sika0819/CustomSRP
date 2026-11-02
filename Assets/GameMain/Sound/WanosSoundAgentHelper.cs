@@ -158,7 +158,8 @@ namespace Game
 
             _playing = _instanceId != 0 || WanosEngine.IsEventPostAllowed;
             ApplyVolumeToEngine();
-            if (_playing && fadeInSeconds <= 0f && WanosEngine.IsPlaybackEnabled)
+            if (_playing && fadeInSeconds <= 0f && WanosEngine.IsPlaybackEnabled
+                && !IslandAudioSession.IsYieldHeld)
                 WanosEngine.Unmute("agent-play");
         }
 

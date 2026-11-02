@@ -73,7 +73,7 @@ static bool IsSkyworthGmj();
 ```
 1. boluoRsa       → cipherText
 2. boluoDeviceLogin → deviceToken
-3. touristLogin   → userToken（游客）
+3. touristLogin   → userToken（游客；Unity 独立包/编辑器未过期同设备先复用 `Boluo.GuestCache`）
    或 mobileLogin / passwordLogin → userToken（正式账号，Editor 联调）
 ```
 

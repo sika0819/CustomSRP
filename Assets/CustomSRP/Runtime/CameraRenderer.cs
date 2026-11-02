@@ -114,8 +114,10 @@ namespace CustomSRP
             if (Application.isMobilePlatform)
             {
                 shadowSettings = shadowSettings.ClonedForMobile();
-                // 移动端含闺蜜机标准版：与 IslandMobileTune shadowDistance 对齐，保留可见近中景接触影。
-                shadowSettings.maxDistance = Mathf.Min(shadowSettings.maxDistance, 25f);
+                // Asset 写死 26。平板直接抬到 40；手机与闺蜜机仍收到 25。
+                shadowSettings.maxDistance = IslandMobileTune.UseTabletShadowDistance
+                    ? IslandMobileTune.TabletShadowDistance
+                    : Mathf.Min(shadowSettings.maxDistance, 25f);
             }
 
             ProfilingSampler cameraSampler;
@@ -303,7 +305,8 @@ namespace CustomSRP
                         (uint)cameraSettings.renderingLayerMask,
                         true,
                         textures,
-                        lightResources);
+                        lightResources,
+                        isReflection);
 
                     // Mirror RT is scenery only. Water already has analytic sky, so the
                     // reflection camera must not draw the skybox again.
@@ -384,6 +387,15 @@ namespace CustomSRP
                     context.DrawUIOverlay(camera);
                 }
                 context.Submit();
+                // Instanced trees are emitted at Submit, after the mirror's
+                // geometry pass. Put winding back before the next camera.
+                if (isReflection)
+                {
+                    commandBuffer.Clear();
+                    commandBuffer.SetInvertCulling(false);
+                    context.ExecuteCommandBuffer(commandBuffer);
+                    context.Submit();
+                }
             }
             finally
             {

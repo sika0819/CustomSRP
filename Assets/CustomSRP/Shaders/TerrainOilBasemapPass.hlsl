@@ -8,8 +8,10 @@
 TEXTURE2D(_MainTex);
 SAMPLER(sampler_MainTex);
 
+#if !defined(OIL_MOBILE_PERF)
 TEXTURE2D(_OutlineBrushMap);
 SAMPLER(sampler_OutlineBrushMap);
+#endif
 
 CBUFFER_START(UnityPerMaterial)
     float4 _MainTex_ST;
@@ -24,7 +26,9 @@ CBUFFER_START(UnityPerMaterial)
     float _ShadowBrushScale;
 CBUFFER_END
 
+#if !defined(OIL_MOBILE_PERF)
 #include "OilShadowBrush.hlsl"
+#endif
 
 struct Attributes
 {
@@ -118,7 +122,7 @@ half4 TerrainOilBasemapFragment(Varyings input) : SV_TARGET
     half3 shadowFloor = albedo * half3(0.18h, 0.12h, 0.26h) + half3(0.015h, 0.01h, 0.03h);
     if (GetDirectionalLightCount() > 0)
     {
-        half3 key = (half3)_DirectionalLightData[0].color.rgb;
+        half3 key = (half3)GetDirectionalLightData(0).color.rgb;
         half keyLum = dot(key, half3(0.2126h, 0.7152h, 0.0722h));
         shadowFloor *= saturate(keyLum * 2.5h);
     }

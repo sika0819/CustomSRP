@@ -23,7 +23,8 @@ namespace CustomSRP
             FXAAWithLuma,
             OilFilter,
             OilRain,
-            OilWarp
+            OilWarp,
+            OilFilterHq
         }
 
         public static readonly int

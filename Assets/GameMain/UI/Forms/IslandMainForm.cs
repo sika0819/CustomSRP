@@ -18,6 +18,8 @@ namespace Game
         const float InlensSeconds = 2f;
         const float BlackHoldSeconds = 0.16f;
         const float BlackHoldLowEndSeconds = 0.08f;
+        /// <summary>Wall-clock cap for one iris. Past this → abort so SchemeState/busy cannot stick.</summary>
+        const float PresetTransitionWatchdogSeconds = 12f;
         // Boluo YuSheLable: fadeIn@2s, fadeOut@5s, each 0.6s.
         const float PresetLabelDelaySeconds = 2f;
         const float PresetLabelFadeSeconds = 0.6f;
@@ -42,6 +44,8 @@ namespace Game
         float _lastMusicVolume = -1f;
         float _lastEffectVolume = -1f;
         bool _volumeMarksReady;
+        /// <summary>Full gray-track width in panel px (design 60). Layout resets it; the fill then shrinks from the left.</summary>
+        float _volumeTrackWidth = 60f;
         Label _timeLabelText;
         Texture2D _texLabelMorning;
         Texture2D _texLabelNoon;
@@ -112,6 +116,7 @@ namespace Game
         int _transitionPresetId;
         int _queuedPresetId;
         float _phaseElapsed;
+        float _transitionWatchdogElapsed;
         enum IrisPhase { None, Exiting, Holding, Entering }
         IrisPhase _irisPhase;
 
@@ -352,7 +357,8 @@ namespace Game
             SyncVolumeIcon();
             SyncTimerIcon();
             TickTimeToastFade(elapseSeconds);
-            TickPresetIris(elapseSeconds);
+            // realElapse：timeScale=0 / hitch 时 scaled dt 会冻死虹膜，SchemeState 钉在 1。
+            TickPresetIris(realElapseSeconds);
             TickPresetLabelFade(elapseSeconds);
             _locomotion.Tick();
             bool pointerPressed = WasPointerPressedThisFrame();
@@ -419,7 +425,9 @@ namespace Game
         }
 
         /// <summary>
-        /// Boluo HudVolumeBinder: dots travel x 24→62 via translate; fills use fixed width + scale.x.
+        /// Boluo HudVolumeBinder: dots travel x 24→62 via translate.
+        /// Fills keep the left edge on the gray track and grow by width (9-slice caps).
+        /// Scale-from-center left the default volume's left cap empty.
         /// Track 1 / music dot follow music; track 2 / effect dot follow effects.
         /// </summary>
         void SyncVolumeIcon(bool force = false)
@@ -434,8 +442,8 @@ namespace Game
 
             _lastMusicVolume = musicVolume;
             _lastEffectVolume = effectVolume;
-            PlaceVolumeMark(_volumeMusicDot, _volumeMusicFill, musicVolume);
-            PlaceVolumeMark(_volumeEffectDot, _volumeEffectFill, effectVolume);
+            PlaceVolumeMark(_volumeMusicDot, _volumeMusicFill, musicVolume, _volumeTrackWidth);
+            PlaceVolumeMark(_volumeEffectDot, _volumeEffectFill, effectVolume, _volumeTrackWidth);
         }
 
         void PrepareVolumeMarks()
@@ -443,11 +451,9 @@ namespace Game
             if (_volumeMarksReady)
                 return;
             // Design-space anchors; IslandMainHudLayout ScaleChild still sizes them.
-            // Animation uses translate / scale only after that.
+            // Dots then move with translate; fills change width from the left edge.
             PrepareVolumeDot(_volumeMusicDot);
             PrepareVolumeDot(_volumeEffectDot);
-            PrepareVolumeFill(_volumeMusicFill);
-            PrepareVolumeFill(_volumeEffectFill);
             _volumeMarksReady = true;
         }
 
@@ -459,41 +465,29 @@ namespace Game
             dot.style.transformOrigin = new TransformOrigin(Length.Percent(0), Length.Percent(50));
         }
 
-        static void PrepareVolumeFill(VisualElement fill)
+        static void PlaceVolumeMark(VisualElement dot, VisualElement fill, float value, float fullTrackWidth)
         {
-            if (fill == null)
-                return;
-            fill.usageHints = UsageHints.DynamicTransform;
-            fill.style.transformOrigin = new TransformOrigin(Length.Percent(0), Length.Percent(50));
-        }
-
-        static void PlaceVolumeMark(VisualElement dot, VisualElement fill, float value)
-        {
-            // Design travel 38px (24→62) over 108 icon; scale with resolved fill width (60 design).
-            float travel = 38f;
-            if (fill != null)
-            {
-                float fillW = fill.resolvedStyle.width;
-                if (fillW > 1f)
-                    travel = fillW * (38f / 60f);
-            }
+            float x = Mathf.Clamp01(value);
+            float fullW = fullTrackWidth > 1f ? fullTrackWidth : 60f;
+            // Design travel 38px (24→62) across the 60px track.
+            float travel = fullW * (38f / 60f);
 
             if (dot != null)
-                dot.style.translate = new Translate(travel * value, 0f);
-            if (fill != null)
+                dot.style.translate = new Translate(travel * x, 0f);
+            if (fill == null)
+                return;
+
+            // Width, not scale: scale is around the center, so the left cap lifts off the track.
+            fill.style.scale = new Scale(Vector2.one);
+            fill.style.translate = new Translate(0f, 0f);
+            if (x < 0.001f)
             {
-                float x = Mathf.Clamp01(value);
-                if (x < 0.001f)
-                {
-                    fill.style.scale = new Scale(new Vector2(0.001f, 1f));
-                    fill.style.display = DisplayStyle.None;
-                }
-                else
-                {
-                    fill.style.display = DisplayStyle.Flex;
-                    fill.style.scale = new Scale(new Vector2(x, 1f));
-                }
+                fill.style.display = DisplayStyle.None;
+                return;
             }
+
+            fill.style.display = DisplayStyle.Flex;
+            fill.style.width = fullW * x;
         }
 
         void OnScreenLayoutChanged()
@@ -502,9 +496,36 @@ namespace Game
             ApplyInputLayout();
         }
 
+        /// <summary>
+        /// Call immediately after HUD layout, before the fill width is overwritten.
+        /// Layout writes the full track; volume then shrinks it from the left.
+        /// </summary>
+        void NoteVolumeTrackWidth()
+        {
+            float w = InlinePixelWidth(_volumeMusicFill);
+            if (w < 1f)
+                w = InlinePixelWidth(_volumeEffectFill);
+            // Layout writes the full track (design 60, or larger if the icon grows).
+            // A shorter width is the volume fill we already shrunk — do not treat it as the track.
+            if (w >= 60f - 0.5f)
+                _volumeTrackWidth = w;
+        }
+
+        static float InlinePixelWidth(VisualElement el)
+        {
+            if (el == null)
+                return 0f;
+            StyleLength length = el.style.width;
+            if (length.keyword != StyleKeyword.Undefined && length.keyword != StyleKeyword.Null)
+                return 0f;
+            Length v = length.value;
+            return v.unit == LengthUnit.Pixel ? v.value : 0f;
+        }
+
         void ApplyInputLayout()
         {
             _hudLayout.Apply();
+            NoteVolumeTrackWidth();
             SyncVolumeIcon(force: true);
             _locomotion.ApplyLayoutScale();
             _idle.ApplyLayout();
@@ -637,12 +658,34 @@ namespace Game
 
         void TryOpenPresetPanel()
         {
+            // Stale latch (SchemeState=1 / busy, iris already None): heal so leave/re-enter
+            // is not the only recovery — then fall through to the normal busy checks.
+            HealStalePresetTransitionLatch();
             // F1: block open while a preset MoveTo / veil is in flight.
             if (GameEntry.Presets != null && GameEntry.Presets.IsTransitioning)
                 return;
             if (_presetTransitionBusy)
                 return;
             UiAssets.OpenPanel(UiAssets.PresetForm);
+        }
+
+        /// <summary>
+        /// Prior iris died mid-flight and left IsTransitioning / busy / veil up with no
+        /// phase left to finish — the session-stuck case that used to need leave/re-enter.
+        /// </summary>
+        public void HealStalePresetTransitionLatch()
+        {
+            bool transitioning = GameEntry.Presets != null && GameEntry.Presets.IsTransitioning;
+            if (!transitioning && !_presetTransitionBusy)
+                return;
+            if (_irisPhase != IrisPhase.None)
+                return;
+
+            Debug.LogWarning(
+                "[IslandMainForm] stale preset latch (no iris phase) — AbortPresetTransitionCleanup");
+            AbortPresetTransitionCleanup();
+            _queuedPresetId = 0;
+            _transitionPresetId = 0;
         }
 
         void OnPresetTransitionRequest(object sender, GameEventArgs e)
@@ -665,6 +708,9 @@ namespace Game
             _transitionPresetId = presetId;
             _queuedPresetId = 0;
             _phaseElapsed = 0f;
+            _transitionWatchdogElapsed = 0f;
+            // Phase first so Tick can advance even if weather/duck/push throws below.
+            _irisPhase = IrisPhase.Exiting;
             _idle.ExitOnReturnFromForeground();
             HidePresetLabelImmediate();
             HideTimeToastImmediate();
@@ -672,13 +718,26 @@ namespace Game
             SetHudVisible(false);
             ShowInputBlocker(true);
 
-            PresetService.Instance?.BeginWeatherHold();
-            PresetIrisOverlay.Clear();
-            // Do not ClearContent3D here — screen is still fully audible for ~0.5–2s.
-            // PresetService.Apply (iris Peak / black) clears under veil; Release retriggers.
+            try
+            {
+                // Queued Begin skips RequestTransition — re-arm SchemeState=1 so Apply
+                // keeps ambience held until reveal MarkPlaying.
+                if (GameEntry.Presets != null && !GameEntry.Presets.IsTransitioning)
+                    GameEntry.Presets.ArmTransitioning();
 
-            IslandJoystickCamera.Current?.BeginPush();
-            _irisPhase = IrisPhase.Exiting;
+                PresetService.Instance?.BeginWeatherHold();
+                PresetIrisOverlay.Clear();
+                // Do not ClearContent3D here — screen is still fully audible for ~0.5–2s.
+                // PresetService.Apply (iris Peak / black) clears under veil; Release retriggers.
+                IslandJoystickCamera.Current?.BeginPush();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[IslandMainForm] BeginPresetTransition failed: " + e.Message);
+                AbortPresetTransitionCleanup();
+                _queuedPresetId = 0;
+                _transitionPresetId = 0;
+            }
         }
 
         void EnsurePresetChrome()
@@ -713,6 +772,7 @@ namespace Game
             _transitionPresetId = 0;
             _queuedPresetId = 0;
             _phaseElapsed = 0f;
+            _transitionWatchdogElapsed = 0f;
             _irisPhase = IrisPhase.None;
         }
 
@@ -735,6 +795,7 @@ namespace Game
             catch (Exception e) { Debug.LogWarning("[IslandMainForm] preset Abort: " + e.Message); }
             _irisPhase = IrisPhase.None;
             _phaseElapsed = 0f;
+            _transitionWatchdogElapsed = 0f;
             _presetTransitionBusy = false;
         }
 
@@ -743,15 +804,27 @@ namespace Game
             if (_irisPhase == IrisPhase.None)
                 return;
 
+            float dt = elapseSeconds > 0f ? elapseSeconds : Time.unscaledDeltaTime;
+            _transitionWatchdogElapsed += dt;
+            if (_transitionWatchdogElapsed > PresetTransitionWatchdogSeconds)
+            {
+                Debug.LogWarning(
+                    $"[IslandMainForm] preset iris watchdog {_transitionWatchdogElapsed:F1}s phase={_irisPhase} — abort");
+                AbortPresetTransitionCleanup();
+                _queuedPresetId = 0;
+                _transitionPresetId = 0;
+                return;
+            }
+
             IslandJoystickCamera cam = IslandJoystickCamera.Current;
-            _phaseElapsed += elapseSeconds;
+            _phaseElapsed += dt;
 
             if (_irisPhase == IrisPhase.Exiting)
             {
                 float t = Mathf.Clamp01(_phaseElapsed / OutlensSeconds);
                 cam?.SamplePush(t);
                 if (!IslandGraphicsTier.IsLowEnd)
-                    cam?.NudgePush(elapseSeconds);
+                    cam?.NudgePush(dt);
                 ApplyExitIris(_phaseElapsed);
 
                 if (_phaseElapsed < OutlensSeconds)
@@ -760,8 +833,18 @@ namespace Game
                 // 先切 Holding，避免 Apply 重/抛错时每帧重复 Apply 钉死 SchemeState=1。
                 _irisPhase = IrisPhase.Holding;
                 _phaseElapsed = 0f;
-                PresetIrisOverlay.Peak();
-                GameEntry.Presets?.Apply(_transitionPresetId, teleportPlayer: true);
+                try
+                {
+                    PresetIrisOverlay.Peak();
+                    GameEntry.Presets?.Apply(_transitionPresetId, teleportPlayer: true);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning("[IslandMainForm] iris Apply failed: " + e.Message);
+                    AbortPresetTransitionCleanup();
+                    _queuedPresetId = 0;
+                    _transitionPresetId = 0;
+                }
                 return;
             }
 
@@ -775,7 +858,8 @@ namespace Game
                 _irisPhase = IrisPhase.Entering;
                 _phaseElapsed = 0f;
                 // Unduck while iris opens — Peak already Cleared/Retargeted under silence.
-                IslandAudioSession.Instance?.Duck.BeginFull();
+                try { IslandAudioSession.Instance?.Duck.BeginFull(); }
+                catch (Exception e) { Debug.LogWarning("[IslandMainForm] duck BeginFull: " + e.Message); }
                 SchedulePresetLabelAfterReveal();
                 return;
             }
@@ -814,22 +898,40 @@ namespace Game
 
         void FinishPresetReveal()
         {
-            // 先清相位，避免 Release/音频路径抛错时每帧重入 Finish 钉死行走。
+            // 先清相位 + 立刻 MarkPlaying / 收 veil：ReleaseWeatherHold 里 Ambience/雨声
+            // 抛错时不得把 SchemeState=1 和全屏 blocker 留到离岛才清。
             if (_irisPhase == IrisPhase.None && !_presetTransitionBusy)
                 return;
             _irisPhase = IrisPhase.None;
             _phaseElapsed = 0f;
+            _transitionWatchdogElapsed = 0f;
             _presetTransitionBusy = false;
             int queued = _queuedPresetId;
             _queuedPresetId = 0;
 
-            PresetIrisOverlay.Clear();
-            IslandJoystickCamera.Current?.EndPush();
-            PresetService.Instance?.ReleaseWeatherHold();
-            ShowInputBlocker(false);
-            SetHudVisible(true);
-            _locomotion.ForceEnd();
-            GameEntry.Presets?.MarkPlaying();
+            try { ShowInputBlocker(false); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] veil: " + e.Message); }
+            try { SetHudVisible(true); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] hud: " + e.Message); }
+            try { _locomotion.ForceEnd(); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] loco: " + e.Message); }
+            try { GameEntry.Presets?.MarkPlaying(); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] MarkPlaying: " + e.Message); }
+
+            try { PresetIrisOverlay.Clear(); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] iris Clear: " + e.Message); }
+            try { IslandJoystickCamera.Current?.EndPush(); }
+            catch (Exception e) { Debug.LogWarning("[IslandMainForm] EndPush: " + e.Message); }
+            try { PresetService.Instance?.ReleaseWeatherHold(); }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[IslandMainForm] ReleaseWeatherHold: " + e.Message);
+                try { PresetService.Instance?.AbortWeatherHold(); }
+                catch (Exception abortEx)
+                {
+                    Debug.LogWarning("[IslandMainForm] weather Abort after Release fail: " + abortEx.Message);
+                }
+            }
 
             if (queued > 0)
                 BeginPresetTransition(queued);

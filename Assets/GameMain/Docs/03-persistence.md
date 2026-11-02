@@ -147,7 +147,9 @@ static string PresetKey(string displayName);   // "p:{name}"
 |---|---|---|
 | 存档不落盘 / 坐标不恢复 | 游客 / 无 userId（旧 blob / 未登录） | 看 `[IslandPlayerPosSave] armed disk=` / `guest=` / `userId=`；`BuildDebugSnapshot()` |
 | 游客进岛却在正式账号坐标 | 旧版游客也按 userId 落盘并迁走无后缀 `PlayerPos` | 现游客门控 + 强制默认出生；清 `PlayerPos.guest_*` 残留可选 |
+| Editor 进过预设退出重进仍亮红点 | 游客 `PersistDownloadedUnplayed` 被门控；退登清内存 | Editor 写 `Boluo.Editor.DownloadedUnplayed`（真机游客仍不落盘） |
 | 退登后再进掉地底 | Services 就 `InitAndArm`，地形未就绪时 CC 重力下坠；Camera 阶段未重贴 | 无地形时相机冻结垂直；`IsTerrainReady` 后 `ReplantAfterTerrainReady`；`SampleGround` 跳过海/河床 |
+| 桥上重启落到桥底 | `Teleport`/`SampleGround` 优先高度图（河床），不认桥面碰撞 | 禁水高度图 + 提示高度在甲板带内时改贴命名甲板（Dock/Pier/Bridge/Qiao/Deck）；先 `ForceRefreshNear`；甲板未进场则暂留存档眼位等 Replant |
 | 退登后再登同账号丢进度 | 误走了 `ExecuteAccountDeleted` / `a=1` | 普通退登用 `a=0` / `ExecuteLeave` |
 | 注销后仍恢复旧位置 | 未走 `a=1` 或未清桶 | 宿主注销成功推 `HostLeaveIsland a=1` |
 | 音量条能动但引擎不变 | 0–1 / 0–100 量纲 | `SetMusicVolume01` 内部已 ×100 |

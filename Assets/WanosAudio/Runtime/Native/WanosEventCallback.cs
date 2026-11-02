@@ -42,6 +42,12 @@ namespace WanosAudio
         [MonoPInvokeCallback(typeof(NativeEntry))]
         static void OnNative(ref WanosEventCallbackInfo info)
         {
+            // 锁屏 / 后台：Unity PlayerLoop 不 Pump，Ended→Next 会丢。
+            // 曲终在回调线程交给原生切下一首，不再入队（避免回前台 Pump 再 Advance 一次）。
+            if (info.State == WanosInstanceState.Ended
+                && BoluoPlatformMusicBridge.TryHandleBackgroundTrackEnded(info.InstanceId))
+                return;
+
             Queue.Enqueue(info);
         }
 

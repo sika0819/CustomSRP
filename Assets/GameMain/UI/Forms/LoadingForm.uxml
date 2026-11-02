@@ -14,7 +14,7 @@
             </ui:Instance>
             <ui:Instance template="NoticeCard" name="storageFullstoragepage" style="position: absolute; left: 50%; margin-left: -466.5px; top: 100%; margin-top: -1173px; margin-right: 0; width: 933px; margin-bottom: 0; height: 1023px; display: none;">
                 <ui:AttributeOverrides element-name="title" text="温馨提示" />
-                <ui:AttributeOverrides element-name="body" text="设备存储空间不足，需至少预留600MB空间才能下载，建议清理存储空间后重试”，无法启动下载。" />
+                <ui:AttributeOverrides element-name="body" text="设备存储空间不足，需至少预留600MB空间才能下载，建议清理存储空间后重试" />
                 <ui:AttributeOverrides element-name="primaryLabel" text="我知道了" />
             </ui:Instance>
             <ui:Instance template="NoticeCard" name="wifidatainusepage" style="position: absolute; left: 50%; margin-left: -466.5px; top: 100%; margin-top: -1203px; margin-right: 0; width: 933px; margin-bottom: 0; height: 1083px; display: none;">

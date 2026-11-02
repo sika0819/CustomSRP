@@ -195,11 +195,11 @@ SkyPeriodLook PeriodLookFallback(int index)
     }
     else
     {
-        // Canonical night teal. Moon disc stays near-white; intensities unchanged.
-        p.zenith = half3(0.1647h, 0.3216h, 0.3765h);
-        p.mid = half3(0.1219h, 0.2656h, 0.3238h);
-        p.horizon = half3(0.0627h, 0.1882h, 0.2510h);
-        p.ground = half3(0.0314h, 0.0941h, 0.1255h);
+        // Displays #2F4071 after PaintSky. Moon disc stays near-white.
+        p.zenith = half3(0.03258h, 0.05934h, 0.18565h);
+        p.mid = half3(0.03258h, 0.05934h, 0.18565h);
+        p.horizon = half3(0.03258h, 0.05934h, 0.18565h);
+        p.ground = half3(0.0039h, 0.0157h, 0.0471h);
         p.sunDisc = float3(0.3451, 0.5020, 0.5333);
         p.sunGlowColor = float3(0.0627, 0.1098, 0.1333);
         p.sunSize = 0.05;
@@ -324,29 +324,70 @@ SkyPeriodLook EvaluatePeriodLook(float period)
 // Canvas ridges run along +U. U follows yaw so the strokes lie along the horizon,
 // V follows elevation so the rows stack upward. Integer turns hide the yaw seam.
 // Higher _BrushScale repeats the tile more often.
-half CanvasStroke(float yaw, float elev)
+void CanvasStrokeUV(float yaw, float elev, out float2 uv, out half seam)
 {
     float scale = max(_BrushScale, 0.5);
     float turns = max(round(scale * _OilCanvas_ST.x), 1.0);
-    float2 uv = float2(
+    uv = float2(
         yaw * (turns / (2.0 * PI)) + _OilCanvas_ST.z,
         elev * (scale * 0.16) * _OilCanvas_ST.y + _OilCanvas_ST.w);
+#if defined(OIL_MOBILE_PERF)
+    seam = 1.0h;
+#else
+    float2 f = frac(uv);
+    float2 edge = min(f, 1.0 - f);
+    seam = (half)smoothstep(0.0, 0.16, min(edge.x, edge.y));
+#endif
+}
 
+half CanvasStroke(float yaw, float elev, out float2 uv, out half seam)
+{
+    CanvasStrokeUV(yaw, elev, uv, seam);
 #if defined(OIL_MOBILE_PERF)
     // Same one tap. Negative bias undoes the extra mip from renderScale 0.375–0.5.
     half canvas = (half)SAMPLE_TEXTURE2D_BIAS(_OilCanvas, sampler_OilCanvas, uv, -1.25).r;
 #else
-    float2 f = frac(uv);
-    float2 edge = min(f, 1.0 - f);
-    half w = (half)smoothstep(0.0, 0.16, min(edge.x, edge.y));
     half a = (half)SAMPLE_TEXTURE2D(_OilCanvas, sampler_OilCanvas, uv).r;
     half b = (half)SAMPLE_TEXTURE2D(_OilCanvas, sampler_OilCanvas, uv + 0.5).r;
-    half canvas = lerp(b, a, w);
+    half canvas = lerp(b, a, seam);
 #endif
     half contrast = max((half)_BrushContrast, 0.5h);
     return saturate((canvas - 0.5h) * contrast + 0.5h);
 }
 
+// Same UV and seam blend as the height, so the lit flank sits on the painted ridge.
+float3 SampleCanvasNormal(float2 uv, half seam)
+{
+    float relief = saturate(_BrushRelief);
+#if defined(OIL_MOBILE_PERF)
+    return DecodeNormal(
+        SAMPLE_TEXTURE2D_BIAS(_OilCanvasNormal, sampler_OilCanvasNormal, uv, -1.25), relief);
+#else
+    float3 a = DecodeNormal(SAMPLE_TEXTURE2D(_OilCanvasNormal, sampler_OilCanvasNormal, uv), relief);
+    float3 b = DecodeNormal(
+        SAMPLE_TEXTURE2D(_OilCanvasNormal, sampler_OilCanvasNormal, uv + 0.5), relief);
+    return normalize(lerp(b, a, (float)seam));
+#endif
+}
+
+// 1 from 06:00 through ~08:30. 清晨起床 is period 0.25, where _OilSkySunrise is only ~0.63
+// and 37% of zenith #0128CD still wins the blue channel. 05:00 wraps to ~3.8 and stays out.
+// Poster pin zeros _OilSkySunrise — keep authored dome colors (same gate as OilCloudLayer).
+half MorningDomeWeight()
+{
+    float sunrise = saturate(_OilSkySunrise);
+    if (sunrise < 0.001)
+    {
+        return 0.0h;
+    }
+
+    float wrapped = _Period - floor(_Period * 0.25) * 4.0;
+    half byClock = (half)(1.0 - smoothstep(0.40, 0.85, wrapped));
+    half bySunrise = (half)smoothstep(0.05, 0.25, sunrise);
+    return max(byClock, bySunrise);
+}
+
+// Online PaintSky — OilCanvas groove/ridge IS the底纹. Do not strip this.
 half3 PaintSky(float y, half stroke, SkyPeriodLook look)
 {
     half strength = saturate((half)_BrushStrength);
@@ -364,9 +405,72 @@ half3 PaintSky(float y, half stroke, SkyPeriodLook look)
 
     half depth = max(saturate((half)_BrushRelief), 0.85h) * strength;
     half3 groove = col * half3(0.48h, 0.58h, 0.78h);
-    half3 ridge = min(col * half3(1.22h, 1.10h, 0.96h) + 0.035h, half3(1.15h, 1.15h, 1.15h));
+    // Absolute +0.035 chalks a dark night dome toward gray. Day luma keeps the full
+    // ridge; blue-black night (luma ~0.06) gets almost none.
+    half skyLuma = dot(col, half3(0.30h, 0.59h, 0.11h));
+    half ridgeLift = 0.035h * smoothstep(0.05h, 0.28h, skyLuma);
+    // Full ridge contrast is the 厚涂底纹. Cap HDR with pigment, never flatten relief.
+    half3 ridge = min(col * half3(1.22h, 1.10h, 0.96h) + ridgeLift, half3(1.15h, 1.15h, 1.15h));
     half3 painted = lerp(groove, ridge, smoothstep(0.12h, 0.88h, stroke));
-    return lerp(col, painted, depth);
+    half3 sky = lerp(col, painted, depth);
+    // Upper dome was zenith #0128CD. Stain peach over the painted canvas —
+    // do not replace groove/ridge (full lerp wiped the impasto).
+    half morning = MorningDomeWeight();
+    if (morning > 0.001h)
+    {
+        half3 peach = half3(0.86h, 0.72h, 0.62h);
+        half peachL = max(dot(peach, half3(0.30h, 0.59h, 0.11h)), 1e-3h);
+        half paintL = max(dot(sky, half3(0.30h, 0.59h, 0.11h)), 1e-3h);
+        // Same OilCanvas value, peach chroma — ridge/groove contrast stays.
+        half3 warmed = (peach / peachL) * paintL;
+        half above = smoothstep(0.02h, 0.20h, saturate((half)y));
+        sky = lerp(sky, lerp(sky, warmed, 0.45h), morning * above);
+    }
+    return sky;
+}
+
+// Directional impasto. Baked OilCanvas normal, lit by the sun (moon at night).
+// Only the tilt (xy) shades the dome — a steep Z must not dim the whole sky.
+half3 PaintSkyCanvasBump(
+    half3 sky, float2 uv, half seam, half strength, float3 viewDir, float3 sunDir, float3 moonDir)
+{
+    half cover = saturate(strength);
+    if (cover < 0.02h || _BrushRelief < 0.02)
+    {
+        return sky;
+    }
+
+    float3 nTS = SampleCanvasNormal(uv, seam);
+    float3 N = viewDir;
+    float3 T = float3(N.z, 0.0, -N.x);
+    float tLen2 = dot(T, T);
+    T = tLen2 > 1e-6 ? T * rsqrt(tLen2) : float3(1.0, 0.0, 0.0);
+    float3 B = cross(N, T);
+
+    float3 L = sunDir;
+    if (dot(L, L) < 1e-4 || L.y < 0.02)
+    {
+        L = (dot(moonDir, moonDir) > 1e-4 && moonDir.y > 0.02)
+            ? moonDir
+            : float3(0.22, 0.90, 0.18);
+    }
+
+    L = normalize(L);
+    float flank = dot(nTS.xy, float2(dot(L, T), dot(L, B)));
+    // Slightly shallower than 1.65 / 0.66. Noon flanks stay cool.
+    // Morning (0.78, 0.84, 1) paints the peach strokes back to blue-black.
+    half morning = MorningDomeWeight();
+    // Morning needs a touch more flank punch — peach stain lowers chroma contrast.
+    half tshade = saturate(0.5h + (half)flank * lerp(1.35h, 1.55h, morning));
+    half3 shadow = lerp(half3(0.78h, 0.84h, 1.00h), half3(0.92h, 0.78h, 0.62h), morning);
+    half3 light = half3(1.22h, 1.08h, 0.96h);
+    half3 mid = 0.5h * (shadow + light);
+    half3 lit = sky * (lerp(shadow, light, tshade) / mid);
+    half day = saturate((half)sunDir.y * 3.0h);
+    half glint = pow(saturate((half)flank), 1.5h) * lerp(0.12h, 0.16h, morning);
+    half3 glintCol = lerp(half3(0.75h, 0.82h, 1.0h), half3(1.0h, 0.84h, 0.52h), day);
+    lit += glint * glintCol;
+    return lerp(sky, max(lit, 0.0h), cover);
 }
 
 // Shared celestial halo: ring from disc rim → 1.85× disc radius (sun & moon).
@@ -669,11 +773,16 @@ half4 OilSkyboxNPRFragment(Varyings input) : SV_TARGET
     float yaw = atan2(viewDir.x, viewDir.z);
     float pitch = asin(clamp(viewDir.y, -1.0, 1.0));
     SkyPeriodLook look = EvaluatePeriodLook(_Period);
-    half stroke = CanvasStroke(yaw, pitch);
-    // Layered air: paint → sky haze → opaque stamps → light celestial veil.
+    float2 canvasUv;
+    half canvasSeam;
+    half stroke = CanvasStroke(yaw, pitch, canvasUv, canvasSeam);
+    // Online path: paint底纹 → weave → fog → then normal-lit 凹凸.
     half3 sky = PaintAir(PaintSky(viewDir.y, stroke, look), viewDir, look);
     sky = OilWeaveTint(sky, viewDir.xz * 6.0);
     sky = (half3)ApplyOilSkyFog((float3)sky, viewDir, stroke);
+    sky = PaintSkyCanvasBump(
+        sky, canvasUv, canvasSeam, saturate((half)_BrushStrength),
+        viewDir, look.sunDir, look.moonDir);
     sky = PaintStars(sky, viewDir, yaw, pitch, look.starIntensity);
     float2 positionSS = input.positionCS.xy;
     sky = StampBody(
