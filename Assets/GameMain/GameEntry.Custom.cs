@@ -1,3 +1,5 @@
+using System;
+using Game.BoluoApi;
 using UnityEngine;
 using YooAsset;
 
@@ -94,20 +96,25 @@ namespace Game
             MusicCatalog.LoadAsync();
             DevicePresetShotHelper.Ensure();
             EnsureEntityGroups();
-            HideDebuggerOnPad();
+            ConfigureDebuggerFps();
         }
 
         /// <summary>
-        /// Pad / 横屏包（<c>BOLUO_PAD</c>）不显示 GameFramework 调试浮窗（FPS 角标）。
+        /// 非平板包显示 FPS 角标：手机市场（originEnd=boluoapp）开；创维/一树横屏包关。
+        /// 与共享 unityLibrary 的 <c>BOLUO_PAD</c> 编译宏解耦，按宿主身份运行时判定。
         /// </summary>
-        static void HideDebuggerOnPad()
+        static void ConfigureDebuggerFps()
         {
-#if BOLUO_PAD
             var debugger = UnityGameFramework.Runtime.GameEntry
                 .GetComponent<UnityGameFramework.Runtime.DebuggerComponent>();
-            if (debugger != null)
-                debugger.ActiveWindow = false;
-#endif
+            if (debugger == null)
+                return;
+
+            bool showFps = string.Equals(
+                BoluoDeviceInfo.GetOriginEnd(),
+                BoluoDeviceInfo.DefaultOriginEndApp,
+                StringComparison.OrdinalIgnoreCase);
+            debugger.ActiveWindow = showFps;
         }
 
         /// <summary>

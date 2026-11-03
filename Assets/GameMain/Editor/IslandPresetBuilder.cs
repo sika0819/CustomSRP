@@ -41,7 +41,8 @@ namespace Game.Editor
             (new Vector3(560.7702f, 23.856f, 582.0682f), -81.77f, Vector3.zero, 3f, 6f, 7.5f, 3, 1),
             // 午后放松：13:00 小雾。TargetPos 贴帐篷。勿用 (468, 411.1)，前方 Grand Fir 6 会挡住帐篷。
             (new Vector3(466.472f, 37.88541f, 402.16f), -168.898f, new Vector3(358.33f, 0f, 0f), 2f, 4f, 13f, 2, 1),
-            (new Vector3(390.6678f, 75.45603f, 480.2867f), -193.155f, new Vector3(350f, 0f, 0f), 0.1f, 6f, 22.5f, 1, 1),
+            // 朝向对准 Huodui(392.4,72.5,467.2)：旧 -193.155 在竖屏窄 HFOV 下火堆偏右。
+            (new Vector3(390.6678f, 75.45603f, 480.2867f), -187.515f, new Vector3(350f, 0f, 0f), 0.1f, 6f, 22.5f, 1, 1),
             (new Vector3(325.88f, 81.40367f, 481f), -92.137f, new Vector3(350.3f, 357f, 0f), 2.9f, 3.5f, 7.5f, 2, 1),
             (new Vector3(233.5713f, 105.0471f, 663.811f), -12.449f, new Vector3(355.03f, 1.5f, 0f), 3f, 6f, 23f, 1, 3),
             (new Vector3(504.6723f, 38.82168f, 463.8487f), -94.024f, new Vector3(349.79f, 0f, 0f), 3f, 4.5f, 7.5f, 3, 1),

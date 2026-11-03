@@ -103,10 +103,10 @@ namespace CustomSRP
         public static readonly Color SunriseSun = Hex(0xF0, 0xA8, 0x3A);
         // Soft peach haze — soil #975028 + oilFill browned the dawn scene.
         public static readonly Color SunriseFog = Hex(0xB8, 0x78, 0x50);
-        // Mid peach. #F2CCB4 chalked the morning skybox white under bloom;
-        // #BC7273 fell into the cool cavity and read blue-black.
-        public static readonly Color SunriseCloud = Hex(0xE0, 0xB0, 0x90);
-        public static readonly Color SunriseCloudShade = Hex(0xC0, 0x88, 0x68);
+        // Cloud-ring peach only (sky sunrise stays poster-gated). #E0B090 was too dull once
+        // umbra/weave hit; #F2CCB4 chalked the dome when it still stained the skybox.
+        public static readonly Color SunriseCloud = Hex(0xE8, 0xBC, 0x9C);
+        public static readonly Color SunriseCloudShade = Hex(0xD0, 0xA0, 0x80);
         public static readonly Color SunriseAmbZenith = Hex(0x51, 0x86, 0xB0);
         // Peach-rose horizon — #C06D31 mixed with cool zenith into muddy oilFill.
         public static readonly Color SunriseAmbHorizon = Hex(0xD0, 0x80, 0x50);

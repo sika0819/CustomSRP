@@ -39,6 +39,12 @@ namespace Game
         /// </summary>
         public static bool IsLowEnd => IsMobilePlayer && Resolve() == Tier.Low;
 
+        /// <summary>
+        /// 高性能档（原始 Resolve，未做闺蜜机带宽压档）。
+        /// Android：约 8GB+ 且 GPU 不弱。编辑器恒为 true。
+        /// </summary>
+        public static bool IsHighEnd => Resolve() == Tier.High;
+
         /// <summary>闺蜜机标准版：GPU 功能不超过中档。4K 走低档，不进这里。</summary>
         public static bool BandwidthConservative =>
             IsMobilePlayer && BoluoDeviceInfo.IsSkyworthGmjStandard();

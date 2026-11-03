@@ -415,8 +415,8 @@ half4 CloudFragment(CloudVaryings input) : SV_Target
         color = lerp(color, nightColor, nightAmt);
     }
 
-    // Posterize drops morning G/B to 0. The floor is a warm shade of the peach body.
-    half3 morningFloor = body * half3(0.78h, 0.74h, 0.68h);
+    // Posterize drops morning G/B to 0. Floor stays a warm peach — 0.78 crushed poster bodies.
+    half3 morningFloor = body * half3(0.88h, 0.84h, 0.76h);
     color = lerp(color, max(color, morningFloor), (half)morning);
 
     return half4(saturate(color), saturate((half)alpha));

@@ -294,7 +294,8 @@ half3 OilNPRLightingEx(
     half lightPeak = max(1e-3h, max(lightColor.r, max(lightColor.g, lightColor.b)));
     half3 litColor = albedo * (ambient * 0.45h + lightColor);
 #if defined(_OIL_NO_VIOLET_UMBRA)
-    half3 umbraColor = albedo * half3(0.18h, 0.20h, 0.24h) + half3(0.02h, 0.022h, 0.025h);
+    // Warm grey-ochre umbra (terrain). Cool slate still greens yellow sand.
+    half3 umbraColor = albedo * half3(0.22h, 0.18h, 0.14h) + half3(0.028h, 0.022h, 0.014h);
 #else
     half3 umbraColor = albedo * half3(0.2h, 0.14h, 0.36h) + half3(0.02h, 0.012h, 0.035h);
 #endif

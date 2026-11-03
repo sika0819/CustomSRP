@@ -38,6 +38,7 @@ CBUFFER_START(UnityPerMaterial)
     float _TriplanarTiling;
     float _OilCrossBillboard;
     float _OilYBillboard;
+    float _BumpTiling;
     float _NormalStrength;
     float _EdgeFade;
     float _OilGrassWindStrength;
@@ -136,17 +137,36 @@ float4 GetBaseRaw(float2 uv)
     return SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uv);
 }
 
-// 单向三向：一张 _BaseMap，yz/xz/xy 三轴采样，按 |N| 线性混合。
-float4 SampleBaseTriplanar(float3 position, float3 normal)
+// Shared triplanar axes/origin with albedo. uvScale>1 densifies oil strokes only.
+void OilTriplanarUVs(
+    float3 position,
+    float3 blendNormal,
+    float uvScale,
+    out float2 uvX,
+    out float2 uvY,
+    out float2 uvZ,
+    out float3 blend)
 {
-    float3 blend = abs(normal);
+    blend = abs(normalize(blendNormal));
     blend = max(blend, 1e-4);
     blend /= dot(blend, 1.0);
     float tiling = max(_TriplanarTiling, 1e-4);
     float3 p = position * tiling;
-    float4 cx = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, p.yz);
-    float4 cy = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, p.xz);
-    float4 cz = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, p.xy);
+    float2 st = _BaseMap_ST.xy * max(uvScale, 1e-4);
+    uvX = p.yz * st + _BaseMap_ST.zw;
+    uvY = p.xz * st + _BaseMap_ST.zw;
+    uvZ = p.xy * st + _BaseMap_ST.zw;
+}
+
+// 单向三向：一张 _BaseMap，yz/xz/xy 三轴采样，按 |N| 线性混合。
+float4 SampleBaseTriplanar(float3 position, float3 normal)
+{
+    float2 uvX, uvY, uvZ;
+    float3 blend;
+    OilTriplanarUVs(position, normal, 1.0, uvX, uvY, uvZ, blend);
+    float4 cx = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uvX);
+    float4 cy = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uvY);
+    float4 cz = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uvZ);
     return cx * blend.x + cy * blend.y + cz * blend.z;
 }
 
@@ -167,6 +187,54 @@ float4 GetBase(InputConfig c)
         raw = GetBaseRaw(c.baseUV);
     }
     return raw * _BaseColor;
+}
+
+// Whiteout triplanar: same axes as albedo; _BumpTiling densifies ShiTou oil brush.
+// ShiTou_OilBrushNormal is authored along rock grain — no UV flip.
+float3 SampleBumpTriplanar(
+    float3 position,
+    float3 blendNormal,
+    float3 shadeNormal,
+    float scale)
+{
+    float2 uvX, uvY, uvZ;
+    float3 blend;
+    OilTriplanarUVs(position, blendNormal, max(_BumpTiling, 1e-4), uvX, uvY, uvZ, blend);
+    float3 nShade = normalize(shadeNormal);
+    float3 nx = DecodeNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvX), scale);
+    float3 ny = DecodeNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvY), scale);
+    float3 nz = DecodeNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvZ), scale);
+    nx = float3(nx.xy + nShade.zy, abs(nx.z) * nShade.x);
+    ny = float3(ny.xy + nShade.xz, abs(ny.z) * nShade.y);
+    nz = float3(nz.xy + nShade.xy, abs(nz.z) * nShade.z);
+    return normalize(nx.zyx * blend.x + ny.xzy * blend.y + nz * blend.z);
+}
+
+// Mesh-UV props: baseUV already has BaseMap_ST; _BumpTiling densifies oil strokes.
+float3 SampleBumpMeshWS(float2 uv, float3 geomNormal, float scale)
+{
+    float3 nGeom = normalize(geomNormal);
+    float2 bumpUV = uv * max(_BumpTiling, 1e-4);
+    float3 nTS = DecodeNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, bumpUV), scale);
+    float3 tRef = abs(nGeom.y) < 0.999 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+    float3 t = normalize(tRef - nGeom * dot(nGeom, tRef));
+    return NormalTangentToWorld(nTS, nGeom, float4(t, -1.0));
+}
+
+float3 GetOilPropBumpWS(InputConfig c, float3 geomNormalWS)
+{
+    float scale = max(_NormalStrength, 1e-4);
+    // Object triplanar (ShiTou): same OS axes as albedo; _BumpTiling = stroke size.
+    if (c.triplanarSpaceValid && _WorldTriplanar > 1.5)
+    {
+        float3 nOS = SampleBumpTriplanar(c.positionOS, c.normalOS, c.normalOS, scale);
+        return TransformObjectToWorldNormal(nOS);
+    }
+    if (c.triplanarSpaceValid && _WorldTriplanar > 0.5)
+    {
+        return SampleBumpTriplanar(c.positionWS, c.normalWS, c.normalWS, scale);
+    }
+    return SampleBumpMeshWS(c.baseUV, geomNormalWS, scale);
 }
 
 float GetCutoff(InputConfig c)

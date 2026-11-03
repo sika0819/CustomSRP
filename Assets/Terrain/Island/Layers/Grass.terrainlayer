@@ -8,14 +8,14 @@ TerrainLayer:
   m_PrefabAsset: {fileID: 0}
   m_Name: Grass
   m_DiffuseTexture: {fileID: 2800000, guid: 68213b187212f480ca1887a52110b02c, type: 3}
-  m_NormalMapTexture: {fileID: 2800000, guid: e7c4a91b2d8f4c0e8a6b3d5f1c9e7a24, type: 3}
-  m_MaskMapTexture: {fileID: 2800000, guid: 4c29d52436964d228981eeb9f2c2fcb7, type: 3}
-  m_TileSize: {x: 8, y: 8}
+  m_NormalMapTexture: {fileID: 2800000, guid: a803e8156266547fbbf9a33fc3f8ce56, type: 3}
+  m_MaskMapTexture: {fileID: 2800000, guid: ede10cf8e32347a0ac0156a05c2c8b76, type: 3}
+  m_TileSize: {x: 10, y: 10}
   m_TileOffset: {x: 0, y: 0}
   m_Specular: {r: 0, g: 0, b: 0, a: 0}
   m_Metallic: 0
   m_Smoothness: 0
-  m_NormalScale: 0.625
+  m_NormalScale: 0.2
   m_DiffuseRemapMin: {x: 0, y: 0, z: 0, w: 0}
   m_DiffuseRemapMax: {x: 1, y: 1, z: 1, w: 1}
   m_MaskMapRemapMin: {x: 0, y: 0, z: 0, w: 0}

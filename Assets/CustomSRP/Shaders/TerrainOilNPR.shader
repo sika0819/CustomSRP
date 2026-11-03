@@ -93,6 +93,8 @@ Shader "CustomSRP/TerrainOilNPR"
             // Terrain runtime mats often drop local keywords — never gate receive on keyword.
             #define _RECEIVE_SHADOWS
             #define TERRAIN_SHADOW_RECEIVER
+            // Yellow sand × violet/cyan umbra reads olive-green on beaches.
+            #define _OIL_NO_VIOLET_UMBRA
             #pragma vertex TerrainOilNPRPassVertex
             #pragma fragment TerrainOilNPRPassFragment
             #include "TerrainOilNPRPass.hlsl"

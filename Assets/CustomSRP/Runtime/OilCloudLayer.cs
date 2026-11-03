@@ -287,7 +287,8 @@ namespace CustomSRP
                 out Color ambientEquator,
                 out Color ambientGround);
 
-            float sunrise = OilSkyboxTime.CurrentSunriseWeight(OilSkyboxTime.PeriodToHours(period));
+            // Cloud sunrise stays live under poster override (sky sunrise is pinned to 0).
+            float sunrise = OilSkyboxTime.CurrentCloudSunriseWeight(OilSkyboxTime.PeriodToHours(period));
             float shaped = ShapeCoverage(coverage);
             if (_windIntensity > 0.01f)
             {
@@ -459,7 +460,8 @@ namespace CustomSRP
             float dist = Mathf.Min(wrapped, 4f - wrapped);
             dawn = Mathf.SmoothStep(0.4f, 0.02f, dist);
             // Period dawn peaks at 06:00 and is already weak by 清晨起床 (07:30).
-            float sunrise = OilSkyboxTime.CurrentSunriseWeight(hours);
+            // Cloud sunrise stays live under poster override (sky sunrise is pinned to 0).
+            float sunrise = OilSkyboxTime.CurrentCloudSunriseWeight(hours);
             dawn = Mathf.Max(dawn, sunrise);
             // Clock night holds through 07:00 and would ink the sunrise clouds black.
             night *= 1f - sunrise;
@@ -467,7 +469,7 @@ namespace CustomSRP
             // Body stays closer to sky mid/horizon pigment — chalk wash kills 色块 contrast.
             body = Color.Lerp(look.horizon, look.mid, 0.55f);
             body = Color.Lerp(body, new Color(0.90f, 0.91f, 0.94f), 0.08f * day);
-            if (!OilSkyboxTime.ColorOverrideActive && sunrise > 0.001f)
+            if (sunrise > 0.001f)
                 body = Color.Lerp(body, OilSkyLookTables.SunriseCloud, sunrise);
             // Knife highlight: cream + horizon warmth (zhanweitu1 peach slabs).
             Color cloudHilite = Color.Lerp(
@@ -511,8 +513,9 @@ namespace CustomSRP
             horizon = Color.Lerp(look.horizon, onlineNightH, night);
 
             // Sky zenith/mid stay blue (#0128CD / #4868B8). Clouds do not inherit them.
+            // Apply under poster too — ColorOverride only pins the dome, not the cloud ring.
             float cloudW = Mathf.SmoothStep(0.15f, 0.45f, sunrise);
-            if (!OilSkyboxTime.ColorOverrideActive && cloudW > 0.001f)
+            if (cloudW > 0.001f)
             {
                 body = Color.Lerp(body, OilSkyLookTables.SunriseCloud, cloudW);
                 highlight = Color.Lerp(highlight, new Color(1f, 0.97f, 0.92f, 1f), cloudW);

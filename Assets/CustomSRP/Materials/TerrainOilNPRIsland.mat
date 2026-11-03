@@ -102,7 +102,7 @@ Material:
     - _Canvas: 1
     - _CanvasStrength: 0.08
     - _EdgeStrength: 0.4
-    - _HeightTransition: 0.874
+    - _HeightTransition: 0
     - _InternalEdge: 0
     - _LayerHasMask0: 1
     - _LayerHasMask1: 1
@@ -116,7 +116,7 @@ Material:
     - _NormalScale1: 1
     - _NormalScale2: 1
     - _NormalScale3: 1
-    - _OilDetail: 0.42
+    - _OilDetail: 0.58
     - _PaintContrast: 1.75
     - _PaintRelief: 1
     - _PaintThickness: 0.12

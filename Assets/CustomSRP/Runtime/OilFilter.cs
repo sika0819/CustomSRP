@@ -87,13 +87,23 @@ namespace CustomSRP
             }
         }
 
+        /// <summary>
+        /// Pad @0.75 is sharper than phone half-res; chroma-only 4-tap reads weak.
+        /// Still 4-tap / no CaptureMax — only lift blend amount.
+        /// </summary>
+        public static bool PadVisibilityBoost => ScreenLayout.IsPad;
+
         /// <summary>Authored strength, or capture boost override (1 = full dab).</summary>
         public static float ResolveStrength(float authored)
         {
             EnsureInit();
             if (_strengthOverride > 0f)
                 return Mathf.Clamp(_strengthOverride, 0.05f, 1f);
-            return Mathf.Clamp(authored, 0.05f, 1f);
+            float s = Mathf.Clamp(authored, 0.05f, 1f);
+            // Pad: full authored ceiling so edge slabs read on a large sharp buffer.
+            if (PadVisibilityBoost)
+                s = Mathf.Max(s, 1f);
+            return s;
         }
 
         /// <summary>
@@ -104,6 +114,9 @@ namespace CustomSRP
             EnsureInit();
             if (_radiusScaleOverride >= 0f)
                 return Mathf.Clamp(_radiusScaleOverride, 0.35f, 1f);
+            // Pad standing buffer often >1080 short side; keep 1080-ref dab size.
+            if (PadVisibilityBoost)
+                return Mathf.Max(computed, 1f);
             return computed;
         }
 

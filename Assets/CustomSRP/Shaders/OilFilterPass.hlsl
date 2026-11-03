@@ -15,6 +15,8 @@ float _OilFilterRadiusScale;
 float _OilFilterStrength;
 // Editor preset capture: 1 = drop the 0.50–0.78 damper and take the full sector color.
 float _OilFilterCaptureMax;
+// Pad standing: 1 = stronger edge blend / chroma (still 4-tap, not CaptureMax).
+float _OilFilterVisBoost;
 
 #define OIL_FILTER_NEAR_M 1.0
 #define OIL_FILTER_FAR_M 18.0
@@ -34,31 +36,48 @@ half OilFilterSampleEyeDepth(float2 uv)
         : LinearEyeDepth(raw, _ZBufferParams);
 }
 
+float OilFilterEdgeResScale()
+{
+    // fwidth shrinks on >1080 buffers (pad @0.75, TV). Compensate so wet-oil
+    // still lights up silhouettes; phone half-res stays at 1 (no weaken).
+    float shortSide = min(_OilFilterTexelSize.z, _OilFilterTexelSize.w);
+    return max(shortSide / OIL_FILTER_REF_SHORT, 1.0);
+}
+
 float OilFilterEdgeWeight(half sharpL, float eye)
 {
+    float res = OilFilterEdgeResScale();
     // Higher threshold → interiors stay crisp; only real folds/silhouettes wet-oil.
-    half lumaEdge = saturate((abs(ddx(sharpL)) + abs(ddy(sharpL)) - 0.012h) * 32.0h);
+    half lumaThresh = 0.012h / (half)res;
+    half lumaGain = 32.0h * (half)res;
+    half lumaEdge = saturate((abs(ddx(sharpL)) + abs(ddy(sharpL)) - lumaThresh) * lumaGain);
     float depthEdge = 0.0;
     if (_OilFilterHasDepth > 0.5)
     {
-        float jump = abs(ddx(eye)) + abs(ddy(eye));
+        // Per-pixel depth jump also shrinks with resolution — scale before thresh.
+        float jump = (abs(ddx(eye)) + abs(ddy(eye))) * res;
         float farSilW = smoothstep(2.5, 22.0, eye);
-        float thresh = lerp(max(0.10, eye * 0.014), max(0.40, eye * 0.038), farSilW);
+        // Near contact / silhouette: lower thresh so outline strokes fire.
+        float nearThresh = max(0.055, eye * 0.010);
+        float farThresh = max(0.40, eye * 0.038);
+        float thresh = lerp(nearThresh, farThresh, farSilW);
         depthEdge = saturate((jump - thresh) / (thresh * 2.0 + 0.3));
     }
 
-    // Near stays sharper; far silhouettes pick up more wet-oil.
+    // Near: emphasize outline strokes. Far: mild lift. (Was near×0.85 → near looked dry.)
+    float nearStroke = 1.0 - smoothstep(1.5, 10.0, eye);
     float farEdgeW = smoothstep(2.5, 26.0, eye);
-    return saturate(max((float)lumaEdge, depthEdge * lerp(1.0, 1.15, farEdgeW))
-        * lerp(0.85, 1.05, farEdgeW));
+    float edgeMul = lerp(1.0, 1.08, farEdgeW) + nearStroke * 0.22;
+    float depthMul = lerp(1.18, 1.12, farEdgeW) + nearStroke * 0.10;
+    return saturate(max((float)lumaEdge, depthEdge * depthMul) * edgeMul);
 }
 
 float OilFilterRadius(float eye, float sil)
 {
     float farW = smoothstep(OIL_FILTER_NEAR_M, OIL_FILTER_FAR_M, eye);
-    // Tight dabs → paint blocks. Large radius on half-res reads as soft blur.
-    float r = lerp(3.6, 5.6, farW);
-    r = lerp(r, r * 1.18, sil);
+    // Near: tight stroke outline (not soft smear). Far: slightly wider slabs.
+    float r = lerp(2.7, 5.2, farW);
+    r = lerp(r, r * 1.10, sil);
     // Larger buffer → smaller texel radius (same UV smear looks mushier on big screens).
     // Unset/0 → treat as 1 so a missed SetGlobal does not kill the pass.
     float radiusScale = _OilFilterRadiusScale > 1e-4 ? saturate(_OilFilterRadiusScale) : 1.0;
@@ -206,23 +225,47 @@ float4 OilFilterCore(float2 uv, bool useSixteenTap)
     if (foam > 0.55h)
         return float4(sharp, 1.0);
 
+    float eyeClamped = min(eye, OIL_FILTER_FAR_M);
+    half nearStroke = (half)(1.0 - smoothstep(1.5, 9.0, eyeClamped));
+    half farW = (half)smoothstep(OIL_FILTER_NEAR_M, OIL_FILTER_FAR_M, eyeClamped);
+
+    // Dense grass / lavender micro-edges: skip near wet-oil before the 4 taps
+    // so blades stay crisp (near stroke boost was washing them soft).
+    half verdant = saturate(sharp.g - max(sharp.r, sharp.b) * 0.72h);
+    half lavender = saturate(max(sharp.r, sharp.b) - sharp.g * 0.85h)
+        * saturate(sharp.b * 1.4h - sharp.r * 0.35h);
+    half plantHue = max(verdant, lavender * 0.85h);
+    half midPlant = saturate(1.0h - abs(sharpL - 0.40h) * 3.2h);
+    half microEdge = saturate((abs(ddx(sharpL)) + abs(ddy(sharpL))) * 48.0h);
+    half grassHint = saturate(plantHue * midPlant * lerp(0.45h, 1.0h, microEdge));
+    if (grassHint * nearStroke > 0.55h)
+        return float4(sharp, 1.0);
+
     float edge = OilFilterEdgeWeight(sharpL, eye);
     edge *= 1.0 - (float)foam * 0.85;
-    if (edge < 0.045)
+    // Near outline: lower gate so fine folds still get a stroke.
+    half edgeGate = lerp(0.045h, 0.028h, nearStroke);
+    // Grass residual: keep a stricter gate so leftover blades don't get smeared.
+    edgeGate = lerp(edgeGate, max(edgeGate, 0.055h), grassHint);
+    if (edge < (float)edgeGate)
         return float4(sharp, 1.0);
 
     half oilL;
     half3 col = useSixteenTap
-        ? OilFilterSixteenTapPick(uv, _OilFilterTexelSize.xy, min(eye, OIL_FILTER_FAR_M), edge, oilL)
-        : OilFilterQuadPick(uv, _OilFilterTexelSize.xy, min(eye, OIL_FILTER_FAR_M), edge, oilL);
+        ? OilFilterSixteenTapPick(uv, _OilFilterTexelSize.xy, eyeClamped, edge, oilL)
+        : OilFilterQuadPick(uv, _OilFilterTexelSize.xy, eyeClamped, edge, oilL);
 
-    half farW = (half)smoothstep(OIL_FILTER_NEAR_M, OIL_FILTER_FAR_M, min(eye, OIL_FILTER_FAR_M));
-    // Steeper edge gate + moderate amount → oil slabs without soft photo blend.
+    // Near stroke: stronger edge blend + flatter mid-edge curve. Far: prior damper.
     // Capture max drops the damper so an edge blends at full strength.
-    half edgeAmt = (half)saturate(pow(edge, 0.70h));
+    // VisBoost (pad): extra near outline without CaptureMax soft wash.
+    half edgePow = lerp(0.70h, 0.55h, nearStroke);
+    half edgeAmt = (half)saturate(pow(edge, edgePow));
+    half dampLo = _OilFilterVisBoost > 0.5 ? 0.88h : 0.80h;
+    half dampHi = _OilFilterVisBoost > 0.5 ? 0.90h : 0.78h;
     half oilAmt = _OilFilterCaptureMax > 0.5
         ? edgeAmt
-        : edgeAmt * lerp(0.50h, 0.78h, farW);
+        : edgeAmt * lerp(dampLo, dampHi, farW);
+    oilAmt = saturate(oilAmt * lerp(1.0h, 1.16h, nearStroke));
     // Unset/0 → 1 so a missed SetGlobal does not wipe the pass.
     half strength = (half)(_OilFilterStrength > 1e-4 ? saturate(_OilFilterStrength) : 1.0);
     oilAmt *= strength;
@@ -237,12 +280,18 @@ float4 OilFilterCore(float2 uv, bool useSixteenTap)
     half waterHint = saturate(max(waterSheet, waterBody));
     // Water stays sharper; NPR strokes already read as oil.
     oilAmt *= 1.0h - waterHint * 0.50h;
+    // Residual grass: near cut hardest; far eases so distant meadows keep oil.
+    oilAmt *= 1.0h - grassHint * lerp(0.92h, 0.55h, farW);
 
-    // Smear chrominance into flat sectors; keep source lighting volume for clarity.
+    // Near outline: more chroma + paint luma on the edge; far keeps lighting volume.
     half3 oilChr = col / max(oilL, 1e-3h);
     half3 sharpChr = sharp / max(sharpL, 1e-3h);
-    half chrMix = lerp(0.52h, 0.82h, farW);
-    half keepL = lerp(0.92h, 0.55h, farW);
+    half chrNear = _OilFilterVisBoost > 0.5 ? 0.86h : 0.78h;
+    half chrFar = _OilFilterVisBoost > 0.5 ? 0.92h : 0.82h;
+    half keepNear = _OilFilterVisBoost > 0.5 ? 0.48h : 0.58h;
+    half keepFar = _OilFilterVisBoost > 0.5 ? 0.40h : 0.55h;
+    half chrMix = lerp(chrNear, chrFar, farW);
+    half keepL = lerp(keepNear, keepFar, farW);
     if (_OilFilterCaptureMax > 0.5)
     {
         chrMix = 1.0h;

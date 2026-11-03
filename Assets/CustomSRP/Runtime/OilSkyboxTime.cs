@@ -518,11 +518,23 @@ namespace CustomSRP
         /// <summary>
         /// Sunrise weight shared by the skybox shader, main light, and ambient.
         /// Look blends fade Canonical's weight with the same t as the palette.
+        /// Poster ColorOverride zeros this so authored dome pigments are not double-stained.
         /// </summary>
         public static float CurrentSunriseWeight(float hours)
         {
             if (s_overrideColors)
                 return 0f;
+            return CloudSunriseWeight(hours);
+        }
+
+        /// <summary>
+        /// Cloud-ring morning weight. Unlike <see cref="CurrentSunriseWeight"/>, stays live under
+        /// poster ColorOverride — zeroing sky sunrise was killing peach slabs and leaving cool cavity.
+        /// </summary>
+        public static float CurrentCloudSunriseWeight(float hours) => CloudSunriseWeight(hours);
+
+        static float CloudSunriseWeight(float hours)
+        {
             if (LookBlendOpen)
             {
                 float from = OilSkyLookTables.CanonicalSunriseWeight(s_blendFrom, hours);

@@ -370,9 +370,16 @@ float3 SampleCanvasNormal(float2 uv, half seam)
 #endif
 }
 
-// 1 from 06:00 through ~08:30. 清晨起床 is period 0.25, where _OilSkySunrise is only ~0.63
-// and 37% of zenith #0128CD still wins the blue channel. 05:00 wraps to ~3.8 and stays out.
-// Poster pin zeros _OilSkySunrise — keep authored dome colors (same gate as OilCloudLayer).
+// Clock morning 06:00–~08:30 (period near 0). Poster zeros _OilSkySunrise, so peach stain
+// stays off — but stroke groove/shadow still need this or they fall back to cool blue-black.
+half MorningClockWeight()
+{
+    float wrapped = _Period - floor(_Period * 0.25) * 4.0;
+    return (half)(1.0 - smoothstep(0.40, 0.85, wrapped));
+}
+
+// Peach stain over dome pigments. Requires live _OilSkySunrise (Canonical only).
+// Poster ColorOverride pins sunrise to 0 so authored zhanweitu colors stay put.
 half MorningDomeWeight()
 {
     float sunrise = saturate(_OilSkySunrise);
@@ -381,8 +388,7 @@ half MorningDomeWeight()
         return 0.0h;
     }
 
-    float wrapped = _Period - floor(_Period * 0.25) * 4.0;
-    half byClock = (half)(1.0 - smoothstep(0.40, 0.85, wrapped));
+    half byClock = MorningClockWeight();
     half bySunrise = (half)smoothstep(0.05, 0.25, sunrise);
     return max(byClock, bySunrise);
 }
@@ -404,7 +410,10 @@ half3 PaintSky(float y, half stroke, SkyPeriodLook look)
     col = lerp(col, carried, 0.72h * strength);
 
     half depth = max(saturate((half)_BrushRelief), 0.85h) * strength;
-    half3 groove = col * half3(0.48h, 0.58h, 0.78h);
+    // Cool groove (0.48, 0.58, 0.78) turns morning poster mauve into blue-black strokes.
+    half morningClock = MorningClockWeight();
+    half3 grooveMul = lerp(half3(0.48h, 0.58h, 0.78h), half3(0.78h, 0.68h, 0.58h), morningClock);
+    half3 groove = col * grooveMul;
     // Absolute +0.035 chalks a dark night dome toward gray. Day luma keeps the full
     // ridge; blue-black night (luma ~0.06) gets almost none.
     half skyLuma = dot(col, half3(0.30h, 0.59h, 0.11h));
@@ -415,6 +424,7 @@ half3 PaintSky(float y, half stroke, SkyPeriodLook look)
     half3 sky = lerp(col, painted, depth);
     // Upper dome was zenith #0128CD. Stain peach over the painted canvas —
     // do not replace groove/ridge (full lerp wiped the impasto).
+    // Gated on live sunrise — poster keeps authored dome colors.
     half morning = MorningDomeWeight();
     if (morning > 0.001h)
     {
@@ -458,8 +468,9 @@ half3 PaintSkyCanvasBump(
     L = normalize(L);
     float flank = dot(nTS.xy, float2(dot(L, T), dot(L, B)));
     // Slightly shallower than 1.65 / 0.66. Noon flanks stay cool.
-    // Morning (0.78, 0.84, 1) paints the peach strokes back to blue-black.
-    half morning = MorningDomeWeight();
+    // Cool morning shadow (0.78, 0.84, 1) paints peach strokes blue-black — warm by clock,
+    // even when poster zeros _OilSkySunrise (MorningDomeWeight stays 0).
+    half morning = max(MorningDomeWeight(), MorningClockWeight());
     // Morning needs a touch more flank punch — peach stain lowers chroma contrast.
     half tshade = saturate(0.5h + (half)flank * lerp(1.35h, 1.55h, morning));
     half3 shadow = lerp(half3(0.78h, 0.84h, 1.00h), half3(0.92h, 0.78h, 0.62h), morning);

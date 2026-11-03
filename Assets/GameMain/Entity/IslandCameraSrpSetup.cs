@@ -16,18 +16,35 @@ namespace Game
         const string CrpTypeName = "CustomSRP.CustomRenderPipelineCamera, Assembly-CSharp";
 
         /// <summary>
-        /// 站立 renderScale。手机 0.5；平板与闺蜜机 0.75（大屏站立糊感太重）。
+        /// 站立 renderScale。平板 / 闺蜜机 / 高性能安卓 0.75；其余手机 0.5。
         /// 平板判定与 FXAA 相同：<see cref="ScreenLayout.IsPad"/>。
+        /// 高性能安卓见 <see cref="IslandGraphicsTier.IsHighEnd"/>（约 8GB+ 且 GPU 不弱）。
         /// </summary>
         public static float DefaultRenderScale =>
-            BoluoDeviceInfo.IsSkyworthGmj() || ScreenLayout.IsPad ? 0.75f : 0.5f;
+            BoluoDeviceInfo.IsSkyworthGmj()
+            || ScreenLayout.IsPad
+            || IsHighPerfAndroidIdleScale()
+                ? 0.75f
+                : 0.5f;
 
         /// <summary>
-        /// 走路略压一档。手机 0.375；闺蜜机 0.5（站立 0.75 的下一档）。
+        /// 走路略压一档。闺蜜机 / 高性能安卓 0.5（站立 0.75 的下一档）；其余手机 0.375。
         /// 起停会重建中间 RT。
         /// </summary>
         public static float WalkingRenderScale =>
-            BoluoDeviceInfo.IsSkyworthGmj() ? 0.5f : 0.375f;
+            BoluoDeviceInfo.IsSkyworthGmj() || IsHighPerfAndroidIdleScale()
+                ? 0.5f
+                : 0.375f;
+
+        /// <summary>高性能安卓站立清晰度：仅真机 Android 高档。</summary>
+        static bool IsHighPerfAndroidIdleScale()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return IslandGraphicsTier.IsHighEnd;
+#else
+            return false;
+#endif
+        }
 
         /// <summary>Unity Panel/Dialog 或原生半层（OverlayPresent）打开时，与沉浸同档。</summary>
         public static float PopupRenderScale => ImmersiveRenderScale;

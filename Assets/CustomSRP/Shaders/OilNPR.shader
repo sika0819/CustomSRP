@@ -37,9 +37,11 @@ Shader "CustomSRP/OilNPR"
         // Runtime-only (EnvTreeBillboardService); not authored on shared mats.
         [HideInInspector] [Toggle] _OilCrossBillboard ("Tree Cross Billboard", Float) = 0
         [HideInInspector] [Toggle] _OilYBillboard ("Tree Y Billboard", Float) = 0
-        [NoScaleOffset] _BumpMap ("Billboard Baked Normal (RGB)", 2D) = "bump" {}
-        // Lower default: vertical cards must bias toward up or noon sun lit them as walls.
-        _NormalStrength ("Billboard Normal Strength", Range(0, 1)) = 0.35
+        [NoScaleOffset] _BumpMap ("Normal (Billboard / Oil Rock)", 2D) = "bump" {}
+        // Relative to albedo UV (same axes). >1 = finer oil strokes on rock.
+        _BumpTiling ("Oil Normal Tile", Range(0.5, 8)) = 1
+        // Billboard default stays low; ShiTou oil-rock mats author ~0.55–0.7.
+        _NormalStrength ("Normal Strength", Range(0, 2)) = 0.35
         _EdgeFade ("Billboard Edge Fade", Range(0, 0.5)) = 0.12
 
         [Toggle(_RECEIVE_SHADOWS)] _ReceiveShadows ("Receive Shadows", Float) = 1

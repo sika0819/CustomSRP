@@ -28,6 +28,7 @@ namespace CustomSRP
             RadiusScaleId = Shader.PropertyToID("_OilFilterRadiusScale"),
             StrengthId = Shader.PropertyToID("_OilFilterStrength"),
             CaptureMaxId = Shader.PropertyToID("_OilFilterCaptureMax"),
+            VisBoostId = Shader.PropertyToID("_OilFilterVisBoost"),
             DepthCopyId = Shader.PropertyToID("_CameraDepthTexture");
 
         TextureHandle _source;
@@ -92,6 +93,7 @@ namespace CustomSRP
                 authored = OilFilter.ResolveStrength(authored);
                 buffer.SetGlobalFloat(StrengthId, ComputeStrength(w, h) * authored);
                 buffer.SetGlobalFloat(CaptureMaxId, OilFilter.CaptureMax ? 1f : 0f);
+                buffer.SetGlobalFloat(VisBoostId, OilFilter.PadVisibilityBoost ? 1f : 0f);
                 if (_hasDepth)
                     buffer.SetGlobalTexture(DepthCopyId, _depth);
 
