@@ -6,22 +6,37 @@ namespace Game.Tests
     public sealed class AmbienceWaterSilencePolicyTests
     {
         [Test]
-        public void PinDaytime_WaterKinds_Only()
+        public void PinDaytime_WaterAndCampfire()
         {
             Assert.IsTrue(AmbienceWaterSilencePolicy.ShouldPinDaytimeTimeOfDay(AmbienceEmitterKind.Ocean));
             Assert.IsTrue(AmbienceWaterSilencePolicy.ShouldPinDaytimeTimeOfDay(AmbienceEmitterKind.River));
             Assert.IsTrue(AmbienceWaterSilencePolicy.ShouldPinDaytimeTimeOfDay(AmbienceEmitterKind.Lake));
             Assert.IsTrue(AmbienceWaterSilencePolicy.ShouldPinDaytimeTimeOfDay(AmbienceEmitterKind.Waterfall));
+            Assert.IsTrue(AmbienceWaterSilencePolicy.ShouldPinDaytimeTimeOfDay(AmbienceEmitterKind.Campfire));
             Assert.IsFalse(AmbienceWaterSilencePolicy.ShouldPinDaytimeTimeOfDay(AmbienceEmitterKind.Forest));
-            Assert.IsFalse(AmbienceWaterSilencePolicy.ShouldPinDaytimeTimeOfDay(AmbienceEmitterKind.Campfire));
             Assert.IsFalse(AmbienceWaterSilencePolicy.ShouldPinDaytimeTimeOfDay(AmbienceEmitterKind.Grassland));
             Assert.IsFalse(AmbienceWaterSilencePolicy.ShouldPinDaytimeTimeOfDay(AmbienceEmitterKind.Plateau));
         }
 
         [Test]
+        public void WaterDuck_NearCampfire_FullAtZero_NoneAtEdge()
+        {
+            Assert.AreEqual(-12f, AmbienceWaterSilencePolicy.WaterDuckDbNearCampfire(0f), 0.01f);
+            Assert.AreEqual(0f, AmbienceWaterSilencePolicy.WaterDuckDbNearCampfire(30f), 0.01f);
+            Assert.AreEqual(0f, AmbienceWaterSilencePolicy.WaterDuckDbNearCampfire(40f), 0.01f);
+            Assert.AreEqual(-6f, AmbienceWaterSilencePolicy.WaterDuckDbNearCampfire(15f), 0.01f);
+        }
+
+        [Test]
         public void PreferFall_WhenWithinPreferRadius()
         {
-            // 湖更近，但人已在 20m 瀑圈内 → 仍保留瀑。
+            // 湖更近，但人已在大瀑 Enter（80）内 → 仍保留瀑。
+            Assert.IsFalse(
+                AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
+                    bestLakeDist: 10f,
+                    bestFallDist: 50f,
+                    lakePlaying: true,
+                    fallPlaying: false));
             Assert.IsFalse(
                 AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
                     bestLakeDist: 10f,
@@ -33,10 +48,11 @@ namespace Game.Tests
         [Test]
         public void PreferLake_WhenCloserAndOutsideFallRadius()
         {
+            // 须在 PreferFallWithinMeters(80) 外，否则贴瀑优先。
             Assert.IsTrue(
                 AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
                     bestLakeDist: 15f,
-                    bestFallDist: 40f,
+                    bestFallDist: 90f,
                     lakePlaying: false,
                     fallPlaying: false));
         }
@@ -44,21 +60,18 @@ namespace Game.Tests
         [Test]
         public void Hysteresis_KeepsPlayingLake()
         {
-            // 瀑略近，但湖在播且在滞回内 → 继续湖。
-            float fall = 40f;
-            float lake = fall - 5f; // 湖更近
+            // 双方都在 80m 外：瀑略近，但湖在播且在滞回内 → 继续湖。
             Assert.IsTrue(
                 AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
-                    bestLakeDist: lake,
-                    bestFallDist: fall,
+                    bestLakeDist: 85f,
+                    bestFallDist: 90f,
                     lakePlaying: true,
                     fallPlaying: false));
 
-            // 瀑更近一点但仍在湖 sticky 内
             Assert.IsTrue(
                 AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
-                    bestLakeDist: 40f,
-                    bestFallDist: 35f,
+                    bestLakeDist: 90f,
+                    bestFallDist: 85f,
                     lakePlaying: true,
                     fallPlaying: false));
         }
@@ -68,8 +81,8 @@ namespace Game.Tests
         {
             Assert.IsFalse(
                 AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
-                    bestLakeDist: 35f,
-                    bestFallDist: 40f,
+                    bestLakeDist: 85f,
+                    bestFallDist: 90f,
                     lakePlaying: false,
                     fallPlaying: true));
         }

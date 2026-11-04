@@ -28,6 +28,18 @@ namespace Game
         /// <summary>无法从 bank 估时长时的 Ended 兜底（仍避免永远不切）。</summary>
         const int EndedFallbackDefaultMs = 180_000;
 
+        /// <summary>
+        /// 用户音乐音量 ≤ 此值视为静音。引擎对近零 <c>Music_Volume</c> 会虚杀掉 voice，
+        /// 若当成曲终会 Advance/重播；调音量不得触发重播。
+        /// </summary>
+        const float SilentMusicVolume01 = 0.001f;
+
+        /// <summary>
+        /// 用户拉到 0 时仍推给引擎的保活地板（经 ×100 后 RTPC≈0.1），避免虚杀；
+        /// 虹膜 Duck=0 时仍推绝对 0，保留转场静音切歌。
+        /// </summary>
+        const float MusicVolumeKeepAlive01 = 0.001f;
+
         static MusicPlaylist _instance;
 
         public static MusicPlaylist Instance => _instance ??= new MusicPlaylist();
@@ -67,6 +79,9 @@ namespace Game
 
         /// <summary>Bumped on attach/detach so stale Ended after Stop/skip is ignored.</summary>
         int _voiceGeneration;
+
+        /// <summary>Bumped on PlayIndex / user Stop so superseded deferred Play is dropped.</summary>
+        int _playGeneration;
 
         /// <summary>Break_Music already posted for this voice (ListLoop / Shuffle).</summary>
         bool _breakPostedForVoice;
@@ -112,6 +127,8 @@ namespace Game
         {
             if (albumIndex < 0 || trackIndex < 0)
                 return;
+            // 后台负一屏切过来的曲也算已听（对齐 Boluo MarkCurrentMusicPlayedIfAny）。
+            MarkTrackHeard(albumIndex, trackIndex);
             CurrentAlbumIndex = albumIndex;
             CurrentTrackIndex = trackIndex;
             IsPlaying = true;
@@ -144,6 +161,7 @@ namespace Game
                 _instance._musicVoiceId = 0;
                 _instance._breakPostedForVoice = false;
                 _instance._voiceGeneration++;
+                _instance._playGeneration++;
                 _instance.IsPlaying = false;
                 _instance._stoppedByUser = false;
             }
@@ -158,12 +176,14 @@ namespace Game
         public void DisarmAfterLeave()
         {
             UnhookVoiceStates();
+            _playGeneration++;
             if (_musicSerialId >= 0 && GameEntry.Sound != null)
             {
                 GameEntry.Sound.StopSound(_musicSerialId);
                 _musicSerialId = -1;
             }
 
+            WanosSoundAgentHelper.SilenceAllMusicAgentsLocal();
             _musicVoiceId = 0;
             _breakPostedForVoice = false;
             _voiceGeneration++;
@@ -225,25 +245,28 @@ namespace Game
             MusicVolume = Mathf.Clamp01(value);
             PushVolumesToEngine();
             ApplyGroupVolumes();
-            // 存档/上次退出 bgm=0 时揭罩仍会 Play_*（Music_Volume=0）。引擎对近静音
-            // music voice 会虚声杀掉；之后只把 RTPC 拉到 100 仍无声。与定时结束恢复同款：重起。
-            MaybeRestartMusicAfterLeavingSilence(prev, MusicVolume);
+            // 调音量禁止 PlayIndex 重播。静音用 RTPC 保活（见 PushVolumesToEngine）；
+            // 若引擎仍虚杀掉 voice，离开静音时仅在 voice 已丢时软恢复。
+            MaybeRestoreMusicAfterLeavingSilence(prev, MusicVolume);
         }
 
-        void MaybeRestartMusicAfterLeavingSilence(float prev01, float next01)
+        void MaybeRestoreMusicAfterLeavingSilence(float prev01, float next01)
         {
-            const float silent = 0.001f;
-            if (prev01 > silent || next01 <= silent)
+            if (prev01 > SilentMusicVolume01 || next01 <= SilentMusicVolume01)
                 return;
             if (!IsPlaying || !HasRestorableTrack)
                 return;
+            if (_musicVoiceId != 0)
+                return; // 仍挂着：只靠 RTPC 抬音量，不重 Post。
             if (NowPlayingService.UserManuallyPaused)
                 return;
             if (!WanosEngine.IsPlaybackEnabled || IslandAudioSession.IsYieldHeld)
                 return;
 
+            // 静音期仍被虚杀 → Ended 已忽略切歌，但 voice 没了；Resume 拉不活，只能重 Post。
+            // 保活 RTPC 正常时走不到这里（_musicVoiceId 仍在，上面已 return）。
             Log.Info(
-                $"[MusicPlaylist] volume {prev01:F3}→{next01:F3} after near-silent — restart " +
+                $"[MusicPlaylist] volume {prev01:F3}→{next01:F3} after mute virt-kill — restore " +
                 $"{CurrentAlbumIndex}/{CurrentTrackIndex}");
             PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
         }
@@ -340,6 +363,10 @@ namespace Game
                 return;
             }
 
+            // 对齐 Boluo MusicPlaybackService：点歌 / 上一首下一首 / 循环随机自动切
+            // 一律在起播时记已听。只靠曲终 Mark 会在 Ended 丢包、后台原生切歌时红点回潮。
+            MarkTrackHeard(albumIndex, trackIndex);
+
             bool same = albumIndex == CurrentAlbumIndex && trackIndex == CurrentTrackIndex && IsPlaying;
             CurrentAlbumIndex = albumIndex;
             CurrentTrackIndex = trackIndex;
@@ -349,9 +376,13 @@ namespace Game
             if (same && !restart)
                 return;
 
-            // Hard-stop previous voice before starting the next (Wanos can stack PostEvents).
-            Stop(publish: false);
-            TryStartTrack(track.Value);
+            // 作废在途延帧起播；HardStop 对齐原生 Stop_Music+Break_Music，下一帧再 Play。
+            int gen = ++_playGeneration;
+            HardStopMusicVoices(markStoppedByUser: false);
+            // 延帧起播前先乐观标记，避免 RefreshAll 一帧闪回「未播放」。
+            _stoppedByUser = false;
+            IsPlaying = true;
+            StartTrackDeferred(gen, track.Value).Forget();
             TrackChanged?.Invoke();
         }
 
@@ -361,21 +392,47 @@ namespace Game
         /// </summary>
         public void Stop(bool publish = true)
         {
+            _playGeneration++;
+            HardStopMusicVoices(markStoppedByUser: true);
+            if (publish)
+                NowPlayingService.PublishFromPlaylist();
+        }
+
+        /// <summary>
+        /// Stop every Music agent + engine music voices (native-aligned Stop+Break).
+        /// </summary>
+        void HardStopMusicVoices(bool markStoppedByUser)
+        {
             StopCurrentMusic();
-            _stoppedByUser = true;
+            WanosSoundAgentHelper.SilenceAllMusicAgentsLocal();
+            _musicVoiceId = 0;
+            _breakPostedForVoice = false;
+            _voiceGeneration++;
+            if (markStoppedByUser)
+                _stoppedByUser = true;
             // Always post even if serialId was lost — prevents overlapping Play_Music* voices.
             try
             {
                 WanosInteraction.PostMusicEvent("Stop_Music");
+                WanosInteraction.PostMusicEvent("Break_Music");
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[MusicPlaylist] Stop_Music failed: {ex.Message}");
+                Debug.LogWarning($"[MusicPlaylist] Stop_Music/Break_Music failed: {ex.Message}");
             }
 
             IsPlaying = false;
-            if (publish)
-                NowPlayingService.PublishFromPlaylist();
+            // Stop/Break 后重推用户音量，避免半截原生增益 / duck 态被当成「音量变了」。
+            PushVolumesToEngine();
+        }
+
+        async UniTaskVoid StartTrackDeferred(int generation, MusicTrack track)
+        {
+            // 让引擎消化 Stop/Break（对齐原生 ~50ms，这里用一帧避免主线程 sleep）。
+            await UniTask.Yield(PlayerLoopTiming.Update);
+            if (generation != _playGeneration)
+                return;
+            TryStartTrack(track, generation);
         }
 
         /// <summary>
@@ -655,6 +712,17 @@ namespace Game
                 return;
             }
 
+            // 用户音量≈0：引擎虚杀近静音 voice，不是曲终。丢掉 ownership，禁止 Advance/重播。
+            if (MusicVolume <= SilentMusicVolume01)
+            {
+                Log.Info(
+                    $"[MusicPlaylist] Ended ignored — music volume silent ({MusicVolume:F3}) voice={instanceId}");
+                _musicVoiceId = 0;
+                _breakPostedForVoice = false;
+                _voiceGeneration++;
+                return;
+            }
+
             Log.Info($"[MusicPlaylist] Ended voice={instanceId} mode={PlayMode} → advance {CurrentAlbumIndex}/{CurrentTrackIndex}");
             // Drop ownership before Advance (PlayIndex → Stop detaches again safely).
             _musicVoiceId = 0;
@@ -668,9 +736,8 @@ namespace Game
             if (!MusicCatalog.IsReady)
                 return;
 
-            // 列表循环 / 随机的自动下一首不走点击。点歌才会 MarkHeard，
-            // 播完切走后行从 Playing 回到未听，红点会留下来。切歌前先记已听。
-            MarkCurrentTrackHeard();
+            // 曲终兜底再记一次（PlayIndex 起播已记；Ended 丢包时仍可清当前行）。
+            MarkTrackHeard(CurrentAlbumIndex, CurrentTrackIndex);
 
             if (PlayMode == MusicPlayMode.Single)
             {
@@ -684,15 +751,15 @@ namespace Game
         }
 
         /// <summary>
-        /// 本曲已自然播完（Ended / 曲长兜底）。与点歌同一套 key，红点此后不再亮。
+        /// 与点歌同一套 key；起播 / 曲终 / 原生对账都走这里，红点此后不再亮。
         /// </summary>
-        void MarkCurrentTrackHeard()
+        static void MarkTrackHeard(int albumIndex, int trackIndex)
         {
-            if (CurrentAlbumIndex < 0 || CurrentTrackIndex < 0)
+            if (albumIndex < 0 || trackIndex < 0)
                 return;
 
-            var album = MusicCatalog.GetAlbum(CurrentAlbumIndex);
-            var track = MusicCatalog.GetTrack(CurrentAlbumIndex, CurrentTrackIndex);
+            var album = MusicCatalog.GetAlbum(albumIndex);
+            var track = MusicCatalog.GetTrack(albumIndex, trackIndex);
             if (album == null || track == null)
                 return;
 
@@ -780,7 +847,7 @@ namespace Game
                 IslandAudioSession.Instance?.SetContentAudioPaused(false);
             }
             else
-                IslandAudioSession.HoldYield("music-resume-denied");
+                Debug.LogWarning("[MusicPlaylist] unmute denied on resume — keep content audio");
 #if UNITY_ANDROID && !UNITY_EDITOR
             // 定时取消依赖此路径出声：原生 pauseForTimerEnd 已 mute，须补抢焦点 + unmute。
             BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
@@ -806,14 +873,16 @@ namespace Game
         }
 
         /// <summary>
-        /// 定时结束弹窗「取消」/「重复定时」：恢复音效闸并硬起重播当前曲。
+        /// 定时结束弹窗「取消」/「重复定时」/关窗：恢复音效闸并硬起重播当前曲。
         /// <para>
         /// 真机到点走 Pause_Music+Pause_ALL+mute 后，Resume_Music 经常拉不起 BGM
         /// （音效 Resume_ALL / ContentAudio 却正常）——不赌 Pause 态，直接 PlayIndex restart。
+        /// 禁止改 Music/Effect 用户音量：到点只 Pause，此处只 Resume + 重推原音量。
         /// </para>
         /// </summary>
         public void ResumeAfterTimerEnd(string reason = "timer-end")
         {
+            NowPlayingService.NotePausedForTimerEnd(false);
             NowPlayingService.NoteUserPaused(false);
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
@@ -828,6 +897,8 @@ namespace Game
             }
             IslandAudioSession.ClearYieldHold();
             IslandAudioSession.Instance?.SetContentAudioPaused(false);
+            // 到点曾 mute：重推用户音量，避免引擎 RTPC 停留在护栏衰减/默认值被听成「音量被调了」。
+            PushVolumesToEngine();
 
             if (!HasRestorableTrack)
             {
@@ -844,6 +915,10 @@ namespace Game
             // 硬起播：Stop_Music + Play_*，绕过失效的 Resume_Music。
             Log.Info($"[MusicPlaylist] ResumeAfterTimerEnd ({reason}): replay {CurrentAlbumIndex}/{CurrentTrackIndex}");
             PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // PlayIndex 在 AudibleCommitted 时会跳过 EnsureAudible；定时到点 mute 后必须再抢一次。
+            BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
+#endif
         }
 
         /// <summary>
@@ -901,7 +976,7 @@ namespace Game
                 IslandAudioSession.Instance?.SetContentAudioPaused(false);
             }
             else
-                IslandAudioSession.HoldYield("music-restore-denied");
+                Debug.LogWarning("[MusicPlaylist] unmute denied on restore — keep content audio");
             PushVolumesToEngine();
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
@@ -917,14 +992,18 @@ namespace Game
         {
             if (_musicSerialId >= 0 && GameEntry.Sound != null)
             {
+                // StopSound → agent.Stop 也会 Post Stop_Music；随后 HardStop 再统一发一次。
                 GameEntry.Sound.StopSound(_musicSerialId);
                 _musicSerialId = -1;
             }
             IsPlaying = false;
         }
 
-        bool TryStartTrack(MusicTrack track)
+        bool TryStartTrack(MusicTrack track, int generation = -1)
         {
+            if (generation >= 0 && generation != _playGeneration)
+                return false;
+
             // 起播新曲目 = 用户不再处于「主动停止」状态（回前台恢复可以拉回来）。
             _stoppedByUser = false;
             string bankName = track.BankName;
@@ -961,18 +1040,37 @@ namespace Game
                 return false;
             }
 
+            if (generation >= 0 && generation != _playGeneration)
+                return false;
+
             _musicSerialId = GameEntry.Sound.PlaySound(asset, MusicGroup);
+            if (generation >= 0 && generation != _playGeneration)
+            {
+                // 连点抢先：刚起的 agent 立刻清掉，避免叠在下一首上。
+                StopCurrentMusic();
+                WanosSoundAgentHelper.SilenceAllMusicAgentsLocal();
+                return false;
+            }
+
             IsPlaying = _musicSerialId >= 0;
             if (IsPlaying)
             {
+                // 在 NoteAudibleCommitted 之前采样：首播仍要 EnsureAudible，切歌跳过。
+                bool needEnsureAudible = !IslandAudioSession.AudibleCommitted
+                    || IslandAudioSession.IsYieldHeld;
                 if (WanosEngine.Unmute("music-play"))
                     IslandAudioSession.NoteAudibleCommitted();
                 else
-                    IslandAudioSession.HoldYield("music-play-denied");
+                {
+                    // 切歌 Unmute 失败只记日志，不 HoldYield 闩住整岛声景（雨/环境）。
+                    Debug.LogWarning("[MusicPlaylist] unmute denied on play — keep content audio");
+                }
                 // Push user volume again after PlaySound (agent may have written RTPC too).
                 PushVolumesToEngine();
 #if UNITY_ANDROID && !UNITY_EDITOR
-                BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
+                // 已在前台出声时的切歌不刷 EnsureAudible，避免连点取消半截 unmute ramp。
+                if (needEnsureAudible)
+                    BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
 #endif
                 // 首播/切歌成功同一帧强制 isPlaying=true，并确保已 Arm，避免负一屏空白。
                 NowPlayingService.PublishPlayingForced();
@@ -988,6 +1086,14 @@ namespace Game
         {
             // Preset iris ducks Music_Volume to 0 before Stop_Music/Play_* so retarget is silent.
             float music = MusicVolume * IslandAudioSession.DuckLevel01;
+            // 用户滑条到 0：不要把 RTPC 打成绝对 0（虚杀 → Ended → 重播）。虹膜 Duck 仍推 0。
+            if (MusicVolume <= SilentMusicVolume01
+                && IslandAudioSession.DuckLevel01 > SilentMusicVolume01
+                && music < MusicVolumeKeepAlive01)
+            {
+                music = MusicVolumeKeepAlive01;
+            }
+
             WanosEngine.SetVolumeParameter(WanosEngine.MusicVolumeParam, music);
             WanosEngine.SetVolumeParameter(WanosEngine.FxVolumeParam, EffectVolume);
         }

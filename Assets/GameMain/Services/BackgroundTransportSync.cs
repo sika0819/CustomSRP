@@ -187,14 +187,20 @@ namespace Game
 
             if (!TryParseState(json, out string eventName, out bool paused, out bool valid))
                 return;
-            if (!valid || string.IsNullOrEmpty(eventName))
-                return;
 
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
+            // 暂停旗始终对账：定时到点 pauseForTimerEnd 时 plan 可能无效/无 event，
+            // 旧逻辑直接 return 会丢掉 userPaused，回前台误 Resume_ALL 把声景拉起。
+            NowPlayingService.NoteUserPaused(paused);
             if (music == null)
                 return;
 
-            NowPlayingService.NoteUserPaused(paused);
+            if (!valid || string.IsNullOrEmpty(eventName))
+            {
+                if (paused)
+                    music.ApplyNativePausedLatch(true);
+                return;
+            }
 
             if (!MusicCatalog.TryFindByEventName(eventName, out int albumIdx, out int trackIdx))
             {

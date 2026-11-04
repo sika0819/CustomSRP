@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Game.Native;
 using GameFramework.UI;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -48,6 +47,11 @@ namespace Game
         /// 下载提示窗要盖住主界面摇杆。只对这几张开：加载罩关闭时改层级会把树又挂回去。
         /// </summary>
         protected virtual bool PinDocumentOrder => false;
+
+        /// <summary>
+        /// 开着时仍允许走路（区域申请 / 进度：固墙拦住即可，空白处穿透到摇杆）。
+        /// </summary>
+        protected virtual bool AllowsLocomotionWhileOpen => false;
 
         const float SlideDuration = 0.32f;
         const float SlideDistance = 2436f;
@@ -107,12 +111,15 @@ namespace Game
                 ApplySlideTranslate(0f);
             }
 
-            if (CloseOnBackdropClick)
+            if (CloseOnBackdropClick && !AllowsLocomotionWhileOpen)
                 BindBackdropDismiss();
-            else
+            else if (!CloseOnBackdropClick)
                 // 不点空白关闭时，stage 的 USS Ignore 会让子树命中不稳定；
                 // 下载弹窗等要把舞台和卡片改成可点。
                 EnableStagePicking();
+
+            if (AllowsLocomotionWhileOpen)
+                EnableLocomotionPassthrough();
 
             if (CloseWhenAnyButtonClicked)
             {
@@ -123,9 +130,31 @@ namespace Game
             if (PinDocumentOrder)
                 EnsureDocumentOrder();
 
-            // 打开的这一刻就把摇杆命中层让开，不等下一帧 Tick。
+            // 打开的这一刻同步摇杆命中层，不等下一帧 Tick。
             if (IsOverlayForm())
-                IslandMainForm.Current?.SetJoystickModal(true);
+                IslandMainForm.Current?.SetJoystickModal(HudOverlayGate.BlocksLocomotion());
+        }
+
+        /// <summary>
+        /// 软提示窗：空白穿透到主界面摇杆，只留 NoticeCard 可点（不再全屏挡走）。
+        /// </summary>
+        void EnableLocomotionPassthrough()
+        {
+            if (Root == null)
+                return;
+            VisualElement formRoot = Root.Q("root") ?? Root;
+            formRoot.pickingMode = PickingMode.Ignore;
+            Root.Query(className: "game-form-stage").ForEach(stage =>
+                stage.pickingMode = PickingMode.Ignore);
+            VisualElement backdrop = formRoot.Q("formBackdrop");
+            if (backdrop != null)
+                backdrop.pickingMode = PickingMode.Ignore;
+            // TemplateContainer 与卡片保持可点；父级 Ignore 不挡子节点拾取。
+            VisualElement dialog = Root.Q("dialog");
+            if (dialog != null)
+                dialog.pickingMode = PickingMode.Position;
+            Root.Query(className: "notice-card").ForEach(card =>
+                card.pickingMode = PickingMode.Position);
         }
 
         void EnableStagePicking()
@@ -157,8 +186,8 @@ namespace Game
             _slideTarget = null;
             Root = null;
             base.OnClose(isShutdown, userData);
-            // 关掉的这一刻按「去掉自己」恢复命中层，不等下一帧。
-            IslandMainForm.Current?.SetJoystickModal(JoystickShouldBlock());
+            // 关掉的这一刻按剩余窗恢复命中层，不等下一帧。
+            IslandMainForm.Current?.SetJoystickModal(HudOverlayGate.BlocksLocomotion());
         }
 
         public override void OnUpdate(float elapseSeconds, float realElapseSeconds)
@@ -385,38 +414,6 @@ namespace Game
                 return false;
             string name = form.UIGroup.Name;
             return name == "Panel" || name == "Dialog";
-        }
-
-        /// <summary>
-        /// 摇杆命中层是否该让开。关闭过程中本窗可能还挂在组上，先把它从计数里拿掉。
-        /// </summary>
-        bool JoystickShouldBlock()
-        {
-            if (NativeOverlayGate.BlocksLocomotion)
-                return true;
-            if (GameEntry.UI == null)
-                return false;
-
-            int panel = GroupCount("Panel");
-            int dialog = GroupCount("Dialog");
-            UIForm self = GetComponent<UIForm>();
-            if (self != null && GameEntry.UI.HasUIForm(self.SerialId) && self.UIGroup != null)
-            {
-                if (self.UIGroup.Name == "Panel")
-                    panel = Mathf.Max(0, panel - 1);
-                else if (self.UIGroup.Name == "Dialog")
-                    dialog = Mathf.Max(0, dialog - 1);
-            }
-
-            return panel > 0 || dialog > 0;
-        }
-
-        static int GroupCount(string groupName)
-        {
-            if (GameEntry.UI == null)
-                return 0;
-            IUIGroup group = GameEntry.UI.GetUIGroup(groupName);
-            return group != null ? group.UIFormCount : 0;
         }
 
         void ClearClicks()

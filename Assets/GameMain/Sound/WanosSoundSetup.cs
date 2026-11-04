@@ -51,7 +51,8 @@ namespace Game
             if (_groupsReady || GameEntry.Sound == null)
                 return;
 
-            EnsureGroup("Music", agentCount: 2);
+            // BGM 独占：多 Agent 会在切歌时叠 Post Play_*。
+            EnsureGroup("Music", agentCount: 1);
             EnsureGroup("Sound", agentCount: 4);
             EnsureGroup("Ambient", agentCount: 4);
             _groupsReady = true;

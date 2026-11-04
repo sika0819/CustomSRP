@@ -176,11 +176,14 @@ namespace Game
             if (weather == null || _editingIndex < 0 || _editingIndex >= WeatherKinds.Length)
                 return;
 
+            // Lock before SetWeather so a same-frame duplicate PointerDown fails CheckInput
+            // before it can CommitWeather-snap the in-flight rain/wind fade.
+            weather.BeginPanelTransitionLock();
+
             _applying = true;
             try
             {
                 weather.SetWeather(WeatherKinds[_editingIndex], _knobLevel, animate: true);
-                weather.BeginPanelTransitionLock();
             }
             finally
             {

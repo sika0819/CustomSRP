@@ -66,6 +66,7 @@ namespace Game.Tests
         [Test]
         public void QueuePending_WithoutUserIntent_IsNotDownloaded()
         {
+            // 静默全量：排队 Pending 保持未下载，仅真实 Downloading 转圈。
             Assert.AreEqual(
                 MusicItemUiState.NotDownloaded,
                 MusicRowUiState.Resolve(

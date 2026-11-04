@@ -1708,6 +1708,7 @@ namespace CustomSRP.Editor
             }
 
             layer.material = cloudMat;
+            TestSceneUtility.BindOilCloudPainterlyMaps(layer);
             layer.Apply();
         }
 

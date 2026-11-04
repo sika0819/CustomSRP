@@ -7,11 +7,11 @@ namespace Game
     /// <summary>
     /// App 前后台 / 音频打断的统一恢复入口。
     /// <para>
-    /// 需求：不管声音是停在哪个状态（引擎 mute / 原生焦点丢失 / 内容声被停 / 曲目被掐），
-    /// 回前台（以及玩家点一下游戏场景）都应该把音乐和音效拉回来。
+    /// 系统打断 / 禁后台播停掉的声音：回前台（以及点场景）应把音乐和音效拉回来。
+    /// 定时到点、负一屏用户暂停：自动回前台保持静音；定时等弹窗按钮，负一屏等点场景。
     /// </para>
     /// <para>
-    /// 恢复分三层（仅当用户暂停、系统打断、或禁止后台播放时才走）：
+    /// 恢复分三层（仅当系统打断、或禁止后台播放时才走；用户暂停除外）：
     /// 1. 引擎层（<see cref="WanosEngine.RestoreForeground"/>）：解 mute + 重推音量 RTPC。
     /// 2. 平台层：Android 同步前后台态 + 抢回 AudioFocus（原生内部必要时 reset + 重播）。
     /// 3. 业务层：音乐续播 / 必要时重起当前曲目；环境声 / 天气 / 雨水强制重起。
@@ -62,6 +62,9 @@ namespace Game
         /// </summary>
         public static void OnSceneInteraction()
         {
+            // 定时结束弹窗未关：禁止点场景续播，等「取消/重复」。
+            if (NowPlayingService.PausedForTimerEnd)
+                return;
             if (!NeedsRestore() && !NowPlayingService.UserManuallyPaused)
                 return;
             RestoreForegroundAudio("scene-interaction");
@@ -154,9 +157,22 @@ namespace Game
                 return;
             }
 
-            // 先对账原生切歌 / 暂停，再决定要不要动正在响的声音。
+            // 先 Drain Push（定时 0,-1 等），再对账原生切歌 / 暂停。
             // 后台一直在播时 Unmute、Resume_Music、重起环境声都会把当前声掐一下。
+            Game.Native.NativePushReceiver.Drain();
             BackgroundTransportSync.ResyncFromNative();
+
+            // 定时到点 / 负一屏用户暂停：自动回前台路径保持静音。
+            // 旧逻辑见 UserManuallyPaused 就走完整恢复并清暂停 → Resume_ALL 把声景拉起、
+            // BGM 却常 Resume_Music 失败，表现为「弹窗还在、只有声景在响」。
+            // 续播入口：定时弹窗「取消/重复」；负一屏暂停则靠点场景（scene-interaction）。
+            if (NowPlayingService.PausedForTimerEnd
+                || (NowPlayingService.UserManuallyPaused && reason != "scene-interaction"))
+            {
+                KeepManualOrTimerEndMute(reason);
+                return;
+            }
+
             if (CanKeepAudibleAcrossLifecycle())
             {
                 _needsRestore = false;
@@ -175,7 +191,7 @@ namespace Game
 
             // 0. 先清暂停意图：负一屏后台 pause 会把原生 userPaused=true，
             //    ReclaimFocusOnForeground / restoreAudible* 见此旗会直接 skip。
-            //    需求：回前台 / 点场景覆盖暂停，必须先清再抢焦。
+            //    点场景覆盖暂停才会走到这里（定时到点已在上方 return）。
             NowPlayingService.NoteUserPaused(false);
 #if UNITY_ANDROID && !UNITY_EDITOR
             BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
@@ -261,6 +277,34 @@ namespace Game
             if (!BoluoAndroidEngineNative.AllowUnmuteNow())
                 return true;
             return false;
+        }
+
+        /// <summary>
+        /// 定时到点 / 用户暂停：回前台只同步前台态并闩住内容声，禁止 Resume_ALL / 解 mute。
+        /// </summary>
+        static void KeepManualOrTimerEndMute(string reason)
+        {
+            _needsRestore = false;
+            BoluoAndroidEngineNative.NotifyAppLifecycle(
+                false, BackgroundPlayPolicyCallback.GetBackgroundPlayDisable());
+
+            // Push 未到或对账早于 Pause：再闩一次 C# 内容声，并 Pause_ALL 兜住引擎侧声景。
+            var music = GameEntry.Music ?? MusicPlaylist.Instance;
+            music?.ApplyNativePausedLatch(true);
+            try
+            {
+                WanosEngine.PauseAll();
+            }
+            catch (System.Exception e)
+            {
+                Log.Warning($"[AudioAppLifecycle] timer/manual mute Pause_ALL: {e.Message}");
+            }
+
+            NowPlayingService.PublishFromPlaylist();
+            Log.Info(
+                $"[AudioAppLifecycle] foreground keep mute ({reason})"
+                + $" timerEnd={(NowPlayingService.PausedForTimerEnd ? 1 : 0)}"
+                + $" userPaused={(NowPlayingService.UserManuallyPaused ? 1 : 0)}");
         }
     }
 }

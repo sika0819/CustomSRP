@@ -1,4 +1,5 @@
 using System;
+using Game.BoluoApi;
 using GameFramework.Event;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -148,8 +149,9 @@ namespace Game
                 return;
             if (GameEntry.Event != null)
                 GameEntry.Event.Subscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
-            // 首装 Critical 波未完成时切风雨会 miss bank；下载灌入后必须重试（对齐 AmbienceZone）。
+            // 首装 Critical 波未完成时切风雨会 miss bank；落盘或灌入后必须重试（对齐 AmbienceZone）。
             WanosBankStore.OnBankLoaded += OnBankLoaded;
+            BankDownloader.OnBankLocalReady += OnBankLocalReady;
             _subscribed = true;
         }
 
@@ -160,6 +162,7 @@ namespace Game
             if (GameEntry.Event != null)
                 GameEntry.Event.Unsubscribe(WeatherChangedEventArgs.EventId, OnWeatherChanged);
             WanosBankStore.OnBankLoaded -= OnBankLoaded;
+            BankDownloader.OnBankLocalReady -= OnBankLocalReady;
             _subscribed = false;
         }
 
@@ -169,16 +172,34 @@ namespace Game
         {
             if (!_started || string.IsNullOrEmpty(bankName))
                 return;
+            if (!ClearWeatherBankMissing(bankName))
+                return;
+            Log.Info($"[WeatherAudio] bank ready={bankName} — retry ApplyFromWeather");
+            ApplyFromWeather();
+        }
+
+        void OnBankLocalReady(string bankName)
+        {
+            if (!_started || string.IsNullOrEmpty(bankName))
+                return;
+            if (!ClearWeatherBankMissing(bankName))
+                return;
+            Log.Info($"[WeatherAudio] bank local-ready={bankName} — retry ApplyFromWeather");
+            ApplyFromWeather();
+        }
+
+        bool ClearWeatherBankMissing(string bankName)
+        {
             bool isWind = string.Equals(bankName, WindBank, StringComparison.OrdinalIgnoreCase);
             bool isRain = string.Equals(bankName, RainBank, StringComparison.OrdinalIgnoreCase);
             if (!isWind && !isRain)
-                return;
+                return false;
+            bool wasMissing = (isWind && _windMissing) || (isRain && _rainMissing);
             if (isWind)
                 _windMissing = false;
             if (isRain)
                 _rainMissing = false;
-            Log.Info($"[WeatherAudio] bank ready={bankName} — retry ApplyFromWeather");
-            ApplyFromWeather();
+            return wasMissing;
         }
 
         void ApplyFromWeather()

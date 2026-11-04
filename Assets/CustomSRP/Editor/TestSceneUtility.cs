@@ -890,7 +890,6 @@ namespace CustomSRP.Editor
 
             Texture2D cloudMap = AssetDatabase.LoadAssetAtPath<Texture2D>(OilCloudLayer.CloudMapPath);
             Texture2D noiseMap = AssetDatabase.LoadAssetAtPath<Texture2D>(OilCloudLayer.NoiseMapPath);
-            Texture2D brush = AssetDatabase.LoadAssetAtPath<Texture2D>(OilCloudLayer.BrushPath);
             if (cloudMap != null)
             {
                 material.SetTexture("_CloudMap", cloudMap);
@@ -902,21 +901,34 @@ namespace CustomSRP.Editor
                 material.SetTextureScale("_NoiseMap", new Vector2(0.32f, 0.32f));
             }
 
-            if (brush != null)
-            {
-                material.SetTexture("_CloudBrush", brush);
-            }
-
-            material.SetFloat("_UVDisturbance", 0.028f);
-            material.SetFloat("_SdfSoftness", 0.08f);
+            material.SetFloat("_NoiseSpeed", 0.0027f);
+            material.SetFloat("_UVDisturbance", 0.04f);
+            material.SetFloat("_SdfSoftness", 0.14f);
             material.SetFloat("_SdfMin", 0.48f);
             material.SetFloat("_SdfMax", 0.90f);
             material.SetFloat("_TopShadow", 1f);
-            material.SetFloat("_TopHighlight", 1f);
-            material.SetFloat("_EdgeIntensity", 2.2f);
+            material.SetFloat("_TopHighlight", 0.92f);
+            material.SetFloat("_EdgeIntensity", 1.55f);
             material.enableInstancing = false;
             EditorUtility.SetDirty(material);
             return material;
+        }
+
+        /// <summary>
+        /// Procedural CombinedRing (no FBX). SDF + atlas lighting only — no canvas normal.
+        /// </summary>
+        public static void BindOilCloudPainterlyMaps(OilCloudLayer layer)
+        {
+            if (layer == null)
+            {
+                return;
+            }
+
+            layer.cloudDomeMesh = null;
+            layer.followSeaLevel = true;
+            layer.ringHeight = 180f;
+            layer.ringScale = 1.85f;
+            EditorUtility.SetDirty(layer);
         }
 
         /// <summary>

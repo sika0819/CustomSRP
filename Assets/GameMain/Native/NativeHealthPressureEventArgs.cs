@@ -5,7 +5,7 @@ namespace Game.Native
 {
     /// <summary>
     /// N→U: 原生健康页选了压力等级（0 放松 / 1 轻度 / 2 中度 / 3 偏高 / 4 高压）。
-    /// 当前业务未直接消费；保留 EventArgs 以便 UI / 适配层后续 Subscribe。
+    /// <see cref="Game.HealthRecommendPresetBridge"/> 在智慧推荐开时消费并切预设。
     /// </summary>
     public sealed class NativeHealthPressureEventArgs : GameEventArgs
     {

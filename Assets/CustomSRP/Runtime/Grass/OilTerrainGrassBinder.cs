@@ -1549,8 +1549,9 @@ namespace CustomSRP
                     topology == (int)OilTerrainGrassBladeMesh.Variant.Billboard ? 1f : 0f);
             if (mat.HasProperty("_UseTexColor"))
                 mat.SetFloat("_UseTexColor", 1f);
+            // Firm cutoff kills grey mip/filter rim; screen fwidth still softens jaggies.
             if (mat.HasProperty("_AlphaClip"))
-                mat.SetFloat("_AlphaClip", OilTerrainGrassBladeMesh.IsLavender(topology) ? 0.28f : 0.34f);
+                mat.SetFloat("_AlphaClip", OilTerrainGrassBladeMesh.IsLavender(topology) ? 0.30f : 0.34f);
 
             if (mat.HasProperty("_WindStrength"))
             {

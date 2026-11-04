@@ -147,6 +147,7 @@ namespace Game
         IVisualElementScheduledItem _downloadProgressSchedule;
         Action<VisualElement> _downloadProgressIcon;
         Action<VisualElement> _playingAnimIcon;
+        bool _lastDownloaderBusy;
         const long DownloadProgressTickMs = 100;
         // Light-card download ring: playing green fore + dark translucent track.
         static readonly Color DownloadRingFore = new Color(0f, 0.639f, 0.459f, 1f);
@@ -198,6 +199,9 @@ namespace Game
             EnsurePlayingFramesLoaded();
             EnsureStatusIconsLoaded();
             StartPlayingAnimLoop();
+            BankDownloader.OnBankLocalReady -= OnBankLocalReadyForUi;
+            BankDownloader.OnBankLocalReady += OnBankLocalReadyForUi;
+            _lastDownloaderBusy = BankDownloader.HasBusyWork;
             StartDownloadProgressTick();
 
             if (MusicCatalog.IsReady)
@@ -217,6 +221,7 @@ namespace Game
         {
             MusicPlaylist.Instance.TrackChanged -= OnPlaylistTrackChanged;
             MusicCatalog.OnCatalogReady -= OnCatalogReady;
+            BankDownloader.OnBankLocalReady -= OnBankLocalReadyForUi;
             StopPlayingAnimLoop();
             StopDownloadProgressTick();
             UnbindScrollbarReveal();
@@ -225,6 +230,18 @@ namespace Game
             StopAllTrackMarquees();
             _title = null;
             base.OnClose(isShutdown, userData);
+        }
+
+        /// <summary>静默 Rest 落盘：立刻刷列表翻牌（含红点），不等人点下载。</summary>
+        void OnBankLocalReadyForUi(string bankName)
+        {
+            if (_list == null || string.IsNullOrEmpty(bankName))
+                return;
+            _list.schedule.Execute(() =>
+            {
+                if (_list != null)
+                    _list.RefreshItems();
+            });
         }
 
         void StopAllTrackMarquees()
@@ -1990,6 +2007,12 @@ namespace Game
             string[] banks = { bankName };
             bool saveSuppressPushed = false;
 
+            // 点击当下就钉死意图，同意链 / 弹窗期间连点仍以最后一首为准。
+            _playAfterDownloadGen++;
+            _pendingMusic = (album, track);
+            PendingDownloadIntent.SetMusic(album, track);
+            _list?.schedule.Execute(() => _list?.RefreshItems());
+
             UserBankDownloadFlow.Start(
                 banks,
                 new DownloadUiOptions
@@ -2030,15 +2053,14 @@ namespace Game
                 },
                 onDownloadStarting: () =>
                 {
-                    _playAfterDownloadGen++;
-                    _pendingMusic = (album, track);
-                    PendingDownloadIntent.SetMusic(album, track);
-                    _list?.schedule.Execute(() => _list?.RefreshItems());
+                    // 意图已在点击时写入；这里只做保存抑制，避免同意链晚到覆盖已点的下一首。
                     IslandPlayerPosSave.PushSaveSuppress();
                     saveSuppressPushed = true;
+                    _list?.schedule.Execute(() => _list?.RefreshItems());
                 },
                 prioritize: true,
-                preempt: true);
+                preempt: true,
+                abortOtherUserDownloads: true);
         }
 
         /// <summary>
@@ -2262,6 +2284,18 @@ namespace Game
         {
             if (_list == null)
                 return;
+            // busy 清除再刷整表：末包漏 OnBankLocalReady / 探针失败时避免粘在环上。
+            bool busy = BankDownloader.HasBusyWork;
+            if (_lastDownloaderBusy && !busy)
+            {
+                _lastDownloaderBusy = false;
+                _list.RefreshItems();
+                return;
+            }
+
+            _lastDownloaderBusy = busy;
+            // 只刷已在「下载中」行的环。翻牌靠 OnBankLocalReadyForUi，
+            // 禁止每 ProgressEpoch RefreshItems——后台弹窗开时进度极频会闪列表/掉帧。
             _downloadProgressIcon ??= ApplyDownloadProgressIcon;
             _list.Query("downloading").ForEach(_downloadProgressIcon);
         }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using Game.BoluoApi;
 using GameFramework.Event;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -15,12 +16,14 @@ namespace Game
     /// - River/Waterfall 用 <see cref="WaterSurfaceProbe"/> 直接查场景里真实的水面最近点
     ///   （运行期采样，取代旧的编辑器烘焙 BakedWaterStation 方案）。
     /// - Ocean 量到地形外海水线（60m 岸带）；Lake 用 catalog 湖点（xz 距离）。
-    /// - Bank Ready 重试：bank 不再永久缓存失败，允许后续重试。
+    /// - Bank Ready 重试：Retain 失败记入 pending；落盘（<see cref="BankDownloader.OnBankLocalReady"/>）
+    ///   或灌引擎（<see cref="WanosBankStore.OnBankLoaded"/>）后立刻 Evaluate。目录环境音即使
+    ///   从未 Retain 失败也 seed pending + 短强制重评窗——防止 Prune 清 pending 后 listener-still 锁死。
     /// - Voice 回收：订阅 <see cref="WanosInteraction.VoiceStateChanged"/>，voice stopped 时摘掉 id，
     ///   list 空且 source 仍在播放区间则 RepostSource。
     /// - Stop 时对每个 voice 显式 Stop with 250ms fade。
     /// - Emitter GameObject 预分配池，避免 enter/exit 时 new/Destroy。
-    /// - Listener-still skip：玩家站着不动时跳过本 tick。
+    /// - Listener-still skip：玩家站着不动时跳过本 tick（pending bank 已可解析时例外）。
     /// - 共用 biome bank（Forest/Grassland/Plateau）：同名 Play 只 Post 一次；离开整组才 Stop+Unload。
     /// - Distance RTPC + AttenuationGain：显示 dB 经 GainInvTransform 再写入（对齐 Boluo CurveForGain）。
     /// </summary>
@@ -106,20 +109,27 @@ namespace Game
             new Vector2(17.46708f, 0f),
             new Vector2(48.055775f, -17.25f),
         };
-        /// <summary>boluo-main River_Sound_1/2/3 CurveForGain（radius=40）。</summary>
+        /// <summary>
+        /// boluo-main River_Sound_1/2/3 CurveForGain（radius=40）。
+        /// 近场 0dB 平台拉到 NearSurface（12m）：桥面水平壳距常 6–12m，原 4.2m 平台会在桥上偏闷。
+        /// </summary>
         static readonly Vector2[] RiverGainCurve =
         {
-            new Vector2(4.1938047f, 0f),
-            new Vector2(19.856232f, -6.5347075f),
-            new Vector2(31.75719f, -12.866475f),
+            new Vector2(12f, 0f),
+            new Vector2(22f, -5f),
+            new Vector2(32f, -11f),
             new Vector2(40f, -17.25f),
         };
-        /// <summary>boluo-main CampFire_0_Audio CurveForGain（radius=30）。</summary>
+        /// <summary>
+        /// boluo-main CampFire_0_Audio CurveForGain（radius=30）。
+        /// 近场 0dB 拉到 12m：火边常站 6–10m，原 7.8m 拐点外太早掉，再被 0dB 瀑盖住。
+        /// </summary>
         static readonly Vector2[] CampfireGainCurve =
         {
-            new Vector2(7.863383f, 0f),
-            new Vector2(14.868943f, -9.213541f),
-            new Vector2(21.493248f, -17.25f),
+            new Vector2(12f, 0f),
+            new Vector2(18f, -6f),
+            new Vector2(24f, -12f),
+            new Vector2(30f, -17.25f),
         };
         /// <summary>boluo-main WaterFall_Sound_Big_1 CurveForGain（radius=80，盖观瀑点）。</summary>
         static readonly Vector2[] WaterfallBigGainCurve =
@@ -174,11 +184,26 @@ namespace Game
 
         /// <summary>因 bank 未就绪而被拒绝的 bank 名（收到 OnBankLoaded 时清掉并重 Evaluate）。</summary>
         readonly HashSet<string> _pendingRetryBanks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// 落盘 / 灌引擎后短窗内禁止 listener-still 跳过（盖住 want 一帧抖 + Prune 清 pending）。
+        /// </summary>
+        float _forceEvalUntil;
+
+        /// <summary>
+        /// 贴河/瀑/火已触发过的优先下载（防每 tick 重入）。失败且仍未就绪时清掉以允许重试。
+        /// </summary>
+        readonly HashSet<string> _proximityBankKick =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>标记 inland water 已就绪（收到 OnInlandWaterReady 时设为 true，无需重复设）。</summary>
         bool _inlandWaterReady;
         /// <summary>上一轮看见的篝火点燃态。变化时打破 listener-still，否则人站着火才点上永远不开播。</summary>
         bool _campfireIgnitedLatched;
+        /// <summary>
+        /// 本轮 Evaluate 贴点燃篝火时，河/瀑/湖额外衰减（dB，≤0）。
+        /// Mute 圈产品保持 0，改用增益压盖，避免火边瀑 0dB 盖住篝火。
+        /// </summary>
+        float _waterDuckDbThisEval;
         int _softStopDriveGen;
         int _attenuationDriveGen;
 
@@ -391,8 +416,9 @@ namespace Game
             // 订阅 voice state 变化（用于回收）
             WanosInteraction.VoiceStateChanged += OnVoiceStateChanged;
 
-            // 订阅 bank loaded（用于重试）
+            // 订阅 bank loaded / 落盘就绪（用于重试；Critical 常 loadIntoEngine=false）
             WanosBankStore.OnBankLoaded += OnBankLoaded;
+            BankDownloader.OnBankLocalReady += OnBankLocalReady;
 
             // 订阅 inland water loaded（用于触发首次河/瀑布 Evaluate）
             IslandWorldService.OnInlandWaterReady += OnInlandWaterReady;
@@ -409,6 +435,7 @@ namespace Game
             _started = false;
             WanosInteraction.VoiceStateChanged -= OnVoiceStateChanged;
             WanosBankStore.OnBankLoaded -= OnBankLoaded;
+            BankDownloader.OnBankLocalReady -= OnBankLocalReady;
             IslandWorldService.OnInlandWaterReady -= OnInlandWaterReady;
             // BeginLeave 与 OnLeave 都会调 IslandAudioSession.Shutdown（文档要求可重入）。
             // 未订阅时 Unsubscribe 会抛 GameFrameworkException，打断 ChangeState→GuestLogin，
@@ -421,6 +448,8 @@ namespace Game
             Sources.Clear();
             VoiceToSource.Clear();
             _pendingRetryBanks.Clear();
+            _proximityBankKick.Clear();
+            _forceEvalUntil = 0f;
             _catalogBuilt = false;
             _contentAudioPaused = false;
             _presetTransitionHeld = false;
@@ -471,17 +500,180 @@ namespace Game
         }
 
         /// <summary>
-        /// Bank Ready 后清掉 pending 记录并重新 Evaluate（让之前因 bank 未就绪而 Stop 的 source 重试）。
+        /// Bank 灌入引擎后 seed pending 并重新 Evaluate。
         /// </summary>
-        void OnBankLoaded(string bankName)        {
+        void OnBankLoaded(string bankName)
+            => HandleAmbienceBankReadySignal(bankName, "ready");
+
+        /// <summary>
+        /// Bank 落盘但未必灌引擎（Bootstrap Critical <c>loadIntoEngine=false</c>）。
+        /// 目录环境音 / 已有 source / pending 任一命中即重评——禁止「必须先 Retain 失败」。
+        /// </summary>
+        void OnBankLocalReady(string bankName)
+            => HandleAmbienceBankReadySignal(bankName, "local-ready");
+
+        void HandleAmbienceBankReadySignal(string bankName, string tag)
+        {
             if (!_started)
                 return;
             if (string.IsNullOrEmpty(bankName))
                 return;
-            if (!_pendingRetryBanks.Remove(bankName))
+
+            bool catalog = AmbienceEventCatalog.TryGet(bankName, out _);
+            bool uses = AnySourceUsesBank(bankName);
+            bool pending = _pendingRetryBanks.Contains(bankName);
+            if (!AmbienceBankRetryPolicy.ShouldHandleAmbienceBankReady(catalog, uses, pending))
                 return;
-            Log.Info($"[AmbienceZone] bank ready={bankName} — retry Evaluate");
+
+            // 即使从未 Retain 失败也 seed：圈外下完再走进 / Prune 清过 pending 时仍可被 HasResolvable 拉起。
+            _pendingRetryBanks.Add(bankName);
+            // 短强制窗：盖住同帧 want 抖 → Prune → still 锁死。
+            _forceEvalUntil = Time.realtimeSinceStartup + AmbienceZoneCatalog.ExitGraceSeconds;
+            InvalidateListenerStill();
+            Log.Info($"[AmbienceZone] bank {tag}={bankName} — retry Evaluate");
             EvaluateNow();
+            // Critical bank 常先 Post 后 loaded：Playing+Voice 已挂但引擎无声且无 Stopped 回调，
+            // KeepSourcePlaying 不会再 Post。bank ready 后对点源强制 HealRepost。
+            HealPlayingPointSourcesForBank(bankName);
+        }
+
+        void HealPlayingPointSourcesForBank(string bankName)
+        {
+            if (string.IsNullOrEmpty(bankName) || !WanosInteraction.IsReady)
+                return;
+            if (!WanosInteraction.TryGetListenerPosition(out Vector3 listener))
+                return;
+
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var src = Sources[i];
+                var spec = src?.Spec;
+                if (spec == null || !src.Playing)
+                    continue;
+                if (!string.Equals(spec.Bank, bankName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!IsPointSourceKind(spec.Kind))
+                    continue;
+
+                Vector3 pos = ResolveRepostPosition(spec, listener);
+                float dist = Distance(spec, listener, pos);
+                Log.Info(
+                    $"[AmbienceZone] bank-ready heal id={spec.Id} bank={bankName} dist={dist:F1}m");
+                HealRepostSource(src, pos, dist);
+            }
+        }
+
+        bool AnySourceUsesBank(string bankName)
+        {
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var spec = Sources[i]?.Spec;
+                if (spec != null
+                    && string.Equals(spec.Bank, bankName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 走进河/瀑/火可听圈：Critical 常 <c>loadIntoEngine=false</c>，只靠走路 Retain 会 miss；
+        /// 未落盘时 preempt+prioritize 插队下载并灌引擎，已落盘则立刻 <see cref="WanosBankStore.Load"/>。
+        /// </summary>
+        void EnsureProximityBankReady(AmbienceEmitterSpec spec)
+        {
+            if (spec == null || string.IsNullOrEmpty(spec.Bank))
+                return;
+
+            string bank = spec.Bank;
+            bool loaded = WanosBankStore.IsLoaded(bank);
+            bool local = WanosBankStore.CanResolve(bank) || BankDownloader.IsLocalReady(bank);
+            var action = AmbienceProximityBankPolicy.Resolve(
+                AmbienceProximityBankPolicy.IsPriorityKind(spec.Kind),
+                loaded,
+                local);
+
+            if (action == AmbienceProximityBankPolicy.Action.None)
+            {
+                if (loaded)
+                    _proximityBankKick.Remove(bank);
+                return;
+            }
+
+            if (action == AmbienceProximityBankPolicy.Action.LoadLocal)
+            {
+                if (WanosBankStore.Load(bank))
+                {
+                    _pendingRetryBanks.Add(bank);
+                    _forceEvalUntil =
+                        Time.realtimeSinceStartup + AmbienceZoneCatalog.ExitGraceSeconds;
+                    InvalidateListenerStill();
+                    Log.Info($"[AmbienceZone] proximity Load bank={bank}");
+                }
+                return;
+            }
+
+            if (!_proximityBankKick.Add(bank))
+                return;
+
+            Log.Info($"[AmbienceZone] proximity prioritize download+load bank={bank}");
+            string kickBank = bank;
+            UserBankDownloadFlow.Start(
+                new[] { kickBank },
+                new DownloadUiOptions { SuppressProgressDialog = true },
+                onComplete: () =>
+                {
+                    if (!WanosBankStore.IsLoaded(kickBank)
+                        && !BankDownloader.IsLocalReady(kickBank))
+                        _proximityBankKick.Remove(kickBank);
+                },
+                prioritize: true,
+                preempt: true,
+                loadIntoEngine: true);
+        }
+
+        bool IsForceEvalWindowActive()
+            => Time.realtimeSinceStartup < _forceEvalUntil;
+
+        /// <summary>pending 里已有可解析/已加载的 bank → 站着也要重评开播。</summary>
+        bool HasResolvablePendingRetry()
+        {
+            if (_pendingRetryBanks.Count == 0)
+                return false;
+            foreach (string bank in _pendingRetryBanks)
+            {
+                if (string.IsNullOrEmpty(bank))
+                    continue;
+                if (WanosBankStore.IsLoaded(bank) || WanosBankStore.CanResolve(bank))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 出圈后没人 want 的 pending 清掉，避免 bank 已落盘却永远挡住 listener-still。
+        /// 落盘强制窗内不剪——同帧 want 抖会把刚 seed 的 pending 拆掉再仍锁死。
+        /// </summary>
+        void PruneUnwantedPendingRetries(int sourceCount)
+        {
+            if (_pendingRetryBanks.Count == 0 || sourceCount <= 0)
+                return;
+            if (IsForceEvalWindowActive())
+                return;
+            _pendingRetryBanks.RemoveWhere(bank =>
+            {
+                if (string.IsNullOrEmpty(bank))
+                    return true;
+                for (int i = 0; i < sourceCount && i < Sources.Count; i++)
+                {
+                    if (!_wantScratch[i])
+                        continue;
+                    var spec = Sources[i]?.Spec;
+                    if (spec != null
+                        && string.Equals(spec.Bank, bank, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                }
+                return true;
+            });
         }
 
         /// <summary>
@@ -872,11 +1064,26 @@ namespace Game
                 InvalidateListenerStill();
             }
 
+            // Mute 圈=0 允许同听；贴火时压河/瀑/湖增益，否则火边瀑 0dB 盖死篝火。
+            _waterDuckDbThisEval = 0f;
+            if (campfireIgnited
+                && TryNearestCampfireHorizontalMeters(listener, out float nearFireM))
+            {
+                _waterDuckDbThisEval =
+                    AmbienceWaterSilencePolicy.WaterDuckDbNearCampfire(nearFireM);
+            }
+
             // Listener-still skip: if the listener moved < 0.09m since the last
             // tick, the previous Enter/Exit decisions are still valid. Cheaper
             // than scanning all sources for nothing.
-            // Soft-stop / gain-slew need ticks even when the listener stands still.
-            if (!ShouldEvaluateListener(listener) && !AnySoftStopping() && !AnyGainSlewPending())
+            // Soft-stop / gain-slew / pending bank 已可解析 need ticks even when still
+            // （边走边下：人站圈内等落盘，下完必须立刻 StartSource）。
+            if (AmbienceBankRetryPolicy.ShouldSkipListenerStillEval(
+                    listenerMovedEnough: ShouldEvaluateListener(listener),
+                    softStopping: AnySoftStopping(),
+                    gainSlewPending: AnyGainSlewPending(),
+                    hasResolvablePendingRetry: HasResolvablePendingRetry(),
+                    forceEvalWindow: IsForceEvalWindowActive()))
                 return;
 
             int n = Sources.Count;
@@ -928,12 +1135,15 @@ namespace Game
             CollapseExclusiveSharedPlayWants(n);
             ApplyLakeWaterfallExclusion(n);
             TransferExclusiveSharedPlays(n);
+            PruneUnwantedPendingRetries(n);
 
             for (int i = 0; i < n; i++)
             {
                 var src = Sources[i];
                 if (_wantScratch[i])
                 {
+                    // 贴河/瀑/火：未落盘优先插队下载并灌引擎；已落盘未 Load 则立刻 Load。
+                    EnsureProximityBankReady(src.Spec);
                     if (src.SoftStopping)
                         CancelSoftStop(src);
                     if (!src.Playing)
@@ -965,7 +1175,9 @@ namespace Game
             sb.Append("[AmbienceZone] point-hb listener=(")
                 .Append(listener.x.ToString("F1")).Append(',')
                 .Append(listener.y.ToString("F1")).Append(',')
-                .Append(listener.z.ToString("F1")).Append(')');
+                .Append(listener.z.ToString("F1")).Append(')')
+                .Append(" waterDuck=")
+                .Append(_waterDuckDbThisEval.ToString("F1"));
             int logged = 0;
             for (int i = 0; i < n; i++)
             {
@@ -1078,7 +1290,8 @@ namespace Game
                 || string.Equals(bank, "River_Quad", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(bank, "River_ADD", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(bank, "Waterfall_Big_Quad", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(bank, "Waterfall_Small_Quad", StringComparison.OrdinalIgnoreCase);
+                || string.Equals(bank, "Waterfall_Small_Quad", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(bank, "Campfire", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -1878,7 +2091,40 @@ namespace Game
             // 鸟叫/虫鸣/风床：相对河瀑略退后，避免贴水时生物声压过水声。
             if (spec != null && IsBiomeKind(spec.Kind))
                 engineDb -= 5f;
+            // 火边压水：硬静音圈产品关着，用增益把河/瀑让给篝火。
+            if (spec != null
+                && _waterDuckDbThisEval < 0f
+                && IsCampfireWaterDuckKind(spec.Kind))
+                engineDb += _waterDuckDbThisEval;
             return engineDb;
+        }
+
+        static bool IsCampfireWaterDuckKind(AmbienceEmitterKind kind)
+        {
+            return kind == AmbienceEmitterKind.River
+                || kind == AmbienceEmitterKind.Waterfall
+                || kind == AmbienceEmitterKind.Lake;
+        }
+
+        bool TryNearestCampfireHorizontalMeters(Vector3 listener, out float meters)
+        {
+            meters = float.MaxValue;
+            bool any = false;
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var s = Sources[i]?.Spec;
+                if (s == null || s.Kind != AmbienceEmitterKind.Campfire)
+                    continue;
+                Vector3 c = ResolveEmitterPosition(s);
+                float dx = listener.x - c.x;
+                float dz = listener.z - c.z;
+                float d = Mathf.Sqrt(dx * dx + dz * dz);
+                if (d >= meters)
+                    continue;
+                meters = d;
+                any = true;
+            }
+            return any;
         }
 
         float EvaluateGainCurveDisplayY(Vector2[] curve, float distMeters)
@@ -1911,10 +2157,13 @@ namespace Game
                 {
                     Log.Warning($"[AmbienceZone] StartSource Retain FAIL id={spec.Id} bank={spec.Bank} (added to retry)");
                     _pendingRetryBanks.Add(spec.Bank);
+                    EnsureProximityBankReady(spec);
                     return;
                 }
 
                 src.BankHeld = true;
+                // 落盘重试成功：清掉 pending，避免站着时 HasResolvablePendingRetry 每 tick 空转。
+                _pendingRetryBanks.Remove(spec.Bank);
             }
 
             string[] plays = ResolvePlayEventsForSingleEmitter(spec);
@@ -1938,9 +2187,13 @@ namespace Game
                 // 先 Post，再 enable+gain（Boluo CurveForGain 也是 voice 起来后持续推）。
                 PostSourceEvents(src, plays);
                 float targetDb = GainDbForDistance(spec, dist);
-                // Soft enter: write quiet first frame; later frames SmoothDamp toward target.
+                // 贴身（桥/岸/火边）：跳过 SoftEnter −36dB，避免近场先闷半秒。
+                bool nearSnap = IsPointSourceKind(spec.Kind)
+                    && dist <= AmbienceZoneCatalog.NearSurfaceMeters;
                 src.LastTargetGainDb = targetDb;
-                src.LastAppliedGainDb = Mathf.Min(SoftEnterStartDb, targetDb);
+                src.LastAppliedGainDb = nearSnap
+                    ? targetDb
+                    : Mathf.Min(SoftEnterStartDb, targetDb);
                 src.GainSlewVelocity = 0f;
                 src.LastSlewedDistance = dist;
                 src.LastTargetDistance = dist;
@@ -1975,8 +2228,12 @@ namespace Game
 
             PostSourceEvents(src, plays);
             float targetDb = GainDbForDistance(spec, dist);
+            bool nearSnap = IsPointSourceKind(spec.Kind)
+                && dist <= AmbienceZoneCatalog.NearSurfaceMeters;
             src.LastTargetGainDb = targetDb;
-            src.LastAppliedGainDb = Mathf.Min(SoftEnterStartDb, targetDb);
+            src.LastAppliedGainDb = nearSnap
+                ? targetDb
+                : Mathf.Min(SoftEnterStartDb, targetDb);
             src.GainSlewVelocity = 0f;
             src.LastSlewedDistance = dist;
             src.LastTargetDistance = dist;

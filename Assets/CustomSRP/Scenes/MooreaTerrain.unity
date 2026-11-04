@@ -256,20 +256,21 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CustomSRP.OilCloudLayer
   material: {fileID: 2100000, guid: c4e8a1b27d9f4e6a8c0b1d2e3f405162, type: 2}
+  cloudDomeMesh: {fileID: 0}
   coverage: 0.85
   wind: 0.2
   ringScale: 1.85
   followSeaLevel: 1
   seaLevel: 0
-  ringHeight: 120
+  ringHeight: 180
   highRing: 1
-  uvDisturbance: 0.028
-  sdfSoftness: 0.08
+  uvDisturbance: 0.04
+  sdfSoftness: 0.14
   sdfMin: 0.48
   sdfMax: 0.9
   topShadow: 1
-  topHighlight: 1
-  edgeIntensity: 2.2
+  topHighlight: 0.92
+  edgeIntensity: 1.55
 --- !u!1 &362718928
 GameObject:
   m_ObjectHideFlags: 0

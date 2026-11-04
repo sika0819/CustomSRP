@@ -6,13 +6,20 @@ namespace Game
     /// </summary>
     public static class AmbienceWaterSilencePolicy
     {
-        /// <summary>贴瀑优先于湖的水平距离（米）。</summary>
-        public const float PreferFallWithinMeters = 28f;
+        /// <summary>
+        /// 贴瀑优先于湖的水平距离（米）。
+        /// 必须盖住大瀑 Enter（80）：原先 28 会在「已进瀑可听圈但仍更近湖」时把瀑掐掉，
+        /// 表现为走到瀑布没声、只剩湖。
+        /// </summary>
+        public const float PreferFallWithinMeters = 80f;
 
         /// <summary>湖/瀑 sticky 滞回（米）。</summary>
         public const float ExclusiveShareHysteresisMeters = 12f;
 
-        /// <summary>水域物体级钉正午 Time of A Day，避免夜间全局 RTPC 掐河/瀑/海/湖。</summary>
+        /// <summary>
+        /// 物体级钉正午 Time of A Day：河/瀑/海/湖 + 篝火。
+        /// 篝火若不钉，夜间全局 TOD 会把它掐成「play=1 却听不见」，河瀑仍响（已钉正午）。
+        /// </summary>
         public static bool ShouldPinDaytimeTimeOfDay(AmbienceEmitterKind kind)
         {
             switch (kind)
@@ -21,10 +28,35 @@ namespace Game
                 case AmbienceEmitterKind.River:
                 case AmbienceEmitterKind.Lake:
                 case AmbienceEmitterKind.Waterfall:
+                case AmbienceEmitterKind.Campfire:
                     return true;
                 default:
                     return false;
             }
+        }
+
+        /// <summary>贴点燃篝火时压河/瀑/湖的增益（dB，负值）。</summary>
+        public const float CampfireWaterDuckDb = -12f;
+
+        /// <summary>火边压水声的水平半径（米），对齐篝火衰减半径。</summary>
+        public const float CampfireWaterDuckMeters = 30f;
+
+        /// <summary>
+        /// 人贴点燃篝火时，水类增益额外衰减多少。
+        /// 火心满压 <see cref="CampfireWaterDuckDb"/>，到半径外线性回到 0。
+        /// </summary>
+        public static float WaterDuckDbNearCampfire(
+            float nearestCampfireHorizontalMeters,
+            float duckMeters = CampfireWaterDuckMeters,
+            float duckDb = CampfireWaterDuckDb)
+        {
+            if (duckMeters <= 0f || duckDb >= 0f)
+                return 0f;
+            if (nearestCampfireHorizontalMeters < 0f
+                || nearestCampfireHorizontalMeters >= duckMeters)
+                return 0f;
+            float t = 1f - nearestCampfireHorizontalMeters / duckMeters;
+            return duckDb * t;
         }
 
         /// <summary>

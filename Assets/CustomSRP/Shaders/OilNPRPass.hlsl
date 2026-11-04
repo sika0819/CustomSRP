@@ -22,6 +22,7 @@ struct Attributes
 {
     float3 positionOS : POSITION;
     float3 normalOS : NORMAL;
+    float4 tangentOS : TANGENT;
     float2 baseUV : TEXCOORD0;
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
@@ -33,6 +34,7 @@ struct Varyings
     float3 positionOS : VAR_POSITION_OS;
     float3 normalWS : VAR_NORMAL;
     float3 normalOS : VAR_NORMAL_OS;
+    float4 tangentWS : VAR_TANGENT;
     float2 baseUV : VAR_BASE_UV;
     float keepCard : VAR_KEEP_CARD;
     UNITY_VERTEX_INPUT_INSTANCE_ID
@@ -84,6 +86,9 @@ Varyings OilNPRPassVertex(Attributes input)
     output.positionCS_SS = TransformWorldToHClip(output.positionWS);
     output.normalWS = normalWS;
     output.normalOS = normalOS;
+    // Mesh-UV oil bump needs real tangents so normal U/V match diffuse U/V.
+    output.tangentWS = float4(
+        TransformObjectToWorldDir(input.tangentOS.xyz), input.tangentOS.w);
     output.baseUV = TransformBaseUV(input.baseUV);
     output.keepCard = keep;
     return output;
@@ -275,29 +280,20 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
     }
 
     // Wood / rocks: keep albedo light Impasto. Rock 凹凸 from oil normal
-    // (UV flipped to match ShiTou grain) + mild albedo-luma tilt along纹理方向.
-    albedo = ImpastoDeviation(albedo, brush, 0.52h);
+    // + albedo-luma tilt. Mobile brush is flat 0.5 — drive deviation from luma.
+    // Always sample _BumpMap (mesh UV or triplanar via GetOilPropBumpWS).
+    // Old WorldTriplanar-only gate left mountain mats with empty relief.
+    half strokeAmt = brush;
+#if defined(OIL_MOBILE_PERF)
+    strokeAmt = PaintStroke(PaintLuma(albedo), 1.45h);
+#endif
+    albedo = ImpastoDeviation(albedo, strokeAmt, 0.52h);
     surface.color = (float3)albedo;
-    if (_WorldTriplanar > 0.5)
-    {
-        normalWS = (half3)GetOilPropBumpWS(config, (float3)geometricNormal);
-#if !defined(OIL_MOBILE_PERF)
-        // Screen-space height of the stone tile steers ridges along visible grain.
-        half height = PaintLuma(albedo);
-        normalWS = ImpastoTiltNormal(
-            normalWS, (half)ddx((float)height), (half)ddy((float)height), 0.38h);
-#endif
-        surface.normal = (float3)normalWS;
-    }
-#if !defined(OIL_MOBILE_PERF)
-    else
-    {
-        half brushDx = (half)ddx((float)brush);
-        half brushDz = (half)ddy((float)brush);
-        normalWS = ImpastoTiltNormal(normalWS, brushDx, brushDz, 0.40h);
-        surface.normal = (float3)normalWS;
-    }
-#endif
+    normalWS = (half3)GetOilPropBumpWS(config, (float3)geometricNormal, input.tangentWS);
+    half height = PaintLuma(albedo);
+    normalWS = ImpastoTiltNormal(
+        normalWS, (half)ddx((float)height), (half)ddy((float)height), 0.38h);
+    surface.normal = (float3)normalWS;
 
 #if defined(OIL_MOBILE_PERF)
     surface.dither = InterleavedGradientNoise(config.fragment.positionSS, 0);
@@ -317,6 +313,13 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         0.2h,
         surface.smoothness,
         config.fragment.screenUV);
+    if (GetDirectionalLightCount() > 0)
+    {
+        half3 L = (half3)GetDirectionalLightData(0).directionAndMask.xyz;
+        half flank = clamp(dot(normalWS - geometricNormal, L), -0.45h, 0.45h);
+        // Milder than desktop — readable stroke flanks without over-bright ridges.
+        color *= max(0.0h, 1.0h + flank * (1.05h + 1.10h * abs(flank)) * 0.40h);
+    }
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush);
 #else
     half3 color = OilNPRLighting(
@@ -341,12 +344,9 @@ half4 OilNPRPassFragment(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV
         half3 H = normalize(L + viewDir);
         color += ImpastoRidgeSpec(brush, saturate(dot(normalWS, H)), 0.52h)
             * lerp(half3(1.0h, 0.96h, 0.88h), (half3)GetDirectionalLightData(0).color.rgb, 0.3h);
-        if (_WorldTriplanar > 0.5)
-        {
-            // Lighting flank from oil normal vs geom — keep mild so denser strokes read.
-            half flank = clamp(dot(normalWS - geometricNormal, L), -0.45h, 0.45h);
-            color *= max(0.0h, 1.0h + flank * (1.05h + 1.10h * abs(flank)) * 0.48h);
-        }
+        // Lighting flank from oil normal vs geom — mesh-UV mountains need this too.
+        half flank = clamp(dot(normalWS - geometricNormal, L), -0.45h, 0.45h);
+        color *= max(0.0h, 1.0h + flank * (1.05h + 1.10h * abs(flank)) * 0.48h);
     }
     color = OilWeaveTint(color, input.positionWS.xz * 0.15);
     color = (half3)ApplyOilFog((float3)color, surface.depth, brush, input.positionWS);

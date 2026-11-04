@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using Game.BoluoApi;
 using UnityEngine;
 using UnityGameFramework.Runtime;
 using WanosAudio;
@@ -40,8 +41,9 @@ namespace Game
                 return;
             _started = true;
             IslandWorldService.OnInlandWaterReady += OnInlandWaterReady;
-            // 首装 Rain_Water 可能晚于切雨；bank 灌入后清熔断并重评。
+            // 首装 Rain_Water 可能晚于切雨；落盘或灌入后清熔断并重评。
             WanosBankStore.OnBankLoaded += OnBankLoaded;
+            BankDownloader.OnBankLocalReady += OnBankLocalReady;
             RunLoop().Forget();
         }
 
@@ -64,11 +66,25 @@ namespace Game
             EvaluateNow();
         }
 
+        void OnBankLocalReady(string bankName)
+        {
+            if (!_started || string.IsNullOrEmpty(bankName))
+                return;
+            if (!string.Equals(bankName, BankName, StringComparison.OrdinalIgnoreCase))
+                return;
+            if (!_bankMissing)
+                return;
+            _bankMissing = false;
+            Log.Info($"[RainWater] bank local-ready={bankName} — retry Evaluate");
+            EvaluateNow();
+        }
+
         public void Shutdown()
         {
             _started = false;
             IslandWorldService.OnInlandWaterReady -= OnInlandWaterReady;
             WanosBankStore.OnBankLoaded -= OnBankLoaded;
+            BankDownloader.OnBankLocalReady -= OnBankLocalReady;
             StopPlaying();
             ReleaseBank();
             _bankMissing = false;

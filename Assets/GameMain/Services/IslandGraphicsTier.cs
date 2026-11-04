@@ -5,8 +5,8 @@ namespace Game
 {
     /// <summary>
     /// 进岛画质档。内存阈值按系统上报值（Android 往往只有标称的约八成）。
-    /// GPU 名字只降档，不升档。闺蜜机标准版把高档压回中档。
-    /// 闺蜜机 4K 整档对齐低端机（分辨率另由 renderScale 管）。
+    /// Android：弱 GPU 降低档；高档还要强 GPU（大内存不够）。认不出的 GPU 名不升高档。
+    /// 闺蜜机标准版把高档压回中档。闺蜜机 4K 整档对齐低端机（分辨率另由 renderScale 管）。
     /// </summary>
     public static class IslandGraphicsTier
     {
@@ -41,7 +41,7 @@ namespace Game
 
         /// <summary>
         /// 高性能档（原始 Resolve，未做闺蜜机带宽压档）。
-        /// Android：约 8GB+ 且 GPU 不弱。编辑器恒为 true。
+        /// Android：约 8GB+ 且 GPU 够强。编辑器恒为 true。
         /// </summary>
         public static bool IsHighEnd => Resolve() == Tier.High;
 
@@ -148,11 +148,13 @@ namespace Game
                 return;
             _logged = true;
             Tier gpu = BandwidthConservative && raw == Tier.High ? Tier.Mid : raw;
+            string gpuName = SystemInfo.graphicsDeviceName;
             Debug.Log(
                 "[IslandGraphicsTier] tier=" + raw
                 + " gpuTier=" + gpu
                 + " mem=" + SystemInfo.systemMemorySize
-                + " gpu=" + SystemInfo.graphicsDeviceName
+                + " gpu=" + gpuName
+                + " strongGpu=" + IsStrongMobileGpu(gpuName)
                 + " gmj=" + BandwidthConservative
                 + " gmj4k=" + BoluoDeviceInfo.IsSkyworthGmj4K());
 #else
@@ -181,10 +183,12 @@ namespace Game
                 return Tier.High;
             return Tier.Mid;
 #else
-            bool weakGpu = IsWeakMobileGpu(SystemInfo.graphicsDeviceName);
+            string gpuName = SystemInfo.graphicsDeviceName;
+            bool weakGpu = IsWeakMobileGpu(gpuName);
             if (weakGpu || IsSpreadtrum9863() || (mem > 0 && mem <= AndroidLowRamMb))
                 return Tier.Low;
-            if (mem >= AndroidHighRamMb)
+            // 高档：大内存 + 强 GPU。G76 等老旗舰内存够也不进 High。
+            if (mem >= AndroidHighRamMb && IsStrongMobileGpu(gpuName))
                 return Tier.High;
             return Tier.Mid;
 #endif
@@ -220,6 +224,31 @@ namespace Game
             if (lower.IndexOf("mali-4", System.StringComparison.Ordinal) >= 0)
                 return true;
             if (lower.IndexOf("powervr", System.StringComparison.Ordinal) >= 0)
+                return true;
+            return false;
+        }
+
+        /// <summary>
+        /// 高档 GPU 门：Adreno ≥ 730；Mali-G ≥ 710（含 Immortalis-G715 等）；
+        /// Immortalis / Maleoon / Xclipse 按名字命中。认不出的名字不升高档。
+        /// </summary>
+        static bool IsStrongMobileGpu(string gpuName)
+        {
+            if (string.IsNullOrEmpty(gpuName))
+                return false;
+
+            if (TryModelNumber(gpuName, "adreno", out int adreno))
+                return adreno >= 730;
+
+            if (TryModelNumber(gpuName, "mali-g", out int maliG))
+                return maliG >= 710;
+
+            string lower = gpuName.ToLowerInvariant();
+            if (lower.IndexOf("immortalis", System.StringComparison.Ordinal) >= 0)
+                return true;
+            if (lower.IndexOf("maleoon", System.StringComparison.Ordinal) >= 0)
+                return true;
+            if (lower.IndexOf("xclipse", System.StringComparison.Ordinal) >= 0)
                 return true;
             return false;
         }

@@ -72,6 +72,7 @@ float OilFoliagePeriodWeight(float period)
     return 1.0;
 }
 
+#include "OilPaintNoise.hlsl"
 #include "OilShadowBrush.hlsl"
 #include "OilTreeCrossBillboard.hlsl"
 
@@ -189,6 +190,22 @@ float4 GetBase(InputConfig c)
     return raw * _BaseColor;
 }
 
+// Cell hash rotate + offset on existing UVs — breaks diagonal wallpaper, 0 extra taps.
+void OilBumpDetileUVs(float3 position, inout float2 uvX, inout float2 uvY, inout float2 uvZ)
+{
+    float tiling = max(_TriplanarTiling, 1e-4);
+    float2 cell = floor(position.xz * tiling);
+    float h = OilHash21(cell);
+    float ang = (h - 0.5) * 3.14159265;
+    float s;
+    float c;
+    sincos(ang, s, c);
+    float2 o = (float2(OilHash21(cell + 19.2), OilHash21(cell + 7.3)) - 0.5) * 0.31;
+    uvX = float2(c * uvX.x - s * uvX.y, s * uvX.x + c * uvX.y) + o;
+    uvY = float2(c * uvY.x - s * uvY.y, s * uvY.x + c * uvY.y) + o.yx;
+    uvZ = float2(c * uvZ.x - s * uvZ.y, s * uvZ.x + c * uvZ.y) + o;
+}
+
 // Whiteout triplanar: same axes as albedo; _BumpTiling densifies ShiTou oil brush.
 // ShiTou_OilBrushNormal is authored along rock grain — no UV flip.
 float3 SampleBumpTriplanar(
@@ -200,28 +217,76 @@ float3 SampleBumpTriplanar(
     float2 uvX, uvY, uvZ;
     float3 blend;
     OilTriplanarUVs(position, blendNormal, max(_BumpTiling, 1e-4), uvX, uvY, uvZ, blend);
+    // Detile breaks wallpaper on pure stroke normals (_BumpTiling > 1).
+    // Skip when bump locks 1:1 to OilTile / albedo detail.
+    if (_BumpTiling > 1.05)
+    {
+        OilBumpDetileUVs(position, uvX, uvY, uvZ);
+    }
     float3 nShade = normalize(shadeNormal);
     float3 nx = DecodeNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvX), scale);
     float3 ny = DecodeNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvY), scale);
     float3 nz = DecodeNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvZ), scale);
+#if !defined(OIL_MOBILE_PERF)
+    // Desktop only: one extra tap on the dominant axis at 0.41× — breaks period, not 6-tap.
+    float2 uvDom = uvX;
+    float domSel = 0.0;
+    if (blend.y >= blend.x && blend.y >= blend.z)
+    {
+        uvDom = uvY;
+        domSel = 1.0;
+    }
+    else if (blend.z >= blend.x && blend.z >= blend.y)
+    {
+        uvDom = uvZ;
+        domSel = 2.0;
+    }
+    float2 uvDomB = uvDom * 0.41 + float2(0.37, 0.19);
+    float3 nDomB = DecodeNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvDomB), scale);
+    float mixW = OilValueNoise(position.xz * max(_TriplanarTiling, 1e-4) * 2.3);
+    mixW = smoothstep(0.28, 0.72, mixW);
+    if (domSel < 0.5)
+    {
+        nx = lerp(nx, nDomB, mixW);
+    }
+    else if (domSel < 1.5)
+    {
+        ny = lerp(ny, nDomB, mixW);
+    }
+    else
+    {
+        nz = lerp(nz, nDomB, mixW);
+    }
+#endif
     nx = float3(nx.xy + nShade.zy, abs(nx.z) * nShade.x);
     ny = float3(ny.xy + nShade.xz, abs(ny.z) * nShade.y);
     nz = float3(nz.xy + nShade.xy, abs(nz.z) * nShade.z);
     return normalize(nx.zyx * blend.x + ny.xzy * blend.y + nz * blend.z);
 }
 
-// Mesh-UV props: baseUV already has BaseMap_ST; _BumpTiling densifies oil strokes.
-float3 SampleBumpMeshWS(float2 uv, float3 geomNormal, float scale)
+// Mesh-UV props: same UV as albedo when _BumpTiling==1 (baseUV already has BaseMap_ST).
+// Use mesh tangent so normal-map U/V match diffuse U/V — do not rebuild from world-up.
+float3 SampleBumpMeshWS(float2 uv, float3 geomNormal, float4 tangentWS, float scale)
 {
     float3 nGeom = normalize(geomNormal);
     float2 bumpUV = uv * max(_BumpTiling, 1e-4);
     float3 nTS = DecodeNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, bumpUV), scale);
-    float3 tRef = abs(nGeom.y) < 0.999 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
-    float3 t = normalize(tRef - nGeom * dot(nGeom, tRef));
-    return NormalTangentToWorld(nTS, nGeom, float4(t, -1.0));
+    float3 t = tangentWS.xyz;
+    float signBit = tangentWS.w < 0.0 ? -1.0 : 1.0;
+    if (dot(t, t) < 1e-8)
+    {
+        float3 tRef = abs(nGeom.y) < 0.999 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+        t = normalize(tRef - nGeom * dot(nGeom, tRef));
+        signBit = -1.0;
+    }
+    else
+    {
+        t = normalize(t - nGeom * dot(nGeom, t));
+    }
+    return NormalTangentToWorld(nTS, nGeom, float4(t, signBit));
 }
 
-float3 GetOilPropBumpWS(InputConfig c, float3 geomNormalWS)
+float3 GetOilPropBumpWS(InputConfig c, float3 geomNormalWS, float4 tangentWS)
 {
     float scale = max(_NormalStrength, 1e-4);
     // Object triplanar (ShiTou): same OS axes as albedo; _BumpTiling = stroke size.
@@ -234,7 +299,7 @@ float3 GetOilPropBumpWS(InputConfig c, float3 geomNormalWS)
     {
         return SampleBumpTriplanar(c.positionWS, c.normalWS, c.normalWS, scale);
     }
-    return SampleBumpMeshWS(c.baseUV, geomNormalWS, scale);
+    return SampleBumpMeshWS(c.baseUV, geomNormalWS, tangentWS, scale);
 }
 
 float GetCutoff(InputConfig c)

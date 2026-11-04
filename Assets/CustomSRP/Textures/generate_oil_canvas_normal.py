@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Bake a tiling tangent-space normal from OilCanvas.png for the oil skybox.
+"""Bake tiling tangent-space normals from OilCanvas.png.
+
+- OilCanvasNormal.png — skybox (source as authored)
+- OilCloudCanvasNormal.png — clouds (OilCanvas horizontally mirrored, then baked)
 
 OpenGL convention: +X along +U (yaw), +Y along +V (elevation), +Z out of the paint.
-Unity imports this as a Normal Map; OilSkyboxNPR samples it with DecodeNormal.
+Unity imports these as Normal Maps; DecodeNormal samples them.
 """
 
 from __future__ import annotations
@@ -14,8 +17,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-SRC = Path(__file__).resolve().parent / "OilCanvas.png"
-OUT = Path(__file__).resolve().parent / "OilCanvasNormal.png"
+ROOT = Path(__file__).resolve().parent
+SRC = ROOT / "OilCanvas.png"
+OUT_SKY = ROOT / "OilCanvasNormal.png"
+OUT_CLOUD = ROOT / "OilCloudCanvasNormal.png"
 
 # Blur kills bristle noise so the normal follows the stroke body.
 # Scale is per blurred texel. Edges land around 30–45 degrees.
@@ -69,15 +74,23 @@ def height_to_normal(height: np.ndarray, scale: float) -> np.ndarray:
     return np.clip(normal * 0.5 + 0.5, 0.0, 1.0)
 
 
-def main() -> None:
-    height = np.asarray(Image.open(SRC).convert("L"), dtype=np.float32) / 255.0
+def bake_and_write(height: np.ndarray, out: Path, label: str) -> None:
     encoded = height_to_normal(height, HEIGHT_SCALE)
     rgb = (encoded * 255.0 + 0.5).astype(np.uint8)
-    write_png(OUT, rgb)
-
+    write_png(out, rgb)
     n = encoded * 2.0 - 1.0
-    slope = np.degrees(np.arctan(np.sqrt(n[..., 0] ** 2 + n[..., 1] ** 2) / np.maximum(n[..., 2], 1e-4)))
-    print(f"Wrote {OUT}  slope deg  p50={np.median(slope):.1f}  p90={np.percentile(slope, 90):.1f}  max={slope.max():.1f}")
+    slope = np.degrees(
+        np.arctan(np.sqrt(n[..., 0] ** 2 + n[..., 1] ** 2) / np.maximum(n[..., 2], 1e-4)))
+    print(
+        f"Wrote {out.name} ({label})  slope deg  "
+        f"p50={np.median(slope):.1f}  p90={np.percentile(slope, 90):.1f}  max={slope.max():.1f}")
+
+
+def main() -> None:
+    height = np.asarray(Image.open(SRC).convert("L"), dtype=np.float32) / 255.0
+    bake_and_write(height, OUT_SKY, "sky")
+    # Horizontal mirror of OilCanvas → cloud normal (strokes flip vs sky).
+    bake_and_write(np.fliplr(height), OUT_CLOUD, "cloud H-mirror")
 
 
 if __name__ == "__main__":

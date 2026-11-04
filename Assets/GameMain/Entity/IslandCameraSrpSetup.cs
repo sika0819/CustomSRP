@@ -17,8 +17,8 @@ namespace Game
 
         /// <summary>
         /// 站立 renderScale。平板 / 闺蜜机 / 高性能安卓 0.75；其余手机 0.5。
-        /// 平板判定与 FXAA 相同：<see cref="ScreenLayout.IsPad"/>。
-        /// 高性能安卓见 <see cref="IslandGraphicsTier.IsHighEnd"/>（约 8GB+ 且 GPU 不弱）。
+        /// 平板判定：<see cref="ScreenLayout.IsPad"/>。
+        /// 高性能安卓见 <see cref="IslandGraphicsTier.IsHighEnd"/>（约 8GB+ 且 GPU 够强）。
         /// </summary>
         public static float DefaultRenderScale =>
             BoluoDeviceInfo.IsSkyworthGmj()
@@ -58,11 +58,10 @@ namespace Game
 
         /// <summary>
         /// 默认目标帧率（判定稳定后缓存）。
-        /// 闺蜜机标准版 45、4K 版 60（<see cref="BoluoDeviceInfo.IsSkyworthGmj4K"/>）。
-        /// 其它手机：低 30 / 中 45 / 高 60。iOS 按机型代际（A12 及更早 30，A13/A14 45，A15 起 60）。
-        /// iPad Pro 2018/2020（A12X/A12Z，iPad8）按 60；iPad13 里的 A14（Air 4、第十代）按 45，M1 按 60。
-        /// Android 按 <see cref="IslandGraphicsTier"/>（弱 GPU 或约 4GB 为低，约 8GB 且 GPU 不弱为高）。
-        /// 45 在不能整除的刷新率上收到 30。高刷屏默认仍不超过 60。热状态严重 30 / 危急 15，不把系统降频写回去。
+        /// 闺蜜机标准版 / 4K 版均为 60（<see cref="BoluoDeviceInfo.IsSkyworthGmj4K"/>）。
+        /// 其它手机：低/中/高目标均为 60（画质档只压特效与分辨率）。iOS 亦按 60。
+        /// Android 按 <see cref="IslandGraphicsTier"/> 分画质；帧率不再按档降。
+        /// 高刷屏默认仍不超过 60。热状态严重 30 / 危急 15，不把系统降频写回去。
         /// </summary>
         public static int DefaultFrameRate
         {
@@ -89,10 +88,10 @@ namespace Game
         /// <summary>闲置沉浸降载：够看就行，省电。</summary>
         public const int ImmersiveFrameRate = 25;
 
-        const int GmjStandardFps = 45;
+        const int GmjStandardFps = 60;
         const int GmjUltraFps = 60;
-        const int LowFps = 30;
-        const int MidFps = 45;
+        const int LowFps = 60;
+        const int MidFps = 60;
         const int HighFps = 60;
 
         static int _cachedFrameRate;
@@ -106,7 +105,6 @@ namespace Game
         static Component _cachedCrp;
         static object _cachedSettings;
         static int _appliedFrameRate = int.MinValue;
-        static int _loggedPacedFps = int.MinValue;
 
         /// <summary>
         /// Skybox clear flags + CustomRenderPipelineCamera (copy color/depth, mobile scale).
@@ -186,8 +184,7 @@ namespace Game
 
         /// <summary>
         /// 按岛面状态设目标帧率：默认见 <see cref="DefaultFrameRate"/>，沉浸 25。
-        /// 再取热状态上限，并把不能整除刷新率的 45 收到 30。
-        /// 原生半层 YieldsGpu 时不抢（overlay 自管 15/1）。
+        /// 再取热状态上限。原生半层 YieldsGpu 时不抢（overlay 自管 15/1）。
         /// </summary>
         public static void ApplyTargetFrameRate()
         {
@@ -195,18 +192,10 @@ namespace Game
                 return;
 
             int requested = IslandIdleImmersive.IsActive ? ImmersiveFrameRate : DefaultFrameRate;
-            int fps = PaceToRefresh(ApplyThermalCap(requested));
+            int fps = ApplyThermalCap(requested);
             if (fps == _appliedFrameRate
                 && Application.targetFrameRate == fps)
                 return;
-
-            if (fps != requested && fps != _loggedPacedFps)
-            {
-                _loggedPacedFps = fps;
-                Log.Info(
-                    "[IslandCamera] fps " + requested + " → " + fps
-                    + " refresh=" + CurrentRefreshHz());
-            }
 
             _appliedFrameRate = fps;
             if (GameEntry.Base != null)
@@ -258,10 +247,10 @@ namespace Game
             // CameraSettings.RenderScaleMode.Override == 2
             SetField(settingsType, settings, "renderScaleMode", 2);
             SetField(settingsType, settings, "renderScale", DefaultRenderScale);
-            // 油画开时关 FXAA：湿油色块硬边会被 AA 洗软。Pad 也不再单独开。
+            // 闺蜜机开 FXAA；其余机油画开时关（湿油硬边会被 AA 洗软）。
             SetField(
                 settingsType, settings, "allowFXAA",
-                ScreenLayout.IsPad && !IslandGraphicsTier.AllowsOilFilter);
+                BoluoDeviceInfo.IsSkyworthGmj());
             SetField(settingsType, settings, "keepAlpha", false);
             SetField(settingsType, settings, "maskLights", false);
         }
@@ -418,28 +407,6 @@ namespace Game
             }
 #endif
             return fps;
-        }
-
-        /// <summary>45 不能整除 60Hz / 120Hz，呈现会一长一短。能被 30 整除时收到 30。90Hz 上 45 保持。</summary>
-        static int PaceToRefresh(int fps)
-        {
-            if (fps != MidFps)
-                return fps;
-
-            int refresh = CurrentRefreshHz();
-            if (refresh < 48 || refresh % MidFps == 0)
-                return fps;
-            if (refresh % LowFps == 0)
-                return LowFps;
-            return fps;
-        }
-
-        static int CurrentRefreshHz()
-        {
-            double hz = Screen.currentResolution.refreshRateRatio.value;
-            if (hz < 30.0 || hz > 240.0)
-                return 0;
-            return (int)Math.Round(hz);
         }
 
         static bool TryAppleMinor(string model, string family, out int minor)

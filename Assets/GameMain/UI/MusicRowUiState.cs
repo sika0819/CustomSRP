@@ -4,7 +4,8 @@ using Game.BoluoApi.Music;
 namespace Game
 {
     /// <summary>
-    /// 音乐列表行状态纯决议（PA-1186）：盘上优先、用户 Pending 才显示下载中。
+    /// 音乐列表行状态纯决议：盘上优先；仅真实 Downloading（或用户点过的 Pending）显示进度环。
+    /// 静默全量入队的 Pending 仍显示未下载，做到一个一个翻牌。
     /// </summary>
     public static class MusicRowUiState
     {
@@ -32,12 +33,13 @@ namespace Game
                 {
                     case BankDownloadState.Downloading:
                         return MusicItemUiState.Downloading;
-                    case BankDownloadState.Failed:
-                        return MusicItemUiState.Failed;
                     case BankDownloadState.Pending:
+                        // 用户点过才对排队项转圈；静默 Kick 的 Pending 保持未下载。
                         return userPending
                             ? MusicItemUiState.Downloading
                             : MusicItemUiState.NotDownloaded;
+                    case BankDownloadState.Failed:
+                        return MusicItemUiState.Failed;
                 }
             }
 

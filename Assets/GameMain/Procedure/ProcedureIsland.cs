@@ -130,6 +130,7 @@ namespace Game
                 $"[ProcedureIsland] enter #{enter} reclaimBusy={IslandLeaveAssetReclaim.Ensure() is { IsBusy: true }}");
             // 负一屏不等音频加载。人在前台就先出「波萝」卡片，曲名等播放列表就绪再刷。
             NowPlayingService.ShowCardIfForeground();
+            HealthRecommendPresetBridge.EnsureSubscribed();
             if (enter > 1)
                 IslandLeaveAssetReclaim.LogFootprint("enter" + enter);
             IslandLeaveAssetReclaim.LogScudoStats("enter" + enter);
@@ -324,10 +325,12 @@ namespace Game
                 IslandPlayerPosSave.TrySaveCurrentAndFlush();
 
             UnhookSceneEvents();
+            HealthRecommendPresetBridge.Unsubscribe();
 
             if (!isShutdown)
             {
                 IslandPlayerPosSave.ResetSession();
+                IslandAudioSession.ResetStartupGate();
                 IslandAudioSession.Instance?.Shutdown();
                 WanosAudio.WanosEngine.Unload("ProcedureIsland.OnLeave");
             }
@@ -604,6 +607,7 @@ namespace Game
             }
 
             PendingDownloadIntent.Clear();
+            HealthRecommendPresetBridge.Unsubscribe();
             (PresetService.Instance ?? GameEntry.Presets)?.ClearPlaybackForAccountSwitch();
             if (IslandJoystickCamera.Current != null)
             {
@@ -623,6 +627,8 @@ namespace Game
             // 实例保持第一次进岛时的激活状态。流送先闩住，再进岛按新出生点恢复距离检查，不整表 Relink。
 
             IslandPlayerPosSave.ResetSession();
+            // 清静态 yield：否则叠播/丢焦 HoldYield 会活过离岛，再进岛天气/雨起不来。
+            IslandAudioSession.ResetStartupGate();
             IslandAudioSession.Instance?.Shutdown();
             // StopEngine 只停 DSP，bank 的原生缓冲还占着 scudo 的 64KB 档。
             // 再进岛铺草时这档分配失败，进程被杀掉。Unload 拆掉引擎，下一趟 GuestLogin 会重新 Load。
@@ -1172,6 +1178,11 @@ namespace Game
             // Start 是异步的：让出旗必须在首轮 Evaluate 之前就在，盖住随后 Post 的环境/天气。
             if (!allowAudible || IslandAudioSession.IsYieldHeld || AudioAppLifecycle.IsInBackground)
                 IslandAudioSession.HoldYield("startup-content");
+            else
+            {
+                // 叠播/Pause_ALL 后本地 playing 态可能与引擎脱节；清态按当前天气重起风雨。
+                IslandAudioSession.Instance?.Weather?.RestorePlaying();
+            }
             Log.Info("[Hitch] audio interaction ms=" + sw.ElapsedMilliseconds);
             if (gen != _uncoverGeneration)
                 return;

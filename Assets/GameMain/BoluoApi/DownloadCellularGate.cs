@@ -63,10 +63,8 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 流量窗「继续下载」：先由调用方 Priority 入队，再调本方法开闸。
-        /// 内部只 EnsureRunner，禁止调用方再 Resume。
-        /// 本岛会话有效，直到 <see cref="ResetForNewSession"/> / 回到 Wi‑Fi 后
-        /// <see cref="ApplyWifiRestoreRevoke"/>；用户流水线不再每批次 Revoke。
+        /// 流量窗「继续下载」：本岛会话开闸，直到离岛 / 回到 Wi‑Fi
+        /// <see cref="ApplyWifiRestoreRevoke"/>。
         /// </summary>
         public static void UserAllowCellularAlways()
         {
@@ -77,8 +75,26 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 显式清开闸（测试 / 特殊路径）；正常用户流水线不调用。
-        /// 再次点下载若仍蜂窝会重新 NeedsMobileDataPrompt。
+        /// 兼容旧名：等同 <see cref="UserAllowCellularAlways"/>（会话开闸到回 Wi‑Fi）。
+        /// </summary>
+        public static void UserAllowCellularOnce() => UserAllowCellularAlways();
+
+        /// <summary>
+        /// FeatureOff：蜂窝上自动开闸（零弹窗）。已开闸 / 非蜂窝 / FeatureOn 则 no-op。
+        /// </summary>
+        public static void EnsureFeatureOffCellularAutoAllow()
+        {
+            if (!Game.BackgroundDownloadPolicy.ShouldAutoAllowCellular(
+                    BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled()))
+                return;
+            if (!NeedsMobileDataPrompt())
+                return;
+            Log.Info("[DownloadCellularGate] FeatureOff auto-allow cellular");
+            UserAllowCellularAlways();
+        }
+
+        /// <summary>
+        /// 清开闸（测试 / 显式复位）。正式路径靠回 Wi‑Fi / 离岛。
         /// </summary>
         public static void RevokeCellularAllow()
         {

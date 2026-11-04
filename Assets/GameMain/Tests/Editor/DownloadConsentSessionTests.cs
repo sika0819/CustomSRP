@@ -38,8 +38,9 @@ namespace Game.Tests
         }
 
         [Test]
-        public void Notify_NeverOpensMobile_StaysIdle()
+        public void Notify_FeatureOff_NeverOpensMobile_StaysIdle()
         {
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOff;
             DownloadConsentSession.NotifyNeedCellularConsent(
                 new List<string> { PendingBank, "NeedDownload_ConsentTest_B" });
 
@@ -74,8 +75,9 @@ namespace Game.Tests
         }
 
         [Test]
-        public void NotifyThenEnsureReady_OnlyUserClickOpensMobile()
+        public void NotifyThenEnsureReady_FeatureOff_NotifyStaysIdle_UserEnsureAutoAllows()
         {
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOff;
             int fromUser = 0;
             var busy = new List<string> { "NeedDownload_ConsentTest_Busy" };
             var userBanks = new List<string> { PendingBank };
@@ -87,11 +89,10 @@ namespace Game.Tests
                 userBanks,
                 onReady: () => fromUser++);
 
-            Assert.AreEqual("MobileConfirm", DownloadConsentSession.EditorPhaseName);
-            Assert.IsTrue(DownloadConsentSession.EditorHasPendingReady);
-            DownloadConsentSession.EditorInvokeMobileAllow();
-
+            // FeatureOff：EnsureReady 自动开闸，不弹流量窗。
             Assert.AreEqual(1, fromUser);
+            Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
+            Assert.IsTrue(DownloadCellularGate.AllowMobileNetwork);
         }
 
         [Test]
@@ -151,6 +152,7 @@ namespace Game.Tests
         [Test]
         public void ShowRequestFirst_NotifySilent_MobileOnlyAfterConfirm()
         {
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOn;
             int ready = 0;
             var banks = new List<string> { PendingBank };
 
@@ -179,6 +181,7 @@ namespace Game.Tests
         [Test]
         public void UserEnsureReady_Cellular_OpensMobileBeforeReady()
         {
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOn;
             int ready = 0;
             DownloadConsentSession.EnsureReady(
                 new List<string> { PendingBank },
@@ -192,8 +195,28 @@ namespace Game.Tests
         }
 
         [Test]
+        public void FeatureOff_Cellular_AutoAllow_NoMobilePrompt()
+        {
+            // FeatureOff：蜂窝零弹窗，自动开闸后直接 Ready。
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOff;
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaCarrierDataNetwork;
+
+            int ready = 0;
+            DownloadConsentSession.EnsureReady(
+                new List<string> { PendingBank },
+                onReady: () => ready++);
+
+            Assert.AreEqual(1, ready);
+            Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
+            Assert.IsTrue(DownloadCellularGate.AllowMobileNetwork);
+        }
+
+        [Test]
         public void SecondUserDownload_Cellular_SkipsPromptWhileSessionAllowed()
         {
+            // FeatureOn：流量确认后会话开闸，后续不重弹。
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOn;
             int first = 0;
             int second = 0;
             var banks = new List<string> { PendingBank };
@@ -204,11 +227,50 @@ namespace Game.Tests
             Assert.AreEqual(1, first);
             Assert.IsTrue(DownloadCellularGate.AllowMobileNetwork);
 
-            // 本岛会话开闸保留：再次 EnsureReady 不再弹流量窗。
             DownloadConsentSession.EnsureReady(banks, onReady: () => second++);
             Assert.AreEqual(1, second);
             Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
             Assert.IsTrue(DownloadCellularGate.AllowMobileNetwork);
+        }
+
+        [Test]
+        public void FeatureOn_Cellular_SessionAllow_SkipsSecondPrompt_UntilWifiRevoke()
+        {
+            // FeatureOn：流量确认后会话开闸，回 Wi‑Fi 前不再弹。
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOn;
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaCarrierDataNetwork;
+
+            int first = 0;
+            int second = 0;
+            var banks = new List<string> { PendingBank };
+
+            DownloadConsentSession.EnsureReady(banks, onReady: () => first++);
+            Assert.AreEqual("MobileConfirm", DownloadConsentSession.EditorPhaseName);
+            DownloadConsentSession.EditorInvokeMobileAllow();
+            Assert.AreEqual(1, first);
+            Assert.IsTrue(DownloadCellularGate.AllowMobileNetwork);
+
+            DownloadConsentSession.EnsureReady(banks, onReady: () => second++);
+            Assert.AreEqual(1, second);
+            Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
+            Assert.IsTrue(DownloadCellularGate.AllowMobileNetwork);
+        }
+
+        [Test]
+        public void FeatureOn_NotifyNeedCellular_OpensMobileWhenBusy()
+        {
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOn;
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaCarrierDataNetwork;
+
+            DownloadConsentSession.NotifyNeedCellularConsent(
+                new List<string> { PendingBank });
+
+            Assert.AreEqual("MobileConfirm", DownloadConsentSession.EditorPhaseName);
+            DownloadConsentSession.EditorInvokeMobileAllow();
+            Assert.IsTrue(DownloadCellularGate.AllowMobileNetwork);
+            Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
         }
 
         [Test]
@@ -256,6 +318,61 @@ namespace Game.Tests
         }
 
         [Test]
+        public void BeginWifiConfirmed_BeforeClose_LatchesAccepted_SurvivesNotifyClose()
+        {
+            // 模拟 WifiConfirmForm：先 BeginWifiConfirmed → Close → OnDownload(FireReady)。
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOn;
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaLocalAreaNetwork;
+
+            int ready = 0;
+            DownloadConsentSession.EnsureReady(
+                new List<string> { PendingBank },
+                onReady: () => ready++);
+
+            Assert.AreEqual("WifiConfirm", DownloadConsentSession.EditorPhaseName);
+            DownloadConsentSession.BeginWifiConfirmed();
+            Assert.IsTrue(DownloadConsentSession.EditorWifiConfirmAccepted);
+            Assert.AreEqual("Checking", DownloadConsentSession.EditorPhaseName);
+
+            // Form.OnClose → NotifyWifiDialogClosed 不得把 phase 打回 Idle 冲掉 Ready。
+            DownloadConsentSession.NotifyWifiDialogClosed();
+            Assert.AreEqual("Checking", DownloadConsentSession.EditorPhaseName);
+
+            DownloadConsentSession.EditorInvokeWifiConfirm();
+            Assert.AreEqual(1, ready);
+            Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
+        }
+
+        [Test]
+        public void CarrierToWifi_RegionRequest_ThenWifiConfirm_FiresReady()
+        {
+            // 流量 → Wi‑Fi 后再进区域门：申请窗 → §4.6 → Ready（进度窗由 Flow 开）。
+            BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOn;
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaCarrierDataNetwork;
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaLocalAreaNetwork;
+
+            int ready = 0;
+            DownloadConsentSession.EnsureReady(
+                new List<string> { PendingBank },
+                onReady: () => ready++,
+                new DownloadUiOptions { ShowRequestFirst = true });
+
+            Assert.AreEqual("RequestPrompt", DownloadConsentSession.EditorPhaseName);
+            DownloadConsentSession.BeginRequestConfirmed();
+            DownloadConsentSession.EditorInvokeRequestConfirmed();
+            Assert.AreEqual("WifiConfirm", DownloadConsentSession.EditorPhaseName);
+
+            DownloadConsentSession.BeginWifiConfirmed();
+            DownloadConsentSession.NotifyWifiDialogClosed();
+            DownloadConsentSession.EditorInvokeWifiConfirm();
+            Assert.AreEqual(1, ready);
+            Assert.IsTrue(DownloadConsentSession.EditorWifiConfirmAccepted);
+        }
+
+        [Test]
         public void EnsureReady_Wifi_FeatureOn_Later_Cancels()
         {
             BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOn;
@@ -275,11 +392,36 @@ namespace Game.Tests
                 });
 
             Assert.AreEqual("WifiConfirm", DownloadConsentSession.EditorPhaseName);
+            Assert.IsTrue(DownloadConsentSession.IsPromptActive);
             DownloadConsentSession.EditorInvokeWifiLater();
             Assert.AreEqual(0, ready);
             Assert.AreEqual(1, later);
             Assert.AreEqual(1, cancel);
             Assert.IsFalse(DownloadConsentSession.EditorWifiConfirmAccepted);
+            Assert.IsFalse(DownloadConsentSession.IsPromptActive);
+        }
+
+        [Test]
+        public void ShowRequestFirst_Return_FiresOnCancel_ClearsPromptActive()
+        {
+            DownloadCellularGate.EditorReachabilityOverride =
+                NetworkReachability.ReachableViaLocalAreaNetwork;
+
+            int cancel = 0;
+            DownloadConsentSession.EnsureReady(
+                new List<string> { PendingBank },
+                onReady: () => { },
+                new DownloadUiOptions
+                {
+                    ShowRequestFirst = true,
+                    OnCancel = () => cancel++,
+                });
+
+            Assert.AreEqual("RequestPrompt", DownloadConsentSession.EditorPhaseName);
+            Assert.IsTrue(DownloadConsentSession.IsPromptActive);
+            DownloadConsentSession.EditorInvokeRequestReturn();
+            Assert.AreEqual(1, cancel);
+            Assert.IsFalse(DownloadConsentSession.IsPromptActive);
         }
 
         [Test]
@@ -299,9 +441,9 @@ namespace Game.Tests
         }
 
         [Test]
-        public void FeatureOff_Cellular_StillShowsMobileConfirm()
+        public void FeatureOff_Cellular_NoMobileConfirm_AutoAllow()
         {
-            // 关 §4.6 Wi‑Fi 确认 ≠ 免流量窗；两层独立。
+            // 关弹窗：蜂窝零确认窗，自动开闸。
             BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOff;
             DownloadCellularGate.EditorReachabilityOverride =
                 NetworkReachability.ReachableViaCarrierDataNetwork;
@@ -311,10 +453,9 @@ namespace Game.Tests
                 new List<string> { PendingBank },
                 onReady: () => ready++);
 
-            Assert.AreEqual(0, ready);
-            Assert.AreEqual("MobileConfirm", DownloadConsentSession.EditorPhaseName);
-            DownloadConsentSession.EditorInvokeMobileAllow();
             Assert.AreEqual(1, ready);
+            Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
+            Assert.IsTrue(DownloadCellularGate.AllowMobileNetwork);
         }
 
         [Test]
@@ -339,6 +480,40 @@ namespace Game.Tests
 
                 Assert.AreEqual(1, ready);
                 Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                    File.Delete(path);
+                BankDownloader.InvalidateLocalReadyCache(readyStem);
+            }
+        }
+
+        [Test]
+        public void ShowRequestFirst_AllLocalReady_SkipsRequestPrompt()
+        {
+            // Critical 申请窗路径：盘上已齐时不得再弹「前方区域未下载」。
+            const string readyStem = "ConsentReady_RequestSkip";
+            string path = null;
+            try
+            {
+                AudioEnginePaths.EnsureWritableDirs();
+                path = Path.Combine(
+                    AudioEnginePaths.PersistentBankPath,
+                    readyStem + AudioEnginePaths.BankExtension);
+                File.WriteAllBytes(path, new byte[] { 1, 2, 3, 4 });
+                BankDownloader.InvalidateLocalReadyCache(readyStem);
+                Assert.IsTrue(BankDownloader.IsLocalReady(readyStem));
+
+                int ready = 0;
+                DownloadConsentSession.EnsureReady(
+                    new List<string> { readyStem },
+                    onReady: () => ready++,
+                    new DownloadUiOptions { ShowRequestFirst = true, RequestSizeMb = "99" });
+
+                Assert.AreEqual(1, ready);
+                Assert.AreEqual("Idle", DownloadConsentSession.EditorPhaseName);
+                Assert.IsFalse(DownloadConsentSession.IsPromptActive);
             }
             finally
             {

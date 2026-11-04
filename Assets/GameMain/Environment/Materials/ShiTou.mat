@@ -98,7 +98,7 @@ Material:
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
     - _BumpScale: 1
-    - _BumpTiling: 2.46
+    - _BumpTiling: 1
     - _Canvas: 1
     - _CanvasStrength: 0.1
     - _ClearCoatMask: 0

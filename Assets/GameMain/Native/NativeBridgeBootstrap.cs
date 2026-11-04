@@ -38,6 +38,12 @@ namespace Game.Native
                     Game.GameEntry.Event.Fire(null, NativeHealthPressureEventArgs.Create(level));
             });
 
+            MessageRouter.Register(MsgType.ApplyWanosScheme, (schemeId, _, __) =>
+            {
+                Log.Info($"[IMP] ApplyWanosScheme schemeId={schemeId}");
+                Game.HealthRecommendPresetBridge.ApplySchemeFromNative(schemeId);
+            });
+
             MessageRouter.Register(MsgType.UiProfileBadge, (visible, _, __) =>
             {
                 Log.Info($"[IMP] UiProfileBadge visible={visible}");

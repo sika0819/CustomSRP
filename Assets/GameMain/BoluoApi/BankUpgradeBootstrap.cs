@@ -43,13 +43,30 @@ namespace Game.BoluoApi
         static int _runId;
         static bool _fatal;
         static bool _silentDeferred;
-        /// <summary>Rest Wi‑Fi 确认点「稍后」：本岛会话不再自动弹 / 静默开 Rest。</summary>
+        /// <summary>
+        /// 后台 Rest §4.6 已被用户关掉（「稍后」/ 蒙层）：本岛不再重弹，改为静默 Rest。
+        /// 未关过则开关开时必须先弹出确认（禁止未关窗就静默）。
+        /// </summary>
         static bool _restWifiConfirmDeclined;
         static UniTaskCompletionSource _catalogTcs = new UniTaskCompletionSource();
         static UniTaskCompletionSource _criticalTcs = new UniTaskCompletionSource();
 
         public static UniTask WaitCatalogAsync() => _catalogTcs.Task;
         public static UniTask WaitCriticalAsync() => _criticalTcs.Task;
+
+        /// <summary>
+        /// 后台弹窗关（或本岛已关 §4.6）：区域门跳过申请窗、优先插队。
+        /// </summary>
+        public static bool IsSilentBackgroundRest =>
+            Game.BackgroundDownloadPolicy.IsSilentBackgroundMode(
+                BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled(),
+                _restWifiConfirmDeclined);
+
+#if UNITY_EDITOR
+        /// <summary>单测：模拟本岛已关过 §4.6。</summary>
+        public static void EditorSetRestWifiConfirmDeclined(bool declined) =>
+            _restWifiConfirmDeclined = declined;
+#endif
 
         public static void ResetSession()
         {
@@ -368,11 +385,8 @@ namespace Game.BoluoApi
                 await StreamingBankCatalog.EnsureLoadedAsync();
                 ReleaseCriticalFromLocal(loadIntoEngine);
 
-                // 与线上版本不一致 → 申请下载弹窗；用户确认后再走门禁链。
-                PromptCriticalUpdateIfNeeded(loadIntoEngine);
-
-                // Rest：Wi‑Fi / 已开闸 → 同意链（开关开则 Wi‑Fi 确认）；蜂窝未开闸则静默巡检。
-                await StartOrDeferRestDownload(loadIntoEngine, runId);
+                // 统一策略：关+WiFi 静默全量；关+流量一次总量窗；开则空转等用户点。
+                await StartBackgroundDownloads(loadIntoEngine, runId);
             }
             catch (Exception e)
             {
@@ -385,43 +399,109 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// Critical 与 catalog 不一致时弹申请下载；点「立即下载」后再无网→存储→流量→下。
-        /// 点「返回」保留首包本地 bank，不强制更新。
+        /// Bootstrap 后台策略入口（见 <see cref="Game.BackgroundDownloadPolicy"/>）。
         /// </summary>
-        static void PromptCriticalUpdateIfNeeded(bool loadIntoEngine)
+        static async UniTask StartBackgroundDownloads(bool loadIntoEngine, int runId)
         {
-            List<string> needUpdate = CollectCriticalNeedingUpdate();
-            if (needUpdate.Count == 0)
+            bool wifiConfirm = BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled();
+            if (Game.BackgroundDownloadPolicy.ShouldBootstrapStayIdle(wifiConfirm))
             {
-                Log.Info("[BankUpgradeBootstrap] Critical all local/streaming — skip HTTP");
+                Log.Info(
+                    "[BankUpgradeBootstrap] FeatureOn — bootstrap idle (no auto Critical/Rest)");
+                await UniTask.CompletedTask;
                 return;
             }
 
-            string size = DownloadNetworkGate.FormatSizeMb(needUpdate);
+            List<string> allPending = Game.BackgroundDownloadCoordinator.CollectAllPendingBankNames();
+            if (allPending.Count == 0)
+            {
+                Log.Info("[BankUpgradeBootstrap] all banks local — skip background download");
+                await UniTask.CompletedTask;
+                return;
+            }
+
+            // FeatureOff 蜂窝：零弹窗自动开闸后再判 CanTransmit。
+            DownloadCellularGate.EnsureFeatureOffCellularAutoAllow();
+            bool canTransmit = DownloadCellularGate.CanTransmitNow();
             Log.Info(
-                $"[BankUpgradeBootstrap] Critical need update count={needUpdate.Count} size={size}MB — EnsureReady");
-            List<string> captured = needUpdate;
-            bool load = loadIntoEngine;
-            Game.DownloadConsentSession.EnsureReady(
-                captured,
-                onReady: () => DownloadCriticalUpdates(captured, load).Forget(),
-                new Game.DownloadUiOptions
-                {
-                    ShowRequestFirst = true,
-                    RequestSizeMb = size,
-                });
+                "[BankUpgradeBootstrap] background decide pending=" + allPending.Count +
+                " wifiConfirm=" + wifiConfirm +
+                " canTransmit=" + canTransmit);
+
+            if (Game.BackgroundDownloadPolicy.ShouldBootstrapSilentAll(wifiConfirm, canTransmit))
+            {
+                Log.Info(
+                    "[BankUpgradeBootstrap] FeatureOff — silent all count=" + allPending.Count);
+                // 静默全量禁止带着「下完切预设」意图；切预设只许用户点 / 健康推荐。
+                Game.PendingDownloadIntent.Clear();
+                KickSilentAllRemaining(loadIntoEngine);
+                await UniTask.CompletedTask;
+                return;
+            }
+
+            Log.Info(
+                "[BankUpgradeBootstrap] FeatureOff defer — waiting transmit " +
+                $"offline={DownloadCellularGate.IsOffline()}");
+            _silentDeferred = true;
+            RunSilentRestPatrol(loadIntoEngine, runId).Forget();
+            await UniTask.CompletedTask;
         }
 
-        static async UniTaskVoid DownloadCriticalUpdates(List<string> bankNames, bool loadIntoEngine)
+        /// <summary>
+        /// 静默全量：Critical（优先）+ Rest。FeatureOff Bootstrap / FeatureOn+WiFi 确认后共用。
+        /// 无 pending 时幂等 return；已在队列中的 bank 由 <see cref="BankDownloader"/> 去重。
+        /// </summary>
+        public static void KickSilentAllRemaining(bool loadIntoEngine = true)
+        {
+            List<string> pending = Game.BackgroundDownloadCoordinator.CollectAllPendingBankNames();
+            if (pending.Count == 0)
+            {
+                Log.Info("[BankUpgradeBootstrap] KickSilentAllRemaining — nothing pending");
+                return;
+            }
+
+            Log.Info(
+                "[BankUpgradeBootstrap] KickSilentAllRemaining count=" + pending.Count);
+            DownloadAllSilent(loadIntoEngine);
+        }
+
+        /// <summary>静默全量：Critical（优先）+ Rest。</summary>
+        static void DownloadAllSilent(bool loadIntoEngine)
+        {
+            TrySilentCriticalUpdates(loadIntoEngine);
+            DownloadRest(loadIntoEngine).Forget();
+        }
+
+        /// <summary>静默补 Critical（FeatureOff 巡检 / 可传后）。</summary>
+        static void TrySilentCriticalUpdates(bool loadIntoEngine)
+        {
+            List<string> needUpdate = CollectCriticalNeedingUpdate();
+            if (needUpdate.Count == 0)
+                return;
+            Log.Info(
+                $"[BankUpgradeBootstrap] silent Critical kick count={needUpdate.Count}");
+            DownloadCriticalUpdates(needUpdate, loadIntoEngine, showProgressDialog: false).Forget();
+        }
+
+        static async UniTaskVoid DownloadCriticalUpdates(
+            List<string> bankNames,
+            bool loadIntoEngine,
+            bool showProgressDialog)
         {
             var remotes = PresetBankCatalog.ResolveRemotes(bankNames);
             if (remotes.Count == 0)
                 return;
 
-            int ticket = UiDialogService.OpenDownloadProgress();
+            // 静默路径不开进度窗；用户申请路径仍开（区域门忙时也不叠第二张）。
+            int ticket = 0;
+            bool showProgress = showProgressDialog && !Game.UserBankDownloadFlow.IsBusy;
+            if (showProgress)
+                ticket = UiDialogService.OpenDownloadProgress();
             try
             {
                 BankDownloader.SetStartupParallelSlots(1);
+                // 静默 Critical 走 Startup，勿 preempt 进 User 队首抢区域/预设进度批。
+                // 用户可见进度路径（showProgressDialog）仍可插队。
                 await BankDownloader.DownloadBanks(
                     remotes,
                     loadIntoEngine: loadIntoEngine,
@@ -429,12 +509,13 @@ namespace Game.BoluoApi
                     onItemDone: null,
                     onItemProgress: null,
                     prioritize: true,
-                    preempt: true);
+                    preempt: showProgressDialog);
                 Log.Info($"[BankUpgradeBootstrap] Critical update done count={remotes.Count}");
             }
             finally
             {
-                UiDialogService.CloseDownloadProgress(ticket);
+                if (ticket > 0)
+                    UiDialogService.CloseDownloadProgress(ticket);
             }
         }
 
@@ -452,8 +533,10 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// Critical 要不要 HTTP：首包版本与线上一致 → 否；首包有版本但不等 → 是；
-        /// 否则看磁盘是否满足 catalog。
+        /// Critical 要不要 HTTP：catalog 有 url 且盘上未就绪 → 要。
+        /// 禁止只凭 ProjectMetadata 版本一致就跳过——首包未必解压该 bank，
+        /// 跳过后再被 Rest 排除 Critical 名 → 预设氛围包永久不下（Grassland/Campfire 等）。
+        /// 盘上已齐（含上次 HTTP）→ 否，避免重启反复弹申请窗。
         /// </summary>
         static bool CriticalNeedsHttpUpdate(string name)
         {
@@ -464,108 +547,14 @@ namespace Game.BoluoApi
             if (string.IsNullOrEmpty(remote.url))
                 return false;
 
-            if (!string.IsNullOrEmpty(remote.version)
-                && StreamingBankCatalog.IsSameVersionAsStreaming(name, remote.version))
-                return false;
-
-            if (!string.IsNullOrEmpty(remote.version)
-                && StreamingBankCatalog.TryGetVersion(name, out string localVer)
-                && !string.IsNullOrEmpty(localVer))
-                return true;
-
             return !BankDownloader.IsLocalReady(name);
         }
 
-        static async UniTask StartOrDeferRestDownload(bool loadIntoEngine, int runId)
-        {
-            var rest = CollectRestRemotes(CriticalBankNames);
-            int pending = CountPendingRemotes(rest);
-            if (pending <= 0)
-            {
-                Log.Info("[BankUpgradeBootstrap] Rest wave empty / all local");
-                return;
-            }
-
-            if (_restWifiConfirmDeclined)
-            {
-                Log.Info(
-                    "[BankUpgradeBootstrap] Rest skipped — Wi‑Fi confirm declined this island");
-                return;
-            }
-
-            bool wifiConfirm = BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled();
-
-            if (!DownloadCellularGate.CanTransmitNow())
-            {
-                Log.Info(
-                    "[BankUpgradeBootstrap] defer Rest — " +
-                    $"offline={DownloadCellularGate.IsOffline()} " +
-                    $"needMobilePrompt={DownloadCellularGate.NeedsMobileDataPrompt()} pending={pending} " +
-                    $"wifiConfirm={wifiConfirm}");
-                _silentDeferred = true;
-                RunSilentRestPatrol(loadIntoEngine, runId).Forget();
-                return;
-            }
-
-            // 开关开：必须等揭罩后再弹 §4.6。加载罩揭开时会 Clear Dialog，
-            // 罩下弹确认等于现网「defer 后看不见 / 被清掉」。禁止自动 Resume。
-            if (wifiConfirm && !CanPresentWifiConfirmUi())
-            {
-                Log.Info(
-                    "[BankUpgradeBootstrap] defer Rest Wi‑Fi confirm until uncover " +
-                    $"(ui={(GameEntry.UI != null)} cover={BootLoadingService.IsVisible} " +
-                    $"hiding={BootLoadingService.IsHiding})");
-                _silentDeferred = true;
-                RunSilentRestPatrol(loadIntoEngine, runId).Forget();
-                return;
-            }
-
-            // 可传：走同意链。开关关 → 静默 Ready；开关开且已揭罩 → 必出 §4.6。
-            PromptRestViaConsent(loadIntoEngine);
-            await UniTask.CompletedTask;
-        }
-
-        /// <summary>
-        /// §4.6 确认窗可被人看见：UI 就绪且加载罩已揭（含淡出结束）。
-        /// 揭罩 <c>clearOverlayForms</c> 会关 Dialog，罩下开窗必丢。
-        /// </summary>
-        static bool CanPresentWifiConfirmUi()
-        {
-            if (GameEntry.UI == null)
-                return false;
-            if (BootLoadingService.IsVisible || BootLoadingService.IsHiding)
-                return false;
-            return true;
-        }
-
-        /// <summary>
-        /// Rest 经 <see cref="Game.DownloadConsentSession.EnsureReady"/>：
-        /// 开关开且 Wi‑Fi → 必弹 §4.6（不自动续下）；开关关 → 存够后静默开下。
-        /// </summary>
-        static void PromptRestViaConsent(bool loadIntoEngine)
-        {
-            List<string> pending = CollectPendingRestBankNames();
-            if (pending.Count == 0)
-                return;
-
-            bool load = loadIntoEngine;
-            bool wifiConfirm = BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled();
-            Log.Info(
-                "[BankUpgradeBootstrap] Rest EnsureReady count=" + pending.Count +
-                " wifiConfirm=" + wifiConfirm);
-            Game.DownloadConsentSession.EnsureReady(
-                pending,
-                onReady: () => DownloadRest(load).Forget(),
-                new Game.DownloadUiOptions
-                {
-                    OnWifiConfirmLater = () =>
-                    {
-                        _restWifiConfirmDeclined = true;
-                        Log.Info(
-                            "[BankUpgradeBootstrap] Rest Wi‑Fi confirm later — stop auto Rest");
-                    },
-                });
-        }
+#if UNITY_EDITOR
+        /// <summary>单测：Critical 是否仍需 HTTP / 申请窗。</summary>
+        public static bool EditorCriticalNeedsHttpUpdate(string name) =>
+            CriticalNeedsHttpUpdate(name);
+#endif
 
         static async UniTask DownloadRest(bool loadIntoEngine)
         {
@@ -586,9 +575,8 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 进岛后：Rest 待下。蜂窝未开闸 / 无网 → 干等（不弹流量窗）；
-        /// 可传后走 <see cref="PromptRestViaConsent"/>（含 Wi‑Fi 确认开关）。
-        /// Critical 更新只走 <see cref="PromptCriticalUpdateIfNeeded"/>，不进静默队列。
+        /// FeatureOff：等可传后静默全量（蜂窝自动开闸，无弹窗）。
+        /// FeatureOn：不应进入本巡检（Bootstrap 空转）。
         /// </summary>
         static async UniTaskVoid RunSilentRestPatrol(bool loadIntoEngine, int runId)
         {
@@ -599,74 +587,38 @@ namespace Game.BoluoApi
                 if (runId != _runId || !_silentDeferred)
                     return;
 
-                if (_restWifiConfirmDeclined)
+                bool wifiConfirm = BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled();
+                if (Game.BackgroundDownloadPolicy.ShouldBootstrapStayIdle(wifiConfirm))
                 {
                     _silentDeferred = false;
-                    Log.Info("[BankUpgradeBootstrap] Rest patrol stop — Wi‑Fi confirm declined");
+                    Log.Info("[BankUpgradeBootstrap] patrol stop — FeatureOn idle");
                     return;
                 }
 
-                List<string> pending = CollectPendingRestBankNames();
-                if (pending.Count == 0)
+                List<string> allPending =
+                    Game.BackgroundDownloadCoordinator.CollectAllPendingBankNames();
+                if (allPending.Count == 0)
                 {
                     _silentDeferred = false;
-                    Log.Info("[BankUpgradeBootstrap] silent Rest patrol — nothing pending");
+                    Log.Info("[BankUpgradeBootstrap] silent patrol — nothing pending");
                     return;
                 }
 
-                // 蜂窝未开闸：静默等用户主动 EnsureReady 开闸或回到 Wi‑Fi。禁止叠流量窗。
-                if (!DownloadCellularGate.CanTransmitNow())
-                    continue;
+                DownloadCellularGate.EnsureFeatureOffCellularAutoAllow();
+                bool canTransmit = DownloadCellularGate.CanTransmitNow();
 
-                // 开关开：等揭罩后再弹确认，绝不在此自动 DownloadRest。
-                if (BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled()
-                    && !CanPresentWifiConfirmUi())
-                    continue;
-
-                _silentDeferred = false;
-                Log.Info("[BankUpgradeBootstrap] Rest patrol — transmit ok → consent");
-                PromptRestViaConsent(loadIntoEngine);
-                return;
+                if (Game.BackgroundDownloadPolicy.ShouldBootstrapSilentAll(
+                        wifiConfirm, canTransmit))
+                {
+                    _silentDeferred = false;
+                    Log.Info(
+                        "[BankUpgradeBootstrap] patrol — FeatureOff transmit ok → silent all");
+                    KickSilentAllRemaining(loadIntoEngine);
+                    return;
+                }
             }
 
             Log.Warning("[BankUpgradeBootstrap] silent Rest patrol timed out still deferred");
-        }
-
-        static List<string> CollectPendingRestBankNames()
-        {
-            var names = new List<string>(64);
-            var rest = CollectRestRemotes(CriticalBankNames);
-            for (int i = 0; i < rest.Count; i++)
-            {
-                BankRemoteInfo info = rest[i];
-                if (info == null || string.IsNullOrEmpty(info.bankName))
-                    continue;
-                if (string.IsNullOrEmpty(info.url))
-                    continue;
-                if (BankDownloader.IsLocalReady(info.bankName))
-                    continue;
-                names.Add(info.bankName);
-            }
-
-            return names;
-        }
-
-        static int CountPendingRemotes(List<BankRemoteInfo> remotes)
-        {
-            if (remotes == null)
-                return 0;
-            int n = 0;
-            for (int i = 0; i < remotes.Count; i++)
-            {
-                BankRemoteInfo info = remotes[i];
-                if (info == null || string.IsNullOrEmpty(info.bankName) || string.IsNullOrEmpty(info.url))
-                    continue;
-                if (BankDownloader.IsLocalReady(info.bankName))
-                    continue;
-                n++;
-            }
-
-            return n;
         }
 
         static void ReleaseCriticalFromLocal(bool loadIntoEngine)
@@ -704,7 +656,25 @@ namespace Game.BoluoApi
                 rest.Add(info);
             }
 
+            // 非 Music 前置：静默 Rest 时先补预设/氛围，避免几十首 BGM 占满单槽。
+            rest.Sort(CompareRestRemotePresetFirst);
             return rest;
+        }
+
+        static int CompareRestRemotePresetFirst(BankRemoteInfo a, BankRemoteInfo b)
+        {
+            bool aMusic = IsMusicBankName(a?.bankName);
+            bool bMusic = IsMusicBankName(b?.bankName);
+            if (aMusic == bMusic)
+                return 0;
+            return aMusic ? 1 : -1;
+        }
+
+        static bool IsMusicBankName(string bankName)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            return !string.IsNullOrEmpty(stem)
+                   && stem.StartsWith("Music", StringComparison.OrdinalIgnoreCase);
         }
 
         static bool IsCriticalName(string bankName, IList<string> criticalNames)

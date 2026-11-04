@@ -41,6 +41,32 @@ namespace Game
             return voiceId != 0;
         }
 
+        /// <summary>
+        /// Clear every Music agent local voice without posting engine Stop
+        /// (caller posts a single <c>Stop_Music</c>/<c>Break_Music</c>).
+        /// </summary>
+        public static void SilenceAllMusicAgentsLocal()
+        {
+            WanosSoundAgentHelper[] helpers = FindObjectsByType<WanosSoundAgentHelper>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < helpers.Length; i++)
+            {
+                WanosSoundAgentHelper helper = helpers[i];
+                if (helper == null || !helper.IsMusicAsset())
+                    continue;
+                if (helper._instanceId != 0)
+                {
+                    MusicPlaylist.Instance.DetachMusicVoice(helper._instanceId);
+                    WanosNative.Instance.RemoveEventStateCallback(helper._instanceId);
+                }
+
+                helper._playing = false;
+                helper._instanceId = 0;
+            }
+
+            _activeMusicVoiceId = 0;
+        }
+
         public override float Length => 0f;
 
         public override float Time

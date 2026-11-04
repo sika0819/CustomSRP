@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Game.Native;
 using UnityEngine;
 
@@ -19,7 +20,11 @@ namespace Game
         static DownloadProgressForm _activeProgressForm;
         static int _progressSeq;
         static int _activeProgressTicket;
-        static int _retiredThrough;
+        /// <summary>
+        /// 已关闭的进度票。必须按票号单独退役——高水位会把更早仍在跑的区域门票一并废掉，
+        /// 表现为进度条被 Critical 等后开窗关掉后无法再开，人却仍被门挡住。
+        /// </summary>
+        static readonly HashSet<int> _retiredTickets = new HashSet<int>();
         static float _pendingPercent = -1f;
         static float _pendingDownloadedMb;
         static float _pendingTotalMb;
@@ -141,6 +146,7 @@ namespace Game
         public static int OpenDownloadProgress(Action onCancel = null)
         {
             int ticket = ++_progressSeq;
+            _retiredTickets.Remove(ticket);
             _pendingPercent = 0f;
             _pendingDownloadedMb = 0f;
             _pendingTotalMb = 0f;
@@ -155,14 +161,21 @@ namespace Game
 
         public static bool IsProgressRetired(int ticket)
         {
-            return ticket > 0 && ticket <= _retiredThrough;
+            return ticket > 0 && _retiredTickets.Contains(ticket);
         }
 
         public static bool IsProgressOpen(int ticket)
         {
             return ticket > 0
                 && _activeProgressForm != null
+                && _activeProgressForm.isActiveAndEnabled
                 && _activeProgressTicket == ticket;
+        }
+
+        /// <summary>当前是否有任一进度窗挂在 Dialog 组（不要求票号）。</summary>
+        public static bool HasActiveProgressForm()
+        {
+            return _activeProgressForm != null && _activeProgressForm.isActiveAndEnabled;
         }
 
         /// <summary>
@@ -172,7 +185,7 @@ namespace Game
         /// </summary>
         public static bool ReopenDownloadProgress(int ticket, Action onCancel = null)
         {
-            if (ticket <= 0 || ticket <= _retiredThrough)
+            if (ticket <= 0 || IsProgressRetired(ticket))
                 return false;
             if (_activeProgressForm != null && _activeProgressTicket == ticket)
             {
@@ -193,6 +206,14 @@ namespace Game
 
         public static void AttachProgressForm(DownloadProgressForm form, int ticket)
         {
+            if (ticket > 0 && IsProgressRetired(ticket))
+            {
+                // 异步 Open 晚于 Close：直接丢掉，避免闪一下再自关。
+                if (form != null)
+                    form.Dismiss();
+                return;
+            }
+
             _activeProgressForm = form;
             _activeProgressTicket = ticket;
             if (form != null && _pendingPercent >= 0f)
@@ -213,7 +234,7 @@ namespace Game
             float downloadedMb = 0f,
             float totalMb = 0f)
         {
-            if (ticket <= 0 || ticket <= _retiredThrough)
+            if (ticket <= 0 || IsProgressRetired(ticket))
                 return;
             _pendingPercent = Mathf.Clamp(percent, 0f, 100f);
             _pendingDownloadedMb = Mathf.Max(0f, downloadedMb);
@@ -227,8 +248,7 @@ namespace Game
         {
             if (ticket <= 0)
                 return;
-            if (ticket > _retiredThrough)
-                _retiredThrough = ticket;
+            _retiredTickets.Add(ticket);
             if (_activeProgressTicket == ticket)
                 _pendingPercent = -1f;
             if (_activeProgressTicket == ticket && _activeProgressForm != null)

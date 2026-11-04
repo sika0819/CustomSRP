@@ -12,6 +12,7 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - _RECEIVE_SHADOWS
   - _SHADOWS_CLIP
   m_InvalidKeywords:
   - _CANVAS_ON
@@ -31,7 +32,7 @@ Material:
         m_Scale: {x: 10, y: 10}
         m_Offset: {x: 0, y: 0}
     - _BumpMap:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: c07d87045d3e4fdda1d82fbaddeb0f29, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _CanvasMap:
@@ -44,6 +45,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _BumpTiling: 1
     - _Canvas: 1
     - _CanvasStrength: 0.12
     - _Clipping: 0
@@ -52,14 +54,19 @@ Material:
     - _DstBlend: 0
     - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
+    - _FoliageHeight: 12
+    - _FoliageYMin: 0
+    - _GradientOffset: 0
+    - _GradientSmoothness: 0.16
     - _InternalEdge: 0
-    - _NormalStrength: 0.85
+    - _NormalStrength: 1.45
+    - _OilBark: 0
     - _OilCrossBillboard: 0
     - _OilFoliage: 0
     - _OilFoliageSkipDay: 0
     - _OilYBillboard: 0
     - _PaintThickness: 0.18
-    - _ReceiveShadows: 0
+    - _ReceiveShadows: 1
     - _ShadeLift: 0.42
     - _ShadeSteps: 3
     - _ShadowBrushScale: 1.8
@@ -75,10 +82,12 @@ Material:
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
     - _BaseColor: {r: 0.8679245, g: 0.8042203, b: 0.6263795, a: 1}
+    - _BottomColor: {r: 0.23921996, g: 0.43921998, b: 0.101959966, a: 1}
     - _EdgeColor: {r: 0.2, g: 0.22, b: 0.28, a: 1}
     - _ShadowTint: {r: 0.3, g: 0.35, b: 0.45, a: 1}
     - _ShadowWarm: {r: 0.5, g: 0.48, b: 0.45, a: 1}
     - _SpecColor: {r: 0.11320752, g: 0.11320752, b: 0.11320752, a: 1}
     - _SpecularColor: {r: 0.4, g: 0.42, b: 0.46, a: 1}
+    - _TopColor: {r: 0.50196, g: 0.74117994, b: 0.18038997, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

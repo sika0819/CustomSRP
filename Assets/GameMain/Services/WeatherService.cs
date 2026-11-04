@@ -334,7 +334,18 @@ namespace Game
             // Level 0 keeps the requested kind (Wind/Rain/Foggy off). Clear is the only kind forced to 0.
             int nextLevel = kind == IslandWeatherKind.Clear ? 0 : Mathf.Clamp(level, 0, 3);
             bool changed = Kind != kind || Level != nextLevel;
-            if (!animate || !isActiveAndEnabled || !changed)
+            // Animate path commits Kind/Level up front, then lerps Visual* for 2s.
+            // A duplicate PointerDown (touch + mouse compat) hits !changed while the
+            // lerp is still running — CommitWeather here would snap VisualRainAudio to 0
+            // and WeatherAudioBridge would Stop_Rain immediately (no fade-out).
+            if (!changed)
+            {
+                if (!animate && _weatherLerpActive)
+                    CommitWeather(kind, nextLevel, fireEvent);
+                return;
+            }
+
+            if (!animate || !isActiveAndEnabled)
             {
                 CommitWeather(kind, nextLevel, fireEvent);
                 return;

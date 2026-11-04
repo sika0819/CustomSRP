@@ -5,7 +5,10 @@ namespace Game
     /// <summary>下载同意会话的 UI 选项（岛门可锁移动、可先弹申请窗）。</summary>
     public struct DownloadUiOptions
     {
-        /// <summary>同意链期间边沿锁平移（岛门）；有 Dialog 时另有 HudOverlayGate。</summary>
+        /// <summary>
+        /// 同意链期间边沿锁平移。区域门已改为仅后退瞬间由 Spawner 上锁，
+        /// 通常传 false（固墙拦住即可，弹窗不冻走）。
+        /// </summary>
         public bool LockMoveDuringPrompt;
 
         /// <summary>先弹「前方区域未下载」申请窗，点立即下载后再跑门禁。</summary>
@@ -18,7 +21,8 @@ namespace Game
         public Action OnCancel;
 
         /// <summary>
-        /// Wi‑Fi 确认窗点「稍后」（不含存储/无网取消）。Rest 静默路径用来闩本岛不再自动开下。
+        /// 后台 Rest Wi‑Fi 确认窗「稍后」/ 蒙层关闭（不含存储/无网取消）。
+        /// 仅关窗后触发：闩本岛不再重弹，可传则静默；未关窗时必须先显示确认窗。
         /// </summary>
         public Action OnWifiConfirmLater;
 

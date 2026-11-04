@@ -14,9 +14,14 @@ namespace CustomSRP.Editor
     /// </summary>
     public static class OilTerrainGrassBakeTool
     {
+        const int SandLayerIndex = 0;
         const int GrassLayerIndex = 1;
         const float GrassThreshold = 0.18f;
         const float PlantSpacing = 0.36f;
+        /// <summary>沙层≥此值视为路面/沙径，禁止种草。</summary>
+        const float MaxSandOnRoad = 0.38f;
+        /// <summary>邻域探测路面（alphamap 格）。只有贴着路面的草抬 dry。</summary>
+        const int RoadNeighborRadius = 1;
         /// <summary>原 Xunyicao 田种点间距（比普通草略疏）。</summary>
         const float LavenderSpacing = 0.48f;
         const float LavenderFieldPadMeters = 1.2f;
@@ -54,9 +59,10 @@ namespace CustomSRP.Editor
             string flag = Path.GetFullPath(Path.Combine(Application.dataPath, "..", BakeFlagRelPath));
             if (!File.Exists(flag))
                 return;
-            try { File.Delete(flag); } catch { /* ignore */ }
+            // Don't eat the flag while Playing — otherwise dry rebake is silently skipped.
             if (EditorApplication.isPlaying)
                 return;
+            try { File.Delete(flag); } catch { /* ignore */ }
             Log.Info("[OilTerrainGrass] Flag detected — baking island grass");
             Bake();
         }
@@ -87,6 +93,7 @@ namespace CustomSRP.Editor
             }
 
             float[,,] maps = data.GetAlphamaps(0, 0, aw, ah);
+            bool hasSand = layers > SandLayerIndex;
             float maxSlopeRad = MaxSlopeDeg * Mathf.Deg2Rad;
             float spacing = Mathf.Max(0.2f, PlantSpacing);
             int stepsX = Mathf.Max(1, Mathf.CeilToInt(size.x / spacing));
@@ -95,6 +102,7 @@ namespace CustomSRP.Editor
             var positions = new List<Vector3>(256000);
             var variants = new List<byte>(256000);
             var dryness = new List<byte>(256000);
+            int wiltBoosted = 0;
 
             EditorUtility.DisplayProgressBar("OilTerrainGrass Bake", "planting…", 0f);
             try
@@ -138,10 +146,27 @@ namespace CustomSRP.Editor
                         if (Hash01(ix, iz, 47f) > Mathf.Lerp(0.35f, 1f, grass))
                             continue;
 
+                        float sand = hasSand ? maps[az, ax, SandLayerIndex] : 0f;
+                        // 路上（沙径/路面）：不种。只在路边草抬 dry 做压弯。
+                        if (sand >= MaxSandOnRoad || sand > grass)
+                            continue;
+
+                        float sandNear = hasSand
+                            ? SampleMaxLayer(maps, ax, az, aw, ah, SandLayerIndex, RoadNeighborRadius)
+                            : 0f;
+                        // 仅贴着路面的草发黄压弯；草地内部 dry=0。
+                        float dry01 = 0f;
+                        if (sandNear >= MaxSandOnRoad)
+                        {
+                            float edge = Mathf.InverseLerp(MaxSandOnRoad, 1f, sandNear);
+                            dry01 = Mathf.Lerp(0.55f, 0.92f, edge);
+                            wiltBoosted++;
+                        }
+
                         var pos = new Vector3(wx, wy, wz);
                         positions.Add(pos);
-                        variants.Add((byte)OilTerrainGrassBladeMesh.PickVariant(pos));
-                        dryness.Add((byte)Mathf.Clamp(Mathf.RoundToInt((1f - grass) * 180f), 0, 255));
+                        variants.Add((byte)OilTerrainGrassBladeMesh.PickVariant(pos, dry01));
+                        dryness.Add((byte)Mathf.Clamp(Mathf.RoundToInt(dry01 * 220f), 0, 255));
                     }
                 }
             }
@@ -153,6 +178,8 @@ namespace CustomSRP.Editor
             int stripped = StripKeepOut(positions, variants, dryness, keepOut);
             if (stripped > 0)
                 Log.Info($"[OilTerrainGrass] KeepOut stripped={stripped} remain={positions.Count}");
+            if (wiltBoosted > 0)
+                Log.Info($"[OilTerrainGrass] roadside-only dry n={wiltBoosted}");
 
             int lavenderAdded = PlantLavenderField(
                 positions, variants, dryness, data, origin, keepOut);
@@ -403,6 +430,30 @@ namespace CustomSRP.Editor
             }
 
             return added;
+        }
+
+        static float SampleMaxLayer(
+            float[,,] maps, int ax, int az, int aw, int ah, int layer, int radius)
+        {
+            float m = 0f;
+            int r = Mathf.Max(0, radius);
+            for (int dz = -r; dz <= r; dz++)
+            {
+                int zz = az + dz;
+                if ((uint)zz >= (uint)ah)
+                    continue;
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    int xx = ax + dx;
+                    if ((uint)xx >= (uint)aw)
+                        continue;
+                    float w = maps[zz, xx, layer];
+                    if (w > m)
+                        m = w;
+                }
+            }
+
+            return m;
         }
 
         static int StripKeepOut(

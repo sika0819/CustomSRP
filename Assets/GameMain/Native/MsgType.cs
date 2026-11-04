@@ -27,6 +27,8 @@ namespace Game.Native
         public const int HostLeaveIsland = 107;
         public const int HostLeaveReasonLogout = 0;
         public const int HostLeaveReasonAccountDeleted = 1;
+        /// <summary>N→U：原生智能推荐 / applyWanosScheme。a=schemeId，下完（若未齐）后切预设。</summary>
+        public const int ApplyWanosScheme = 109;
         /// <summary>
         /// U→N：流程已经在 GuestLogin。宿主这时才能把 Unity 视图 GONE。
         /// 退登当帧 GONE 会暂停引擎，BeginLeave 跑不完，再登录停在旧岛上。

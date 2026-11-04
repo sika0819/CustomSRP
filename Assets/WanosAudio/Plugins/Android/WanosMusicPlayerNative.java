@@ -221,7 +221,9 @@ public class WanosMusicPlayerNative {
                 @Override
                 public void onFocusPause() {
                     // 调用方已确认是真丢焦 / 外来音源。后台续播不能再吞掉：
-                    // 切到抖音、QQ 音乐时必须停，否则启动期出声会一直叠播。
+                    // 切到抖音、QQ 音乐、微信语音时必须停，否则启动期出声会一直叠播。
+                    // 立刻拆掉 keepPlaying 自愈，避免 Pause 后被 L0 Resume_ALL 把音效拉回来。
+                    cancelKeepPlayingAliveWatch();
                     applyGuardedSystemMute("focus_pause");
                 }
 
@@ -251,7 +253,9 @@ public class WanosMusicPlayerNative {
                             UnityPlayer.UnitySendMessage("BoluoMusicPlayerAndroid",
                                     "OnAudioFocusUnduck", "");
                             UnityPlayer.UnitySendMessage("BoluoMusicPlayerAndroid",
-                                    "OnNowPlayingPlay", "");
+                                    "OnSystemAudioRestored", "");
+                            UnityPlayer.UnitySendMessage("BoluoMusicPlayerAndroid",
+                                    "OnNowPlayingPlay", "ui");
                         } catch (Exception e) {
                             Log.w(TAG, "focus resume UI notify failed: " + e.getMessage());
                         }
@@ -260,12 +264,16 @@ public class WanosMusicPlayerNative {
 
                 @Override
                 public void onFocusDuck() {
+                    // Unity OnAudioFocusDuck 为空实现；且微信 MAY_DUCK 不能只压音乐。
+                    // 兜底：与 focus_pause 同路径，停音乐+音效。
+                    cancelKeepPlayingAliveWatch();
+                    applyGuardedSystemMute("focus_pause");
                     mainHandler.post(() -> {
                         try {
                             UnityPlayer.UnitySendMessage("BoluoMusicPlayerAndroid",
-                                    "OnAudioFocusDuck", "0.4");
+                                    "OnSystemAudioMuted", "");
                         } catch (Exception e) {
-                            Log.w(TAG, "OnAudioFocusDuck failed: " + e.getMessage());
+                            Log.w(TAG, "onFocusDuck notify failed: " + e.getMessage());
                         }
                     });
                 }
@@ -397,8 +405,8 @@ public class WanosMusicPlayerNative {
     }
 
     /**
-     * 产品口径（对齐 iOS）：蓝牙/耳机断开有扬声器等剩余输出时继续播，不因
-     * ACTION_AUDIO_BECOMING_NOISY 强制暂停防外放。仅记录日志便于排查。
+     * 产品矩阵：蓝牙/耳机断开 → 停音乐+音效，路由落到扬声器后后台自恢复
+     * （对齐 iOS RouteDisconnected）。有外来 MEDIA 时不抢，等回前台。
      */
     private void registerBecomingNoisyReceiver() {
         if (becomingNoisyRegistered) return;
@@ -408,7 +416,13 @@ public class WanosMusicPlayerNative {
                 if (intent == null || !AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(intent.getAction())) {
                     return;
                 }
-                Log.i(TAG, "AUDIO_BECOMING_NOISY: keep playing (product auto-resume on BT disconnect)");
+                if (userPaused || shouldStop) {
+                    Log.i(TAG, "AUDIO_BECOMING_NOISY skip userPaused/shouldStop");
+                    return;
+                }
+                Log.i(TAG, "AUDIO_BECOMING_NOISY: pause music+sfx, schedule BG resume");
+                cancelKeepPlayingAliveWatch();
+                audioFocusManager.onBecomingNoisy();
             }
         };
         try {
@@ -752,6 +766,7 @@ public class WanosMusicPlayerNative {
                 + " trace=" + BoluoAudioStutterProbe.traceId());
         audioFocusManager.reclaimOnForeground(userPaused, hasResumeIntent);
         // reclaim 可能 NOOP（已持焦且 pending 已清），仍补 Resume_ALL + Resume_Music + unmute。
+        // 微信/电话结束后若后台未收到 GAIN，回前台必须能拉起音乐+音效。
         if (needsForegroundVoiceRestore()) {
             final long gen = foregroundResumeGeneration;
             playbackExecutor.execute(() -> {
@@ -761,7 +776,14 @@ public class WanosMusicPlayerNative {
                 if (!needsForegroundVoiceRestore()) {
                     return;
                 }
-                resumeVoicesAfterFocusIfNeeded("reclaim_foreground_fallback");
+                if (voicesPausedForFocusLoss) {
+                    resumeVoicesAfterFocusIfNeeded("reclaim_foreground_fallback");
+                } else {
+                    // pending 被清但引擎仍 mute：补 Resume，避免音效停在 Pause。
+                    postMusicControlEvent("Resume_ALL");
+                    postMusicControlEvent("Resume_Music");
+                    Log.i(TAG, "reclaim_foreground_fallback Resume without voicesPaused latch");
+                }
                 runGuardedUnmuteOnCurrentThread("reclaim_foreground_fallback");
                 mainHandler.post(this::updateNowPlayingForCurrentTrack);
                 Log.i(TAG, "reclaimFocusOnForeground fallback Resume+unmute");
@@ -1107,8 +1129,9 @@ public class WanosMusicPlayerNative {
      * 系统丢焦护栏静音：先同步压对象增益到 0，短缓冲后再 SetMute。
      * 禁止满音量硬 mute（切微信/QQ/B 站电流音）。mute 后保持衰减，由 unmute 爬坡回满。
      * <p>
-     * {@code focus_pause} 额外 Pause_Music + Pause_ALL：仅压音乐增益时环境/天气音效仍会响
-     * （产品：其它播放器起播时音乐与音效一起停，回前台一起恢复）。
+     * {@code focus_pause} 必须立刻 Pause_Music + Pause_ALL（不能等 80ms 护栏）：
+     * 旧逻辑只先压音乐对象增益，Pause 放在 sleep 之后——generation 被顶掉时音乐会停在增益 0，
+     * 环境/天气音效继续响（微信语音抢焦的典型症状）。产品：音乐与音效一起停，回前台一起恢复。
      */
     private void applyGuardedSystemMute(String reason) {
         final long gen = ++guardedMuteGeneration;
@@ -1119,8 +1142,15 @@ public class WanosMusicPlayerNative {
             voicesPausedForFocusLoss = true;
         }
         playbackExecutor.execute(() -> {
+            // 微信语音等：先停 BGM + 内容声，再压增益 / 延迟 SetMute（消电流音）。
+            if (pauseVoices) {
+                postMusicControlEvent("Pause_Music");
+                postMusicControlEvent("Pause_ALL");
+                voicesPausedForFocusLoss = true;
+            }
             applyMusicGainSafe(obj, 0f, true);
-            Log.i(TAG, "guarded mute dip reason=" + reason + " obj=" + obj + " gen=" + gen);
+            Log.i(TAG, "guarded mute dip reason=" + reason + " obj=" + obj + " gen=" + gen
+                    + " pauseVoices=" + pauseVoices);
             try {
                 Thread.sleep(GUARDED_MUTE_DELAY_MS);
             } catch (InterruptedException e) {
@@ -1128,17 +1158,13 @@ public class WanosMusicPlayerNative {
                 return;
             }
             if (gen != guardedMuteGeneration) {
-                Log.i(TAG, "guarded mute superseded reason=" + reason + " gen=" + gen);
+                // Pause 已发出；即便 mute 护栏被顶掉也保持 voicesPaused，回焦走 Resume_ALL。
+                Log.i(TAG, "guarded mute superseded reason=" + reason + " gen=" + gen
+                        + " pauseVoicesKept=" + pauseVoices);
                 return;
             }
             musicEngineMuted = true;
             probeSetMute(true);
-            if (pauseVoices) {
-                // 对齐 pauseForTimerEnd / 前台 MusicPlaylist.Pause：BGM + 内容声一起停。
-                postMusicControlEvent("Pause_Music");
-                postMusicControlEvent("Pause_ALL");
-                voicesPausedForFocusLoss = true;
-            }
             Log.i(TAG, "guarded mute landed reason=" + reason
                     + " pauseVoices=" + pauseVoices);
         });
@@ -2100,6 +2126,13 @@ public class WanosMusicPlayerNative {
 
     private void keepPlayingRecoverOnExecutor(long gen) {
         if (gen != foregroundResumeGeneration || !shouldSuppressTransientPauseInBackground()) {
+            return;
+        }
+        // 微信/来电丢焦期间禁止 L0 Resume_ALL：否则音效约数秒回潮、音乐仍 Pause。
+        if (voicesPausedForFocusLoss || audioFocusManager.isPendingResume()) {
+            Log.i(TAG, "[CWPA-audio] keepPlayingRecover skip (focus yield)"
+                    + " voicesPaused=" + voicesPausedForFocusLoss
+                    + " pendingResume=" + audioFocusManager.isPendingResume());
             return;
         }
         long now = SystemClock.elapsedRealtime();

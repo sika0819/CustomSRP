@@ -31,6 +31,16 @@ namespace Game
         /// gesture and drive scrollOffset 1:1 with the finger.
         /// </summary>
         const float ClickSlop = 8f;
+        /// <summary>Coast after release: linear px/s². Higher = shorter glide.</summary>
+        const float CoastDeceleration = 3200f;
+        const float CoastVelocityScale = 0.85f;
+        const float MinCoastStartSpeed = 140f;
+        const float MinCoastStopSpeed = 35f;
+        const float MaxCoastSpeed = 2000f;
+        const float CoastTickMs = 16f;
+        /// <summary>Release velocity from trailing window — avoids single-frame spikes.</summary>
+        const float VelocitySampleWindow = 0.07f;
+        const float MinVelocitySampleDt = 0.012f;
         const float TrackWidth = 240f;
         const float ThumbWidth = 63f;
         const float SidePad = 60f;
@@ -81,6 +91,7 @@ namespace Game
         IVisualElementScheduledItem _scrollbarHide;
         IVisualElementScheduledItem _progressTick;
         IVisualElementScheduledItem _playingAnimTick;
+        IVisualElementScheduledItem _coastTick;
         int _selected;
         bool _dragging;
         bool _moved;
@@ -88,10 +99,20 @@ namespace Game
         int _pointerId = -1;
         float _dragStartX;
         float _scrollStartX;
+        float _lastPointerX;
+        float _lastPointerTime;
+        float _velAnchorX;
+        float _velAnchorTime;
+        float _scrollVelocity;
+        float _coastVelocity;
+        float _coastX;
+        float _coastLastTime;
+        bool _drivingScroll;
         int _pressIndex = -1;
         int _lastProgressEpoch = -1;
         int _lastSeenCurrentId = -1;
         int _lastSeenSchemeState = -1;
+        bool _lastDownloaderBusy;
         bool _anyPlaying;
 
         public override void OnOpen(object userData)
@@ -111,11 +132,14 @@ namespace Game
             if (_list == null)
                 return;
 
+            // Thumb travel via translate (not marginLeft) so drag ticks don't dirty layout.
+            if (_scrollThumb != null)
+                _scrollThumb.style.marginLeft = -TrackWidth * 0.5f;
+
             _list.mode = ScrollViewMode.Horizontal;
             _list.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             _list.verticalScrollerVisibility = ScrollerVisibility.Hidden;
-            // Own the drag: Clamped + no inertia so content tracks the finger 1:1
-            // and does not coast / rubber-band after we steal capture from UITK.
+            // Own the drag (starve UITK pan). Coast after release is custom — see TickCoast.
             _list.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
             _list.scrollDecelerationRate = 0f;
             _list.elasticity = 0f;
@@ -139,8 +163,11 @@ namespace Game
                 }
             }
 
+            _lastDownloaderBusy = BankDownloader.HasBusyWork;
             Rebuild();
             Root.schedule.Execute(ScrollSelectedIntoView).StartingIn(0);
+            BankDownloader.OnBankLocalReady -= OnBankLocalReadyForUi;
+            BankDownloader.OnBankLocalReady += OnBankLocalReadyForUi;
             StartProgressTick();
             StartPlayingAnimTick();
         }
@@ -148,7 +175,9 @@ namespace Game
         public override void OnClose(bool isShutdown, object userData)
         {
             IsOpen = false;
+            BankDownloader.OnBankLocalReady -= OnBankLocalReadyForUi;
             // F2: closing must NOT cancel downloads or CancelOtherState.
+            StopCoast();
             StopProgressTick();
             StopPlayingAnimTick();
             _scrollbarHide?.Pause();
@@ -381,18 +410,34 @@ namespace Game
         // Card state machine
         // -----------------------------------------------------------------------
 
+        /// <summary>静默 Rest/Critical 落盘：立刻全量翻牌（含红点），不等人点下载。</summary>
+        void OnBankLocalReadyForUi(string bankName)
+        {
+            if (!IsOpen || Root == null || string.IsNullOrEmpty(bankName))
+                return;
+            Root.schedule.Execute(() =>
+            {
+                if (IsOpen)
+                    RefreshAllStates(force: true);
+            });
+        }
+
         void RefreshAllStates(bool force = false)
         {
             int epoch = BankDownloader.ProgressEpoch;
             int currentId = GameEntry.Presets != null ? GameEntry.Presets.CurrentId : 0;
             int schemeState = GameEntry.Presets != null ? GameEntry.Presets.SchemeState : 0;
             bool busy = BankDownloader.HasBusyWork;
+            bool busyCleared = _lastDownloaderBusy && !busy;
+            _lastDownloaderBusy = busy;
             bool hasUser = _userTriggered.Count > 0;
             bool idsChanged = currentId != _lastSeenCurrentId
                 || schemeState != _lastSeenSchemeState;
 
-            // 就绪翻牌只靠 force（下载触发/完成）；100ms tick 只刷进度环 / Playing，不因 epoch 全扫 NotDownloaded。
-            if (force)
+            // 就绪翻牌只靠 force（含 OnBankLocalReady）。禁止 epoch 全扫——
+            // 后台弹窗开 / 用户主动下时 ProgressEpoch 极频，全扫会掉帧（闺蜜机已踩过）。
+            // busy 清除再 force 一次：末包若当时探针失败，避免 !busy 早退永不再刷。
+            if (force || busyCleared)
             {
                 _lastProgressEpoch = epoch;
                 _lastSeenCurrentId = currentId;
@@ -419,7 +464,8 @@ namespace Game
                         || item.PresetId == currentId
                         || (item.HasAppliedState && item.AppliedState == BankUiState.Playing)
                         || (item.HasAppliedState && item.AppliedState == BankUiState.Downloading)
-                        || _userTriggered.Contains(item.PresetId);
+                        || _userTriggered.Contains(item.PresetId)
+                        || ItemHasActiveDownload(item);
                     if (!relevant)
                         continue;
                 }
@@ -435,6 +481,26 @@ namespace Game
             }
 
             SyncPlayingAnimTick();
+        }
+
+        static bool ItemHasActiveDownload(in ItemBinding item)
+        {
+            string[] banks = item.BankNames;
+            if (banks == null)
+                return false;
+            for (int i = 0; i < banks.Length; i++)
+            {
+                string bn = banks[i];
+                if (string.IsNullOrEmpty(bn) || BankDownloader.IsLocalReady(bn))
+                    continue;
+                if (BankDownloader.TryGetActiveItem(bn, out BankDownloadItem active)
+                    && active != null
+                    && (active.State == BankDownloadState.Downloading
+                        || active.State == BankDownloadState.Pending))
+                    return true;
+            }
+
+            return false;
         }
 
         BankUiState ComputeState(in ItemBinding item)
@@ -469,6 +535,7 @@ namespace Game
 
             bool anyFailed = false;
             bool anyPending = false;
+            bool anyPendingInQueue = false;
             bool anyDownloading = false;
             bool anyNoUrl = false;
             bool allReady = true;
@@ -489,7 +556,14 @@ namespace Game
                     switch (active.State)
                     {
                         case BankDownloadState.Ready:
+                            break;
                         case BankDownloadState.Skipped:
+                            // 空 url Skipped 不是就绪（IsLocalReady 已回落 Probe）；标不可下。
+                            if (string.Equals(
+                                    active.Error,
+                                    BankDownloadItem.UrlEmptyError,
+                                    System.StringComparison.Ordinal))
+                                anyNoUrl = true;
                             break;
                         case BankDownloadState.Failed:
                             anyFailed = true;
@@ -505,22 +579,22 @@ namespace Game
                             if (string.IsNullOrEmpty(active.Url))
                                 anyNoUrl = true;
                             else
+                            {
                                 anyPending = true;
+                                anyPendingInQueue = true;
+                            }
                             break;
                     }
                     continue;
                 }
 
-                if (PresetBankCatalog.TryGet(bn, out var remote) && remote != null)
+                if (PresetBankCatalogGaps.IsUndownloadable(bn))
                 {
-                    if (string.IsNullOrEmpty(remote.url))
-                        anyNoUrl = true;
-                    else
-                        anyPending = true;
+                    // 无 catalog / url 空：不可下 → Failed，勿假 NotDownloaded 空点。
+                    anyNoUrl = true;
                 }
                 else
                 {
-                    // No catalog entry — treat as missing / not downloaded (retry later).
                     anyPending = true;
                 }
             }
@@ -533,7 +607,9 @@ namespace Game
                 return BankUiState.Failed;
 
             bool userTriggered = item.UserTriggered || _userTriggered.Contains(item.PresetId);
-            if (userTriggered && (anyDownloading || anyPending))
+            // 仅真实 Downloading 转圈；用户点过才对排队 Pending 转圈。
+            // 静默 Kick 入队的 Pending 保持未下载，避免整表假转圈。
+            if (anyDownloading || (userTriggered && (anyPending || anyPendingInQueue)))
                 return BankUiState.Downloading;
 
             return BankUiState.NotDownloaded;
@@ -763,6 +839,13 @@ namespace Game
             int presetId = captured.PresetId;
             bool saveSuppressPushed = false;
 
+            // 点击当下钉死「下完进场」意图（仅 UserClick / 健康推荐可自动切；静默全量不得进场）。
+            _userTriggered.Add(presetId);
+            PendingDownloadIntent.SetPreset(
+                presetId,
+                PendingDownloadIntent.EnterSource.UserClick);
+            RefreshAllStates(force: true);
+
             UserBankDownloadFlow.Start(
                 banks,
                 new DownloadUiOptions
@@ -785,11 +868,10 @@ namespace Game
                 onBanksDone: _ => OnPresetBanksDone(presetId),
                 onDownloadStarting: () =>
                 {
-                    _userTriggered.Add(presetId);
-                    PendingDownloadIntent.SetPreset(presetId);
-                    RefreshAllStates(force: true);
+                    // 意图已在点击时写入；这里只做保存抑制，避免同意链晚到覆盖已点的下一张。
                     IslandPlayerPosSave.PushSaveSuppress();
                     saveSuppressPushed = true;
+                    RefreshAllStates(force: true);
                 },
                 prioritize: false,
                 preempt: true);
@@ -832,9 +914,11 @@ namespace Game
             if (banks != null && banks.Length > 0)
                 BankDownloader.MarkLocalReady(banks);
 
-            // F7: 仅最后点的 pending 自动进场；未跳转的保持已下载未播红点。
-            if (!PendingDownloadIntent.IsPresetMatch(presetId))
+            // 仅用户点卡 / 健康智慧推荐才自动进场；静默 KickSilentAll 落盘不得切预设。
+            if (!PendingDownloadIntent.ShouldAutoEnterPreset(presetId))
             {
+                if (PendingDownloadIntent.IsPresetMatch(presetId))
+                    PendingDownloadIntent.Clear();
                 if (Root != null)
                     RefreshAllStates(force: true);
                 return;
@@ -972,11 +1056,13 @@ namespace Game
                     _captured = false;
                     _dragStartX = evt.position.x;
                     _scrollStartX = _list.scrollOffset.x;
+                    ResetVelocitySample(evt.position.x);
                     _pressIndex = FindItemIndexAt(evt.position);
                 }
                 return;
             }
 
+            StopCoast();
             _pointerId = evt.pointerId;
             _dragging = true;
             _moved = false;
@@ -984,6 +1070,7 @@ namespace Game
             // Panel coords — same space as scrollOffset (Unity ScrollView formula).
             _dragStartX = evt.position.x;
             _scrollStartX = _list.scrollOffset.x;
+            ResetVelocitySample(evt.position.x);
             _pressIndex = FindItemIndexAt(evt.position);
             RevealScrollbar();
         }
@@ -1007,14 +1094,22 @@ namespace Game
                 }
             }
 
+            float now = Time.unscaledTime;
+            if (_moved)
+                UpdateVelocitySample(evt.position.x, now);
+            else
+            {
+                _lastPointerX = evt.position.x;
+                _lastPointerTime = now;
+            }
+
             if (!_moved)
                 return;
 
             // scrollOffset = start − fingerΔ → content translate stays under the finger.
             float max = Mathf.Max(0f, ContentWidth() - ViewportWidth());
             float next = Mathf.Clamp(_scrollStartX - dx, 0f, max);
-            _list.scrollOffset = new Vector2(next, 0f);
-            SyncScrollTrack();
+            SetScrollX(next);
             RevealScrollbar();
         }
 
@@ -1025,6 +1120,9 @@ namespace Game
 
             bool wasMoved = _moved;
             int pressIndex = _pressIndex;
+            float releaseVelocity = wasMoved
+                ? FinalizeReleaseVelocity(evt.position.x, Time.unscaledTime)
+                : 0f;
 
             if (_captured && _list != null && _list.HasPointerCapture(evt.pointerId))
                 _list.ReleasePointer(evt.pointerId);
@@ -1034,8 +1132,13 @@ namespace Game
             _captured = false;
             _pressIndex = -1;
             _moved = false;
+            _scrollVelocity = 0f;
             SyncScrollTrack();
-            ScheduleScrollbarHide();
+
+            if (wasMoved && Mathf.Abs(releaseVelocity) >= MinCoastStartSpeed)
+                StartCoast(releaseVelocity * CoastVelocityScale);
+            else
+                ScheduleScrollbarHide();
 
             if (!wasMoved && pressIndex >= 0 && pressIndex < _items.Count)
             {
@@ -1057,8 +1160,112 @@ namespace Game
             _captured = false;
             _pressIndex = -1;
             _moved = false;
+            _scrollVelocity = 0f;
+            StopCoast();
             SyncScrollTrack();
             ScheduleScrollbarHide();
+        }
+
+        void ResetVelocitySample(float pointerX)
+        {
+            float now = Time.unscaledTime;
+            _lastPointerX = pointerX;
+            _lastPointerTime = now;
+            _velAnchorX = pointerX;
+            _velAnchorTime = now;
+            _scrollVelocity = 0f;
+        }
+
+        void UpdateVelocitySample(float pointerX, float now)
+        {
+            _lastPointerX = pointerX;
+            _lastPointerTime = now;
+            float window = now - _velAnchorTime;
+            if (window < VelocitySampleWindow)
+                return;
+
+            // Trailing-window velocity; scrollOffset moves opposite the finger.
+            _scrollVelocity = -((pointerX - _velAnchorX) / window);
+            _velAnchorX = pointerX;
+            _velAnchorTime = now;
+        }
+
+        float FinalizeReleaseVelocity(float pointerX, float now)
+        {
+            float window = now - _velAnchorTime;
+            if (window >= MinVelocitySampleDt)
+                _scrollVelocity = -((pointerX - _velAnchorX) / window);
+            return Mathf.Clamp(_scrollVelocity, -MaxCoastSpeed, MaxCoastSpeed);
+        }
+
+        void StartCoast(float velocity)
+        {
+            if (_list == null || Root == null)
+                return;
+
+            _coastVelocity = Mathf.Clamp(velocity, -MaxCoastSpeed, MaxCoastSpeed);
+            if (Mathf.Abs(_coastVelocity) < MinCoastStartSpeed)
+            {
+                ScheduleScrollbarHide();
+                return;
+            }
+
+            _coastTick?.Pause();
+            _coastX = _list.scrollOffset.x;
+            _coastLastTime = Time.unscaledTime;
+            RevealScrollbar();
+            _coastTick = Root.schedule.Execute(TickCoast).Every((long)CoastTickMs);
+        }
+
+        void TickCoast()
+        {
+            if (_list == null || _dragging)
+            {
+                StopCoast();
+                return;
+            }
+
+            float now = Time.unscaledTime;
+            float dt = Mathf.Clamp(now - _coastLastTime, 0.001f, 0.05f);
+            _coastLastTime = now;
+
+            float max = Mathf.Max(0f, ContentWidth() - ViewportWidth());
+            float prevV = _coastVelocity;
+            float decel = CoastDeceleration * Mathf.Sign(_coastVelocity);
+            _coastVelocity -= decel * dt;
+            // Crossed zero → stop (no reverse bounce).
+            if (prevV * _coastVelocity <= 0f || Mathf.Abs(_coastVelocity) < MinCoastStopSpeed)
+            {
+                StopCoast();
+                ScheduleScrollbarHide();
+                return;
+            }
+
+            _coastX = Mathf.Clamp(_coastX + prevV * dt, 0f, max);
+            SetScrollX(_coastX);
+
+            if (max <= 0.01f || _coastX <= 0f || _coastX >= max)
+            {
+                StopCoast();
+                ScheduleScrollbarHide();
+            }
+        }
+
+        void StopCoast()
+        {
+            _coastTick?.Pause();
+            _coastTick = null;
+            _coastVelocity = 0f;
+        }
+
+        void SetScrollX(float x)
+        {
+            if (_list == null)
+                return;
+            _drivingScroll = true;
+            _list.scrollOffset = new Vector2(x, 0f);
+            _drivingScroll = false;
+            SyncScrollTrack();
         }
 
         int FindItemIndexAt(Vector2 panelPosition)
@@ -1077,6 +1284,9 @@ namespace Game
 
         void OnScrollValueChanged(float _)
         {
+            // Our SetScrollX already syncs the thumb; skip hide-timer churn while driving.
+            if (_drivingScroll)
+                return;
             SyncScrollTrack();
             RevealScrollbar();
             ScheduleScrollbarHide();
@@ -1091,8 +1301,7 @@ namespace Game
             float cardCenter = SidePad + _selected * (ItemWidth + ItemGap) + ItemWidth * 0.5f;
             float target = cardCenter - ViewportWidth() * 0.5f;
             float max = Mathf.Max(0f, ContentWidth() - ViewportWidth());
-            _list.scrollOffset = new Vector2(Mathf.Clamp(target, 0f, max), 0f);
-            SyncScrollTrack();
+            SetScrollX(Mathf.Clamp(target, 0f, max));
         }
 
         void SyncScrollTrack()
@@ -1103,7 +1312,8 @@ namespace Game
             float max = Mathf.Max(0f, ContentWidth() - ViewportWidth());
             float t = max > 0.01f ? Mathf.Clamp01(_list.scrollOffset.x / max) : 0f;
             float travel = TrackWidth - ThumbWidth;
-            _scrollThumb.style.marginLeft = -TrackWidth * 0.5f + t * travel;
+            // translate avoids Layout Recalculation (marginLeft was dirtying the sheet).
+            _scrollThumb.style.translate = new Translate(t * travel, 0f);
         }
 
         void RevealScrollbar()

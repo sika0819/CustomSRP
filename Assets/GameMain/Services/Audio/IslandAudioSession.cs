@@ -62,7 +62,8 @@ namespace Game
 
         /// <summary>
         /// 音乐已因丢焦 / 启动期让出而暂停时，声景走同一道闸。
-        /// Pause_ALL 盖不住随后才 Post 的 3D，所以要停掉已播并禁止再 Evaluate。
+        /// 只 Pause_ALL + latch（禁止 Evaluate 重 Post）；不要 Stop——微信/来电/蓝牙等
+        /// 短暂打断需后台 Resume_ALL 能把音效拉回来；Stop 后原生续播补不齐声景。
         /// </summary>
         public static void HoldYield(string reason)
         {
@@ -83,7 +84,8 @@ namespace Game
                 WanosEngine.KeepSilent(reason);
             }
 
-            Instance?.SetContentAudioPaused(true);
+            // 禁止 Evaluate 靠 IsYieldHeld；不 SetContentAudioPaused(Stop)，
+            // 否则短暂打断后台 Resume_ALL 拉不起已 Stop 的风雨/环境声。
             Log.Info($"[AudioInteraction] yield hold ({reason})");
         }
 
@@ -153,6 +155,8 @@ namespace Game
             bool wasStarted = _started;
             _started = false;
             _contentAudioPaused = false;
+            // 实例停了，静态让出闸也清掉，避免下一趟进岛被脏 _yieldHold 盖住风雨。
+            ResetStartupGate();
 
             try { Rain?.Shutdown(); }
             catch (System.Exception e) { Log.Warning($"[AudioInteraction] Rain.Shutdown: {e.Message}"); }
@@ -186,10 +190,9 @@ namespace Game
         }
 
         /// <summary>
-        /// 回前台 / 打断后恢复内容声（环境声 / 天气 / 雨水）。
-        /// 只续一次：暂停时环境声和雨水已经 Stop，解开暂停会重新 Post。
-        /// 天气循环只被 Pause_ALL 暂停，Resume_ALL 能续上。
-        /// 不要再 Stop 一遍重播，否则刚出声会被掐掉，听感就是回前台停一拍。
+        /// 回前台 / 系统打断结束后恢复内容声（环境声 / 天气 / 雨水）。
+        /// 系统丢焦走 HoldYield（Pause_ALL，不 Stop）：Resume_ALL 能续上；再 Evaluate 补 3D。
+        /// 用户暂停仍可能 Stop 过：SetContentAudioPaused(false) 会重 Post。
         /// </summary>
         public void RestoreContentAudio(string reason)
         {
@@ -206,9 +209,13 @@ namespace Game
                 Log.Warning($"[AudioInteraction] Resume_ALL: {e.Message}");
             }
 
+            bool wasContentPaused = _contentAudioPaused;
             SetContentAudioPaused(false);
             Weather.ReapplyDuckedRtpcs();
             Weather.Refresh();
+            // HoldYield 只闩 IsYieldHeld 时 Ambience 未 Stop：清闸后补一次 Evaluate。
+            if (!wasContentPaused)
+                Ambience?.EvaluateNow();
 
             Log.Info($"[AudioInteraction] content audio restored ({reason})");
         }

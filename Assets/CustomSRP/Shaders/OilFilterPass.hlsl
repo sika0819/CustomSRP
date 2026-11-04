@@ -20,6 +20,9 @@ float _OilFilterVisBoost;
 
 #define OIL_FILTER_NEAR_M 1.0
 #define OIL_FILTER_FAR_M 18.0
+// Boluo BOLUO_OIL_SKY_SKIP_M: cloud ring / sky dome sit past this — keep
+// ApplyOilPainterlyCloud ridges; do not Kuwahara-smear the thick-paint face.
+#define OIL_FILTER_SKY_SKIP_M 560.0
 #define OIL_FILTER_REF_SHORT 1080.0
 
 half OilFilterLuma(half3 c)
@@ -217,6 +220,12 @@ float4 OilFilterCore(float2 uv, bool useSixteenTap)
         ? OilFilterSampleEyeDepth(uv)
         : OIL_FILTER_NEAR_M;
 
+    // Boluo: depth silhouette skipped past SKY_SKIP; Oil also skips the whole wet-oil
+    // pass here so cloud-card brush strokes stay (Boluo OilFilter prefs default OFF —
+    // CustomSRP defaults ON and was milking the cloud face).
+    if (_OilFilterHasDepth > 0.5 && eye >= OIL_FILTER_SKY_SKIP_M)
+        return float4(sharp, 1.0);
+
     // Shore foam / 拍岸白边：高亮低彩 → 直接跳过湿油（省 taps，白沫保持锐利）。
     half cMax = max(sharp.r, max(sharp.g, sharp.b));
     half cMin = min(sharp.r, min(sharp.g, sharp.b));
@@ -270,8 +279,9 @@ float4 OilFilterCore(float2 uv, bool useSixteenTap)
     half strength = (half)(_OilFilterStrength > 1e-4 ? saturate(_OilFilterStrength) : 1.0);
     oilAmt *= strength;
 
-    half sunCore = saturate((sharpL - 0.40h) * 5.0h);
-    oilAmt *= 1.0h - sunCore * 0.50h;
+    // Boluo FragComposite: sunCore * 0.75 — bright cloud/sky keep more authored paint.
+    half sunCore = saturate((sharpL - 0.38h) * 5.5h);
+    oilAmt *= 1.0h - sunCore * 0.75h;
     oilAmt *= 1.0h - foam * 0.97h;
 
     half cool = saturate((sharp.b + sharp.g) * 0.5h - sharp.r);

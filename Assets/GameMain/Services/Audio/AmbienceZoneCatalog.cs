@@ -114,7 +114,8 @@ namespace Game
         /// <summary>boluo-main <c>WaterFall_Audio</c> unloadwaittime=2。</summary>
         public const float WaterfallBigUnloadDelaySeconds = 2f;
         /// <summary>
-        /// 大瀑在篝火旁的静音圈。产品要火边同听河/瀑，保持 0（Boluo 原值 22）。
+        /// 大瀑在篝火旁的硬静音圈。产品要火边同听河/瀑，保持 0（Boluo 原值 22）。
+        /// 火边盖音改走 <see cref="AmbienceWaterSilencePolicy.WaterDuckDbNearCampfire"/> 压增益。
         /// </summary>
         public const float WaterfallCampfireMuteMeters = 0f;
         /// <summary>boluo-main <c>WaterFall_Sound_Small_*</c> / <c>WaterFall_S_Audio</c> radius=50。</summary>

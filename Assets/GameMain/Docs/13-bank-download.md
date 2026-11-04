@@ -12,11 +12,11 @@
 
 | 入口 | 触发 | Flow 参数要点 | 完成后 |
 |---|---|---|---|
-| **区域门** `SceneBankGateSpawner` | 走进 Trigger | `ShowRequestFirst` + 锁移动 + **有**进度窗；`prioritize=true` `preempt=true` | 开固墙 / toast 失败 |
-| **预设** `PresetForm` | 点未就绪卡 | **无**进度窗（卡片环）；`prioritize=false` `preempt=true` | pending 命中则自动进预设；否则红点 |
-| **音乐** `MusicForm` | 点未就绪曲 | **无**进度窗（`SuppressProgressDialog`，行内环）；`prioritize=true` `preempt=true` | pending 命中则解码后播 |
+| **区域门** `SceneBankGateSpawner` | 走进 Trigger | **开** → `ShowRequestFirst`；**关** → 跳过申请；始终 `PriorityBanks(zone)` + **本区进度窗**；开+Wi‑Fi 确认后另 KickSilentAll | 开固墙 / toast 失败 |
+| **预设** `PresetForm` | 点未就绪卡 | **无**进度窗（卡片环）；开+Wi‑Fi → 确认后 KickSilentAll + 仅本次等齐；开+流量 → 仅本次 | pending 命中则自动进预设；否则红点 |
+| **音乐** `MusicForm` | 点未就绪曲 | **无**进度窗（行内环）；开+Wi‑Fi 同预设 | pending 命中则解码后播 |
 
-另有一条**静默启动流水线** `BankUpgradeBootstrap`（Critical / Rest），不走用户流量窗。
+另有一条 Bootstrap 后台策略（见 §3 / §10）：关 → 静默全量零弹窗；**开则不主动下**（用户确认 §4.6 后 KickSilentAll）。
 
 ```mermaid
 flowchart TB
@@ -75,7 +75,9 @@ flowchart LR
 | 意图 | `PendingDownloadIntent` | 最后一次用户点的「下完做什么」：进预设 / 播音乐；两者互斥覆盖 |
 | 流水线 | `UserBankDownloadFlow` | FilterPending → 同意链 →（可选进度窗）→ DownloadBanks → onBanksDone |
 | 同意 | `DownloadConsentSession` | **唯一**弹窗所有者；无网→存储→蜂窝→（AppLaunch Wi‑Fi 确认） |
-| 蜂窝 | `DownloadCellularGate` | WifiOnly / AllowAlways；本岛会话开闸，离岛 / 回 Wi‑Fi 复位 |
+| 蜂窝 | `DownloadCellularGate` | 开/关流量确认后均会话开闸到回 Wi‑Fi；关弹窗蜂窝 `EnsureFeatureOffCellularAutoAllow`；离岛复位 |
+| 策略 | `BackgroundDownloadPolicy` | 关/开 × Wi‑Fi/流量 / 切换 / 点过后跳过申请窗 |
+| 全量收集 | `BackgroundDownloadCoordinator` | catalog 全部 `!IsLocalReady`；开+Wi‑Fi 同意链体积 / `KickSilentAllIfNeeded` |
 | 门禁计算 | `DownloadNetworkGate` | 离线 / 存储×2 / PendingKilobytes 文案 |
 | 传输 | `BankDownloader` | 三队列、HTTP、MD5、落盘、载入引擎、`IsLocalReady` 缓存 |
 | 目录 | `PresetBankCatalog` + `BankUpgradeClient` | 服务端 upgrade/bank → url/size/md5/version |
@@ -83,49 +85,80 @@ flowchart LR
 
 ---
 
-## 3. 用户下载主流程
+## 3. 统一后台策略表（关/开 × Wi‑Fi/流量）
+
+AppLaunch `feature.cancelAccount`：`1` = 后台弹窗**开**（`wifiConfirmEnabled`），`2` / 缺缓存 = **关**。
+
+| 后台弹窗 | 网络 / 边沿 | 行为 |
+|---|---|---|
+| **关** | Wi‑Fi / 流量 | **静默全量**；**零弹窗**；蜂窝自动开闸；断网静默重试续传 |
+| **关** UI | 未完成区域 / 预设 | 进门本区进度窗；仅真实 Downloading（及用户点过）预设/音乐显示进度环 |
+| **开** | Bootstrap | **不主动下** |
+| **开** | Wi‑Fi 首次点 | §4.6 一次（体积=全部剩余）→ KickSilentAll；入口只 await 本次/本区 |
+| **开** | 已点过 §4.6 / 已在下 | **不再弹**申请窗/§4.6；再触发 → **直接进度** |
+| **开** | 流量（用户点或后台堵闸） | **弹流量窗**；同意后会话开闸到回 Wi‑Fi；`.tmp` 续传不重下 |
+| **开** | WiFi↔流量切换 | 已下完不重下；WiFi 已同意不弹 §4.6；断网静默重试 |
+
+区域进度窗 **只统计本区 bank**；`PriorityBanks` 插队。
+
+```mermaid
+flowchart TD
+  Boot[BankUpgradeBootstrap catalog ready] --> Sw{wifiConfirmEnabled?}
+  Sw -->|关| Auto[EnsureFeatureOffCellularAutoAllow]
+  Auto --> Silent[KickSilentAllRemaining]
+  Sw -->|开| Idle[不主动下]
+  Idle --> Click[用户点 区域/预设/音乐]
+  Click --> NetOn{WiFi?}
+  NetOn -->|WiFi| WifiOnce[EnsureReady 可含首次申请+§4.6]
+  WifiOnce -->|立即下载| Kick[KickSilentAllRemaining]
+  Kick --> Entry[入口只下本次 banks]
+  NetOn -->|流量| Mob[流量窗会话开闸]
+  Mob -->|继续| Entry
+```
+
+## 3.1 用户下载主流程
 
 ```mermaid
 flowchart TD
   Start([UserBankDownloadFlow.Start]) --> Snap[Snapshot banks]
-  Snap --> FP{FilterPending<br/>去掉 IsLocalReady}
-  FP -->|pending 空| ReadyPath[CompleteAlreadyReady<br/>onDownloadStarting → onBanksDone → onComplete]
-  FP -->|有待下| ER[DownloadConsentSession.EnsureReady]
+  Snap --> FP{FilterPending}
+  FP -->|pending 空| ReadyPath[CompleteAlreadyReady]
+  FP -->|有待下| Size{开+WiFi且未接受§4.6?}
+  Size -->|是| ConsentAll[BanksForWifiConsentSize]
+  Size -->|否| ConsentClick[同意链=本次]
+  ConsentAll --> ER[EnsureReady]
+  ConsentClick --> ER
   ER --> Offline{离线?}
-  Offline -->|是| Toast1[无网弹窗 → OnCancel]
-  Offline -->|否| Stor{可用空间 ≥ 需求×2?}
-  Stor -->|否| Toast2[存储不足 → OnCancel]
-  Stor -->|是| Cell{NeedsMobileDataPrompt?}
-  Cell -->|蜂窝| MD[流量确认窗]
-  MD -->|继续| Allow[UserAllowCellularAlways] --> Go
-  MD -->|切 Wi‑Fi| WifiOnly[UserRequireWifiOnly → OnCancel]
-  Cell -->|非蜂窝| WifiGate{AppLaunch Wi‑Fi确认开且未接受?}
-  WifiGate -->|是| WC[Wi‑Fi 确认窗]
+  Offline -->|是| Toast1[无网 → OnCancel]
+  Offline -->|否| Stor{存储够?}
+  Stor -->|否| Toast2[存储不足]
+  Stor -->|是| AutoOff[FeatureOff auto-allow]
+  AutoOff --> Cell{NeedsMobileDataPrompt?}
+  Cell -->|是 FeatureOn| MD[流量确认窗]
+  MD -->|继续| Always[UserAllowCellularAlways]
+  Always --> Go
+  Cell -->|否| WifiGate{开且未接受§4.6?}
+  WifiGate -->|是| WC[Wi‑Fi 确认]
   WC -->|立即下载| Go
-  WC -->|稍后| Later[OnWifiConfirmLater → OnCancel]
-  WifiGate -->|否| Go[onReady → onDownloadStarting]
-  Go --> Busy{_busy?}
-  Busy -->|否| DL1[开进度窗可选 → DownloadBanks]
-  Busy -->|是| Merge[MergeIntoBusyDownload<br/>并入队列]
-  DL1 --> Done[onBanksDone → MarkResultLocalReady]
-  Merge --> Done
-  Done --> Fin[关进度窗 → onComplete]
+  WifiGate -->|否| Go[onReady]
+  Go --> Kick{开+WiFi?}
+  Kick -->|是| Silent[KickSilentAllIfNeeded]
+  Kick -->|否| DL
+  Silent --> DL[DownloadBanks 仅本次]
+  DL --> Done[onBanksDone]
+  Done --> Fin[关进度窗]
   ReadyPath --> End([结束])
   Fin --> End
-  Toast1 --> End
-  Toast2 --> End
-  WifiOnly --> End
-  Later --> End
 ```
 
 ### 策略要点
 
-1. **已落盘不进同意链 / HTTP**：`FilterPending` 用 `BankDownloader.IsLocalReady`；全齐走 `CompleteAlreadyReady`（仍调 `onDownloadStarting` / `onBanksDone`，以便预设自动进场、音乐开播）。
-2. **流量窗只服务用户点击**：Rest / 传输层 `NotifyNeedCellularConsent` **只记账不开窗**。
-3. **蜂窝 AllowAlways 本岛会话级**：点「继续下载」后同会话再下不重弹；离岛 / 回 Wi‑Fi 复位。
-4. **AppLaunch `feature.cancelAccount==1`**：Wi‑Fi 上插入 Wi‑Fi 确认窗（本会话接受一次后跳过）；`==2` / 缺缓存则跳过。
-5. **`_busy` 重叠并入队列**：第二路不丢单、不开第二进度窗；由持有进度窗的那一路 finally 收尾。
-6. **完成先 `onBanksDone` 再写正向 ready 缓存**：禁止完成后全量 `InvalidateLocalReadyCache`（多预设并下会把已完成卡刷回「未下载」）。
+1. **已落盘不进同意链 / HTTP**：`FilterPending` / `IsLocalReady`；全齐走 `CompleteAlreadyReady`。
+2. **关弹窗零确认**：蜂窝 `EnsureFeatureOffCellularAutoAllow`；Bootstrap / EnsureReady 均不弹流量窗。
+3. **开 + Wi‑Fi**：§4.6 本岛一次；确认后 KickSilentAll；点过后区域跳过申请窗直接进度。
+4. **开 + 流量 / WiFi→流量堵闸**：弹流量窗 → 会话开闸到回 Wi‑Fi；`NotifyNeedCellularConsent` 可弹窗续传。
+5. **区域门**：进度/await 只用 ZoneBanks；始终 `PriorityBanks(zone)`。
+6. **列表翻牌**：仅真实 `Downloading`（及用户点过的 Pending）→ 进度环；静默入队 Pending 仍未下载；`OnBankLocalReady` + `MarkLocalReady` force；busy 清除再刷；禁止 epoch 全表刷。
 
 ---
 
@@ -152,14 +185,19 @@ sequenceDiagram
     Flow->>Consent: EnsureReady(pending)
     opt 蜂窝未开闸
       Consent->>User: 流量窗
-      User->>Cell: UserAllowCellularAlways
+      alt 后台弹窗关
+        User->>Cell: UserAllowCellularAlways
+      else 开
+        User->>Cell: UserAllowCellularAlways
+      end
     end
-    opt AppLaunch Wi‑Fi 确认开且 Wi‑Fi
+    opt 开且 Wi‑Fi 且未接受 §4.6
       Consent->>User: Wi‑Fi 确认窗
     end
     Consent->>Flow: onReady
     Flow->>PF: onDownloadStarting → SetPreset + 卡片转圈
-    Flow->>DL: DownloadBanks(pending, preempt=User)
+    Note over Flow: 开+WiFi → KickSilentAll + DownloadBanks(仅本次)
+    Flow->>DL: DownloadBanks(本次, preempt=User)
     DL->>Disk: HTTP / promote .tmp → .wsbk
     DL-->>Flow: await 完成
     Flow->>PF: onBanksDone
@@ -204,11 +242,11 @@ sequenceDiagram
 
 | 规则 | 说明 |
 |---|---|
-| Intent 最后点击优先 | 只有 `PendingDownloadIntent.IsPresetMatch` 才自动 `RequestTransition` |
+| Intent 最后点击优先 | 只有 `ShouldAutoEnterPreset`（UserClick / HealthRecommend）才 `RequestTransition`；静默 KickSilentAll 落盘**禁止**自动切 |
 | 未跳转保持完成态 | banks 齐 → `MarkLocalReady` + `ShouldShowRedDot` → `statedownloadsuccess` |
 | 已跳转无红点 | `PresetService.Apply` / 进岛 `RestorePlaybackFromAccount` 记 `MarkPlayed`（`PresetForm` 仍可提前 Mark） |
 | 未齐且仍 busy | **不清** `_userTriggered`，继续转圈；勿因 2s 超时刷回未下载 |
-| Merge 不 Revoke | 第一路 finally 才 `RevokeCellularAllow` + `_busy=false` |
+| FeatureOn 流量会话开闸 | 回 Wi‑Fi 才 revoke；首路 finally 清 `_busy` |
 
 ---
 
@@ -224,7 +262,7 @@ stateDiagram-v2
   Checking --> StorageBlock: 空间不足
   Checking --> MobileConfirm: 蜂窝需确认
   Checking --> [*]: Wi‑Fi / 已开闸 → FireReady
-  MobileConfirm --> [*]: 继续 → AllowAlways → FireReady
+  MobileConfirm --> [*]: 继续 → Always(关)/Once(开) → FireReady
   MobileConfirm --> Idle: 切 Wi‑Fi / 关闭
   OfflineToast --> Idle
   StorageBlock --> Idle
@@ -232,8 +270,8 @@ stateDiagram-v2
 
 | API | 谁调用 | 是否弹流量窗 |
 |---|---|---|
-| `EnsureReady` | Flow（用户点下） | 蜂窝时弹 |
-| `NotifyNeedCellularConsent` | Rest / 传输打断 | **永不弹**，只合并 bank |
+| `EnsureReady` | Flow / 用户点下 | FeatureOn 蜂窝时弹；FeatureOff 自动开闸 |
+| `NotifyNeedCellularConsent` | 传输打断 | **永不弹**，只合并 bank |
 | `ResetForLeaveIsland` | 离岛 / Spawner 重建 | 清会话 |
 
 ---
@@ -318,9 +356,9 @@ flowchart LR
 
 | 维度 | 区域门 | 预设 | 音乐 |
 |---|---|---|---|
-| 申请窗 | 有（`ShowRequestFirst`） | 无 | 无 |
-| 进度窗 | 有 | **无**（`SuppressProgressDialog`） | **无**（行内环） |
-| 锁移动 | 有 + 后退 1m | 无 | 无 |
+| 申请窗 | 开：有；关：无 | 无 | 无 |
+| 进度窗 | 有（关时进门即弹） | **无**（`SuppressProgressDialog`） | **无**（行内环） |
+| 锁移动 | 仅后退 1s；申请/进度窗不冻走（固墙拦住） | 无 | 无 |
 | 保存抑制 | — | `IslandPlayerPosSave` Push/Pop | 同左 |
 | 自动后续 | 开门 | 切预设 | 播放 |
 | UI 就绪优先 | `BanksSatisfied` | `IsLocalReady` → RedDot/AllReady/Playing | `IsLocalReady` → Succeeded/Ready |
@@ -345,8 +383,8 @@ stateDiagram-v2
 
 | 状态 | 图标 | 条件 |
 |---|---|---|
-| NotDownloaded | `statewaitdownload` | 未齐且非本卡用户触发下载 |
-| Downloading | 进度环 | `_userTriggered` 且仍有 Pending/Downloading |
+| NotDownloaded | `statewaitdownload` | 未齐；静默排队 Pending 也算未下载 |
+| Downloading | 进度环 | 真实 `Downloading`，或 `_userTriggered` 且仍有 Pending |
 | Failed | `stateerror` | Failed 或仅无 Url |
 | RedDot | `statedownloadsuccess`（三角+红点） | 全齐 + 未 MarkPlayed + 24h 内 |
 | AllReady | `stateready` | 全齐但不显示红点（已听 / 保护过期） |
@@ -356,32 +394,35 @@ stateDiagram-v2
 
 ---
 
-## 10. 静默启动（Bootstrap）与用户下载关系
+## 10. Bootstrap 与用户下载关系
 
 ```mermaid
 sequenceDiagram
   participant Login as ProcedureGuestLogin
   participant Boot as BankUpgradeBootstrap
+  participant Policy as BackgroundDownloadPolicy
   participant DL as BankDownloader
-  participant Cell as DownloadCellularGate
   participant User as 用户点预设/音乐/门
 
   Login->>Boot: Start(userToken ready)
-  Boot->>DL: Critical（Startup 队列）
-  Boot->>Boot: Rest → EnsureReady（开关开则 Wi‑Fi 确认）
-  Boot->>DL: Rest DownloadBanks（Normal）
-  Note over Boot,Cell: Rest 蜂窝未开闸 → 静默巡检<br/>不开流量窗
-  User->>DL: User 队列 preempt
-  Note over DL: User 优先；可 Abort 非 User 活跃槽
+  Boot->>Boot: catalog + Critical 本地就绪
+  Boot->>Policy: StartBackgroundDownloads
+  alt 关
+    Boot->>Boot: EnsureFeatureOffCellularAutoAllow
+    Boot->>DL: KickSilentAllRemaining
+  else 开
+    Note over Boot: 空转，等用户点
+  end
+  User->>DL: 开+WiFi 确认后 KickSilentAll；入口 User 仅本次/本区
 ```
 
-| 波次 | 内容 | 队列 | 弹窗 |
+| 波次 | 内容 | 队列 | 弹窗 / 触发 |
 |---|---|---|---|
 | Essential 本地 | Common_Init / Common_Music | 不解压 HTTP | — |
-| Critical | Music1_1、区域氛围、风雨等 | Startup | 版本不一致 → 申请下载 |
-| Rest | catalog 其余 | Normal | 开关开 → **揭罩后**弹 §4.6（不自动 Resume）；关 → 静默 |
+| Critical∪Rest | catalog 全部待下 | Startup + Normal | **关** → 静默全量零弹窗；**开** → Bootstrap 不下；用户确认 §4.6 后 `KickSilentAll` |
+| Critical 判定 | — | — | 只看 `IsLocalReady`（禁止仅凭 Streaming version 跳过） |
 
-用户点下后与 Rest **共享同一 `BankDownloader` / 同一磁盘**；`FilterPending` 跳过已 Critical/Rest/音乐下过的 stem。
+用户点下与 Bootstrap **共享同一 `BankDownloader` / 同一磁盘**。
 
 ---
 
@@ -392,7 +433,7 @@ sequenceDiagram
 | 离岛 | `BankDownloader.PauseForLeave`（Abort 活跃，保留 .tmp）；`PendingDownloadIntent.Clear`；`DownloadConsentSession.ResetForLeaveIsland` |
 | 换票后再进 | `ResumeAfterLeave`；`BankUpgradeBootstrap.InvalidateAfterLeave` 后可再 `Start` |
 | 退登 | Clear Intent；`DownloadedUnplayedManager.ResetSession`；蜂窝闸复位 |
-| Flow 批次结束 | 不再 Revoke；蜂窝许可保留到离岛 / 回 Wi‑Fi |
+| Flow 批次结束 | 不 Revoke；蜂窝会话开闸保留到离岛 / 回 Wi‑Fi |
 
 详见 [12-session-lifecycle.md](12-session-lifecycle.md)。
 
@@ -410,7 +451,10 @@ sequenceDiagram
 | [Services/PendingDownloadIntent.cs](../Services/PendingDownloadIntent.cs) | 下完进预设或播音乐 |
 | [BoluoApi/DownloadCellularGate.cs](../BoluoApi/DownloadCellularGate.cs) | 蜂窝闸 |
 | [BoluoApi/BankDownloader.cs](../BoluoApi/BankDownloader.cs) | 队列 + HTTP + IsLocalReady |
-| [BoluoApi/BankUpgradeBootstrap.cs](../BoluoApi/BankUpgradeBootstrap.cs) | Critical / Rest |
+| [BoluoApi/BankUpgradeBootstrap.cs](../BoluoApi/BankUpgradeBootstrap.cs) | Bootstrap 策略入口（静默全量 / 空转） |
+| [Services/BackgroundDownloadPolicy.cs](../Services/BackgroundDownloadPolicy.cs) | 关/开 × 网络矩阵 |
+| [Services/BackgroundDownloadCoordinator.cs](../Services/BackgroundDownloadCoordinator.cs) | 全部剩余 bank 收集 |
+| [Services/RestSilentDownloadPolicy.cs](../Services/RestSilentDownloadPolicy.cs) | 旧名转发 → BackgroundDownloadPolicy |
 | [BoluoApi/PresetBankCatalog.cs](../BoluoApi/PresetBankCatalog.cs) | 内存 catalog |
 | [UI/Forms/PresetForm.cs](../UI/Forms/PresetForm.cs) | 预设下载 / 红点 / 自动进场 |
 | [UI/Forms/MusicForm.cs](../UI/Forms/MusicForm.cs) | 音乐下载 / 红点 / 下完播 |
@@ -436,6 +480,14 @@ sequenceDiagram
 | 进入过仍亮红点 | 只在 Form 点选 Mark；虹膜 Apply / 恢复播放未记；Persist 未 Save | `Apply`/`Restore` MarkPlayed；Save 后 `PlayerPrefsSave` |
 | 换票后银行不再下 | Bootstrap `_started` 早置位 | [12](12-session-lifecycle.md) |
 | `DownloadBanks` 参数错位 | 与 `DownloadBank` 顺序不同 | **命名参数** |
-| Rest 弹流量窗 | 误调 `EnsureReady` | Rest 只用 `NotifyNeedCellularConsent` |
+| 开仍自动弹 Critical/§4.6 | Bootstrap 未走 `ShouldBootstrapStayIdle` | FeatureOn 必须空转 |
+| 开+流量切换卡住 | Notify 不弹窗 | FeatureOn busy 时 Notify→MobileConfirm |
+| 关仍弹流量窗 | Bootstrap/EnsureReady 旧总量窗 | FeatureOff auto-allow |
+| 开+WiFi 预设闪回未下载 | 全量塞进 User Flow | 确认后 KickSilentAll；Flow 只用本次 |
+| 区域进度变成全量 | Flow pending=全部剩余 | 进度/await 只用 ZoneBanks |
+| 区域进度回退/总量缩水 | `PushProgress` 只计 Entries；完成即 Remove | catalog 定总量；`IsLocalReady` 计满 |
+| WiFi 全量后区域进度卡住 | 静默 Critical `preempt` 抢 User 队首 | 静默 Critical 仅 Startup，不 preempt |
+| 静默全量整表假转圈 | Pending 也当 Downloading | 仅 Downloading / 用户触发 Pending 转圈 |
+| 静默翻牌不稳/粘环 | `NotifyBankReady` 只 Invalidate；busy 早退 | 完成 `MarkLocalReady`；busy 清除 force 再刷 |
 
 排障总表见 [10-bug-index.md](10-bug-index.md)。

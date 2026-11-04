@@ -41,9 +41,13 @@ namespace Game.Native
             }
 
             // 0,-1：到点结束 → 停播（弹窗「取消」/「重复」再 ResumeAfterTimerEnd）。
+            // 先抬到点闩，避免回前台 RestoreForegroundAudio 抢在 Pause 之后把声景 Resume_ALL。
             // 0,0：用户中途取消定时 → 不停播。
             if (remainingSeconds <= 0 && totalSeconds < 0)
+            {
+                Game.NowPlayingService.NotePausedForTimerEnd(true);
                 Game.MusicPlaylist.Instance.Pause();
+            }
 
             RefreshFill();
             if (Game.GameEntry.Event != null)

@@ -88,14 +88,27 @@ struct Varyings
     float4 positionCS_SS : SV_POSITION;
     float2 uv : TEXCOORD0;
     float3 positionWS : TEXCOORD1;
-    half3 color : COLOR;
     half fade : TEXCOORD2;
     half useTex : TEXCOORD3;
     half3 normalWS : TEXCOORD4;
-    // Blade height 0 root → 1 tip (pre-atlas). Flowers skip root darken.
     half tip : TEXCOORD5;
     half isFlower : TEXCOORD6;
+    // x = tint01, y = dry01, z = isWheat
+    half3 tintDryWheat : TEXCOORD7;
 };
+
+half3 OilGrassPaletteMul(half tint01)
+{
+    // Discrete 4-band within authored green family (no new hue).
+    uint band = (uint)floor(saturate(tint01) * 3.999h);
+    if (band == 0u)
+        return half3(0.90h, 1.04h, 0.96h); // cool
+    if (band == 1u)
+        return half3(1.00h, 1.00h, 1.00h); // neutral
+    if (band == 2u)
+        return half3(1.06h, 1.00h, 0.86h); // warm olive
+    return half3(1.04h, 1.05h, 0.88h);     // soft chartreuse
+}
 
 Varyings OilTerrainGrassPassVertex(Attributes input)
 {
@@ -106,8 +119,10 @@ Varyings OilTerrainGrassPassVertex(Attributes input)
     uint bits = asuint(inst.w);
     uint tileId = bits & 0xFFu;
     float dry = ((bits >> 8) & 0xFFu) * (1.0 / 255.0);
+    float tint01 = ((bits >> 16) & 0xFFu) * (1.0 / 255.0);
     uint flags = bits >> 24;
     bool flower = (flags & 1u) != 0u;
+    bool wheat = (flags & 2u) != 0u;
 
     float hash = sin(pivotWS.x * 23.4643 + pivotWS.z);
     float hashW = sin(pivotWS.x * 95.4643 + pivotWS.z);
@@ -148,7 +163,11 @@ Varyings OilTerrainGrassPassVertex(Attributes input)
     // Flowers sway less.
     if (flower)
         wind *= 0.55;
-    float3 positionWS = pivotWS + rotated + windDir * wind;
+    // Roadside wilt: static lean (separate from gust wind).
+    float lean = dry * tip * lerp(0.10, 0.28, dry);
+    if (flower)
+        lean *= 0.35;
+    float3 positionWS = pivotWS + rotated + windDir * (wind + lean);
 
     float4 rect = _GrassAtlasRects[tileId];
     float2 uv = input.uv;
@@ -163,28 +182,40 @@ Varyings OilTerrainGrassPassVertex(Attributes input)
     output.useTex = 1.0h;
     output.tip = (half)tip;
     output.isFlower = flower ? 1.0h : 0.0h;
+    output.tintDryWheat = half3((half)tint01, (half)dry, wheat ? 1.0h : 0.0h);
 
     half3 n = normalize(half3(0, 1, 0) + (_RandomNormal * hash) * (half3)windDir);
     output.normalWS = n;
-    output.color = 1;
     return output;
 }
 
 half4 OilTerrainGrassPassFragment(Varyings input) : SV_TARGET
 {
     OilBakeClipAboveWater(input.positionWS);
-    half4 tex = SAMPLE_TEXTURE2D(_GrassTexture, sampler_GrassTexture, input.uv);
+    // Sharper mips. Atlas RGB is dilated into transparent so filter won't grey-fringe.
+    half4 tex = (half4)SAMPLE_TEXTURE2D_BIAS(
+        _GrassTexture, sampler_GrassTexture, input.uv, -0.85);
     half alpha = tex.a * (half)input.fade;
-    half clipT = input.useTex > 0.5h ? min((half)_AlphaClip, 0.34h) : (half)_AlphaClip;
-    clip(alpha - clipT);
+    // Firm cutoff — do not keep low-alpha shoulder (that was the grey rim).
+    half clipT = input.useTex > 0.5h ? max((half)_AlphaClip, 0.35h) : (half)_AlphaClip;
+    half aa = min(max(fwidth(alpha), (half)1e-4), (half)0.05);
+    clip(alpha - clipT + aa);
 
-    // Flowers: raw atlas color (no green volume). Grass: mild root darken only.
     half3 albedo = tex.rgb;
+    half tint01 = input.tintDryWheat.x;
+    half dry = input.tintDryWheat.y;
+    half isWheat = input.tintDryWheat.z;
     if (input.isFlower < 0.5h)
     {
-        half root = 1.0h - saturate(input.tip);
-        root *= root;
-        albedo *= lerp(1.0h, 0.84h, root);
+        // Grass: discrete green bands. Wheat: skip bands, keep atlas gold.
+        if (isWheat < 0.5h)
+            albedo *= OilGrassPaletteMul(tint01);
+        // Straw wilt only when bake marked roadside (dry≈0 inland).
+        if (dry > 0.20h)
+        {
+            half3 straw = half3(1.16h, 1.02h, 0.58h);
+            albedo = lerp(albedo, saturate(albedo * straw), dry * 0.78h);
+        }
     }
     half3 rgb = OilTerrainGrassVertexLit(albedo, input.normalWS, input.positionWS);
 

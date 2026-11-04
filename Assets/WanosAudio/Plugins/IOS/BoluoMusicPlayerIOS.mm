@@ -638,7 +638,7 @@ extern void UnitySendMessage(const char* obj, const char* method, const char* ms
 /// 本轮竞争曾见 otherAudioPlaying=YES（杀 QQ 音乐后 secondarySilence 可能卡住）
 @property (nonatomic, assign) BOOL competingEpisodeSawOtherAudioPlaying;
 /// 本轮是否曾见 secondarySilenceHint（微信语音输入/ASR）。
-/// 与 sawOtherAudio 组合：ASR-only → 禁止后台自动续播，等回菠萝前台。
+/// 与 sawOtherAudio 组合：仅 otherAudio（QQ/B 站）→ 等回前台续；ASR/来电/RD → 后台可续。
 @property (nonatomic, assign) BOOL competingEpisodeSawSecondarySilence;
 /// 最近一次 Interruption Began 时间；微信语音识别刚启动时 secondarySilence 可能晚于 Began 数百毫秒，
 /// 此窗口内禁止静默确认/独占抢回，否则对方录音/ASR 一上来就被掐。
@@ -1541,16 +1541,16 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         return;
     }
 
-    // 微信语音（ASR-only）：发完后仍在后台 → 保持暂停，等回菠萝前台再续。
-    // 对齐 BoluoAudioFocusLossBranchPolicy.ShouldAllowBackgroundAutoResumeAfterCompetingAudioStopped。
+    // QQ/B 站等 otherAudio competing：对方停后仍等回波萝前台再续（禁止后台抢播）。
+    // 微信 ASR / 来电等短暂打断：允许后台自动续（见 shouldAllowBackgroundAutoResume…）。
     if (![self shouldAllowBackgroundAutoResumeAfterCompetingAudioStopped]) {
-        BoluoAudioLog(@"[BoluoAudioResume] ASR-only episode — defer resume until foreground (sawSecondary=%@ sawOtherAudio=%@)",
+        BoluoAudioLog(@"[BoluoAudioResume] competing-media episode — defer resume until foreground (sawSecondary=%@ sawOtherAudio=%@)",
               self.competingEpisodeSawSecondarySilence ? @"YES" : @"NO",
               self.competingEpisodeSawOtherAudioPlaying ? @"YES" : @"NO");
         self.backgroundSilenceConfirmStreak = 0;
         self.backgroundResumeArmed = NO;
         self.wantsResumeAfterRecovery = YES;
-        [self noteCompetingAudioDetected:@"ASR-only-defer-foreground"];
+        [self noteCompetingAudioDetected:@"competing-media-defer-foreground"];
         [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_pollWaitForCompetingAudioToStop) object:nil];
         self.competingAudioPollCount = 0;
         return;
@@ -1629,13 +1629,16 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     }];
 }
 
-/// 对齐 C# ShouldAllowBackgroundAutoResumeAfterCompetingAudioStopped：
-/// ASR-only（曾见 secondarySilence、从未见 otherAudio）后台禁止自动续播。
+/// 后台自动续播门闩（产品矩阵）：
+/// - ASR / 来电 / RD 等短暂打断：允许后台续。
+/// - 本轮见过 otherAudio（QQ 音乐 / B 站等）且不是「仅 secondarySilence」：等回前台再续。
+///   若曾见 secondarySilence（微信按住发语音），即使短暂带上 otherAudio 仍允许后台续。
 - (BOOL)shouldAllowBackgroundAutoResumeAfterCompetingAudioStopped {
     if ([UIApplication sharedApplication].applicationState != UIApplicationStateBackground) {
         return YES;
     }
-    if (self.competingEpisodeSawSecondarySilence && !self.competingEpisodeSawOtherAudioPlaying) {
+    if (self.competingEpisodeSawOtherAudioPlaying
+            && !self.competingEpisodeSawSecondarySilence) {
         return NO;
     }
     return YES;
@@ -2590,7 +2593,8 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     // 仅「引擎已硬 mute」才可跳过护栏。冷启动/SyncExternal 可能把 isMuted 记成 YES
     // 但从未 SetMute(true)（hardMuted=NO）——此时若早退，微信发语音会漏掉 soft-silence。
     if (self.isMuted && sBoluoEngineHardMuted) {
-        // 已静音：直接执行尾动作（yield / UI 仍需要）。
+        // 已静音：仍补 Pause_Music+Pause_ALL（仅 SetMute 时音效可能还在响），再跑尾动作。
+        WanosMusicPlayer_PostGlobalPauseMusic();
         [self noteFocusState:BoluoAudioFocusStateCompetingWait
                       reason:[NSString stringWithFormat:@"guard_already_muted_%@", reason ?: @"?"]];
         if (afterMute) afterMute();
@@ -2631,6 +2635,8 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
             // setAudioMute 路径不一定走 BoluoSetMuteWithMusicEventsNative；显式钉硬 mute
             sBoluoEngineHardMuted = YES;
         }
+        // 显式 Pause_Music+Pause_ALL：仅压音乐增益 / SetMute 时环境音效仍可能响（微信语音）。
+        WanosMusicPlayer_PostGlobalPauseMusic();
         sBoluoGuardedMuteInFlight = NO;
         // mute 落地后保持增益 0（勿立刻还原 1.0），由 unmute 爬坡回满。
         BoluoAudioLog(@"[BoluoAudioDuck] guarded mute done reason=%@", reason);
@@ -3530,6 +3536,8 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     // 若传空串，C# OnNowPlayingPlay 会 RequestResumeAll → ForceUnmute → 再进本路径，
     // 形成 unmute 风暴（电流音 + 假 isPlaying）。控制中心/切曲仍走 "" / remote 全量 Resume。
     NSString *go = self.unityGameObjectName ?: @"BoluoMusicPlayerIOS";
+    // 清 C# yield + 恢复音效（微信/来电/蓝牙短暂打断后台续播）。
+    UnitySendMessage([go UTF8String], "OnSystemAudioRestored", "");
     UnitySendMessage([go UTF8String], "OnNowPlayingPlay", "ui");
     return YES;
 }
@@ -4260,12 +4268,11 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
             }
             strongSelf.wantsResumeAfterRecovery = preservePending && !strongSelf.userManuallyPaused;
 
-            // 短暂可 duck（导航/短信）：不 mute，通知 Unity 降到 40%
+            // 短暂可 duck（导航/短信）本可只降音乐增益；但微信语音 Began 常早于
+            // isOtherAudioPlaying，误走 duck → 音乐几乎听不到、环境音效仍满。
+            // 产品：抢焦时音乐与音效一起停，禁止误 duck，统一走护栏 mute + Pause_ALL。
             if (canDuck) {
-                [strongSelf beginAudioFocusDuck];
-                [strongSelf scheduleDuckEscalateCheck];
-                BoluoAudioLog(@"[BoluoAudioResume] Interruption Began branch=transient_duck");
-                return;
+                BoluoAudioLog(@"[BoluoAudioResume] Interruption Began skip transient_duck → guarded mute (WeChat-safe)");
             }
 
             [strongSelf endAudioFocusDuck];
@@ -4318,10 +4325,9 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
                         if (!softSelf || softSelf.userManuallyPaused) return;
                         [softSelf endAudioFocusDuck];
                         [softSelf yieldAudioSessionForCompetingAudioWithReason:@"InterruptionBeganCompeting"];
-                        AVAudioSession *sessSoft = [AVAudioSession sharedInstance];
-                        if ([sessSoft isOtherAudioPlaying] || sessSoft.secondaryAudioShouldBeSilencedHint) {
-                            [softSelf notifyUnityCompetingOrSystemMuted:YES];
-                        }
+                        // 微信语音 otherAudio/secondarySilence 常晚到：不得以此挡住 Unity HoldYield，
+                        // 否则原生只压了音乐增益，环境/天气音效继续响。
+                        [softSelf notifyUnityCompetingOrSystemMuted:YES];
                         [softSelf reportAudioFocusLossToBLSWithTag:@"audio_duck_escalate"
                                                             detail:@"guarded_mute_to_mute"
                                                         durationMs:kBoluoGuardedMuteDelaySeconds * 1000.0];
@@ -4410,14 +4416,18 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
 BOOL shouldAutoResume = shouldResume
             && !self.userManuallyPaused
             && BoluoAudioSession_IsLogoutSilenced() == 0;
-        // 微信语音 ASR-only：即便 shouldResume=YES（按住间隙常见），后台也禁止立刻 hard，
-        // 保持暂停直到回菠萝前台（对齐 ShouldAllowBackgroundAutoResumeAfterCompetingAudioStopped）。
-        if (shouldAutoResume && ![self shouldAllowBackgroundAutoResumeAfterCompetingAudioStopped]) {
-            BoluoAudioLog(@"[BoluoAudioResume] InterruptionEnded shouldResume=YES but ASR-only BG — keep pending until foreground");
+        // shouldResume=YES：来电挂断 / 微信语音结束等系统明确允许续播 → 前后台均可立刻续
+        // （不再因 ASR-only 后台 defer）。QQ/B 站抢焦通常 shouldResume=NO，走下方 pending。
+        if (shouldAutoResume
+                && ![self shouldAllowBackgroundAutoResumeAfterCompetingAudioStopped]
+                && self.competingEpisodeSawOtherAudioPlaying
+                && !self.competingEpisodeSawSecondarySilence) {
+            // 极少：shouldResume 却仍是纯 otherAudio competing → 等回前台，避免后台抢 QQ。
+            BoluoAudioLog(@"[BoluoAudioResume] InterruptionEnded shouldResume=YES but competing-media BG — keep pending until foreground");
             self.wantsResumeAfterRecovery = YES;
-            [self noteCompetingAudioDetected:@"ASR-only-BG-defer"];
+            [self noteCompetingAudioDetected:@"competing-media-BG-defer"];
             [self noteFocusState:BoluoAudioFocusStateCompetingWait
-                          reason:@"ASR-only-BG-defer"];
+                          reason:@"competing-media-BG-defer"];
             [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_pollWaitForCompetingAudioToStop) object:nil];
             self.competingAudioPollCount = 0;
             self.backgroundSilenceConfirmStreak = 0;

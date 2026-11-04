@@ -248,6 +248,12 @@ namespace WanosAudio
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.CompetingLong);
         }
 
+        /// <summary>原生 focus resume / 蓝牙路由恢复后：清 yield 并恢复音效。</summary>
+        public void OnSystemAudioRestored(string empty)
+        {
+            GlobalPlaybackIntentCallback.NotifySystemAudioRestored();
+        }
+
         public void OnAudioFocusDuck(string factorStr) { }
         public void OnAudioFocusUnduck(string empty) { }
         public void OnAudioFocusRequestFailed(string empty)

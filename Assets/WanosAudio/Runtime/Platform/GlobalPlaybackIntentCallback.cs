@@ -12,6 +12,7 @@ namespace WanosAudio
         static Action _requestResumeAll;
         static Action _mediaTrackChanged;
         static Action _systemAudioInterrupted;
+        static Action _systemAudioRestored;
 
         public static void SetHandlers(Action requestPauseAll, Action requestResumeAll)
         {
@@ -33,12 +34,19 @@ namespace WanosAudio
             _systemAudioInterrupted = onSystemAudioInterrupted;
         }
 
+        /// <summary>原生短暂打断结束后（微信/来电/蓝牙）后台可续：清 yield 并恢复内容声。</summary>
+        public static void SetSystemAudioRestoredHandler(Action onSystemAudioRestored)
+        {
+            _systemAudioRestored = onSystemAudioRestored;
+        }
+
         public static void ClearHandlers()
         {
             _requestPauseAll = null;
             _requestResumeAll = null;
             _mediaTrackChanged = null;
             _systemAudioInterrupted = null;
+            _systemAudioRestored = null;
         }
 
         /// <summary>锁屏/通知栏等应走此入口，勿直接 WanosEngine.PauseAll。</summary>
@@ -76,6 +84,19 @@ namespace WanosAudio
             }
 
             WanosEngine.PauseAll();
+        }
+
+        /// <summary>原生自动续播后调用：清 yield + Resume 内容声（前后台均可）。</summary>
+        public static void NotifySystemAudioRestored()
+        {
+            if (_systemAudioRestored != null)
+            {
+                _systemAudioRestored.Invoke();
+                return;
+            }
+
+            WanosEngine.ResumeAll();
+            WanosEngine.ClearInterrupted("system-audio-restored");
         }
     }
 }

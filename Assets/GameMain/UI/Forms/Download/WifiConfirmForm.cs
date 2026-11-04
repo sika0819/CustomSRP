@@ -3,8 +3,8 @@ using System;
 namespace Game
 {
     /// <summary>
-    /// Wi‑Fi 下载确认（AppLaunch 线上下载弹窗开关开启时）。
-    /// 「立即下载」继续门禁链；「稍后」取消本次强开。
+    /// 后台 Rest Wi‑Fi 确认（AppLaunch 线上下载弹窗开关开启时）——未关过必须先显示。
+    /// 「立即下载」继续门禁链；「稍后」/ 蒙层关闭后：不再弹，可传则静默 Rest。
     /// </summary>
     public class WifiConfirmForm : GameFormLogic
     {
@@ -26,8 +26,9 @@ namespace Game
 
         protected override void OnBackdropDismiss()
         {
-            _userData?.OnLater?.Invoke();
-            CloseSelf();
+            Action later = _userData?.OnLater;
+            CloseSelfImmediate();
+            later?.Invoke();
         }
 
         public override void OnOpen(object userData)
@@ -51,15 +52,19 @@ namespace Game
 
             OnClick("primary", () =>
             {
+                // 与 RequestDownloadForm 对齐：先离 phase、再同步关窗、最后回调。
+                // 回调里会 OpenDownloadProgress；若仍叠在未关的 §4.6 上，
+                // 流量→Wi‑Fi 后走区域门时进度窗偶发不 Attach。
+                DownloadConsentSession.BeginWifiConfirmed();
                 Action download = _userData?.OnDownload;
+                CloseSelfImmediate();
                 download?.Invoke();
-                CloseSelf();
             });
             OnClick("secondary", () =>
             {
                 Action later = _userData?.OnLater;
+                CloseSelfImmediate();
                 later?.Invoke();
-                CloseSelf();
             });
         }
 

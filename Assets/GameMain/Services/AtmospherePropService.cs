@@ -95,14 +95,15 @@ namespace Game
 
             bool rainOn = weather.Level > 0 && weather.Kind == IslandWeatherKind.Rain;
             bool heavyRain = weather.Kind == IslandWeatherKind.Rain && weather.Level >= 2;
+            // 小雾(1)可显；中雾(2)/大雾(3)关光柱。
+            bool fogBlocksSunBeam = weather.Kind == IslandWeatherKind.Foggy && weather.Level >= 2;
             bool day = weather.Period == IslandTimePeriod.Morning || weather.Period == IslandTimePeriod.Noon;
             bool night = weather.Period == IslandTimePeriod.Evening || weather.Period == IslandTimePeriod.Night;
 
             SetActive(AtmospherePropKind.DayRoot, day);
             SetActive(AtmospherePropKind.NightRoot, night);
 
-            // Foggy day (e.g. 专注工作) still shows beams; only rain turns them off.
-            SetActive(AtmospherePropKind.SunBeam, day && !rainOn);
+            SetActive(AtmospherePropKind.SunBeam, day && !rainOn && !fogBlocksSunBeam);
             SetActive(AtmospherePropKind.Butterflies, day && !heavyRain);
             SetActive(AtmospherePropKind.Fireflies, night && !heavyRain);
 

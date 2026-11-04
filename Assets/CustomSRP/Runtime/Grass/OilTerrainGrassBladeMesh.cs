@@ -61,8 +61,22 @@ namespace CustomSRP
         public static bool UsesAtlasColor(int variant) =>
             variant >= FirstFlower;
 
-        public static int PickVariant(Vector3 pos)
+        public static int PickVariant(Vector3 pos) => PickVariant(pos, dry01: 0f);
+
+        /// <param name="dry01">0 fresh interior → 1 roadside/edge wilt; high dry biases short blades.</param>
+        public static int PickVariant(Vector3 pos, float dry01)
         {
+            dry01 = Mathf.Clamp01(dry01);
+            // Wilt edges: skip flower accents, bias Thin / Shrub / Billboard.
+            if (dry01 >= 0.42f)
+            {
+                float h = Hash2(pos.x, pos.z, 1f);
+                if (h < 0.38f) return (int)Variant.Thin;
+                if (h < 0.66f) return (int)Variant.Shrub;
+                if (h < 0.86f) return (int)Variant.Billboard;
+                return (int)Variant.Single;
+            }
+
             int clustered = TryPickClusteredAccent(pos);
             if (clustered >= 0)
                 return clustered;
@@ -74,12 +88,12 @@ namespace CustomSRP
             if (singleH < 0.0075f) return (int)Variant.Dandelions;
             if (singleH < 0.018f) return (int)Variant.Clover;
 
-            float h = Hash2(pos.x, pos.z, 1f);
-            if (h < 0.34f) return (int)Variant.Patch;
-            if (h < 0.54f) return (int)Variant.Thick;
-            if (h < 0.72f) return (int)Variant.Thin;
-            if (h < 0.85f) return (int)Variant.Single;
-            if (h < 0.94f) return (int)Variant.Billboard;
+            float g = Hash2(pos.x, pos.z, 1f);
+            if (g < 0.34f) return (int)Variant.Patch;
+            if (g < 0.54f) return (int)Variant.Thick;
+            if (g < 0.72f) return (int)Variant.Thin;
+            if (g < 0.85f) return (int)Variant.Single;
+            if (g < 0.94f) return (int)Variant.Billboard;
             return (int)Variant.Shrub;
         }
 

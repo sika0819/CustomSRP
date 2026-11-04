@@ -8,6 +8,7 @@ namespace Game
     /// 按与焦点距离开关环境非 Trigger MeshCollider，降低 CharacterController 对远距三角网格的 PhysX 开销。
     /// 近处保留启用；仅远距预关；刷新用 bounds.ClosestPoint。
     /// Mountain / Cliff / Cave / Ramp / Spike / Large 常开（可视远、关碰撞会穿模）。
+    /// 即将启用时若与焦点胶囊重叠则推迟，避免石头突然挤出导致抖动。
     /// </summary>
     public sealed class EnvMeshColliderLod : MonoBehaviour
     {
@@ -15,6 +16,7 @@ namespace Game
         // 与 _colliders 同步的集合：Register 去重、Unregister O(1) 移除，避免同一实例重复登记。
         readonly HashSet<MeshCollider> _colliderSet = new HashSet<MeshCollider>();
         Transform _focus;
+        CharacterController _focusCc;
         float _enableSq;
         float _disableSq;
         float _refreshInterval = 0.25f;
@@ -23,6 +25,7 @@ namespace Game
         public void Begin(Transform focus)
         {
             _focus = focus;
+            _focusCc = focus != null ? focus.GetComponent<CharacterController>() : null;
             float enable = EnvStreamingConfig.MeshColliderEnableRadius;
             float disable = EnvStreamingConfig.MeshColliderDisableRadius;
             _enableSq = enable * enable;
@@ -58,13 +61,15 @@ namespace Game
 
                 if (alwaysOn)
                 {
-                    mc.enabled = true;
+                    TryEnableWithoutFocusOverlap(mc);
                     continue;
                 }
 
                 // 用 AABB 最近点，避免大 mesh 出生 pivot 在中心却人已在坡上。
                 if (HorizontalDistSqToBounds(mc.bounds, focusPos) > _enableSq)
                     mc.enabled = false;
+                else
+                    TryEnableWithoutFocusOverlap(mc);
             }
         }
 
@@ -108,8 +113,7 @@ namespace Game
 
                 if (IsAlwaysOnCollider(mc))
                 {
-                    if (!mc.enabled)
-                        mc.enabled = true;
+                    TryEnableWithoutFocusOverlap(mc);
                     continue;
                 }
 
@@ -149,8 +153,7 @@ namespace Game
 
                 if (IsAlwaysOnCollider(mc))
                 {
-                    if (!mc.enabled)
-                        mc.enabled = true;
+                    TryEnableWithoutFocusOverlap(mc);
                     continue;
                 }
 
@@ -168,8 +171,56 @@ namespace Game
             }
             else if (horizontalDistSq < _enableSq)
             {
-                mc.enabled = true;
+                TryEnableWithoutFocusOverlap(mc);
             }
+        }
+
+        /// <summary>
+        /// 启用前若与焦点 CharacterController 胶囊重叠则保持关闭，等走出后再开。
+        /// </summary>
+        void TryEnableWithoutFocusOverlap(MeshCollider mc)
+        {
+            if (mc == null || mc.enabled)
+                return;
+
+            if (FocusCapsuleOverlaps(mc))
+                return;
+
+            mc.enabled = true;
+        }
+
+        bool FocusCapsuleOverlaps(MeshCollider mc)
+        {
+            CharacterController cc = _focusCc;
+            if (cc == null && _focus != null)
+                cc = _focusCc = _focus.GetComponent<CharacterController>();
+            if (cc == null || !cc.enabled)
+                return false;
+
+            // AABB 粗测：无交集则不可能重叠。
+            Bounds body = CharacterControllerWorldBounds(cc);
+            if (!body.Intersects(mc.bounds))
+                return false;
+
+            // 临时启用才能 ComputePenetration；测完恢复。
+            bool wasEnabled = mc.enabled;
+            mc.enabled = true;
+            bool overlap = Physics.ComputePenetration(
+                cc, cc.transform.position, cc.transform.rotation,
+                mc, mc.transform.position, mc.transform.rotation,
+                out _, out float distance);
+            mc.enabled = wasEnabled;
+            return overlap && distance > 1e-3f;
+        }
+
+        static Bounds CharacterControllerWorldBounds(CharacterController cc)
+        {
+            Transform t = cc.transform;
+            Vector3 center = t.TransformPoint(cc.center);
+            float r = cc.radius + cc.skinWidth;
+            float h = Mathf.Max(cc.height, r * 2f);
+            Vector3 size = new Vector3(r * 2f, h, r * 2f);
+            return new Bounds(center, size);
         }
 
         static bool IsAlwaysOnCollider(MeshCollider mc)

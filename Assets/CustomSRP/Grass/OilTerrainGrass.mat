@@ -30,13 +30,13 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _AlphaClip: 0.34
+    - _AlphaClip: 0.5
     - _Billboard: 0
     - _GrassHeight: 1
     - _GrassWidth: 1
     - _RandomNormal: 0.12
     - _ShadeLift: 0.42
-    - _ShadeSteps: 4
+    - _ShadeSteps: 3
     - _UseTexColor: 1
     - _WindStrength: 0.55
     m_Colors: []

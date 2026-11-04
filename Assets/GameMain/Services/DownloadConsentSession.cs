@@ -59,6 +59,13 @@ namespace Game
             if (_lockMove)
                 ApplyMoveLock(true);
 
+            // 已全部落盘：申请窗 / Wi‑Fi / 流量都不要（含 Critical ShowRequestFirst）。
+            if (AllBanksLocallyReady(_banks))
+            {
+                FireReady();
+                return;
+            }
+
             if (opts.ShowRequestFirst)
             {
                 ShowRequestPrompt(opts.RequestSizeMb);
@@ -69,8 +76,8 @@ namespace Game
         }
 
         /// <summary>
-        /// 传输层 / Rest：蜂窝未开闸时只合并 bank，<b>不开流量窗</b>。
-        /// 进岛静默 Rest、Wi‑Fi→蜂窝打断均走此路径；用户点下载才由 <see cref="EnsureReady"/> 弹窗。
+        /// 传输层：蜂窝未开闸且队列仍忙。
+        /// FeatureOn → 弹流量窗续传；FeatureOff 由闸自动开闸，此处只 Merge。
         /// </summary>
         public static void NotifyNeedCellularConsent(IList<string> busyBanks)
         {
@@ -84,7 +91,24 @@ namespace Game
                 return;
 
             MergeBanks(busyBanks);
-            // 有意不 ShowMobileConfirm：流量窗只服务用户主动 EnsureReady。
+
+            bool wifiConfirm = BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled();
+            if (!BackgroundDownloadPolicy.ShouldPromptMobileWhenBackgroundBlocked(
+                    wifiConfirm,
+                    hasBusyWork: true,
+                    needsMobileDataPrompt: true))
+                return;
+
+            if (_phase == Phase.MobileConfirm || IsMobileConfirmPresent())
+            {
+                _phase = Phase.MobileConfirm;
+                return;
+            }
+
+            if (_phase != Phase.Idle && _phase != Phase.Checking)
+                return;
+
+            ShowMobileConfirm();
         }
 
         /// <summary>
@@ -97,12 +121,32 @@ namespace Game
                 _phase = Phase.Checking;
         }
 
+        /// <summary>
+        /// Wi‑Fi 确认点「立即下载」：关窗前离开 WifiConfirm 并记下已接受，
+        /// 再 Close → FireReady，避免同帧 Progress 叠在未关的 §4.6 上（流量切 Wi‑Fi 后区域门尤甚）。
+        /// </summary>
+        public static void BeginWifiConfirmed()
+        {
+            if (_phase == Phase.WifiConfirm)
+                _phase = Phase.Checking;
+            _wifiConfirmAccepted = true;
+        }
+
         /// <summary>Rest 等：仅在尚无 continue 时挂上，不抢用户 EnsureReady。</summary>
         public static void BindReadyIfEmpty(Action onReady)
         {
             if (_onReady == null && onReady != null)
                 _onReady = onReady;
         }
+
+        /// <summary>
+        /// 同意链是否占着弹窗 / 门禁（非 Idle）。
+        /// Bootstrap Rest 不得在 Critical 申请窗仍开时再 EnsureReady，否则会冲掉回调。
+        /// </summary>
+        public static bool IsPromptActive => _phase != Phase.Idle;
+
+        /// <summary>本岛是否已接受 §4.6「立即下载」（接受后不再弹，可静默全量）。</summary>
+        public static bool WifiConfirmAccepted => _wifiConfirmAccepted;
 
         /// <summary>离岛 / 关 Spawner：清会话与会话持有的移动锁。</summary>
         public static void ResetForLeaveIsland()
@@ -155,6 +199,9 @@ namespace Game
 
         /// <summary>单测：模拟申请窗点「立即下载」后的门禁链（跳过 UI）。</summary>
         public static void EditorInvokeRequestConfirmed() => OnRequestConfirmed();
+
+        /// <summary>单测：模拟申请窗「返回」/ 蒙层关闭。</summary>
+        public static void EditorInvokeRequestReturn() => OnCancelled();
 
         public static string EditorPhaseName => _phase.ToString();
 
@@ -375,7 +422,8 @@ namespace Game
                 }
             }
 
-            // 蜂窝流量窗与 AppLaunch §4.6 Wi‑Fi 确认无关：开关关仍要弹。
+            // FeatureOff：蜂窝自动开闸（零弹窗）。FeatureOn：未开闸则弹流量窗。
+            DownloadCellularGate.EnsureFeatureOffCellularAutoAllow();
             if (DownloadCellularGate.NeedsMobileDataPrompt())
             {
                 // 已在弹 / 异步 Open 中：只更新 continue，不叠窗。
@@ -427,6 +475,7 @@ namespace Game
         static void OnMobileAllow()
         {
             BankDownloader.PriorityBanks(_banks);
+            // 开/关：会话开闸直到回 Wi‑Fi / 离岛。
             DownloadCellularGate.UserAllowCellularAlways();
             // 蜂窝确认后不再叠 Wi‑Fi 确认窗（文案是「已连 Wi‑Fi」）。
             FireReady();
@@ -462,6 +511,7 @@ namespace Game
 
         static void OnWifiConfirmDownload()
         {
+            // BeginWifiConfirmed 可能已置位；幂等保留。
             _wifiConfirmAccepted = true;
             FireReady();
         }

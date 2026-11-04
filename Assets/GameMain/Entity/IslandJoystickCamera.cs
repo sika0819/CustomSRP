@@ -53,6 +53,16 @@ namespace Game
         const float WalkRenderScaleThreshold = 0.05f;
         const float InputSmooth = 10f;
         const float GroundStickSpeed = 2f;
+        /// <summary>桥/码头贴地用更弱 stick，避免 CC 每帧压进薄 Box 再弹起。</summary>
+        const float DeckGroundStickSpeed = 0.4f;
+        /// <summary>丢弃 CC 微修正，减轻薄板 / 石缝微抖。</summary>
+        const float MinMoveDistance = 0.02f;
+        /// <summary>禁海硬恢复与当前眼点过近则跳过，避免缝边闪烁。</summary>
+        const float WaterBanRestoreDeadzone = 0.08f;
+        /// <summary>甲板眼高校正死区（小于此不拧）。</summary>
+        const float DeckYStabilizeDeadzone = 0.02f;
+        /// <summary>甲板眼高校正上限；更大落差交给上台阶 / 重力。</summary>
+        const float DeckYStabilizeMaxCorrect = 0.35f;
         /// <summary>Degrees per pixel at <see cref="RefLookWidth"/> (portrait design 1125).</summary>
         const float LookSensitivity = 0.11f;
         /// <summary>Portrait design width; wider screens scale look down so full-width swipes feel similar.</summary>
@@ -373,7 +383,8 @@ namespace Game
         }
 
         /// <summary>
-        /// 下载弹窗或进度条期间停住平移。视角仍走 <see cref="ConsumeLookInput"/>。
+        /// 区域门后退瞬间停住平移。视角仍走 <see cref="ConsumeLookInput"/>。
+        /// 申请/进度窗本身不持此锁（固墙拦住进区）。
         /// </summary>
         public void SetDownloadMoveLock(bool locked)
         {
@@ -998,7 +1009,7 @@ namespace Game
             _cc.slopeLimit = SlopeLimit;
             _cc.stepOffset = Mathf.Min(StepOffset, radius * 0.85f);
             _cc.skinWidth = Mathf.Clamp(radius * 0.12f, 0.08f, 0.2f);
-            _cc.minMoveDistance = 0f;
+            _cc.minMoveDistance = MinMoveDistance;
             _appliedEyeHeight = EyeHeight;
             _appliedRadius = BodyRadius;
         }
@@ -1006,8 +1017,17 @@ namespace Game
         float IntegrateVertical(float dt)
         {
             bool grounded = _cc != null && _cc.enabled && _cc.isGrounded;
+            float stick = GroundStickSpeed;
+            if (grounded)
+            {
+                Vector3 foot = transform.position;
+                foot.y -= EyeHeight;
+                if (IsOnNamedDeckRelief(foot))
+                    stick = DeckGroundStickSpeed;
+            }
+
             if (grounded && _verticalSpeed <= 0f)
-                _verticalSpeed = -GroundStickSpeed;
+                _verticalSpeed = -stick;
             else
                 _verticalSpeed -= Gravity * dt;
 
@@ -1149,6 +1169,7 @@ namespace Game
             }
 
             TryClimbOceanDeck(before, motion);
+            StabilizeNamedDeckEye();
             ApplyWaterWalkBan(before);
             ClampFootNotBelowOcean();
             ApplyIslandTerrainLimit();
@@ -1161,6 +1182,7 @@ namespace Game
             if (Mathf.Abs(motion.x) + Mathf.Abs(motion.z) <= 1e-4f)
             {
                 transform.position = pos;
+                StabilizeNamedDeckEye();
                 ApplyWaterWalkBan(before);
                 ClampFootNotBelowOcean();
                 ApplyIslandTerrainLimit();
@@ -1180,6 +1202,7 @@ namespace Game
             }
             transform.position = pos;
             TryClimbOceanDeck(before, motion);
+            StabilizeNamedDeckEye();
             ApplyWaterWalkBan(before);
             ClampFootNotBelowOcean();
             ApplyIslandTerrainLimit();
@@ -1335,6 +1358,13 @@ namespace Game
 
             Vector3 eye = transform.position;
             Vector3 foot = eye - Vector3.up * EyeHeight;
+            // 甲板上 / grace：禁海探针偶发 miss 时不要硬拽，否则与 CC 互顶狂抖。
+            if (IsOnNamedDeckRelief(foot))
+            {
+                RememberSafeEyeIfAllowed();
+                return;
+            }
+
             if (!IsFootInForbiddenWater(foot))
             {
                 RememberSafeEyeIfAllowed();
@@ -1343,14 +1373,7 @@ namespace Game
 
             // 一律优先 last-safe。若回 before，岸→礁石→水 会被 before 钉在礁石上走不回来。
             Vector3 restore = _hasLastSafeEye ? _lastSafeEye : beforeEye;
-
-            bool ccOn = _cc != null && _cc.enabled;
-            if (ccOn)
-                _cc.enabled = false;
-            transform.position = restore;
-            Physics.SyncTransforms();
-            if (ccOn)
-                _cc.enabled = true;
+            TryHardRestoreEye(eye, restore);
         }
 
         /// <summary>
@@ -1367,15 +1390,12 @@ namespace Game
             Vector3 foot = eye;
             foot.y = footY;
 
+            if (IsOnNamedDeckRelief(foot))
+                return;
+
             if (BlockWaterWalking && IsFootInForbiddenWater(foot) && _hasLastSafeEye)
             {
-                bool ccOn = _cc != null && _cc.enabled;
-                if (ccOn)
-                    _cc.enabled = false;
-                transform.position = _lastSafeEye;
-                Physics.SyncTransforms();
-                if (ccOn)
-                    _cc.enabled = true;
+                TryHardRestoreEye(eye, _lastSafeEye);
                 return;
             }
 
@@ -1391,6 +1411,75 @@ namespace Game
             Physics.SyncTransforms();
             if (ccLift)
                 _cc.enabled = true;
+        }
+
+        /// <summary>
+        /// 禁海硬设眼点。与当前过近则跳过，避免桥缝「前进一寸→拽回」闪烁。
+        /// </summary>
+        bool TryHardRestoreEye(Vector3 currentEye, Vector3 restore)
+        {
+            float dx = restore.x - currentEye.x;
+            float dy = restore.y - currentEye.y;
+            float dz = restore.z - currentEye.z;
+            if (dx * dx + dy * dy + dz * dz < WaterBanRestoreDeadzone * WaterBanRestoreDeadzone)
+                return false;
+
+            bool ccOn = _cc != null && _cc.enabled;
+            if (ccOn)
+                _cc.enabled = false;
+            transform.position = restore;
+            Physics.SyncTransforms();
+            if (ccOn)
+                _cc.enabled = true;
+            return true;
+        }
+
+        /// <summary>
+        /// 站在命名甲板或 grace 内：减弱贴地、禁止禁海硬拽、把眼高钳回甲板顶。
+        /// </summary>
+        void StabilizeNamedDeckEye()
+        {
+            if (_heightTransitioning)
+                return;
+
+            Vector3 eye = transform.position;
+            Vector3 foot = eye;
+            foot.y = eye.y - EyeHeight;
+            if (!IsOnNamedDeckRelief(foot))
+                return;
+
+            float deckY = _lastNamedDeckY;
+            if (TryGetNamedDeckStand(foot, out float standY, out _))
+                deckY = standY;
+
+            float targetEyeY = deckY + EyeHeight;
+            float dy = targetEyeY - eye.y;
+            float ady = Mathf.Abs(dy);
+            if (ady <= DeckYStabilizeDeadzone || ady > DeckYStabilizeMaxCorrect)
+                return;
+
+            eye.y = targetEyeY;
+            bool ccOn = _cc != null && _cc.enabled;
+            if (ccOn)
+                _cc.enabled = false;
+            transform.position = eye;
+            Physics.SyncTransforms();
+            if (ccOn)
+                _cc.enabled = true;
+            if (_verticalSpeed < 0f)
+                _verticalSpeed = -DeckGroundStickSpeed;
+        }
+
+        /// <summary>已站命名甲板或仍在缝边宽限内。</summary>
+        bool IsOnNamedDeckRelief(Vector3 foot)
+        {
+            if (!TryGetOceanSurfaceY(out float oceanY))
+                return false;
+            float minDeckY = oceanY - NamedDeckSpawnPolicy.OceanDeckBelowSeaSlackMeters;
+            bool hasDeck = TryGetNamedDeckStand(foot, out float deckY, out Collider deckCol);
+            if (IsStandingOnNamedDeck(foot, hasDeck, deckY, deckCol, minDeckY))
+                return true;
+            return HasNamedDeckGrace(foot, minDeckY);
         }
 
         Vector3 ClampEyeOutOfWater(Vector3 eye)

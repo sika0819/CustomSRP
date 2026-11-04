@@ -8,6 +8,8 @@ namespace CustomSRP
     {
         static readonly ProfilingSampler Sampler = new ProfilingSampler("Oil Cloud");
         static readonly int AtmosphereFogAmountId = Shader.PropertyToID("_OilAtmosphereFogAmount");
+        // Boluo SkyWeatherDomeBuilder.MinCameraFarClip — ring ≈786 needs ≥1000.
+        const float MinFarClip = 1000f;
 
         Material _material;
         OilCloudLayer.Frame _frame;
@@ -19,9 +21,14 @@ namespace CustomSRP
         void Render(UnsafeGraphContext context)
         {
             UnsafeCommandBuffer cmd = context.cmd;
-            if (OilCloudLayer.Current == null || _frame.mesh == null)
+            if (OilCloudLayer.Current == null || _frame.mesh == null || _material == null)
             {
                 return;
+            }
+
+            if (_camera != null && _camera.farClipPlane < MinFarClip)
+            {
+                _camera.farClipPlane = MinFarClip;
             }
 
             OilCloudLayer.ApplyFrame(cmd, _frame);
@@ -36,11 +43,16 @@ namespace CustomSRP
                 RenderBufferLoadAction.Load,
                 RenderBufferStoreAction.Store);
             cmd.SetViewport(new Rect(0f, 0f, _bufferSize.x, _bufferSize.y));
-            // Fog dye amount after camera props — clouds share TOD fog with the skybox.
-            cmd.SetGlobalFloat(AtmosphereFogAmountId, 1f);
-            // Low triangles first, high ring after. Overlap is painter's order:
-            // both layers sit at sky depth with ZWrite off.
+            // Boluo AtmosphereProfile.cloudsFogAmount default = 0.2 (Boluo_CloudsFogAmount).
+            cmd.SetGlobalFloat(AtmosphereFogAmountId, 0.2f);
+            // Procedural CombinedRing: one DrawMesh (high Y+140 baked). FBX: optional 2nd draw.
             cmd.DrawMesh(_frame.mesh, _frame.low, _material, 0, 0);
+            if (_frame.drawHigh)
+            {
+                cmd.DrawMesh(
+                    _frame.mesh, _frame.high, _material, 0, 0,
+                    OilCloudLayer.HighRingBlock);
+            }
         }
 
         static Material _fallback;

@@ -98,7 +98,7 @@ Material:
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
     - _BumpScale: 1
-    - _BumpTiling: 4
+    - _BumpTiling: 1
     - _Canvas: 1
     - _CanvasStrength: 0.1
     - _ClearCoatMask: 0
@@ -124,7 +124,7 @@ Material:
     - _GradientSmoothness: 0.16
     - _InternalEdge: 1
     - _Metallic: 0
-    - _NormalStrength: 2
+    - _NormalStrength: 1
     - _OcclusionStrength: 1
     - _OilBark: 0
     - _OilCrossBillboard: 0

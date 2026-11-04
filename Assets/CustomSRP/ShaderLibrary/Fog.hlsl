@@ -265,10 +265,29 @@ float3 ApplyOilCelestialFog(float3 color, float3 viewDirWS, half stroke)
     return ApplyOilSkyFogLayer(color, viewDirWS, stroke, 0.06, 0.24);
 }
 
-// Opaque cloud cards: same density-height fog glaze on RGB. Never touch alpha.
+// Opaque cloud cards — BoluoMixCloudFog: amount * clearHaze * height. Never touch alpha.
+// _OilAtmosphereFogAmount is set to Boluo_CloudsFogAmount (≈0.2) for the cloud draw.
 float3 ApplyOilCloudFog(float3 color, float3 viewDirWS, half stroke)
 {
-    return ApplyOilSkyFogLayer(color, viewDirWS, SoftFogStroke(stroke), 0.10, 0.32);
+    float amount = saturate(_OilAtmosphereFogAmount);
+    if (amount < 1e-4 && _CustomFogEnabled < 0.5)
+    {
+        return color;
+    }
+
+    float lenSq = dot(viewDirWS, viewDirWS);
+    float3 dir = lenSq > 1e-8 ? viewDirWS * rsqrt(lenSq) : float3(0.0, 1.0, 0.0);
+    float concentration = AtmosphereConcentration();
+    float height = AtmosphereFogCover(dir, concentration);
+    // Boluo clearHaze lerp(0.16, 0.20, night); weather fog when density rises.
+    float clearHaze = 0.18;
+    float weather = concentration < 0.25 ? 0.0 : lerp(0.50, 1.0, saturate((concentration - 0.25) / 0.75));
+    float a = saturate(amount * max(clearHaze, weather) * height);
+    float3 fogCol = amount > 1e-4
+        ? _OilAtmosphereFogColor.rgb
+        : _CustomFogColor.rgb;
+    fogCol = OilFogPigment(fogCol, SoftFogStroke(stroke), a);
+    return lerp(color, fogCol, a);
 }
 
 #endif

@@ -23,8 +23,9 @@ namespace Game
         SceneBankGate _downloadGate;
         int _progressTicket;
         bool _progressOpen;
+        /// <summary>本次下载是否已经 Attach 过进度窗（区分「首次异步 Open 中」与「窗被顶掉」）。</summary>
+        bool _progressEverAttached;
         bool _moveLocked;
-        bool _unlockMoveAfterExit;
         float _retreatUntil;
 
         /// <summary>贴墙时胶囊中心可能落在 Trigger 壳外的余量。</summary>
@@ -71,7 +72,7 @@ namespace Game
             _downloadGate = null;
             _progressTicket = 0;
             _progressOpen = false;
-            _unlockMoveAfterExit = false;
+            _progressEverAttached = false;
             _retreatUntil = 0f;
             SetDownloadMoveLock(false);
             DownloadConsentSession.ResetForLeaveIsland();
@@ -255,11 +256,35 @@ namespace Game
                 return;
 
             RefreshBlocked();
+            SyncProgressOpenWithUi();
             SamplePlayerInside();
             if (!HudOverlayGate.HasPopup())
             {
-                if (_busy || UserBankDownloadFlow.IsBusy)
+                // SuppressProgress 的 Flow（环境音插队 / 预设环 / 音乐行）IsBusy 但无票：
+                // 不能走 Reopen（_downloadGate 空），否则门口挡人却永远不弹申请/进度。
+                if (SceneBankGateProgressPolicy.ShouldPreferReopenOverNewPrompt(
+                        _busy,
+                        UserBankDownloadFlow.IsBusy,
+                        ResolveActiveProgressTicket()))
+                {
                     TryReopenActiveProgress();
+                    // §4.6 / 同意链已结束但 Progress 未开票：清 orphan busy，允许再进门出进度。
+                    if (SceneBankGateProgressPolicy.ShouldClearOrphanedSpawnerBusy(
+                            _busy,
+                            UserBankDownloadFlow.IsBusy,
+                            ResolveActiveProgressTicket(),
+                            hasOtherPopup: false,
+                            consentPromptActive: DownloadConsentSession.IsPromptActive))
+                    {
+                        Log.Warning(
+                            "[SceneBankGate] orphan busy without progress ticket — clear for re-prompt");
+                        _busy = false;
+                        _downloadGate = null;
+                        _progressOpen = false;
+                        _progressEverAttached = false;
+                        _progressTicket = 0;
+                    }
+                }
                 else
                     TryBeginPrompt();
             }
@@ -273,17 +298,51 @@ namespace Game
                 && Time.time >= _retreatUntil + 0.2f)
                 cam.CancelDownloadRetreat();
 
-            // 弹窗那一下的后退要播完再还移动，避免半秒后又走进去。
+            // 只在后退期间锁平移；播完就还，固墙拦住进区，弹窗开着也能走开。
             bool retreatPlaying = cam != null && cam.IsDownloadRetreatPlaying;
-            if (_unlockMoveAfterExit && !retreatPlaying && !_progressOpen)
-            {
-                _unlockMoveAfterExit = false;
+            bool retreatWindowDone = _retreatUntil <= 0f || Time.time >= _retreatUntil;
+            if (_moveLocked && !retreatPlaying && retreatWindowDone)
                 SetDownloadMoveLock(false);
-            }
 
             // 人已经在门外时再采样一次，清掉弹窗锁，下次走进去才能再触发。
             if (cam == null || !StillInsideBlocked(cam))
                 SamplePlayerInside();
+        }
+
+        /// <summary>
+        /// 以真实进度窗为准校正 <see cref="_progressOpen"/>：
+        /// Flow 开窗后抬起；被 Critical 等顶掉 / 异步 Close 后清掉，避免挡住再开与清 latch。
+        /// </summary>
+        void SyncProgressOpenWithUi()
+        {
+            int ticket = ResolveActiveProgressTicket();
+            if (ticket > 0)
+                _progressTicket = ticket;
+
+            bool uiOpen = ticket > 0 && UiDialogService.IsProgressOpen(ticket);
+            if (uiOpen)
+            {
+                _progressOpen = true;
+                _progressEverAttached = true;
+                return;
+            }
+
+            if (!SceneBankGateProgressPolicy.ShouldClearOrphanedProgressOpen(
+                    _progressOpen,
+                    uiOpenForTicket: false,
+                    anyActiveProgressForm: UiDialogService.HasActiveProgressForm(),
+                    hasOtherPopup: HudOverlayGate.HasPopup()))
+                return;
+
+            Log.Info("[SceneBankGate] progress UI lost — clear open flag for reopen");
+            _progressOpen = false;
+        }
+
+        int ResolveActiveProgressTicket()
+        {
+            if (UserBankDownloadFlow.ActiveProgressTicket > 0)
+                return UserBankDownloadFlow.ActiveProgressTicket;
+            return _progressTicket;
         }
 
         void TryBeginPrompt()
@@ -302,18 +361,35 @@ namespace Game
         /// <summary>
         /// 这次下载还在跑、进度条已被关掉时，再次走进同一扇门只把进度条打开。
         /// 不另起一次下载。其它未下完的门不并行第二段下载。
+        /// UI 已丢时忽略 PromptLatched（否则再进只挡门、永远不弹条）。
         /// </summary>
         void TryReopenActiveProgress()
         {
             SceneBankGate gate = _downloadGate;
-            if (gate == null || !gate.IsBlocked || !gate.PlayerInside || gate.PromptLatched)
+            if (gate == null || !gate.IsBlocked || !gate.PlayerInside)
                 return;
-            int ticket = UserBankDownloadFlow.ActiveProgressTicket > 0
-                ? UserBankDownloadFlow.ActiveProgressTicket
-                : _progressTicket;
-            if (_progressOpen || ticket <= 0 || UiDialogService.IsProgressRetired(ticket))
+
+            int ticket = ResolveActiveProgressTicket();
+            bool ticketOk = ticket > 0 && !UiDialogService.IsProgressRetired(ticket);
+            bool uiOpen = ticketOk && UiDialogService.IsProgressOpen(ticket);
+            if (uiOpen)
+            {
+                _progressOpen = true;
+                _progressTicket = ticket;
+                gate.PromptLatched = true;
                 return;
-            if (UiDialogService.IsProgressOpen(ticket))
+            }
+
+            // 首次 Open 异步加载中：尚未 Attach，禁止叠第二张。
+            if (!_progressEverAttached)
+                return;
+
+            if (!SceneBankGateProgressPolicy.ShouldAttemptReopen(
+                    playerInsideBlockedGate: true,
+                    progressOpenFlag: _progressOpen,
+                    uiOpenForTicket: false,
+                    ticketValidAndNotRetired: ticketOk,
+                    hasOtherPopup: HudOverlayGate.HasPopup()))
                 return;
 
             if (!UiDialogService.ReopenDownloadProgress(ticket, OnProgressDismissed))
@@ -322,9 +398,9 @@ namespace Game
             gate.PromptLatched = true;
             _progressOpen = true;
             _progressTicket = ticket;
-            _unlockMoveAfterExit = false;
             SetDownloadMoveLock(true);
             BeginPopupRetreat();
+            Log.Info("[SceneBankGate] reopen progress ticket=" + ticket + " gate=" + gate.name);
         }
 
         void RefreshBlocked()
@@ -354,24 +430,42 @@ namespace Game
                 return;
             }
 
-            _unlockMoveAfterExit = false;
+            // 仅后退瞬间锁平移；同意链不再持锁（固墙拦住，弹窗不冻走）。
             SetDownloadMoveLock(true);
             BeginPopupRetreat();
 
             string[] zoneBanks = gate.ZoneBanks;
             string size = FormatResourceSize(zoneBanks);
-            Log.Info("[SceneBankGate] UserBankDownloadFlow size=" + size + " gate=" + gate.name);
+            // FeatureOn：保留「前方区域未下载」；FeatureOff：跳过申请、进门插队+进度。
+            bool wifiConfirm = BoluoAppLaunchCache.IsWifiDownloadConfirmEnabled();
+            bool acceptedOrBusy = DownloadConsentSession.WifiConfirmAccepted
+                || BankDownloader.HasBusyWork;
+            bool showRequest = BackgroundDownloadPolicy.ShouldShowGateRequestFirst(
+                wifiConfirm,
+                acceptedOrBusy);
+            Log.Info(
+                "[SceneBankGate] UserBankDownloadFlow size=" + size +
+                " gate=" + gate.name +
+                " wifiConfirm=" + wifiConfirm +
+                " acceptedOrBusy=" + acceptedOrBusy +
+                " showRequest=" + showRequest);
             SceneBankGate captured = gate;
             _busy = true;
             _downloadGate = captured;
-            _progressOpen = true;
+            // 进度窗在 Flow Attach 之后才算 open；同意链期间只靠申请窗 HasPopup。
+            _progressOpen = false;
+            _progressEverAttached = false;
+            _progressTicket = 0;
+
+            // 本区插队：静默全量已在队列时只 bump，不重下；进度窗只跟 zone banks。
+            BankDownloader.PriorityBanks(zoneBanks);
 
             UserBankDownloadFlow.Start(
                 zoneBanks,
                 new DownloadUiOptions
                 {
-                    LockMoveDuringPrompt = true,
-                    ShowRequestFirst = true,
+                    LockMoveDuringPrompt = false,
+                    ShowRequestFirst = showRequest,
                     RequestSizeMb = size,
                     OnCancel = EndPromptChain,
                 },
@@ -386,7 +480,7 @@ namespace Game
                 preempt: true);
         }
 
-        /// <summary>返回、无网、存储不足、只等 Wi-Fi：链结束。后退播完再还移动。</summary>
+        /// <summary>返回、无网、存储不足、只等 Wi-Fi：链结束。后退由 LateUpdate 还移动。</summary>
         void EndPromptChain()
         {
             // 同意链取消时 Flow 不会跑 onComplete，这里清掉 BeginPrompt 预置的 busy。
@@ -395,10 +489,9 @@ namespace Game
                 _busy = false;
                 _downloadGate = null;
                 _progressOpen = false;
+                _progressEverAttached = false;
                 _progressTicket = 0;
             }
-
-            _unlockMoveAfterExit = true;
         }
 
         /// <summary>弹窗出现时沿当前朝向，在 1 秒内后退大约 1 米。</summary>
@@ -480,13 +573,10 @@ namespace Game
         }
 #endif
 
-        /// <summary>玩家关掉进度条。下载继续。后退播完再还移动。</summary>
+        /// <summary>玩家关掉进度条。下载继续。</summary>
         void OnProgressDismissed()
         {
             _progressOpen = false;
-            if (!_busy && !UserBankDownloadFlow.IsBusy)
-                return;
-            _unlockMoveAfterExit = true;
         }
 
         /// <summary>Flow 已关进度窗并 Revoke；这里只清门状态与移动锁。</summary>
@@ -498,7 +588,7 @@ namespace Game
             _downloadGate = null;
             _progressTicket = 0;
             _progressOpen = false;
-            _unlockMoveAfterExit = false;
+            _progressEverAttached = false;
             RefreshBlocked();
             SetDownloadMoveLock(false);
             DownloadConsentSession.ReleaseSessionMoveLock();
@@ -519,7 +609,6 @@ namespace Game
         void OnDestroy()
         {
             _life++;
-            _unlockMoveAfterExit = false;
             DownloadConsentSession.ResetForLeaveIsland();
             SetDownloadMoveLock(false);
             _gates.Clear();
@@ -582,12 +671,17 @@ namespace Game
         {
             if (string.IsNullOrEmpty(bankName))
                 return true;
+            // IsLocalReady 已对空 url Skipped 回落 Probe；保留显式拒绝作双保险。
             if (!BankDownloader.IsLocalReady(bankName))
                 return false;
             if (BankDownloader.TryGetActiveItem(bankName, out BankDownloadItem item)
                 && item != null
                 && item.State == BankDownloadState.Skipped
-                && string.IsNullOrEmpty(item.Url))
+                && (string.IsNullOrEmpty(item.Url)
+                    || string.Equals(
+                        item.Error,
+                        BankDownloadItem.UrlEmptyError,
+                        System.StringComparison.Ordinal)))
                 return false;
             return true;
         }

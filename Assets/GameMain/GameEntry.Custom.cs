@@ -100,8 +100,10 @@ namespace Game
         }
 
         /// <summary>
-        /// 非平板包显示 FPS 角标：手机市场（originEnd=boluoapp）开；创维/一树横屏包关。
-        /// 与共享 unityLibrary 的 <c>BOLUO_PAD</c> 编译宏解耦，按宿主身份运行时判定。
+        /// FPS 角标：手机与闺蜜机开；仅平板关。
+        /// 平板口径与 <see cref="IslandMobileTune.UseTabletShadowDistance"/> 一致：
+        /// <see cref="ScreenLayout.IsPad"/> 且非 <see cref="BoluoDeviceInfo.IsSkyworthGmj"/>。
+        /// 与共享 unityLibrary 的 <c>BOLUO_PAD</c> 编译宏解耦，按屏形 + 宿主身份运行时判定。
         /// </summary>
         static void ConfigureDebuggerFps()
         {
@@ -110,11 +112,8 @@ namespace Game
             if (debugger == null)
                 return;
 
-            bool showFps = string.Equals(
-                BoluoDeviceInfo.GetOriginEnd(),
-                BoluoDeviceInfo.DefaultOriginEndApp,
-                StringComparison.OrdinalIgnoreCase);
-            debugger.ActiveWindow = showFps;
+            bool isPad = ScreenLayout.IsPad && !BoluoDeviceInfo.IsSkyworthGmj();
+            debugger.ActiveWindow = !isPad;
         }
 
         /// <summary>

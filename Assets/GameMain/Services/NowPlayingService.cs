@@ -19,14 +19,29 @@ namespace Game
         static bool _handlersBound;
         static bool _armed;
         static bool _userManuallyPaused;
+        /// <summary>
+        /// 定时到点停播闩：弹窗「取消/重复」前禁止回前台 / 点场景自动续播。
+        /// 否则 <see cref="AudioAppLifecycle.RestoreForegroundAudio"/> 会清 userPaused 并
+        /// Resume_ALL，音乐常续不上、声景却被拉起来。
+        /// </summary>
+        static bool _pausedForTimerEnd;
         static float _pendingPlayPauseAt = -1f;
         static bool _pendingWantMute;
         static bool _skipCancelPending;
 
         public static bool UserManuallyPaused => _userManuallyPaused;
+        public static bool PausedForTimerEnd => _pausedForTimerEnd;
         public static bool IsArmed => _armed;
 
         public static void NoteUserPaused(bool paused) => _userManuallyPaused = paused;
+
+        /// <summary>定时到点 / 弹窗续播：抬或清到点停播闩（抬时同步 userPaused）。</summary>
+        public static void NotePausedForTimerEnd(bool paused)
+        {
+            _pausedForTimerEnd = paused;
+            if (paused)
+                _userManuallyPaused = true;
+        }
 
         /// <summary>
         /// Android StreamingAssets 是 jar: URL，传相对 asset 路径给 MediaSession 解码；
@@ -54,6 +69,7 @@ namespace Game
             GlobalPlaybackIntentCallback.SetHandlers(OnIntentPauseAll, OnIntentResumeAll);
             GlobalPlaybackIntentCallback.SetMediaTrackChangedHandler(OnMediaTrackChanged);
             GlobalPlaybackIntentCallback.SetSystemAudioInterruptedHandler(OnSystemAudioInterrupted);
+            GlobalPlaybackIntentCallback.SetSystemAudioRestoredHandler(OnSystemAudioRestored);
             NowPlayingSkipBridge.SetHandlers(OnSkipNext, OnSkipPrev);
 
             MusicPauseUICallback.SetCallbacks(
@@ -122,6 +138,7 @@ namespace Game
             bool firstArm = !_armed;
             _armed = true;
             _userManuallyPaused = false;
+            _pausedForTimerEnd = false;
 
             // 每次 Arm 都确保平台门面 + 开闸：冷启动 Cleanup 会关 sPlaybackActive；
             // 若只在 !_armed 时 Init，已 Arm 但未 Init 会永久吞掉负一屏推送。
@@ -184,6 +201,7 @@ namespace Game
             music?.Stop(publish: false);
             music?.DisarmAfterLeave();
             _userManuallyPaused = false;
+            _pausedForTimerEnd = false;
             // 先 Disarm，堵住拆除窗口里 PublishFromPlaylist 再推非空 title。
             _armed = false;
 
@@ -333,6 +351,26 @@ namespace Game
             Log.Info("[NowPlaying] system audio interrupted — content paused with music");
         }
 
+        /// <summary>
+        /// 原生短暂打断结束并自动续播：清 yield + 恢复内容声（前后台均可）。
+        /// 定时结束弹窗未关时禁止拉回声景（与回前台 keep mute 同口径）。
+        /// </summary>
+        static void OnSystemAudioRestored()
+        {
+            if (_pausedForTimerEnd)
+            {
+                Log.Info("[NowPlaying] system audio restored skipped — timer end mute");
+                return;
+            }
+
+            WanosEngine.ClearInterrupted("system-audio-restored");
+            MusicPauseUICallback.Hide();
+            IslandAudioSession.Instance?.RestoreContentAudio("system-audio-restored");
+            IslandAudioSession.ClearYieldHold();
+            IslandAudioSession.NoteAudibleCommitted();
+            Log.Info("[NowPlaying] system audio restored — content with music");
+        }
+
         static void OnMediaTrackChanged()
         {
             _userManuallyPaused = false;
@@ -362,6 +400,7 @@ namespace Game
                 case MsgType.MediaPlay:
                     // 定时结束弹窗「取消/重复」：立刻 ResumeAfterTimerEnd（音乐+音效闸+EnsureAudible），
                     // 跳过 coalesce/skip，与原生 resumeFromUserAction 双保险。
+                    _pausedForTimerEnd = false;
                     _userManuallyPaused = false;
                     _pendingPlayPauseAt = -1f;
                     _skipCancelPending = false;

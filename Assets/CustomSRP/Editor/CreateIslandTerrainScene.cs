@@ -455,6 +455,7 @@ namespace CustomSRP.Editor
             if (layer == null)
                 layer = sun.gameObject.AddComponent<OilCloudLayer>();
             layer.material = cloudMat;
+            TestSceneUtility.BindOilCloudPainterlyMaps(layer);
             layer.coverage = 0.85f;
             layer.wind = 0.2f;
             layer.ringScale = 1.85f;

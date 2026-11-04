@@ -5,10 +5,8 @@ TEXTURE2D(_CloudMap);
 SAMPLER(sampler_CloudMap);
 TEXTURE2D(_NoiseMap);
 SAMPLER(sampler_NoiseMap);
-TEXTURE2D(_CloudBrush);
-SAMPLER(sampler_CloudBrush);
 
-// Per camera. Set from the cloud pass, not the material.
+// Per camera. Set from the cloud pass.
 float3 _OilCloudSunDir;
 float3 _OilCloudMoonDir;
 float4 _OilCloudColor;
@@ -18,13 +16,15 @@ float4 _OilCloudHorizon;
 float4 _OilCloudAmbientSky;
 float4 _OilCloudAmbientEquator;
 float4 _OilCloudAmbientGround;
-float4 _OilCloudParams; // x moonBlend, y coverage, z unused, w sunrise 0-1
+float4 _OilCloudParams; // x moonBlend, y coverage, z unused, w drift
 float4 _OilCloudWind;   // x yaw speed, y yaw radians, z cell disturb, w wind 0-1
 float _OilCloudDawn;
 float _OilCloudNight;
 
 CBUFFER_START(UnityPerMaterial)
+    float4 _CloudMap_ST;
     float4 _NoiseMap_ST;
+    float _NoiseSpeed;
     float _UVDisturbance;
     float _SdfSoftness;
     float _SdfMin;

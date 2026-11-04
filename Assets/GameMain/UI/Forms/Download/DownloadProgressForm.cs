@@ -20,6 +20,8 @@ namespace Game
         protected override bool SlidesUpFromBottom => true;
         protected override bool CloseOnBackdropClick => true;
         protected override bool PinDocumentOrder => true;
+        // 进度窗只提示；固墙拦住进区，开着仍可走开。
+        protected override bool AllowsLocomotionWhileOpen => true;
 
         protected override void OnBackdropDismiss()
         {
@@ -58,7 +60,10 @@ namespace Game
                 CloseSelf();
             });
 
+            // Attach 内部若发现票已退役会 Dismiss（Close 早于异步 OnOpen）。
             UiDialogService.AttachProgressForm(this, ticket);
+            if (UiDialogService.IsProgressRetired(ticket))
+                return;
         }
 
         public void Dismiss()

@@ -23,6 +23,8 @@ namespace Game
         protected override bool SlidesUpFromBottom => true;
         protected override bool CloseOnBackdropClick => true;
         protected override bool PinDocumentOrder => true;
+        // 固墙拦住进区；申请窗开着仍可走开（空白穿透摇杆）。
+        protected override bool AllowsLocomotionWhileOpen => true;
 
         protected override void OnBackdropDismiss()
         {

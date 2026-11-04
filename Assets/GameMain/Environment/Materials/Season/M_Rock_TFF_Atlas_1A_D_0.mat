@@ -61,6 +61,7 @@ Material:
     - _BakedStroke: 0
     - _BoluoColorOverlay: 0
     - _BumpScale: 0
+    - _BumpTiling: 4
     - _Canvas: 1
     - _CanvasStrength: 0.1
     - _Clipping: 0
@@ -70,11 +71,17 @@ Material:
     - _EdgeFade: 0.12
     - _EdgeStrength: 0.55
     - _EnableAntiTile: 0
+    - _FoliageHeight: 12
+    - _FoliageYMin: 0
+    - _GradientOffset: 0
+    - _GradientSmoothness: 0.16
     - _InternalEdge: 0
     - _LayerDetailStrength: 0
     - _NormalStrength: 0.6
-    - _BumpTiling: 4
+    - _OilBark: 0
+    - _OilCrossBillboard: 0
     - _OilFoliage: 0
+    - _OilYBillboard: 0
     - _PaintThickness: 0.18
     - _ReceiveShadows: 1
     - _RockSeason: 1
@@ -88,7 +95,7 @@ Material:
     - _SpecularThreshold: 0.86
     - _SrcBlend: 1
     - _TriplanarTiling: 0.06
-    - _WorldTriplanar: 2
+    - _WorldTriplanar: 0
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}

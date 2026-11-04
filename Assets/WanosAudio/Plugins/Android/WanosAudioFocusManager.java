@@ -32,9 +32,10 @@ import java.lang.reflect.Method;
  * <p>处理策略（与 iOS 对齐）：</p>
  * <ul>
  *   <li>播放开始 → requestFocus(GAIN) 并注册 OnAudioFocusChangeListener。</li>
- *   <li>LOSS_TRANSIENT_CAN_DUCK：前台无 competing → duck ~40%；后台或 MEDIA 竞争（B 站 MAY_DUCK）→ 抢占 mute。</li>
- *   <li>LOSS_TRANSIENT：暂停；进后台 800ms 内无 competing 可忽略（CWPA-44 抖动）。
- *       OEM 提示音常不回 GAIN：~1.8s 看门狗在非通话时改走 competing poll 重申焦点。</li>
+ *   <li>LOSS_TRANSIENT_CAN_DUCK：统一护栏 mute + Pause_ALL（微信语音常用 MAY_DUCK）。
+ *       禁止生命周期边沿 suppress——切微信后 1.5s 内首条语音常 !competing，吞了会首次拦不住。</li>
+ *   <li>LOSS_TRANSIENT：暂停；仅生命周期边沿且无 competing / 无外来声 / 非通话可忽略（HOME）。
+ *       OEM 提示音常不回 GAIN：~1.8s 看门狗转 competing poll，禁止误 resume。</li>
  *   <li>GAIN → unduck；pendingResume 时，若本轮见过 MEDIA 竞争则先静默确认再 unmute
  *       （前台 2s / 后台 30s），避免 B 站暂停漏一声尾音；系统提示等未见 MEDIA 的 GAIN
  *       后台也立刻恢复（不必回前台）。后台且对方 MEDIA 仍在播 → 禁止 request GAIN 抢占。</li>
@@ -55,11 +56,10 @@ final class WanosAudioFocusManager {
     private static final int COMPETING_AUDIO_POLL_MAX = 120;
     /** 回前台强抢最小间隔：避免快切前后台重复 request/resume 导致音效卡顿。 */
     private static final long RECLAIM_DEBOUNCE_MS = 400L;
-    /** 进后台后仅在此窗口内忽略 LOSS_TRANSIENT（CWPA-44）；超时视为 B 站等真竞争。 */
-    private static final long BACKGROUND_TRANSIENT_SUPPRESS_WINDOW_MS = 800L;
     /**
      * 前后台边沿：回前台会先把 appInBackground 清掉，紧接着的焦点抖动不再满足「已在后台」。
      * 边沿内无 competing、非通话则不 mute，避免切回来停一下。
+     * （曾用「进后台 800ms」吞 TRANSIENT，会误伤微信听语音，已去掉。）
      */
     private static final long LIFECYCLE_EDGE_SUPPRESS_MS = 1500L;
     /** 对齐 C# AndroidForegroundCompetingResumeDebounceMs：一起启动 / 切视频间隙防尾音。 */
@@ -75,6 +75,8 @@ final class WanosAudioFocusManager {
     private static final long TRANSIENT_GAIN_WATCHDOG_MS = 1800L;
     /** CAN_DUCK 后 OEM 拆轨且不回 GAIN：超时 unduck 并标记重开设备。 */
     private static final long DUCK_STALE_WATCHDOG_MS = 2000L;
+    /** 蓝牙/耳机断开后等路由落到扬声器再续（对齐 iOS RD soft resume）。 */
+    private static final long BECOMING_NOISY_RESUME_DELAY_MS = 700L;
 
     private long lastReclaimAttemptElapsedMs = 0L;
 
@@ -168,6 +170,7 @@ final class WanosAudioFocusManager {
     private final Runnable silenceConfirmPoll = this::pollSilenceConfirm;
     private final Runnable transientGainWatchdog = this::onTransientGainWatchdog;
     private final Runnable duckStaleWatchdog = this::onDuckStaleWatchdog;
+    private final Runnable becomingNoisyResume = this::onBecomingNoisyResume;
     private boolean volumeReceiverRegistered;
     private final BroadcastReceiver volumeReceiver = new BroadcastReceiver() {
         @Override
@@ -522,6 +525,7 @@ final class WanosAudioFocusManager {
                 stopCompetingAudioPoll();
                 stopTransientGainWatchdog();
                 stopDuckStaleWatchdog();
+                mainHandler.removeCallbacks(becomingNoisyResume);
                 clearCompetingEpisodeLocked();
                 // 停播时系统不一定再发 GAIN；若不在此 unduck，Unity 侧会粘在 ~0.4 音量
                 if (ducked) {
@@ -615,43 +619,37 @@ final class WanosAudioFocusManager {
                     break;
                 }
                 case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK: {
-                    // 前台无 competing media：duck ~40%（导航/短信，PRD P0-2/P0-3）。
-                    // 后台或已有 MEDIA/GAME 竞争（B 站常用 MAY_DUCK）→ 抢占静音，禁止叠播。
+                    // 微信听/发语音常用 MAY_DUCK。禁止再吃「生命周期边沿」——切微信后 1.5s 内
+                    // 首条语音常 !competing，旧 suppress 导致首次拦不住、第二次才停。
+                    // 对齐 iOS WeChat-safe：统一护栏 Pause（focus_pause）。
                     noteBackgroundStateLocked();
                     boolean competing = isCompetingMediaPlaybackActive(getAudioManager());
-                    // 后台或对方 MEDIA 出声 → 抢占。前台无 competing 仍 duck（导航/短信）。
-                    boolean preempt = callback.isAppInBackground() || competing;
                     long t0 = SystemClock.elapsedRealtime();
-                    if (!competing && shouldIgnoreLifecycleFlickerLocked()) {
-                        Log.i(TAG, "LOSS_TRANSIENT_CAN_DUCK suppressed (lifecycle edge)");
-                        break;
+                    Log.i(TAG, "LOSS_TRANSIENT_CAN_DUCK -> pause (WeChat-safe) competing="
+                            + competing + " bg=" + callback.isAppInBackground());
+                    Log.i(TAG, "[CWPA-66] CAN_DUCK pause competing=" + competing
+                            + " bg=" + callback.isAppInBackground());
+                    if (competing) {
+                        // 真 MEDIA：记 episode + poll，回前台才续。
+                        applyCompetingPreemptLocked(changeName, true, true);
+                    } else {
+                        // 无 foreign 快照（微信语音常见）：勿走 preempt 的 skip mute 分支。
+                        // watchdog 无 GAIN 会转 competing poll，对方停后后台可恢复。
+                        applyTransientPauseLocked();
+                        startTransientGainWatchdog();
                     }
-                    if (preempt) {
-                        Log.i(TAG, "LOSS_TRANSIENT_CAN_DUCK -> preempt bg="
-                                + callback.isAppInBackground() + " competing=" + competing);
-                        Log.i(TAG, "[CWPA-66] CAN_DUCK preempt bg="
-                                + callback.isAppInBackground() + " competing=" + competing);
-                        // competingLongUi / startPoll 仅真 MEDIA；系统提示不得记 episode（否则 30s 死等回前台）。
-                        applyCompetingPreemptLocked(changeName, competing, competing);
-                        if (callback.isAppInBackground() && !competing) {
-                            startTransientGainWatchdog();
-                        }
-                    } else if (callback.isEnginePlaying()) {
-                        ducked = true;
-                        Log.i(TAG, "LOSS_TRANSIENT_CAN_DUCK -> duck");
-                        callback.onFocusDuck();
-                        startDuckStaleWatchdog();
-                        reportFocusBls("boluo_audio_focus_loss", "info", changeName,
-                                false, SystemClock.elapsedRealtime() - t0, "transient_duck");
-                    }
+                    reportFocusBls("boluo_audio_focus_loss", "warn", changeName,
+                            pendingResume, SystemClock.elapsedRealtime() - t0,
+                            competing ? "can_duck_preempt" : "can_duck_transient_pause");
                     break;
                 }
                 case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT: {
-                    // 瞬时丢焦（来电等）：暂停并记 pendingResume，不放弃焦点，等待系统回调 GAIN。
-                    // CWPA-44：进后台 800ms 内无 competing 可忽略抖动；其后或 B 站 competing 禁止忽略。
+                    // 瞬时丢焦（来电 / 微信语音等）：暂停并记 pendingResume，等系统 GAIN。
+                    // CWPA-44：仅生命周期边沿无 competing / 无外来声 / 非通话可忽略 HOME 抖动。
                     long t0 = SystemClock.elapsedRealtime();
                     noteBackgroundStateLocked();
-                    boolean competing = isCompetingMediaPlaybackActive(getAudioManager());
+                    AudioManager amTransient = getAudioManager();
+                    boolean competing = isCompetingMediaPlaybackActive(amTransient);
                     long bgAge = lastObservedBackground
                             ? (t0 - backgroundEnteredElapsedMs) : 0L;
                     // 回前台刚强抢后 B 站仍发 TRANSIENT：禁止再 pause，立刻再申 GAIN。
@@ -665,17 +663,17 @@ final class WanosAudioFocusManager {
                         }
                         break;
                     }
+                    // 首通来电 / 微信偶发走 TRANSIENT：边沿内若已有外来声或通话模式禁止吞。
                     boolean suppress = !competing
-                            && !isInVoiceCallLocked(getAudioManager())
+                            && !isInVoiceCallLocked(amTransient)
+                            && !isExternalMusicActiveLocked(amTransient)
                             && callback.allowsUninterruptedBackgroundPlayback()
-                            && (isLifecycleEdgeLocked()
-                            || (callback.isAppInBackground()
-                            && bgAge < BACKGROUND_TRANSIENT_SUPPRESS_WINDOW_MS));
+                            && isLifecycleEdgeLocked();
                     if (suppress) {
-                        Log.i(TAG, "LOSS_TRANSIENT suppressed (bg flicker window age="
+                        Log.i(TAG, "LOSS_TRANSIENT suppressed (lifecycle edge age="
                                 + bgAge + "ms)");
                         reportFocusBls("boluo_audio_focus_loss", "info", changeName,
-                                false, 0, "transient_suppressed_background_play");
+                                false, 0, "transient_suppressed_lifecycle_edge");
                         break;
                     }
                     Log.i(TAG, "LOSS_TRANSIENT -> pause competing=" + competing
@@ -724,12 +722,6 @@ final class WanosAudioFocusManager {
         return SystemClock.elapsedRealtime() - lastLifecycleEdgeElapsedMs < LIFECYCLE_EDGE_SUPPRESS_MS;
     }
 
-    private boolean shouldIgnoreLifecycleFlickerLocked() {
-        return callback.allowsUninterruptedBackgroundPlayback()
-                && isLifecycleEdgeLocked()
-                && !isInVoiceCallLocked(getAudioManager());
-    }
-
     /**
      * 长期竞争抢占：mute、记 pending。
      * @param startPoll true=对方停止后无 GAIN（LOSS / 已见到 PlaybackConfiguration）；
@@ -738,11 +730,14 @@ final class WanosAudioFocusManager {
      */
     private void applyCompetingPreemptLocked(String reason, boolean competingLongUi,
                                             boolean startPoll) {
-        // 后台续播只忽略「没有外来音源」的自扰（HOME 焦点抖动 / 自身轨误报）。
-        // AUDIOFOCUS_LOSS 与已确认的外来 MEDIA 必须停：切到抖音 / QQ 音乐时不能继续出声。
-        boolean hardLoss = "AUDIOFOCUS_LOSS".equals(reason);
+        // 后台续播只忽略「没有外来音源」的自扰（PlaybackConfiguration 误报等）。
+        // 系统焦点回调（LOSS / TRANSIENT / CAN_DUCK）已确认丢焦——微信语音常在 foreign
+        // 快照之前到达，禁止再 skip mute。
+        boolean systemFocusLoss = "AUDIOFOCUS_LOSS".equals(reason)
+                || "AUDIOFOCUS_LOSS_TRANSIENT".equals(reason)
+                || "AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK".equals(reason);
         boolean foreign = isCompetingMediaPlaybackActive(getAudioManager());
-        if (!hardLoss && !foreign && callback.shouldSuppressTransientPauseInBackground()) {
+        if (!systemFocusLoss && !foreign && callback.shouldSuppressTransientPauseInBackground()) {
             Log.i(TAG, "[CWPA-audio] " + reason + " skip mute (keep playing bg, no foreign)");
             return;
         }
@@ -774,8 +769,10 @@ final class WanosAudioFocusManager {
 
     /** 瞬时丢焦暂停：不放弃本地焦点记账以外的轮询（等系统 GAIN）。 */
     private void applyTransientPauseLocked() {
-        // 800ms 无 competing 的后台抖动已在 onAudioFocusChange 里丢掉。
-        // 能进到这里的是真 TRANSIENT（来电 / 抖音 / QQ 音乐），后台续播也要停。
+        // 能进到这里的是真 TRANSIENT（来电 / 微信语音），后台续播也要停。
+        // 必须清 hasFocus：旧逻辑保留 true → 1.8s TRANSIENT watchdog 走
+        // 「hasFocus → onFocusResume」把 Pause_ALL 的音效又 Resume_ALL 拉起来（音乐常仍 Pause）。
+        hasFocus = false;
         markReopenLocked(BoluoAudioStutterProbe.REOPEN_TRANSIENT);
         if (callback.isEnginePlaying()) {
             pendingResume = true;
@@ -786,6 +783,58 @@ final class WanosAudioFocusManager {
             ducked = false;
         }
         callback.onFocusPauseUi(false);
+    }
+
+    /**
+     * 蓝牙/耳机断开（ACTION_AUDIO_BECOMING_NOISY）：停音乐+音效，短延迟后后台自恢复。
+     * 若有外来 MEDIA（QQ/B 站）则不抢，等回前台 reclaim。
+     */
+    void onBecomingNoisy() {
+        synchronized (focusLock) {
+            Log.i(TAG, "BECOMING_NOISY -> pause + schedule BG resume");
+            markReopenLocked(BoluoAudioStutterProbe.REOPEN_DEVICE_ROUTE);
+            if (callback.isEnginePlaying()) {
+                pendingResume = true;
+            }
+            callback.onFocusPause();
+            if (ducked) {
+                ducked = false;
+            }
+            callback.onFocusPauseUi(false);
+            mainHandler.removeCallbacks(becomingNoisyResume);
+            mainHandler.postDelayed(becomingNoisyResume, BECOMING_NOISY_RESUME_DELAY_MS);
+            reportFocusBls("boluo_audio_focus_loss", "info", "BECOMING_NOISY",
+                    pendingResume, 0, "route_disconnect_pause");
+        }
+    }
+
+    private void onBecomingNoisyResume() {
+        synchronized (focusLock) {
+            if (!pendingResume) {
+                return;
+            }
+            if (isInVoiceCallLocked(getAudioManager())) {
+                Log.i(TAG, "BECOMING_NOISY resume deferred (voice call)");
+                mainHandler.postDelayed(becomingNoisyResume, BECOMING_NOISY_RESUME_DELAY_MS);
+                return;
+            }
+            // QQ/B 站仍在播：禁止后台抢，等回前台。
+            if (isCompetingMediaAppPlaybackActive(getAudioManager())) {
+                Log.i(TAG, "BECOMING_NOISY resume skip — competing media, wait foreground");
+                noteCompetingSeenLocked();
+                startCompetingAudioPoll();
+                return;
+            }
+            Log.i(TAG, "BECOMING_NOISY resume after route settle");
+            boolean granted = hasFocus || performRequestFocus(false, false);
+            if (granted) {
+                pendingResume = false;
+                clearCompetingEpisodeLocked();
+                callback.onFocusResume();
+            } else {
+                startCompetingAudioPoll();
+            }
+        }
     }
 
     /** 尚未持焦时也注册 PlaybackCallback，启动期切到其它播放器能被看到。 */
@@ -982,6 +1031,12 @@ final class WanosAudioFocusManager {
                 startSilenceConfirmLocked();
                 return;
             }
+            // QQ/B 站等 MEDIA competing 停后：后台不抢播，等回前台 reclaim。
+            if (competingEpisodeSawMedia) {
+                Log.i(TAG, "silence confirmed BG competing-media — defer until foreground");
+                Log.i(TAG, "[CWPA-66] silence-confirm BG defer FG reclaim");
+                return;
+            }
             boolean granted = hasFocus || performRequestFocus(false, false);
             if (granted) {
                 pendingResume = false;
@@ -1028,8 +1083,8 @@ final class WanosAudioFocusManager {
                 return;
             }
             // 仍有其它音源在播 → 继续等待（带看门狗上限）。
-            // CWPA-66：isMusicActive 对哔哩/腾讯视频等纯视频流常为 false，须再查活跃 PlaybackConfiguration。
-            if (isCompetingPlaybackActive(am)) {
+            // CWPA-66：PlaybackConfiguration 对视频常漏检；微信语音常无 UID → 再靠 isMusicActive。
+            if (isCompetingPlaybackActive(am) || isExternalMusicActiveLocked(am)) {
                 competingAudioPollCount++;
                 if (competingAudioPollCount < COMPETING_AUDIO_POLL_MAX) {
                     mainHandler.postDelayed(competingAudioPoll, COMPETING_AUDIO_POLL_INTERVAL_MS);
@@ -1047,6 +1102,12 @@ final class WanosAudioFocusManager {
                         "[CWPA-66] poll defer silence-confirm bg="
                                 + callback.isAppInBackground());
                 startSilenceConfirmLocked();
+                return;
+            }
+            // QQ/B 站 MEDIA 停后：后台保持 pending，等回前台 reclaim（禁止后台抢播）。
+            if (competingEpisodeSawMedia) {
+                Log.i(TAG, "competing media gone BG — defer until foreground");
+                Log.i(TAG, "[CWPA-66] poll BG competing-media defer FG reclaim");
                 return;
             }
             // 其它音源已停止且静默确认通过 → 重新申请焦点。
@@ -1115,11 +1176,22 @@ final class WanosAudioFocusManager {
                 }
                 Boolean foreign = isForeignClient(cfg, myUid);
                 if (foreign == null) {
-                    // 无 UID 时无法与自身 Unity/WIA 多路流区分，交给 CAN_DUCK 后台升级 / TRANSIENT 窗口
-                    continue;
+                    // 微信语音常无 UID；VOICE/SPEECH 本进程不会发 → 当外来，禁止 1.8s 误 resume。
+                    if (isVoiceOrSpeechUsage(attrs)) {
+                        foreign = Boolean.TRUE;
+                        Log.i(TAG, "[CWPA-66] uid-less VOICE/SPEECH treated as foreign"
+                                + " usage=" + attrs.getUsage()
+                                + " content=" + attrs.getContentType());
+                    } else {
+                        // 无 UID 的 MEDIA 无法与自身 WIA 区分，交给 isMusicActive 兜底
+                        continue;
+                    }
                 }
                 if (foreign) {
-                    noteCompetingSeenLocked();
+                    // 仅 QQ/B 站等 MEDIA 记 episode（回前台才续）；微信 VOICE 不记，允许后台 GAIN 续。
+                    if (isForeignMediaAppUsage(attrs)) {
+                        noteCompetingSeenLocked();
+                    }
                     int uid = -1;
                     int pid = -1;
                     try {
@@ -1146,11 +1218,92 @@ final class WanosAudioFocusManager {
         return false;
     }
 
+    /** 仅 QQ 音乐 / B 站等 MEDIA 出声（不含微信 VOICE）——用于后台禁止抢播。 */
+    private boolean isCompetingMediaAppPlaybackActive(AudioManager am) {
+        if (am == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return false;
+        }
+        try {
+            List<AudioPlaybackConfiguration> configs = am.getActivePlaybackConfigurations();
+            if (configs == null) {
+                return false;
+            }
+            int myUid = Process.myUid();
+            for (AudioPlaybackConfiguration cfg : configs) {
+                if (cfg == null || !isPlaybackStarted(cfg)) {
+                    continue;
+                }
+                AudioAttributes attrs = cfg.getAudioAttributes();
+                if (attrs == null || !isForeignMediaAppUsage(attrs)) {
+                    continue;
+                }
+                if (attrs.getUsage() == AudioAttributes.USAGE_MEDIA
+                        && attrs.getContentType() == AudioAttributes.CONTENT_TYPE_UNKNOWN) {
+                    continue;
+                }
+                if (attrs.getUsage() == AudioAttributes.USAGE_MEDIA
+                        && attrs.getContentType() == AudioAttributes.CONTENT_TYPE_MUSIC
+                        && BoluoKeepPlayingMediaAnchor.isRunning()) {
+                    Boolean own = isForeignClient(cfg, myUid);
+                    if (own == null || !own) {
+                        continue;
+                    }
+                }
+                Boolean foreign = isForeignClient(cfg, myUid);
+                if (foreign != null && foreign) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "isCompetingMediaAppPlaybackActive: " + e.getMessage());
+        }
+        return false;
+    }
+
     /**
-     * 对方音乐/视频 competing：只认 MEDIA/影视。
+     * 对方 competing：MEDIA/影视，以及微信语音等 VOICE/SPEECH。
      * USAGE_GAME 不计入——SKS30 上自身 AAudio 常被标 GAME 且 UID 错报，unmute 后会误抢占自己。
      */
     private static boolean isForeignCompetingUsage(AudioAttributes attrs) {
+        return isForeignMediaAppUsage(attrs) || isVoiceOrSpeechUsage(attrs);
+    }
+
+    /** 微信听/发语音常见 usage；本进程 WIA 不会发这些。 */
+    private static boolean isVoiceOrSpeechUsage(AudioAttributes attrs) {
+        int usage = attrs.getUsage();
+        return usage == AudioAttributes.USAGE_VOICE_COMMUNICATION
+                || usage == AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING
+                || usage == AudioAttributes.USAGE_ASSISTANT
+                || usage == AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE
+                || attrs.getContentType() == AudioAttributes.CONTENT_TYPE_SPEECH;
+    }
+
+    /**
+     * 已 mute/Pause 后自身可听轨常空：此时 {@link AudioManager#isMusicActive()} 真即外来
+     * （微信语音消息常无 UID）。若保活 MEDIA 锚点仍占 mixer，不能单靠此 API——交给 GAIN。
+     */
+    private boolean isExternalMusicActiveLocked(AudioManager am) {
+        if (am == null) {
+            return false;
+        }
+        try {
+            if (!am.isMusicActive()) {
+                return false;
+            }
+            // 清晰外来 config 优先
+            if (isCompetingMediaPlaybackActive(am)) {
+                return true;
+            }
+            // 自身 mixer 已空仍 isMusicActive → 外来（常见微信）
+            return !isSelfMediaPlaybackActive(am);
+        } catch (Exception e) {
+            Log.w(TAG, "isExternalMusicActiveLocked: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** QQ / B 站等长期 MEDIA competing（回前台才续）；不含微信 VOICE。 */
+    private static boolean isForeignMediaAppUsage(AudioAttributes attrs) {
         int usage = attrs.getUsage();
         int content = attrs.getContentType();
         return usage == AudioAttributes.USAGE_MEDIA
@@ -1286,7 +1439,7 @@ final class WanosAudioFocusManager {
 
     /**
      * OEM 提示音结束后不发 GAIN：非通话则改走 competing poll 重申焦点。
-     * 通话中续期，避免 1.8s 抢焦叠在电话上。
+     * 通话 / 微信语音中续期或转 poll，禁止 1.8s 误 resume（音效 3s 回潮）。
      */
     private void onTransientGainWatchdog() {
         synchronized (focusLock) {
@@ -1299,30 +1452,26 @@ final class WanosAudioFocusManager {
                 startTransientGainWatchdog();
                 return;
             }
-            if (isCompetingMediaPlaybackActive(am)) {
-                Log.i(TAG, "TRANSIENT GAIN watchdog: competing still active, poll (do not steal)");
+            if (isCompetingMediaPlaybackActive(am) || isExternalMusicActiveLocked(am)) {
+                Log.i(TAG, "TRANSIENT GAIN watchdog: external still active, poll (do not steal)");
                 Log.i(TAG,
                         "[PA-904] TRANSIENT watchdog skip reclaim competing media");
                 startCompetingAudioPoll();
                 return;
             }
-            Log.i(TAG, "TRANSIENT GAIN watchdog — no competing, reacquire");
-            Log.i(TAG, "[PA-904] TRANSIENT GAIN watchdog reacquire");
-            markReopenLocked(BoluoAudioStutterProbe.REOPEN_TRANSIENT);
-            if (hasFocus) {
-                pendingResume = false;
-                clearCompetingEpisodeLocked();
-                callback.onFocusResume();
+            // 尚未收到系统 GAIN：禁止因「本地 hasFocus 残留 / 扫不到微信 UID」强抢续播。
+            // 短提示音停后 poll 会在无外来轨时 requestFocus；微信未结束则 isMusicActive 拦住。
+            if (!hasFocus) {
+                Log.i(TAG, "TRANSIENT GAIN watchdog — still no GAIN, poll (no steal)");
+                Log.i(TAG, "[PA-904] TRANSIENT watchdog defer until GAIN/poll");
+                startCompetingAudioPoll();
                 return;
             }
-            boolean granted = performRequestFocus(false, false);
-            if (granted) {
-                pendingResume = false;
-                clearCompetingEpisodeLocked();
-                callback.onFocusResume();
-            } else {
-                startCompetingAudioPoll();
-            }
+            Log.i(TAG, "TRANSIENT GAIN watchdog — focus already restored, resume");
+            Log.i(TAG, "[PA-904] TRANSIENT GAIN watchdog resume hasFocus");
+            pendingResume = false;
+            clearCompetingEpisodeLocked();
+            callback.onFocusResume();
         }
     }
 
