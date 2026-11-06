@@ -16,8 +16,10 @@ namespace CustomSRP
     public sealed class OilTerrainGrassBinder : MonoBehaviour
     {
         const float CellSize = 16f;
-        const float WindowRebuildMeters = 48f;
+        const float WindowRebuildMeters = 32f;
         const float WindowPackPaddingMeters = 90f;
+        /// <summary>距打包窗缘不足此比例×draw 时提前开建，避免走到硬边才换窗。</summary>
+        const float WindowEdgeRebuildDrawFrac = 0.65f;
         const float FarGrassFullDensityMeters = 32f;
         const int FarBladeSegments = 2;
         const int ArgsStride = sizeof(uint) * 5;
@@ -27,6 +29,11 @@ namespace CustomSRP
         const int ShrinkKindVisibleFar = 3;
         const int ShrinkKindCount = 4;
         const long GrassShrinkBudgetMs = 1;
+        const long GrassPackBudgetMs = 1;
+        const int GrassPackMaxStride = 16;
+        const int GmjRecullIntervalFrames = 2;
+        const float GmjRecullMoveMeters = 1f;
+        const float GmjRecullAngleDeg = 8f;
 
         static readonly int WindDirId = Shader.PropertyToID("_OilGrassWindDir");
         static readonly int WindStrengthId = Shader.PropertyToID("_OilGrassWindStrength");
@@ -134,6 +141,7 @@ namespace CustomSRP
         Vector3 _windowCenter;
         int[] _cellOrder = System.Array.Empty<int>();
         float[] _cellDistSq = System.Array.Empty<float>();
+        int[] _packStrides = System.Array.Empty<int>();
         List<Vector4>[] _windowPackLists;
         Vector4[][] _windowPackUpload;
         readonly Stopwatch _grassWork = new Stopwatch();
@@ -141,6 +149,16 @@ namespace CustomSRP
         bool _submittedGrassThisFrame;
         bool _shrinkQueued;
         int _shrinkCursor;
+        bool _packRebuildActive;
+        Vector3 _packFocus;
+        int _packCellN;
+        int _packCursor;
+        int _packRemaining;
+        bool _forceCullThisFrame;
+        int _gmjFramesSinceCull;
+        Vector3 _gmjLastCullPos;
+        Quaternion _gmjLastCullRot;
+        bool _hasGmjCullView;
         /// <summary>
         /// DrawIndirect 之后不能立刻 Release：真机 hitch 后帧计数不够，
         /// 墙钟延后才安全（揭罩同窗 SEGV 实测 Unlock+30ms）。
@@ -239,6 +257,7 @@ namespace CustomSRP
                 RebuildTopologyMeshes();
             }
 
+            CancelPackRebuild();
             _windowDirty = true;
         }
 
@@ -386,9 +405,10 @@ namespace CustomSRP
             _maxZ = maxZ;
             _packedCount = 0;
             _hasWindow = false;
+            CancelPackRebuild();
             _windowDirty = true;
             EnsureGpu();
-            RebuildBakeWindow(ResolveGrassFocus());
+            BeginPackRebuild(ResolveGrassFocus());
         }
 
         public void DrawForCamera(Camera cam)
@@ -460,17 +480,33 @@ namespace CustomSRP
                 return;
 
             var camTf = cam.transform;
-            // 闺蜜机：停稳判定更严，微抖/刚停住也继续复用，避免树密朝向草重算尖刺。
-            bool gmj = Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmjStandard();
+            // 闺蜜机（含 4K）：停稳判定更严，微抖/刚停住也继续复用，避免树密朝向草重算尖刺。
+            bool gmj = Game.BoluoApi.BoluoDeviceInfo.IsSkyworthGmj();
             float settlePosSq = gmj ? 0.01f : 0.04f;
             float settleAngle = gmj ? 0.35f : 0.75f;
             bool settled = _hasGrassView
                 && (camTf.position - _lastGrassCamPos).sqrMagnitude <= settlePosSq
                 && Quaternion.Angle(camTf.rotation, _lastGrassCamRot) <= settleAngle;
-            // 闺蜜机标准版：转头/走动/未完全停稳时整段复用上一份草 submit。
-            bool gmjThrottle = !settled
-                && _hasLastGrassSubmit
-                && gmj;
+
+            bool needCull = _forceCullThisFrame || !_hasLastGrassSubmit;
+            if (!needCull && gmj && !settled)
+            {
+                // 走动/转头节流重剔，禁止一直 replay 到停稳才出草。
+                _gmjFramesSinceCull++;
+                float move = _hasGmjCullView
+                    ? HorizontalDistXZ(camTf.position, _gmjLastCullPos)
+                    : GmjRecullMoveMeters;
+                float ang = _hasGmjCullView
+                    ? Quaternion.Angle(camTf.rotation, _gmjLastCullRot)
+                    : GmjRecullAngleDeg;
+                if (_gmjFramesSinceCull >= GmjRecullIntervalFrames
+                    || move >= GmjRecullMoveMeters
+                    || ang >= GmjRecullAngleDeg)
+                    needCull = true;
+            }
+            else if (!needCull && !settled)
+                needCull = true;
+
             // DrawMeshInstancedIndirect only scopes the submit when its camera
             // argument is set; leaving it null makes the planar mirror probe
             // re-draw the whole grass window into the reflection RT. Bind the
@@ -478,10 +514,17 @@ namespace CustomSRP
             _bindDrawCamera = cam;
             try
             {
-                if (_hasLastGrassSubmit && (settled || gmjThrottle))
+                if (!needCull && _hasLastGrassSubmit)
                     ReplayLastGrassDraw();
                 else
+                {
                     CullAndDraw(cam);
+                    _forceCullThisFrame = false;
+                    _gmjFramesSinceCull = 0;
+                    _gmjLastCullPos = camTf.position;
+                    _gmjLastCullRot = camTf.rotation;
+                    _hasGmjCullView = true;
+                }
             }
             finally
             {
@@ -547,6 +590,10 @@ namespace CustomSRP
             _windowPackUpload = null;
             _packedCount = 0;
             _hasLastGrassSubmit = false;
+            CancelPackRebuild();
+            _forceCullThisFrame = false;
+            _hasGmjCullView = false;
+            _hasWindow = false;
             Log.Info($"[OilTerrainGrass] gpu released buffers={bytes}");
         }
 
@@ -605,23 +652,51 @@ namespace CustomSRP
 
         float WindowPackRadiusMeters() => Mathf.Max(maxDrawDistance, 8f) + WindowPackPaddingMeters;
 
-        void MaybeRebuildBakeWindow(Vector3 focus)
+        float WindowRebuildTriggerMeters()
         {
-            bool need = _windowDirty || !_hasWindow || _packedCount <= 0;
-            if (!need && _hasWindow)
-                need = HorizontalDistXZ(focus, _windowCenter) >= WindowRebuildMeters;
-            if (need)
-                RebuildBakeWindow(focus);
+            float edge = WindowPackRadiusMeters() - maxDrawDistance * WindowEdgeRebuildDrawFrac;
+            return Mathf.Min(WindowRebuildMeters, Mathf.Max(8f, edge));
         }
 
-        void RebuildBakeWindow(Vector3 focus)
+        void CancelPackRebuild()
         {
-            _windowRebuiltThisFrame = true;
+            _packRebuildActive = false;
+            _packCellN = 0;
+            _packCursor = 0;
+            _packRemaining = 0;
+        }
+
+        void MaybeRebuildBakeWindow(Vector3 focus)
+        {
+            if (_packRebuildActive)
+            {
+                // 打包途中焦点飘太远则作废重开，避免提交过期窗。
+                if (HorizontalDistXZ(focus, _packFocus) >= WindowRebuildMeters * 0.5f)
+                {
+                    CancelPackRebuild();
+                    BeginPackRebuild(focus);
+                }
+                else
+                    TickPackRebuild();
+                return;
+            }
+
+            bool need = _windowDirty || !_hasWindow || _packedCount <= 0;
+            if (!need && _hasWindow)
+                need = HorizontalDistXZ(focus, _windowCenter) >= WindowRebuildTriggerMeters();
+            if (need)
+                BeginPackRebuild(focus);
+        }
+
+        void BeginPackRebuild(Vector3 focus)
+        {
             int cellN = _cellCountX * _cellCountZ;
             if (cellN <= 0 || !_bakeLoaded || _bakeData?.Cells == null)
             {
+                CancelPackRebuild();
                 _windowDirty = false;
                 _packedCount = 0;
+                _hasWindow = false;
                 return;
             }
 
@@ -652,32 +727,100 @@ namespace CustomSRP
             if (n > 1)
                 System.Array.Sort(_cellDistSq, _cellOrder, 0, n);
 
-            int cap = Mathf.Max(0, maxTotalVisible);
-            int take = 0;
-            int packed = 0;
-            for (int i = 0; i < n; i++)
-            {
-                int count = BakeCellCount(_cellOrder[i]);
-                int stride = GrassPackStride(_cellDistSq[i]);
-                int add = (count + stride - 1) / stride;
-                if (packed > 0 && packed + add > cap)
-                    break;
-                packed += add;
-                take = i + 1;
-                if (packed >= cap)
-                    break;
-            }
+            AssignPackStrides(n, Mathf.Max(0, maxTotalVisible));
 
             EnsureWindowPackLists();
-            EnsurePackedCellTables(take);
+            EnsurePackedCellTables(n);
             const int vc = OilTerrainGrassBladeMesh.TopologyCount;
             for (int v = 0; v < vc; v++)
                 _windowPackLists[v].Clear();
 
-            int remaining = cap;
-            for (int i = 0; i < take && remaining > 0; i++)
-                PackOneBakeCell(_cellOrder[i], focus, i, ref remaining);
+            _packFocus = focus;
+            _packCellN = n;
+            _packCursor = 0;
+            _packRemaining = Mathf.Max(0, maxTotalVisible);
+            _packRebuildActive = true;
+            _windowDirty = false;
+            // 无旧窗时本帧尽量多装，减少首屏空白。
+            TickPackRebuild();
+        }
 
+        void AssignPackStrides(int n, int cap)
+        {
+            if (n <= 0)
+                return;
+            if (_packStrides.Length < n)
+                _packStrides = new int[n];
+
+            int total = 0;
+            for (int i = 0; i < n; i++)
+            {
+                int stride = GrassPackStride(_cellDistSq[i]);
+                _packStrides[i] = stride;
+                int count = BakeCellCount(_cellOrder[i]);
+                total += (count + stride - 1) / stride;
+            }
+
+            if (cap <= 0 || total <= cap)
+                return;
+
+            // 从最远 cell 加倍 stride，增量扣减估计量，避免反复全表扫描。
+            int cursor = n - 1;
+            int guard = 0;
+            while (total > cap && guard++ < 8192)
+            {
+                while (cursor >= 0 && _packStrides[cursor] >= GrassPackMaxStride)
+                    cursor--;
+                if (cursor < 0)
+                    break;
+
+                int oldStride = _packStrides[cursor];
+                int newStride = Mathf.Min(GrassPackMaxStride, oldStride * 2);
+                int count = BakeCellCount(_cellOrder[cursor]);
+                int oldAdd = (count + oldStride - 1) / oldStride;
+                int newAdd = (count + newStride - 1) / newStride;
+                total += newAdd - oldAdd;
+                _packStrides[cursor] = newStride;
+                if (newStride >= GrassPackMaxStride)
+                    cursor--;
+            }
+        }
+
+        void TickPackRebuild()
+        {
+            if (!_packRebuildActive)
+                return;
+
+            // TryLoadBake 可能在 LateUpdate 外触发；Stopwatch 未跑时 Elapsed 一直为 0。
+            if (!_grassWork.IsRunning)
+                _grassWork.Start();
+
+            long budgetMs = _hasWindow ? GrassPackBudgetMs : 8;
+            long deadline = _grassWork.ElapsedMilliseconds + budgetMs;
+            while (_packCursor < _packCellN && _packRemaining > 0)
+            {
+                // 已有旧窗可画：严格分帧；首窗允许把本帧预算用完。
+                if (_grassWork.ElapsedMilliseconds >= deadline)
+                    return;
+
+                int stride = _packCursor < _packStrides.Length
+                    ? Mathf.Max(1, _packStrides[_packCursor])
+                    : 1;
+                PackOneBakeCell(_cellOrder[_packCursor], _packCursor, stride, ref _packRemaining);
+                _packCursor++;
+            }
+
+            // 预算内仍未扫完且还有 remaining：继续下一帧；remaining 耗尽则提交已装部分。
+            if (_packCursor < _packCellN && _packRemaining > 0)
+                return;
+
+            FinishPackRebuild();
+        }
+
+        void FinishPackRebuild()
+        {
+            const int vc = OilTerrainGrassBladeMesh.TopologyCount;
+            int take = Mathf.Min(_packCursor, _packCellN);
             for (int v = 0; v < vc; v++)
             {
                 int count = _windowPackLists[v].Count;
@@ -689,10 +832,11 @@ namespace CustomSRP
                 _windowPackLists[v].CopyTo(_windowPackUpload[v]);
             }
 
-            CommitPackedWindow(focus, take);
+            CommitPackedWindow(_packFocus, take);
             UploadPackedVariantBuffers();
-            _windowDirty = false;
-            // 重包这一帧只记下过大的块，缩小留到后面有余量的帧。
+            _windowRebuiltThisFrame = true;
+            _forceCullThisFrame = true;
+            _packRebuildActive = false;
             _shrinkQueued = AnyGrassPieceOversized();
         }
 
@@ -734,7 +878,7 @@ namespace CustomSRP
             }
         }
 
-        void PackOneBakeCell(int cell, Vector3 focus, int packedIdx, ref int remaining)
+        void PackOneBakeCell(int cell, int packedIdx, int stride, ref int remaining)
         {
             if (remaining <= 0)
                 return;
@@ -745,7 +889,7 @@ namespace CustomSRP
                 _packOffsetsV[v][packedIdx] = _windowPackLists[v].Count;
 
             int count = BakeCellCount(cell);
-            int stride = GrassPackStride(HorizontalDistSqXZ(focus, cell));
+            stride = Mathf.Max(1, stride);
             for (int j = 0; j < count && remaining > 0; j += stride)
             {
                 if (!TryReadWindowPlant(cell, j, out Vector3 p, out int variant, out byte dry))
@@ -761,19 +905,19 @@ namespace CustomSRP
                 _packCountsV[v][packedIdx] = _windowPackLists[v].Count - _packOffsetsV[v][packedIdx];
         }
 
-        float HorizontalDistSqXZ(Vector3 focus, int cell)
-        {
-            if ((uint)cell >= (uint)_cellCenters.Length)
-                return 0f;
-            float dx = _cellCenters[cell].x - focus.x;
-            float dz = _cellCenters[cell].z - focus.z;
-            return dx * dx + dz * dz;
-        }
-
+        /// <summary>
+        /// 与 CS/CPU VariantCullLimits 草叶远距环对齐（45/70/110），走近只是加密。
+        /// </summary>
         static int GrassPackStride(float distSq)
         {
-            float full = FarGrassFullDensityMeters * FarGrassFullDensityMeters;
-            return distSq > full ? 2 : 1;
+            float d = Mathf.Sqrt(Mathf.Max(0f, distSq));
+            if (d >= 110f)
+                return 8;
+            if (d >= 70f)
+                return 4;
+            if (d >= 45f)
+                return 2;
+            return 1;
         }
 
         bool TryReadWindowPlant(int cell, int j, out Vector3 p, out int variant, out byte dry)

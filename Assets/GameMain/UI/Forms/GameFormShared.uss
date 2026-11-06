@@ -43,7 +43,9 @@
     height: 957px;
 }
 
-/* Full-screen hit target behind sheet chrome; tap dismisses the popup. */
+/* Full-screen dim + hit target. Matches Boluo InGame*Tip/Download root Image
+   color {r:0,g:0,b:0,a:0.8} so NoticeCard stays readable over Music/Preset sheets
+   (both cards are white). */
 .game-form-backdrop {
     position: absolute;
     left: 0;
@@ -52,8 +54,22 @@
     bottom: 0;
     margin: 0;
     padding: 0;
-    background-color: rgba(0, 0, 0, 0.001);
+    background-color: rgba(0, 0, 0, 0.8);
     picking-mode: Position;
+}
+
+/* BindBackdropDismiss may insert #formBackdrop under a root that already dims —
+   keep the inner layer hit-only so alpha does not stack. */
+.game-form-backdrop > .game-form-backdrop {
+    background-color: rgba(0, 0, 0, 0.001);
+}
+
+/* Bottom sheets (Boluo YinYue/Volume/Weather/YuShe): root Image a=0 — hit only. */
+.game-music-form__root > .game-form-backdrop,
+.game-volume-form__root > .game-form-backdrop,
+.game-weather-form__root > .game-form-backdrop,
+.game-preset-form__root > .game-form-backdrop {
+    background-color: rgba(0, 0, 0, 0.001);
 }
 
 /* Boluo UICanvasTip / TipWindows toast bubble. */

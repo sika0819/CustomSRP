@@ -35,6 +35,12 @@ namespace Game
             Current = null;
         }
 
+        /// <summary>立刻收起当前全局 tip（续播成功等，不必等自动淡出）。</summary>
+        public static void DismissCurrent()
+        {
+            Current?.Hide();
+        }
+
         public override void OnOpen(object userData)
         {
             base.OnOpen(userData);

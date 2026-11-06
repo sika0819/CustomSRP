@@ -106,5 +106,31 @@ namespace Game.Tests
             Assert.AreEqual(1, complete);
             Assert.IsFalse(UserBankDownloadFlow.IsBusy);
         }
+
+        [Test]
+        public void BusyToastText_IsProductCopy()
+        {
+            Assert.AreEqual("已有资源包在下载中", UserBankDownloadFlow.BusyToastText);
+        }
+
+        [Test]
+        public void SoftBusy_AllowsPreempt_HardBusyRejects()
+        {
+            UserBankDownloadFlow.EditorForceBusy(busy: false);
+            Assert.IsFalse(UserBankDownloadFlow.ShouldRejectNewBatch(preemptBusyBatch: true));
+            Assert.IsFalse(UserBankDownloadFlow.ShouldRejectNewBatch(preemptBusyBatch: false));
+
+            // 软占用（无进度票）：列表抢占放行，非抢占仍拒。
+            UserBankDownloadFlow.EditorForceBusy(busy: true, activeTicket: 0);
+            Assert.IsFalse(UserBankDownloadFlow.ShouldRejectNewBatch(preemptBusyBatch: true));
+            Assert.IsTrue(UserBankDownloadFlow.ShouldRejectNewBatch(preemptBusyBatch: false));
+
+            // 区域进度窗硬占用：一律拒。
+            UserBankDownloadFlow.EditorForceBusy(busy: true, activeTicket: 42);
+            Assert.IsTrue(UserBankDownloadFlow.ShouldRejectNewBatch(preemptBusyBatch: true));
+            Assert.IsTrue(UserBankDownloadFlow.ShouldRejectNewBatch(preemptBusyBatch: false));
+
+            UserBankDownloadFlow.EditorForceBusy(busy: false);
+        }
     }
 }

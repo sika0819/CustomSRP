@@ -167,6 +167,9 @@ namespace Game
                 if (IslandJoystickCamera.Current != null)
                     IslandPlayerPosSave.ReplantAfterTerrainReady(IslandJoystickCamera.Current);
                 EnvItemStreamerLite.ResumePositionStream();
+                // keep-scene 离岛：OnLeave 已 Release 草 GPU，但 _loaded 仍为 true。
+                // 若不在此重铺，二次进岛 / 切账号会永久没草（闺蜜机 SKS30 已复现）。
+                yield return WaitCoverThenLoadGrass(reportProgress);
                 yield break;
             }
 
@@ -224,9 +227,47 @@ namespace Game
 
             IsNearReady = probe || _terrainInstance != null;
 
-            // 罩淡出结束再铺草，再 extras，最后才放流送。
-            // 渲染闩还关着时也不铺：二次进岛不能和放渲染叠在同一帧。
-            // 离岛 / 超时若已 ReleasePrefillHold，不要死等淡出。
+            // 罩淡出 + EntryGpuSettled 后再铺草，再 extras，最后才放流送。
+            yield return WaitCoverThenLoadGrass(reportProgress);
+
+            if (_mapItemSpawner != null)
+                yield return _mapItemSpawner.SpawnDeferredExtras();
+
+            // Prefill 内 warm 若被截断，AllowStream 前再补一截（仍不 Instantate）。
+            if (EnvItemStreamerLite.Current != null)
+                yield return EnvItemStreamerLite.Current.WarmJianZhuPrefabCache();
+
+            EnvItemStreamerLite.AllowStream();
+
+            // 水体最近点改成运行期直接从场景采样（见 WaterSurfaceProbe），
+            // 不再加载任何烘焙的水域资源。
+
+            InlandWaterReady = _inlandWaterInstance != null;
+            _loaded = true;
+            OnInlandWaterReady?.Invoke(_inlandWaterInstance != null);
+            int mapCount = _mapItemSpawner != null ? _mapItemSpawner.MapItemCount : 0;
+            int spawned = _mapItemSpawner != null ? _mapItemSpawner.SpawnedCount : 0;
+            int extras = _mapItemSpawner != null ? _mapItemSpawner.ExtrasSpawnedCount : 0;
+
+            Log.Info(
+                "[IslandWorld] loaded terrain=" + (_terrainInstance != null) +
+                " ocean=" + (_oceanInstance != null) +
+                " inland=" + (_inlandWaterInstance != null) +
+                " mapItems=" + mapCount + " spawned=" + spawned + " extras=" + extras);
+
+            reportProgress?.Invoke(BootLoadingService.TerrainPrepareMax, "正在准备场景...");
+
+            if (GameEntry.Event != null)
+                GameEntry.Event.Fire(this, IslandWorldReadyEventArgs.Create(mapCount, spawned, extras));
+        }
+
+        /// <summary>
+        /// 罩淡出结束且 PostUncoverRelock 完成后再铺草。
+        /// 渲染闩还关着时不铺；二次进岛也不能和放渲染叠在同一帧。
+        /// 离岛 / 超时若已 ReleasePrefillHold，不要死等淡出。
+        /// </summary>
+        IEnumerator WaitCoverThenLoadGrass(System.Action<float, string> reportProgress)
+        {
             float waitCover = Time.realtimeSinceStartup;
             while (!EnvItemStreamerLite.PrefillAbortReleased
                    && (EnvItemStreamerLite.PrefillSuppressRender
@@ -252,41 +293,20 @@ namespace Game
             yield return null;
 
             IslandGrassService grass = GameEntry.Grass ?? IslandGrassService.Ensure();
-            if (IslandLeakProbe.Allow(IslandLeakProbe.Module.Grass))
-            {
-                reportProgress?.Invoke(0.86f, "正在铺装草地...");
-                yield return grass.Load();
-            }
-            else
+            if (!IslandLeakProbe.Allow(IslandLeakProbe.Module.Grass))
             {
                 Log.Info("[LeakProbe] grass OFF");
+                yield break;
             }
 
-            if (_mapItemSpawner != null)
-                yield return _mapItemSpawner.SpawnDeferredExtras();
+            if (grass.IsLoaded)
+            {
+                Log.Info("[IslandWorld] grass already loaded — skip reload");
+                yield break;
+            }
 
-            EnvItemStreamerLite.AllowStream();
-
-            // 水体最近点改成运行期直接从场景采样（见 WaterSurfaceProbe），
-            // 不再加载任何烘焙的水域资源。
-
-            InlandWaterReady = _inlandWaterInstance != null;
-            _loaded = true;
-            OnInlandWaterReady?.Invoke(_inlandWaterInstance != null);
-            int mapCount = _mapItemSpawner != null ? _mapItemSpawner.MapItemCount : 0;
-            int spawned = _mapItemSpawner != null ? _mapItemSpawner.SpawnedCount : 0;
-            int extras = _mapItemSpawner != null ? _mapItemSpawner.ExtrasSpawnedCount : 0;
-
-            Log.Info(
-                "[IslandWorld] loaded terrain=" + (_terrainInstance != null) +
-                " ocean=" + (_oceanInstance != null) +
-                " inland=" + (_inlandWaterInstance != null) +
-                " mapItems=" + mapCount + " spawned=" + spawned + " extras=" + extras);
-
-            reportProgress?.Invoke(BootLoadingService.TerrainPrepareMax, "正在准备场景...");
-
-            if (GameEntry.Event != null)
-                GameEntry.Event.Fire(this, IslandWorldReadyEventArgs.Create(mapCount, spawned, extras));
+            reportProgress?.Invoke(0.86f, "正在铺装草地...");
+            yield return grass.Load();
         }
 
         bool _released;

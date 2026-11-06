@@ -12,14 +12,6 @@ namespace Game
             bool canTransmitNow) =>
             !wifiConfirmEnabled && canTransmitNow;
 
-        /// <summary>
-        /// 关也不再弹流量总量窗（蜂窝自动开闸）；恒 false 保留 API 兼容。
-        /// </summary>
-        public static bool ShouldBootstrapPromptMobileForAll(
-            bool wifiConfirmEnabled,
-            bool needsMobileDataPrompt) =>
-            false;
-
         /// <summary>开 → Bootstrap 不主动 EnsureReady / Download。</summary>
         public static bool ShouldBootstrapStayIdle(bool wifiConfirmEnabled) =>
             wifiConfirmEnabled;

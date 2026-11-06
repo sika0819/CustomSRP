@@ -19,7 +19,7 @@ namespace Game.Editor
             ("环境·渠道·版本窗口 · originEnd", BoluoDeviceInfo.EditorOriginEndOverrideKey, "BoluoEnvTestWindow 写入的 originEnd 覆盖"),
             ("环境·渠道·版本窗口 · 版本号", BoluoDeviceInfo.EditorVersionOverrideKey, "BoluoEnvTestWindow 写入的 version 覆盖"),
             ("API 环境覆盖 (dev/test/prerelease/product)", BoluoApiEnvironment.EditorEnvOverrideKey, "BoluoApiEnvironment.SetEditorOverride 写入"),
-            ("GuestLogin 旧 API 环境 (legacy 同步)", GuestLoginClient.ApiEnvKey, "Game.Editor.ApiEnv 旧键，ResolveUserApiBase 启动时同步到 EditorEnvOverrideKey"),
+            ("GuestLogin 旧 API 环境", GuestLoginClient.ApiEnvKey, "旧键 Game.Editor.ApiEnv；环境窗与游客菜单仍写入，生效值以 BoluoApiEnvironment 为准"),
             ("UGF 日志宏已应用标记", "CustomSRP.UGFLogMacrosBootstrap.Applied", "标记 UGFLogMacrosBootstrap 是否已铺好所有 target 的日志宏；删除后下次打开工程会重铺"),
         };
 

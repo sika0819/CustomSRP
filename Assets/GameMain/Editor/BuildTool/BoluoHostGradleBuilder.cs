@@ -19,22 +19,61 @@ namespace Game.Editor.BuildTool
             Path.Combine(BoluoCIBuildSupport.GetRepoRoot(), "AndroidProject");
 
         /// <summary>
-        /// skyworthUltra → :app:assembleSkyworthUltraDebug
-        /// phoneXiaomi → :app:assemblePhoneXiaomiDebug
-        /// yishu → :app:assembleYishuDebug
+        /// 宿主 buildType ↔ API ENVIRONMENT（与 pack.sh / app build.gradle.kts 对齐）：
+        /// debug→dev · alpha→test · beta→prerelease · release→product
         /// </summary>
-        public static string ResolveAssembleTask(string flavor, bool release)
+        public static string HostBuildTypeFromEnvironment(BoluoCIBuildSupport.CIEnvironment env) =>
+            env switch
+            {
+                BoluoCIBuildSupport.CIEnvironment.Test => "alpha",
+                BoluoCIBuildSupport.CIEnvironment.PreRelease => "beta",
+                BoluoCIBuildSupport.CIEnvironment.Product => "release",
+                _ => "debug",
+            };
+
+        public static string NormalizeHostBuildType(string buildType)
         {
-            string suffix = release ? "Release" : "Debug";
-            string flavorPascal = BoluoCIBuildSupport.ToGradleFlavorPascal(flavor);
-            return $":app:assemble{flavorPascal}{suffix}";
+            switch ((buildType ?? "").Trim().ToLowerInvariant())
+            {
+                case "debug":
+                case "dev":
+                    return "debug";
+                case "alpha":
+                case "test":
+                    return "alpha";
+                case "beta":
+                case "prerelease":
+                    return "beta";
+                case "release":
+                case "product":
+                    return "release";
+                default:
+                    return "debug";
+            }
         }
 
-        public static string ResolveInstallTask(string flavor, bool release)
+        static string ToGradleBuildTypePascal(string buildType) =>
+            NormalizeHostBuildType(buildType) switch
+            {
+                "alpha" => "Alpha",
+                "beta" => "Beta",
+                "release" => "Release",
+                _ => "Debug",
+            };
+
+        /// <summary>
+        /// skyworthUltra + alpha → :app:assembleSkyworthUltraAlpha
+        /// </summary>
+        public static string ResolveAssembleTask(string flavor, string buildType)
         {
-            string suffix = release ? "Release" : "Debug";
             string flavorPascal = BoluoCIBuildSupport.ToGradleFlavorPascal(flavor);
-            return $":app:install{flavorPascal}{suffix}";
+            return $":app:assemble{flavorPascal}{ToGradleBuildTypePascal(buildType)}";
+        }
+
+        public static string ResolveInstallTask(string flavor, string buildType)
+        {
+            string flavorPascal = BoluoCIBuildSupport.ToGradleFlavorPascal(flavor);
+            return $":app:install{flavorPascal}{ToGradleBuildTypePascal(buildType)}";
         }
 
         public static bool EnsureLocalProperties(out string error)
@@ -98,10 +137,10 @@ namespace Game.Editor.BuildTool
             return true;
         }
 
-        /// <summary>跑 assemble；成功时 apkPath 指向最新 APK。</summary>
+        /// <summary>跑 assemble；成功时 apkPath 指向最新 APK。buildType: debug|alpha|beta|release。</summary>
         public static bool Assemble(
             string flavor,
-            bool release,
+            string buildType,
             Action<string> log,
             out string apkPath,
             out string error)
@@ -127,13 +166,14 @@ namespace Game.Editor.BuildTool
                 Log(warn);
 
             string projectRoot = GetAndroidProjectRoot();
-            string task = ResolveAssembleTask(flavor, release);
-            Log($"Gradle {task} @ {projectRoot}");
+            string normalized = NormalizeHostBuildType(buildType);
+            string task = ResolveAssembleTask(flavor, normalized);
+            Log($"Gradle {task} @ {projectRoot} (ENVIRONMENT buildType={normalized})");
 
             if (!RunGradle(projectRoot, $"{task} --no-daemon", Log, out error))
                 return false;
 
-            if (!TryLocateApk(projectRoot, flavor, release, out apkPath))
+            if (!TryLocateApk(projectRoot, flavor, normalized, out apkPath))
             {
                 error = "Gradle 成功但未找到 APK（检查 app/build/outputs/apk/）";
                 return false;
@@ -280,13 +320,13 @@ namespace Game.Editor.BuildTool
             return true;
         }
 
-        static bool TryLocateApk(string projectRoot, string flavor, bool release, out string apkPath)
+        static bool TryLocateApk(string projectRoot, string flavor, string buildType, out string apkPath)
         {
             apkPath = null;
             if (!BoluoCIBuildSupport.TryNormalizeAndroidFlavor(flavor, out string norm, out _))
                 norm = "skyworthUltra";
             string flavorDir = norm;
-            string buildType = release ? "release" : "debug";
+            buildType = NormalizeHostBuildType(buildType);
             string apkDir = Path.Combine(projectRoot, "app", "build", "outputs", "apk", flavorDir, buildType);
             if (!Directory.Exists(apkDir))
             {

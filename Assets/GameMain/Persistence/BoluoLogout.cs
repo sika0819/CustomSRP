@@ -15,9 +15,6 @@ namespace Game
         /// </summary>
         public static Action ReleasePlanarReflectTex;
 
-        /// <summary>兼容旧调用：等同普通退登（保留分桶进度）。</summary>
-        public static void Execute() => ExecuteLeave();
-
         /// <summary>普通退登：清会话与运行时态，不删 PlayerPrefs 进度桶。</summary>
         public static void ExecuteLeave()
         {

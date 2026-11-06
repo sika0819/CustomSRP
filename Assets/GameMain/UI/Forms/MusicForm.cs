@@ -1061,15 +1061,10 @@ namespace Game
                 return;
 
             int mode = GameEntry.Music.CyclePlayMode();
-            ShowModeTip(MusicPlayMode.TipText(mode));
+            UiDialogService.ShowToast(MusicPlayMode.TipText(mode));
 
             // Update mode button appearance.
             UpdateModeButton(mode);
-        }
-
-        void ShowModeTip(string text)
-        {
-            UiTipToast.ShowMessage(text);
         }
 
         // Sprite names for the 3 play modes (yy_danqu / yy_list / yy_suiji).
@@ -2003,11 +1998,18 @@ namespace Game
             if (track < 0 || track >= tracks.Count)
                 return;
 
+            // 区域进度窗硬占用：先判再钉意图，避免环闪一下又被 OnCancel 清掉。
+            if (UserBankDownloadFlow.ShouldRejectNewBatch(preemptBusyBatch: true))
+            {
+                UiDialogService.ShowToast(UserBankDownloadFlow.BusyToastText);
+                return;
+            }
+
             string bankName = tracks[track].BankName;
             string[] banks = { bankName };
             bool saveSuppressPushed = false;
 
-            // 点击当下就钉死意图，同意链 / 弹窗期间连点仍以最后一首为准。
+            // 点击当下就钉死意图并翻成进度环；软占用由 Flow 抢占。
             _playAfterDownloadGen++;
             _pendingMusic = (album, track);
             PendingDownloadIntent.SetMusic(album, track);
@@ -2021,7 +2023,9 @@ namespace Game
                     SuppressProgressDialog = true,
                     OnCancel = () =>
                     {
-                        ClearPendingMusic();
+                        // 同意链被后点覆盖时勿清新 Intent（只清仍指向本行的）。
+                        if (PendingDownloadIntent.IsMusicMatch(album, track))
+                            ClearPendingMusic();
                         _list?.schedule.Execute(() => _list?.RefreshItems());
                     },
                 },
@@ -2060,7 +2064,9 @@ namespace Game
                 },
                 prioritize: true,
                 preempt: true,
-                abortOtherUserDownloads: true);
+                // 未下载点击：打断其它 User（含环境音/其它曲），本行优先出进度。
+                abortOtherUserDownloads: true,
+                preemptBusyBatch: true);
         }
 
         /// <summary>
@@ -2384,32 +2390,24 @@ namespace Game
                 icon.style.backgroundImage = new StyleBackground(sprite);
         }
 
-        // -----------------------------------------------------------------------
-        // Post-play refresh helper (kept for compatibility)
-        // -----------------------------------------------------------------------
-
-        void RefreshAfterPlay()
-        {
-            RefreshAlbumStrip();
-            _list?.RefreshItems();
-        }
-
         /// <summary>
-        /// Loop/Shuffle auto-advance (and any other PlayIndex) updates playlist
-        /// indices without going through a row click. Rebind visible rows so the
-        /// playing marker moves; do not rebuild, so the user's scroll stays.
-        /// A shuffle jump to another album only clears the stale marker here.
+        /// PlayIndex / AdoptTrack 改会话后：同专辑只刷行高亮；跨专辑跟到当前会话专辑。
         /// </summary>
         void OnPlaylistTrackChanged()
         {
             if (_list == null || Root == null || Root.panel == null)
                 return;
 
+            var music = GameEntry.Music;
+            if (music != null && music.CurrentAlbumIndex != _centerAlbum)
+            {
+                SyncOpenToNowPlaying();
+                return;
+            }
+
             _list.RefreshItems();
 
-            var music = GameEntry.Music;
             if (music != null
-                && music.CurrentAlbumIndex == _centerAlbum
                 && music.CurrentTrackIndex >= 0
                 && music.CurrentTrackIndex < _trackNames.Count)
             {

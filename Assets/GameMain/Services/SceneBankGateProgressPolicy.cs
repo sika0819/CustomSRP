@@ -87,5 +87,21 @@ namespace Game
                 return true;
             return closedTicket != otherTicket;
         }
+
+        /// <summary>
+        /// 区域门固墙：仅未齐时挡；盘齐后即使 Spawner/Flow 仍 busy（MD5 收尾）也放行。
+        /// </summary>
+        public static bool ShouldForceBlockWhileBusy(bool spawnerBusyDownloadingGate, bool banksSatisfied) =>
+            spawnerBusyDownloadingGate && !banksSatisfied;
+
+        /// <summary>
+        /// 传输完成能否立刻把进度票标成结束。
+        /// 百分比还没套到可见窗上，或套上后还没留出可见时间（上滑未结束 / 同一帧）时不能退役，
+        /// 否则晚到的 OnOpen 会在画出百分比之前把窗丢掉。用户点关闭不走这里。
+        /// </summary>
+        public static bool ShouldRetireOnTransferComplete(
+            bool progressPresentedOnForm,
+            bool visibleLongEnough) =>
+            progressPresentedOnForm && visibleLongEnough;
     }
 }

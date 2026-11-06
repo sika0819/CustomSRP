@@ -24,6 +24,13 @@ namespace UnityGameFramework.Runtime
         const float PanelMargin = 8f;
         const float PanelMaxWidth = 720f;
         const string DefaultPageTitle = "Memory";
+        // IslandMainHudLayout 右栏：profile → timer；角标落在 timer 底边之下，避免挡个人中心。
+        const float HudRefH = 2436f;
+        const float HudTopY0 = 228f;
+        const float HudIconGap = 156f;
+        const float HudIcon = 108f;
+        const float HudIconTopUnderTimer = HudTopY0 + HudIconGap + HudIcon * 0.5f + 8f;
+        const float HudIconRight = 12f;
 
         static StyleSheet s_CachedStyle = null;
         static MethodInfo s_PanelUpdate = null;
@@ -734,7 +741,14 @@ namespace UnityGameFramework.Runtime
 
         private void FitPanel(float panelWidth, float panelHeight)
         {
-            if (m_Panel == null || panelWidth < 32f || panelHeight < 32f)
+            if (panelWidth < 32f || panelHeight < 32f)
+            {
+                return;
+            }
+
+            PlaceIcon(panelHeight);
+
+            if (m_Panel == null)
             {
                 return;
             }
@@ -760,6 +774,20 @@ namespace UnityGameFramework.Runtime
             m_Panel.style.top = PanelMargin;
             m_Panel.style.width = width;
             m_Panel.style.height = height;
+        }
+
+        private void PlaceIcon(float panelHeight)
+        {
+            if (m_Icon == null || panelHeight < 32f)
+            {
+                return;
+            }
+
+            float top = HudIconTopUnderTimer * (panelHeight / HudRefH);
+            m_Icon.style.right = HudIconRight;
+            m_Icon.style.top = top;
+            m_Icon.style.left = StyleKeyword.Auto;
+            m_Icon.style.bottom = StyleKeyword.Auto;
         }
 
         private static StyleSheet LoadStyle()

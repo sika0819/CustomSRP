@@ -144,6 +144,66 @@ namespace Game.Tests
         }
 
         [Test]
+        public void OceanDeck_ShoreNearBridgeIsNotStandingOnDeck()
+        {
+            // 桥头岸上：即使水平贴边，0.9m 落差也超过贴面容差 → 不算已站桥。
+            const float oceanY = 5.7f;
+            const float deckY = 6.81f;
+            const float shoreFootY = 5.9f;
+            Assert.IsFalse(
+                NamedDeckSpawnPolicy.IsStandingNearOceanDeck(
+                    shoreFootY, deckY, oceanY,
+                    xzDistToDeck: 0.2f,
+                    edgeSlop: NamedDeckSpawnPolicy.OceanDeckStandEdgeMeters,
+                    footSlop: NamedDeckSpawnPolicy.OceanDeckStandFootSlopMeters));
+            Assert.IsFalse(
+                NamedDeckSpawnPolicy.IsStandingNearOceanDeck(
+                    shoreFootY, deckY, oceanY,
+                    xzDistToDeck: 2.0f,
+                    edgeSlop: NamedDeckSpawnPolicy.OceanDeckStandEdgeMeters,
+                    footSlop: NamedDeckSpawnPolicy.OceanDeckStandFootSlopMeters));
+            Assert.IsTrue(
+                NamedDeckSpawnPolicy.IsStandingNearOceanDeck(
+                    deckY, deckY, oceanY,
+                    xzDistToDeck: 0.2f,
+                    edgeSlop: NamedDeckSpawnPolicy.OceanDeckStandEdgeMeters,
+                    footSlop: NamedDeckSpawnPolicy.OceanDeckStandFootSlopMeters));
+        }
+
+        [Test]
+        public void OceanDeck_ClimbAssistRequiresIntentNotIdlePull()
+        {
+            // 站着不动：禁止硬抬。
+            Assert.IsFalse(
+                NamedDeckSpawnPolicy.ShouldAssistOceanDeckClimb(
+                    plannedHorizMeters: 0f,
+                    intentOverlapsDeck: true,
+                    alreadyOverlapsDeck: false,
+                    motionBlockedTowardDeck: true));
+            // 路过桥头、意图未压进甲板：禁止水平吸人。
+            Assert.IsFalse(
+                NamedDeckSpawnPolicy.ShouldAssistOceanDeckClimb(
+                    plannedHorizMeters: 0.2f,
+                    intentOverlapsDeck: false,
+                    alreadyOverlapsDeck: false,
+                    motionBlockedTowardDeck: false));
+            // 已在板面上：禁止再硬抬（否则 stick 互顶狂抖）。
+            Assert.IsFalse(
+                NamedDeckSpawnPolicy.ShouldAssistOceanDeckClimb(
+                    plannedHorizMeters: 0.2f,
+                    intentOverlapsDeck: true,
+                    alreadyOverlapsDeck: true,
+                    motionBlockedTowardDeck: true));
+            // 朝桥走且被竖直面挡住、意图已进板、尚未上板：允许只抬 Y。
+            Assert.IsTrue(
+                NamedDeckSpawnPolicy.ShouldAssistOceanDeckClimb(
+                    plannedHorizMeters: 0.2f,
+                    intentOverlapsDeck: true,
+                    alreadyOverlapsDeck: false,
+                    motionBlockedTowardDeck: true));
+        }
+
+        [Test]
         public void KeepSavedEye_WhenTeleportDroppedToRiverbed()
         {
             Assert.IsTrue(NamedDeckSpawnPolicy.ShouldKeepSavedEye(savedEyeY: 10f, afterTeleportY: 3f));

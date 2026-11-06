@@ -19,7 +19,6 @@ namespace Game.Editor.BuildTool
         const string PrefSkipYoo = "BoluoPublish_SkipYoo";
         const string PrefDevBuild = "BoluoPublish_DevBuild";
         const string PrefOrientation = "BoluoPublish_Orientation";
-        const string PrefHostRelease = "BoluoPublish_HostRelease";
         const string PrefInstallApk = "BoluoPublish_InstallApk";
 
         static readonly string[] EnvLabels = { "dev", "test", "prerelease", "product" };
@@ -67,12 +66,12 @@ namespace Game.Editor.BuildTool
         bool _skipYooAsset;
         bool _developmentBuild;
         int _orientationIndex;
-        bool _hostRelease;
         bool _installAfterApk;
         Vector2 _scroll;
         string _log = "";
         bool _busy;
         string _lastApkPath = "";
+        Action _pendingAction;
 
         [MenuItem("Build/BoLuo发布工具", false, 100)]
         public static void Open()
@@ -94,21 +93,76 @@ namespace Game.Editor.BuildTool
             _developmentBuild = EditorPrefs.GetBool(PrefDevBuild, false);
             string orient = EditorPrefs.GetString(PrefOrientation, "sensor");
             _orientationIndex = Mathf.Max(0, Array.IndexOf(OrientationLabels, orient));
-            _hostRelease = EditorPrefs.GetBool(PrefHostRelease, false);
             _installAfterApk = EditorPrefs.GetBool(PrefInstallApk, false);
+        }
+
+        void OnDisable()
+        {
+            EditorApplication.update -= RunPending;
+            _pendingAction = null;
         }
 
         void OnGUI()
         {
+            // 按钮回调里同步跑导出会在 EndScrollView 之前 Repaint/重入 OnGUI，
+            // 打乱 Layout 栈 → EndLayoutGroup 报错并表现为 Editor「卡死」刷屏。
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
-            DrawPaths();
-            EditorGUILayout.Space(8);
-            DrawConfig();
-            EditorGUILayout.Space(8);
-            DrawActions();
-            EditorGUILayout.Space(8);
-            DrawLog();
-            EditorGUILayout.EndScrollView();
+            try
+            {
+                DrawPaths();
+                EditorGUILayout.Space(8);
+                DrawConfig();
+                EditorGUILayout.Space(8);
+                DrawActions();
+                EditorGUILayout.Space(8);
+                DrawLog();
+            }
+            finally
+            {
+                EditorGUILayout.EndScrollView();
+            }
+        }
+
+        /// <summary>
+        /// 等本帧 OnGUI（含 EndScrollView）结束后再跑重活。
+        /// 本工程 delayCall 可能不派发，与 HostShellExport 一样用 update 一次性触发。
+        /// </summary>
+        void Schedule(Action action)
+        {
+            if (_busy || action == null)
+                return;
+            _busy = true;
+            _log = "";
+            _lastApkPath = "";
+            _pendingAction = action;
+            EditorApplication.update -= RunPending;
+            EditorApplication.update += RunPending;
+            Repaint();
+        }
+
+        void RunPending()
+        {
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+                return;
+
+            EditorApplication.update -= RunPending;
+            Action action = _pendingAction;
+            _pendingAction = null;
+            if (action == null)
+            {
+                _busy = false;
+                return;
+            }
+
+            try
+            {
+                action();
+            }
+            finally
+            {
+                _busy = false;
+                Repaint();
+            }
         }
 
         void DrawPaths()
@@ -144,7 +198,10 @@ namespace Game.Editor.BuildTool
                 _skipYooAsset = EditorGUILayout.Toggle("跳过 YooAsset", _skipYooAsset);
                 _developmentBuild = EditorGUILayout.Toggle("Unity Development Build", _developmentBuild);
                 EditorGUILayout.Space(4);
-                _hostRelease = EditorGUILayout.Toggle("宿主 Release（否则 Debug）", _hostRelease);
+                string hostBt = CurrentHostBuildType();
+                EditorGUILayout.HelpBox(
+                    $"宿主 Gradle buildType → {hostBt}（dev→debug / test→alpha / prerelease→beta / product→release）",
+                    MessageType.Info);
                 _installAfterApk = EditorGUILayout.Toggle("编完 APK 后 adb 安装", _installAfterApk);
             }
         }
@@ -157,23 +214,23 @@ namespace Game.Editor.BuildTool
                 GUI.enabled = !_busy;
 
                 string flavor = FlavorValues[_flavorIndex];
-                string task = BoluoHostGradleBuilder.ResolveAssembleTask(flavor, _hostRelease);
+                string task = BoluoHostGradleBuilder.ResolveAssembleTask(flavor, CurrentHostBuildType());
                 if (GUILayout.Button($"一键：导出宿主 + {task}", GUILayout.Height(40)))
-                    RunExportAndAssemble();
+                    Schedule(RunExportAndAssemble);
 
                 EditorGUILayout.BeginHorizontal();
                 if (GUILayout.Button("仅导出 Android Gradle", GUILayout.Height(28)))
-                    RunExport(android: true);
+                    Schedule(() => RunExport(android: true));
                 if (GUILayout.Button("仅编宿主 APK（已导出）", GUILayout.Height(28)))
-                    RunAssembleOnly();
+                    Schedule(RunAssembleOnly);
                 EditorGUILayout.EndHorizontal();
 
                 if (GUILayout.Button("导出 iOS Xcode（宿主）", GUILayout.Height(28)))
-                    RunExport(android: false);
+                    Schedule(() => RunExport(android: false));
 
                 EditorGUILayout.Space(4);
                 if (GUILayout.Button("独立 APK（非宿主 / Unity 直出）", GUILayout.Height(24)))
-                    RunStandaloneApk();
+                    Schedule(RunStandaloneApk);
 
                 GUI.enabled = true;
 
@@ -199,9 +256,20 @@ namespace Game.Editor.BuildTool
             EditorPrefs.SetBool(PrefSkipYoo, _skipYooAsset);
             EditorPrefs.SetBool(PrefDevBuild, _developmentBuild);
             EditorPrefs.SetString(PrefOrientation, OrientationLabels[_orientationIndex]);
-            EditorPrefs.SetBool(PrefHostRelease, _hostRelease);
             EditorPrefs.SetBool(PrefInstallApk, _installAfterApk);
         }
+
+        BoluoCIBuildSupport.CIEnvironment CurrentEnvironment() =>
+            EnvLabels[_envIndex] switch
+            {
+                "dev" => BoluoCIBuildSupport.CIEnvironment.Dev,
+                "test" => BoluoCIBuildSupport.CIEnvironment.Test,
+                "prerelease" => BoluoCIBuildSupport.CIEnvironment.PreRelease,
+                _ => BoluoCIBuildSupport.CIEnvironment.Product,
+            };
+
+        string CurrentHostBuildType() =>
+            BoluoHostGradleBuilder.HostBuildTypeFromEnvironment(CurrentEnvironment());
 
         BoluoCIBuildSupport.CIConfig BuildConfig(BuildTarget target)
         {
@@ -219,14 +287,7 @@ namespace Game.Editor.BuildTool
                 OutputDir = target == BuildTarget.iOS
                     ? BoluoCIBuildSupport.GetDefaultIosOutputRoot()
                     : BoluoCIBuildSupport.GetDefaultAndroidUnityExportRoot(),
-            };
-
-            config.Environment = EnvLabels[_envIndex] switch
-            {
-                "dev" => BoluoCIBuildSupport.CIEnvironment.Dev,
-                "test" => BoluoCIBuildSupport.CIEnvironment.Test,
-                "prerelease" => BoluoCIBuildSupport.CIEnvironment.PreRelease,
-                _ => BoluoCIBuildSupport.CIEnvironment.Product,
+                Environment = CurrentEnvironment(),
             };
             return config;
         }
@@ -239,9 +300,6 @@ namespace Game.Editor.BuildTool
                 return;
             }
 
-            _busy = true;
-            _log = "";
-            _lastApkPath = "";
             try
             {
                 var config = BuildConfig(BuildTarget.Android);
@@ -255,8 +313,9 @@ namespace Game.Editor.BuildTool
                     return;
                 }
 
-                AppendLog("=== 2/2 宿主 Gradle 编 APK ===");
-                if (!BoluoHostGradleBuilder.Assemble(flavor, _hostRelease, AppendLog, out string apk, out string err))
+                string hostBt = CurrentHostBuildType();
+                AppendLog($"=== 2/2 宿主 Gradle 编 APK（{hostBt}） ===");
+                if (!BoluoHostGradleBuilder.Assemble(flavor, hostBt, AppendLog, out string apk, out string err))
                 {
                     AppendLog($"Gradle 失败: {err}");
                     return;
@@ -276,22 +335,17 @@ namespace Game.Editor.BuildTool
                 AppendLog($"异常: {ex.Message}");
                 Debug.LogException(ex);
             }
-            finally
-            {
-                _busy = false;
-            }
         }
 
         void RunAssembleOnly()
         {
-            _busy = true;
-            _log = "";
             try
             {
                 SavePrefs();
                 string flavor = FlavorValues[_flavorIndex];
-                AppendLog("=== 仅编宿主 APK ===");
-                if (!BoluoHostGradleBuilder.Assemble(flavor, _hostRelease, AppendLog, out string apk, out string err))
+                string hostBt = CurrentHostBuildType();
+                AppendLog($"=== 仅编宿主 APK（{hostBt}） ===");
+                if (!BoluoHostGradleBuilder.Assemble(flavor, hostBt, AppendLog, out string apk, out string err))
                 {
                     AppendLog($"失败: {err}");
                     return;
@@ -310,10 +364,6 @@ namespace Game.Editor.BuildTool
                 AppendLog($"异常: {ex.Message}");
                 Debug.LogException(ex);
             }
-            finally
-            {
-                _busy = false;
-            }
         }
 
         void RunExport(bool android)
@@ -324,8 +374,6 @@ namespace Game.Editor.BuildTool
                 return;
             }
 
-            _busy = true;
-            _log = "";
             try
             {
                 var config = BuildConfig(android ? BuildTarget.Android : BuildTarget.iOS);
@@ -340,10 +388,6 @@ namespace Game.Editor.BuildTool
                 AppendLog($"异常: {ex.Message}");
                 Debug.LogException(ex);
             }
-            finally
-            {
-                _busy = false;
-            }
         }
 
         void RunStandaloneApk()
@@ -354,8 +398,6 @@ namespace Game.Editor.BuildTool
                 return;
             }
 
-            _busy = true;
-            _log = "";
             try
             {
                 var config = BuildConfig(BuildTarget.Android);
@@ -370,17 +412,15 @@ namespace Game.Editor.BuildTool
                 AppendLog($"异常: {ex.Message}");
                 Debug.LogException(ex);
             }
-            finally
-            {
-                _busy = false;
-            }
         }
 
         void AppendLog(string msg)
         {
             _log += msg + "\n";
             Debug.Log($"[BoluoPublish] {msg}");
-            Repaint();
+            // 避免在 IMGUI Layout/Repaint 事件中间再触发重绘把栈打乱
+            if (Event.current == null)
+                Repaint();
         }
     }
 }

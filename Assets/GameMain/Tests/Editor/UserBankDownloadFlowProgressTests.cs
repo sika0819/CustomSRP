@@ -139,5 +139,39 @@ namespace Game.Tests
             Assert.AreEqual(0f, total);
             Assert.AreEqual(0f, percent);
         }
+
+        [Test]
+        public void AreBanksTransferComplete_TrueWhenHttpProgressFullBeforeReady()
+        {
+            // HTTP 写完 Progress=1、尚未 MarkLocalReady / State=Ready（MD5 中）→ 应视为传输齐，可关进度窗。
+            Assert.IsFalse(BankDownloader.IsLocalReady(ActiveStem));
+            BankDownloader.EditorPutActiveItem(new BankDownloadItem
+            {
+                BankName = ActiveStem,
+                SizeKb = "3072",
+                Progress = 1f,
+                State = BankDownloadState.Downloading,
+                Url = "https://example.test/active.wsbk",
+            });
+
+            Assert.IsTrue(
+                UserBankDownloadFlow.AreBanksTransferComplete(new[] { ReadyStem, ActiveStem }));
+        }
+
+        [Test]
+        public void AreBanksTransferComplete_FalseWhileStillTransferring()
+        {
+            BankDownloader.EditorPutActiveItem(new BankDownloadItem
+            {
+                BankName = ActiveStem,
+                SizeKb = "3072",
+                Progress = 0.5f,
+                State = BankDownloadState.Downloading,
+                Url = "https://example.test/active.wsbk",
+            });
+
+            Assert.IsFalse(
+                UserBankDownloadFlow.AreBanksTransferComplete(new[] { ReadyStem, ActiveStem }));
+        }
     }
 }

@@ -228,12 +228,18 @@ namespace Game.Native
                 ResumePlaybackAfterTimerEnd();
                 Close();
             }
+
+            if (GUILayout.Button("关闭", GUILayout.Height(28)))
+            {
+                // 与 Android Compose onDismissRequest 同语义：关窗 = 取消续播。
+                ResumePlaybackAfterTimerEnd();
+                Close();
+            }
         }
 
         static void ResumePlaybackAfterTimerEnd()
         {
-            var music = Game.GameEntry.Music ?? Game.MusicPlaylist.Instance;
-            music?.ResumeAfterTimerEnd("timer-end");
+            Game.AudioAppLifecycle.CommitPairedHardResume("timer-end");
         }
 
         static void StartTimer(int minutes)

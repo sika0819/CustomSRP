@@ -63,9 +63,12 @@ namespace CustomSRP
                 return;
             }
 
-            // 铺装时不画世界：全场景每帧更重，Present 会把主线程停死。
+            // 铺装/退登时不画世界：全场景每帧更重，Present 会把主线程停死。
             // 仍清屏并画 UI，Game 视图才认这台摄像机在渲染，加载条才能往前走。
-            if (EnvItemStreamerLite.PrefillSuppressRender || IslandGpuReclaim.CoverOnly)
+            // 有 targetTexture 的离线相机（远树 Billboard 烘贴等）必须继续画世界，
+            // 否则会把 CoverOnly 黑屏 +「正在进入世界」写进 Albedo。
+            if ((EnvItemStreamerLite.PrefillSuppressRender || IslandGpuReclaim.CoverOnly)
+                && camera.targetTexture == null)
             {
                 if (camera.cameraType == CameraType.Game)
                     RenderCoverOnly(context, camera);
@@ -154,7 +157,7 @@ namespace CustomSRP
                 postFXSettings = cameraSettings.postFXSettings;
             }
 
-            // 低档 / 闺蜜机标准版默认无关后处理；开湿油时仍走 PostFX 栈（Bloom/调色按档门控）。
+            // Bloom / 调色全档开；湿油另由 AllowsOilFilter。两者任一即可走 PostFX 栈。
             bool hasActivePostFX =
                 (IslandGraphicsTier.AllowsPostFx || IslandGraphicsTier.AllowsOilFilter) &&
                 IslandLeakProbe.Allow(IslandLeakProbe.Module.PostFx) &&

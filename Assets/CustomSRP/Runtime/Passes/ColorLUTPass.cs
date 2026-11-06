@@ -80,7 +80,7 @@ namespace CustomSRP
         void ConfigureWhiteBalance(ComputeCommandBuffer buffer, PostFXSettings settings)
         {
             WhiteBalanceSettings whiteBalance = settings.WhiteBalance;
-            bool active = whiteBalance.enabled && Game.IslandGraphicsTier.AllowsColorGrading;
+            bool active = whiteBalance.enabled && Game.IslandGraphicsTier.AllowsWhiteBalance;
             float temperature = active ? whiteBalance.temperature : 0f;
             float tint = active ? whiteBalance.tint : 0f;
             buffer.SetComputeVectorParam(
@@ -169,7 +169,7 @@ namespace CustomSRP
                 }
 
                 WhiteBalanceSettings wb = settings.WhiteBalance;
-                bool wbOn = wb.enabled && Game.IslandGraphicsTier.AllowsColorGrading;
+                bool wbOn = wb.enabled && Game.IslandGraphicsTier.AllowsWhiteBalance;
                 hash = hash * 397 ^ (wbOn ? 1 : 0);
                 if (wbOn)
                 {

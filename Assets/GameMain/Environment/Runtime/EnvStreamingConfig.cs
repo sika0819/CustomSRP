@@ -187,6 +187,18 @@ namespace Game
         public static int PrefillNearHardCap = int.MaxValue;
 
         /// <summary>
+        /// Prefill hardCap 内优先保留该半径内的 JianZhu，避免近树挤掉近房。
+        /// 勿用 FarResident 全半径优先，否则 NeverUnload 会占满 90。
+        /// </summary>
+        public static float PrefillJianZhuPriorityRadius = 80f;
+
+        /// <summary>Prefill 后、AllowStream 前异步预热 JianZhu 缓存的墙钟上限（秒）。</summary>
+        public static float PrefabCacheWarmTimeoutSeconds = 1.5f;
+
+        /// <summary>Warm 按距离取最近 unique Location 上限（含农舍/码头/楼梯）。</summary>
+        public static int PrefabCacheWarmMaxLocations = 16;
+
+        /// <summary>
         /// 可投射物体超过此距离关闭 ShadowCasting。与 CRP / Quality shadowDistance 对齐。
         /// 必须在流送轮询里走近后再打开，不能只在生成时关一次。
         /// 平板在 <see cref="ApplyMobileTierDefaults"/> 里抬到 40，手机与闺蜜机保持 26。

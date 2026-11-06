@@ -8,7 +8,7 @@
 // then call ApplyWetSurface() in the fragment shader.
 // =============================================================================
 
-// Shader variables set by OilRainGPUParticles.cs via Shader.SetGlobalFloat/Color
+// Shader variables set by OilRainRenderHook / CameraRenderer via Shader.SetGlobalFloat/Color
 // These must be declared before use.
 #ifndef OIL_RAIN_WET_GLOBALS
 #define OIL_RAIN_WET_GLOBALS

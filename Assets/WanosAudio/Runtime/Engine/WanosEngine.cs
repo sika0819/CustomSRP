@@ -13,6 +13,10 @@ namespace WanosAudio
 
         static bool _playbackEnabled;
         static bool _eventPostAllowed;
+        /// <summary>
+        /// Soft-disarm 后设备仍开着；再 EnablePlayback 时跳过 Reset+Set，避免 600ms+ 尖刺。
+        /// </summary>
+        static bool _playbackDeviceOpened;
 
         /// <summary>最后一次要写入的音量（0–1 UI 量纲）。引擎未创建时也会更新，供回前台重推。默认 0.8 对齐 bank / BoluoSaveData。</summary>
         static float _lastMusicVolume01 = 0.8f;
@@ -57,6 +61,7 @@ namespace WanosAudio
         {
             _playbackEnabled = false;
             _eventPostAllowed = false;
+            _playbackDeviceOpened = false;
             _interrupted = false;
             _musicVolumeApplied = false;
             _fxVolumeApplied = false;
@@ -79,6 +84,7 @@ namespace WanosAudio
                 WanosBankStore.ClearAfterEngineUnload();
                 _playbackEnabled = false;
                 _eventPostAllowed = false;
+                _playbackDeviceOpened = false;
                 KeepSilent(reason);
                 Debug.Log($"[{LogTag}] Load ({reason}) result={r} events=off");
                 return r == WanosResult.Success || WanosNative.Instance.IsCreated;
@@ -116,6 +122,8 @@ namespace WanosAudio
         public static void StopEngine(string reason = null)
         {
             DisarmPlaybackSession(reason ?? "StopEngine");
+            // DSP 停后设备状态不可靠，下次 EnablePlayback 必须重新 Open。
+            _playbackDeviceOpened = false;
             if (!WanosNative.Instance.IsCreated)
                 return;
             WanosNative.Instance.StopAllVoices(500);
@@ -124,7 +132,7 @@ namespace WanosAudio
             Debug.Log($"[{LogTag}] StopEngine ({reason ?? "<no-reason>"})");
         }
 
-        /// <summary>Attach playback device, start DSP, allow business PostEvent.</summary>
+        /// <summary>Attach playback device, allow business PostEvent. Does not unmute / StartEngine.</summary>
         public static void EnablePlayback(string reason)
         {
             if (!WanosNative.Instance.IsCreated)
@@ -138,14 +146,28 @@ namespace WanosAudio
 
             try
             {
+                // Soft-disarm 后设备仍开：跳过 ResetPlaybackDevice+SetPlaybackDevice（真机可达 600ms+）。
+                if (_playbackDeviceOpened && WanosNative.Instance.IsCreated)
+                {
+                    _playbackEnabled = true;
+                    _eventPostAllowed = true;
+                    ReapplyVolumes();
+                    var reused = WanosNative.Instance.PlaybackState;
+                    Debug.Log(
+                        $"[{LogTag}] EnablePlayback ({reason}) reuse-device events=on playbackState={reused}");
+                    return;
+                }
+
                 if (!WanosNative.Instance.OpenDefaultPlaybackDevice())
                 {
                     Debug.LogError($"[{LogTag}] EnablePlayback ({reason}) aborted — playback device failed");
                     _playbackEnabled = false;
                     _eventPostAllowed = false;
+                    _playbackDeviceOpened = false;
                     return;
                 }
 
+                _playbackDeviceOpened = true;
                 // Call EnablePlayback (device) then StartEngine (DSP) — macOS wrapper needs device open.
                 // This method only attaches the playback device + unblocks PostEvent.
 
@@ -164,6 +186,7 @@ namespace WanosAudio
             {
                 _playbackEnabled = false;
                 _eventPostAllowed = false;
+                _playbackDeviceOpened = false;
                 Debug.LogWarning($"[{LogTag}] EnablePlayback({reason}): {e.Message}");
             }
         }
@@ -172,6 +195,7 @@ namespace WanosAudio
         {
             _eventPostAllowed = false;
             _playbackEnabled = false;
+            _playbackDeviceOpened = false;
             _musicVolumeApplied = false;
             _fxVolumeApplied = false;
 

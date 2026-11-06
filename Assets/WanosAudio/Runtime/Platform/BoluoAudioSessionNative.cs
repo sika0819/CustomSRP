@@ -30,9 +30,6 @@ namespace WanosAudio
         private static extern void BoluoAudioSession_ArmSessionForIslandPlayback();
 
         [DllImport(Lib)]
-        private static extern void BoluoAudioSession_PrepareAfterLogin();
-
-        [DllImport(Lib)]
         private static extern void BoluoAudioSession_SilenceForLogout();
 
         [DllImport(Lib)]
@@ -67,6 +64,9 @@ namespace WanosAudio
 
         [DllImport(Lib)]
         private static extern int BoluoMusicPlayerIOS_WasVoiceResumeClaimedRecently();
+
+        [DllImport(Lib)]
+        private static extern int BoluoAudioSession_ShouldHoldWeChatInterruptForSwipe();
 #endif
         /// <summary>
         /// 追加音频诊断行。统一过滤字段 <c>[BoluoAudioDbg]</c>（iOS trail 文件 + console；其它平台 Debug.Log）。
@@ -133,14 +133,6 @@ namespace WanosAudio
 #endif
         }
 
-        /// <summary>兼容旧名：原生侧已 no-op，请用 <see cref="ArmSessionForIslandPlayback"/>。</summary>
-        public static void PrepareAfterLogin()
-        {
-#if UNITY_IOS && !UNITY_EDITOR
-            BoluoAudioSession_PrepareAfterLogin();
-#endif
-        }
-
         /// <summary>会话 Disarm：关闸 + 停播清空（由 Unity 驱动，不经 Swift）。</summary>
         public static void SilenceForLogout()
         {
@@ -160,6 +152,17 @@ namespace WanosAudio
             catch { return true; }
 #else
             return true;
+#endif
+        }
+
+        /// <summary>微信发语音取消后：回前台保持暂停，滑动再续。</summary>
+        public static bool ShouldHoldWeChatInterruptOnReturn()
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            try { return BoluoAudioSession_ShouldHoldWeChatInterruptForSwipe() != 0; }
+            catch { return false; }
+#else
+            return false;
 #endif
         }
 

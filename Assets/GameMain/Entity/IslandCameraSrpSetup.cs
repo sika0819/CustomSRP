@@ -15,26 +15,66 @@ namespace Game
     {
         const string CrpTypeName = "CustomSRP.CustomRenderPipelineCamera, Assembly-CSharp";
 
+        /// <summary>闺蜜机 4K 中间 RT 长边。对齐旧工程，不改 Screen / 触摸 / HUD。</summary>
+        public const int Gmj4KColorLongEdge = 1920;
+
+        /// <summary>4K 走路相对 1920 缓冲的倍率（长边约 1440）。</summary>
+        public const float Gmj4KWalkFactor = 0.75f;
+
+        /// <summary>4K 弹窗 / 原生半层相对 1920 缓冲的倍率（长边约 960）。</summary>
+        public const float Gmj4KOverlayFactor = 0.5f;
+
+        /// <summary>闺蜜机标准版站立：画满当前缓冲，不缩中间图。</summary>
+        public const float GmjStandardStandScale = 1f;
+
+        /// <summary>闺蜜机标准版走路绝对档。1080p 上面长边约 1440。</summary>
+        public const float GmjStandardWalkScale = 0.75f;
+
+        /// <summary>闺蜜机标准版打开界面时的 renderScale。1080p 上面长边约 960。</summary>
+        public const float GmjStandardUiScale = 0.5f;
+
+        /// <summary>闺蜜机标准版闲置沉浸的中间 RT 长边。</summary>
+        public const int GmjStandardImmersiveLongEdge = 1280;
+
         /// <summary>
-        /// 站立 renderScale。平板 / 闺蜜机 / 高性能安卓 0.75；其余手机 0.5。
+        /// 站立 renderScale。4K 把中间 RT 长边收到 <see cref="Gmj4KColorLongEdge"/>；
+        /// 闺蜜机标准版画满当前缓冲；平板 / 高性能安卓 0.75；其余手机 0.5。
         /// 平板判定：<see cref="ScreenLayout.IsPad"/>。
         /// 高性能安卓见 <see cref="IslandGraphicsTier.IsHighEnd"/>（约 8GB+ 且 GPU 够强）。
         /// </summary>
         public static float DefaultRenderScale =>
-            BoluoDeviceInfo.IsSkyworthGmj()
-            || ScreenLayout.IsPad
-            || IsHighPerfAndroidIdleScale()
-                ? 0.75f
-                : 0.5f;
+            BoluoDeviceInfo.IsSkyworthGmj4K()
+                ? Gmj4KBufferScale
+                : BoluoDeviceInfo.IsSkyworthGmjStandard()
+                    ? GmjStandardStandScale
+                    : ScreenLayout.IsPad || IsHighPerfAndroidIdleScale()
+                        ? 0.75f
+                        : 0.5f;
 
         /// <summary>
-        /// 走路略压一档。闺蜜机 / 高性能安卓 0.5（站立 0.75 的下一档）；其余手机 0.375。
+        /// 走路略压一档。4K 为 1920 缓冲的 0.75；闺蜜机标准版 0.75；高性能安卓 0.5；其余手机 0.375。
         /// 起停会重建中间 RT。
         /// </summary>
         public static float WalkingRenderScale =>
-            BoluoDeviceInfo.IsSkyworthGmj() || IsHighPerfAndroidIdleScale()
-                ? 0.5f
-                : 0.375f;
+            BoluoDeviceInfo.IsSkyworthGmj4K()
+                ? Gmj4KBufferScale * Gmj4KWalkFactor
+                : BoluoDeviceInfo.IsSkyworthGmjStandard()
+                    ? GmjStandardWalkScale
+                    : IsHighPerfAndroidIdleScale()
+                        ? 0.5f
+                        : 0.375f;
+
+        /// <summary>
+        /// 让中间 RT 长边等于 <paramref name="longEdgeClamp"/>。
+        /// 按当前 Screen 像素算，背缓冲已经缩过时不会再对物理面板乘一次。
+        /// </summary>
+        public static float ScaleToLongEdge(int width, int height, int longEdgeClamp)
+        {
+            int longEdge = Mathf.Max(width, height);
+            if (longEdgeClamp <= 0 || longEdge <= longEdgeClamp)
+                return 1f;
+            return longEdgeClamp / (float)longEdge;
+        }
 
         /// <summary>高性能安卓站立清晰度：仅真机 Android 高档。</summary>
         static bool IsHighPerfAndroidIdleScale()
@@ -46,15 +86,72 @@ namespace Game
 #endif
         }
 
-        /// <summary>Unity Panel/Dialog 或原生半层（OverlayPresent）打开时，与沉浸同档。</summary>
-        public static float PopupRenderScale => ImmersiveRenderScale;
+        /// <summary>
+        /// Unity Panel/Dialog 或原生半层（OverlayPresent）。
+        /// 4K 为 1920 缓冲的一半；标准版固定 0.5；其余与沉浸同档。
+        /// </summary>
+        public static float PopupRenderScale =>
+            BoluoDeviceInfo.IsSkyworthGmj4K()
+                ? Gmj4KBufferScale * Gmj4KOverlayFactor
+                : BoluoDeviceInfo.IsSkyworthGmjStandard()
+                    ? GmjStandardUiScale
+                    : ImmersiveRenderScale;
 
         /// <summary>预设面板：手机、闺蜜机标准版、4K 一律 0.375。</summary>
         public const float PresetPanelRenderScale = 0.375f;
 
-        /// <summary>Idle 沉浸（HUD 隐去）。手机 0.375；闺蜜机 0.5。</summary>
+        /// <summary>
+        /// Idle 沉浸（HUD 隐去）。4K 保持 1920 缓冲；标准版长边收到 1280；手机 0.375。
+        /// </summary>
         public static float ImmersiveRenderScale =>
-            BoluoDeviceInfo.IsSkyworthGmj() ? 0.5f : 0.375f;
+            BoluoDeviceInfo.IsSkyworthGmj4K()
+                ? Gmj4KBufferScale
+                : BoluoDeviceInfo.IsSkyworthGmjStandard()
+                    ? GmjStandardImmersiveScale
+                    : 0.375f;
+
+        static bool _logged4KScale;
+        static bool _loggedStandardScale;
+
+        /// <summary>4K 站立 / 沉浸：当前 Screen 长边收到 1920 的系数。</summary>
+        static float Gmj4KBufferScale
+        {
+            get
+            {
+                float scale = ScaleToLongEdge(Screen.width, Screen.height, Gmj4KColorLongEdge);
+                if (!_logged4KScale && Screen.width > 8 && Screen.height > 8)
+                {
+                    _logged4KScale = true;
+                    Log.Info(
+                        "[IslandCamera] gmj4k bufferScale=" + scale.ToString("F3")
+                        + " longEdge=" + Gmj4KColorLongEdge
+                        + " screen=" + Screen.width + "x" + Screen.height);
+                }
+                return scale;
+            }
+        }
+
+        /// <summary>标准版闲置沉浸：当前 Screen 长边收到 1280 的系数。</summary>
+        static float GmjStandardImmersiveScale
+        {
+            get
+            {
+                float scale = ScaleToLongEdge(
+                    Screen.width, Screen.height, GmjStandardImmersiveLongEdge);
+                if (!_loggedStandardScale && Screen.width > 8 && Screen.height > 8)
+                {
+                    _loggedStandardScale = true;
+                    Log.Info(
+                        "[IslandCamera] gmj standard stand=" + GmjStandardStandScale.ToString("F3")
+                        + " walk=" + GmjStandardWalkScale.ToString("F3")
+                        + " ui=" + GmjStandardUiScale.ToString("F3")
+                        + " immersive=" + scale.ToString("F3")
+                        + " longEdge=" + GmjStandardImmersiveLongEdge
+                        + " screen=" + Screen.width + "x" + Screen.height);
+                }
+                return scale;
+            }
+        }
 
         /// <summary>
         /// 默认目标帧率（判定稳定后缓存）。
@@ -228,7 +325,7 @@ namespace Game
             SetField(settingsType, settings, "copyColor", false);
             SetField(settingsType, settings, "copyDepth", true);
 
-            // 低档无湿油时整机关后处理；有湿油则走管线 PostFX（Bloom/调色仍由档位门控）。
+            // 无后处理且无湿油时整机关 PostFX；否则走管线（Bloom/调色全档开）。
             if (!IslandGraphicsTier.AllowsPostFx && !IslandGraphicsTier.AllowsOilFilter)
             {
                 SetField(settingsType, settings, "postFXSettings", null);

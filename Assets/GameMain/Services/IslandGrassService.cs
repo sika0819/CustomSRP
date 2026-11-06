@@ -210,13 +210,14 @@ namespace Game
                 return;
 
 #if UNITY_ANDROID || UNITY_IOS
-            // 低档少镂空叶片。闺蜜机标准版再收（不改树）；4K 走下面的低档。
-            if (IslandGraphicsTier.BandwidthConservative)
-                apply.Invoke(binder, new object[] { 800, 12f, 1 });
-            else if (IslandGraphicsTier.GpuTier == IslandGraphicsTier.Tier.Low)
-                apply.Invoke(binder, new object[] { 8000, 48f, 2 });
+            // 低档少镂空叶片。闺蜜机标准版对齐低档草预算（带宽）；4K 同走低档。
+            // 远距靠打包抽稀覆盖 draw，走近加密；预算略抬避免窗内全秃。
+            if (IslandGraphicsTier.BandwidthConservative
+                || IslandGraphicsTier.GpuTier == IslandGraphicsTier.Tier.Low)
+                apply.Invoke(binder, new object[] { 12000, 64f, 2 });
             else
                 apply.Invoke(binder, new object[] { 24000, 90f, 3 });
+
 #else
             apply.Invoke(binder, new object[] { 48000, 180f, 4 });
 #endif

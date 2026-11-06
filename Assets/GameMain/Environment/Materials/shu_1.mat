@@ -85,16 +85,16 @@ Material:
     - _WindStrength: 0.08
     - _ZWrite: 1
     m_Colors:
-    - _AmbientColor: {r: 0.5333333, g: 0.6627451, b: 0.4196078, a: 1}
-    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
-    - _BottomColor: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
-    - _Color: {r: 1, g: 1, b: 1, a: 1}
+    - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BaseColor: {r: 1.154589, g: 1.127048, b: 1.129866, a: 1}
+    - _BottomColor: {r: 0.53333336, g: 0.6627451, b: 0.41960785, a: 1}
+    - _Color: {r: 1.154589, g: 1.127048, b: 1.129866, a: 1}
     - _EdgeColor: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
     - _FilterColor: {r: 1, g: 1, b: 1, a: 1}
-    - _ShadowTint: {r: 0.3803922, g: 0.4784314, b: 0.3490196, a: 1}
-    - _ShadowWarm: {r: 0.6588235, g: 0.7490196, b: 0.4705882, a: 1}
-    - _SpecularColor: {r: 0.6588235, g: 0.7490196, b: 0.4705882, a: 1}
-    - _TopColor: {r: 0.6588235, g: 0.7490196, b: 0.4705882, a: 1}
+    - _ShadowTint: {r: 0.38039216, g: 0.47843137, b: 0.34901962, a: 1}
+    - _ShadowWarm: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
+    - _SpecularColor: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
+    - _TopColor: {r: 0.65882355, g: 0.7490196, b: 0.47058824, a: 1}
     - _WindDirection: {r: 1, g: 0, b: 1, a: 0}
     - _WindStrengthVec: {r: 0.2, g: 0, b: 0.2, a: 0}
   m_BuildTextureStacks: []

@@ -24,6 +24,38 @@ description: >-
 
 另：河岸 / 近岸海若 停播还卸引擎资源，走回再解码全局恢复，也会刺啦——所以后来改成「只停播、常保留 bank」。
 
+## 下载完 bank 贴河/瀑/火仍无声
+
+Critical 默认 `loadIntoEngine=false`：只发 `OnBankLocalReady`，不灌引擎。旧逻辑要求「先 Retain 失败进 pending」才重评；`PruneUnwantedPendingRetries` 同帧把 pending 清掉后，listener-still 会站着永远跳过 Evaluate。
+
+修法（`AmbienceZoneService.HandleAmbienceBankReadySignal`）：
+- 目录环境音 / 已有 source / pending 任一命中 → seed `_pendingRetryBanks` + `InvalidateListenerStill` + `EvaluateNow`
+- `_forceEvalUntil`（≈ `ExitGraceSeconds`）内禁止 still 跳过，且强制窗内不 Prune pending
+- 篝火另需 `IsVisuallyIgnited`；未点燃时 LocalReady 重评也不会 Post
+
+贴河/瀑/火 `want=true` 时另走 `EnsureProximityBankReady`：
+- 已落盘未灌引擎 → 立刻 `WanosBankStore.Load`（不靠 Bootstrap `loadIntoEngine`）
+- 未落盘 → `UserBankDownloadFlow` `prioritize+preempt` + `loadIntoEngine=true`（无进度窗）
+- 湖↔瀑互斥：`PreferFallWithinMeters` 须 ≥ 大瀑 Enter（80）；过小会在瀑可听圈内被湖掐成「走到瀑布没声」
+- 桥上河声：River 增益近场 0dB 平台拉到 `NearSurfaceMeters`（12），且近场 Post 跳过 SoftEnter −36dB
+
+## 火边听不见篝火（play=1 / gain=0 仍无声）
+
+真机日志典型：`campfire_extra_* want=1 play=1 gain=0dB v=1`，同帧瀑布也 `gain=0dB`；`hours=12` 排除夜间。
+
+根因不是「没 Post」，而是：
+1. `WaterfallCampfireMuteMeters=0`（产品要同听）→ 火边瀑满增益盖住篝火
+2. 篝火未钉正午 TOD（河瀑已钉）→ 夜间更易「play=1 听不见」
+3. 双 `campfire_extra_*` 同 bank 叠 Post；`Campfire` 须进 exclusive shared
+4. Critical bank 先 Post 后 loaded → 静音 voice 无 Stopped 回调，`KeepSourcePlaying` 不再 Post
+
+修法：
+- `ShouldPinDaytimeTimeOfDay` 含 `Campfire`
+- `AmbienceWaterSilencePolicy.WaterDuckDbNearCampfire`：贴点燃火压河/瀑/湖增益（硬静音圈仍 0）
+- `IsExclusiveSharedPlayBank` 含 `Campfire`
+- `HandleAmbienceBankReadySignal` 后 `HealPlayingPointSourcesForBank`
+- 篝火近场 0dB 平台拉到 12m
+
 贴岸 / 沿河走路另一种刺啦：已播时每 tick 把 Ocean/River 发射器硬跟到最近点，近场空间化拉链。
 修法见 `AmbienceOceanPosePolicy`：听者离当前声道落点不足 8m 不改 pose，够远才跳；增益仍用 shell 距离。
 

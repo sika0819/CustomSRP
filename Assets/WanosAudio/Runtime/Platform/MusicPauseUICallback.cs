@@ -15,7 +15,8 @@ namespace WanosAudio
             /// <summary>长期抢占：音频被其他应用占用</summary>
             CompetingLong = 1,
             /// <summary>
-            /// 程序化暂停（定时结束 / 通知栏 PauseAll）：只切 yinyuePause 图标，不弹「音频中断」toast。
+            /// 程序化暂停（定时结束 / 通知栏 PauseAll）。
+            /// CustomSRP 回岛静音时与打断共用同一 pauseHint toast。
             /// </summary>
             ProgrammaticPause = 2,
         }

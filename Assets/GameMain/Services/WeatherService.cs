@@ -22,8 +22,11 @@ namespace Game
         public int Level { get; private set; } = 1;
         /// <summary>Active Boluo AtmosphereProfile look (sky / light / fog pigments).</summary>
         public IslandLookKind LookKind { get; private set; } = IslandLookKind.Canonical;
+        /// <summary>关雾 / Clear 绝对密度；开雾 = 基线 × <see cref="WeatherFogScale"/>。</summary>
+        public const float BaselineFogDensity = 0.003f;
+
         /// <summary>Absolute ExpSquared density pushed to <see cref="IAtmosphereVisualDriver"/>.</summary>
-        public float FogDensity { get; private set; } = 0.003f;
+        public float FogDensity { get; private set; } = BaselineFogDensity;
         public bool IsTimeTransitioning => _timeLerpActive;
 
         /// <summary>0–1 SmoothStep of the active period blend. 1 when the clock is settled.</summary>
@@ -50,9 +53,6 @@ namespace Game
         public bool IsWeatherBusy => Time.unscaledTime < _panelBusyUntil;
 
         float _panelBusyUntil;
-
-        /// <summary>开雾基系数（默认 0.003）；天气 UI 用 <see cref="WeatherFogScale"/> 乘出绝对密度。</summary>
-        float _hazeFogDensity = 0.003f;
 
         bool _timeLerpActive;
         float _timeLerpElapsed;
@@ -173,7 +173,10 @@ namespace Game
             PersistAtmosphereIfSettled();
         }
 
-        /// <summary>切账号 / 退登：内存回到默认大气，禁止写盘（磁盘已由 persistence 清空）。</summary>
+        /// <summary>
+        /// 切账号 / 退登：只复位内存态，禁止写盘。
+        /// 不 Push 视觉——Leave 当帧相机可能仍开着；二次进岛由 RestoreOrApplyLocalClock / PushVisuals 罩下写正确态。
+        /// </summary>
         public void ClearForAccountSwitch()
         {
             _suppressPersist = true;
@@ -187,9 +190,11 @@ namespace Game
                 Hours = 12f;
                 Period = IslandTimePeriod.Noon;
                 LookKind = IslandLookKind.Canonical;
-                FogDensity = 0.003f;
-                _hazeFogDensity = 0.003f;
-                PushAll();
+                FogDensity = ResolveFogDensity(Kind, Level);
+                VisualWind01 = WindFactor(Kind, Level);
+                VisualRainAudio = AudioUnits(Kind, Level, IslandWeatherKind.Rain);
+                VisualFoggyAudio = AudioUnits(Kind, Level, IslandWeatherKind.Foggy);
+                _displayedFog = FogDensity;
             }
             finally
             {
@@ -232,8 +237,9 @@ namespace Game
                 Hours = Mathf.Repeat(hours, 24f);
                 Period = ResolvePeriod(Hours);
                 PushTime();
+                // 密度只由基线 × WeatherFogScale 决定；忽略旧存档里偏高的绝对雾值。
+                _ = fogDensity;
                 SetWeather(kind, level, fireEvent);
-                SetFogDensity(fogDensity);
                 if (fireEvent && GameEntry.Event != null)
                     GameEntry.Event.Fire(this, TimeOfDayChangedEventArgs.Create(Hours, Period));
             }
@@ -362,7 +368,7 @@ namespace Game
 
             Kind = kind;
             Level = nextLevel;
-            FogDensity = _hazeFogDensity * WeatherFogScale(Kind, Level);
+            FogDensity = ResolveFogDensity(Kind, Level);
             _weatherFromFog = fromFog;
             _weatherToFog = FogDensity;
             _weatherFromWind = fromWind;
@@ -386,7 +392,7 @@ namespace Game
             _weatherLerpActive = false;
             Kind = kind;
             Level = level;
-            FogDensity = _hazeFogDensity * WeatherFogScale(Kind, Level);
+            FogDensity = ResolveFogDensity(Kind, Level);
             _displayedFog = FogDensity;
             VisualWind01 = WindFactor(Kind, Level);
             VisualRainAudio = AudioUnits(Kind, Level, IslandWeatherKind.Rain);
@@ -423,10 +429,11 @@ namespace Game
         }
 
         /// <summary>
-        /// Pin absolute ExpSquared density (preset apply). Backs out haze so later weather UI can rescale.
+        /// 按当前天气重算绝对密度（基线 × 倍率）。参数保留兼容调用方，已忽略以免旧预设/存档污染基线。
         /// </summary>
         public void SetFogDensity(float density)
         {
+            _ = density;
             if (_weatherLerpActive)
             {
                 _weatherLerpActive = false;
@@ -436,16 +443,18 @@ namespace Game
                 PushWeather();
             }
 
-            FogDensity = Mathf.Max(0f, density);
-            float scale = WeatherFogScale(Kind, Level);
-            _hazeFogDensity = scale > 1e-4f ? FogDensity / scale : FogDensity;
+            FogDensity = ResolveFogDensity(Kind, Level);
             _displayedFog = FogDensity;
             PushFogDensity();
             PersistAtmosphereIfSettled();
         }
 
+        /// <summary>关雾 = <see cref="BaselineFogDensity"/>；开雾 = 基线 × <see cref="WeatherFogScale"/>。</summary>
+        public static float ResolveFogDensity(IslandWeatherKind kind, int level) =>
+            BaselineFogDensity * WeatherFogScale(kind, level);
+
         /// <summary>
-        /// Multiplier on haze base (default 0.003).
+        /// Multiplier on <see cref="BaselineFogDensity"/>.
         /// 关雾 / Clear → 1（0.003）；Foggy 小/中/大 → 2/3/4（0.006 / 0.009 / 0.012）。
         /// </summary>
         public static float WeatherFogScale(IslandWeatherKind kind, int level)

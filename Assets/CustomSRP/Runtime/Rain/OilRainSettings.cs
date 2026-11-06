@@ -127,7 +127,7 @@ namespace CustomSRP
         public float streakFallSpeed = 3.5f;
 
         [Tooltip("Render rain with the single camera-following Quad (OilRainStreakQuad). " +
-                 "When off, the legacy 30k-instance OilRainGPUParticles path runs instead.")]
+                 "When off, OilRainStreakQuad draws nothing.")]
         public bool useSingleQuadStreaks = true;
 
         [Tooltip("Pre-baked rain-curtain material (Boluo RainMaterial pattern). " +

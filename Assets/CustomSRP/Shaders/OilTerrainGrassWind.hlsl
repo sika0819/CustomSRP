@@ -21,7 +21,9 @@ float OilGrassDistanceFade(float3 pivotWS)
     float dx = pivotWS.x - cam.x;
     float dz = pivotWS.z - cam.z;
     float d = sqrt(dx * dx + dz * dz);
-    return saturate(1.0 - smoothstep(maxD * 0.82, maxD, d));
+    // 更长淡入带：走近是长高，不是硬边弹出。
+    float fade = saturate(1.0 - smoothstep(maxD * 0.55, maxD, d));
+    return fade < 0.02 ? 0.0 : fade;
 }
 
 #endif

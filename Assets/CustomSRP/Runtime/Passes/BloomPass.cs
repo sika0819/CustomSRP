@@ -109,7 +109,7 @@ namespace CustomSRP
 
             int downscaleLimit = Mathf.Max(1, bloom.downscaleLimit);
 
-            // Bloom：仅高档机。中/低在门控处直接跳过。
+            // Bloom：全档可开；门控关或参数无效时跳过。
             if (!Game.IslandGraphicsTier.AllowsBloom ||
                 !bloom.enabled ||
                 bloom.maxIterations == 0 ||

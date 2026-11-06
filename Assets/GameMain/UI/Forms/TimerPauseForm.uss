@@ -1,9 +1,12 @@
+/* Boluo tip-family dim (a=0.8): 温馨提示 over music sheet must not share white card only. */
 .game-timer-pause-form__root {
     position: absolute;
     left: 0;
     right: 0;
     top: 0;
     bottom: 0;
+    background-color: rgba(0, 0, 0, 0.8);
+    picking-mode: Position;
 }
 
 #timerDialog {

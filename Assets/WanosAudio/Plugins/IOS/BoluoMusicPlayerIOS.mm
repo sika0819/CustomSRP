@@ -144,6 +144,7 @@ static void BoluoNativeAudioJank_Report(NSString *phase, CFTimeInterval duration
 static int BoluoAudio_IsPlaybackDeviceRecoveryInFlight(void);
 /// ownerEpoch：本次 unmute 决策的 Focus Epoch；窗口内出现更新决策则整链作废（防 unmute 压过更新的 mute）。
 static void BoluoTryDelayedUnmute(NSInteger ownerEpoch);
+void BoluoMusicPlayerIOS_ClearWeChatSwipeHold(void);
 
 /// 静音/恢复错序与 Post 事件；Unity DllImport 与本文件内 ObjC 共用此唯一实现，避免与 C# 重复调用。
 static const NSTimeInterval kBoluoMuteStaggerDelaySeconds = 0.08;
@@ -289,6 +290,34 @@ static BOOL BoluoNotificationIsAppWasSuspended(NSNotification *notification) {
     return NO;
 }
 
+static BOOL BoluoNotificationIsRouteDisconnected(NSNotification *notification) {
+    if (@available(iOS 17.0, *)) {
+        NSNumber *reasonValue = notification.userInfo[AVAudioSessionInterruptionReasonKey];
+        return reasonValue != nil
+            && (AVAudioSessionInterruptionReason)[reasonValue unsignedIntegerValue]
+                == AVAudioSessionInterruptionReasonRouteDisconnected;
+    }
+    return NO;
+}
+
+/// 前后台、系统搜索、控制中心、以及「还没有外来播放器」的焦点通知：不要动音频图。
+/// 预压增益、标脏设备、再 setActive 都会让 CoreAudio 重开输出，听感就是卡一下。
+/// 已进后台且不是挂起（微信/QQ 的 Began 常早于 otherAudio）仍返回 NO，交给静音路径。
+static BOOL BoluoInterruptionShouldKeepGraph(NSNotification *notification) {
+    if (BoluoNotificationIsRouteDisconnected(notification)) {
+        return NO;
+    }
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    BOOL foreign = [session isOtherAudioPlaying] || session.secondaryAudioShouldBeSilencedHint;
+    BOOL background = [UIApplication sharedApplication].applicationState
+        == UIApplicationStateBackground;
+    if (BoluoNotificationIsAppWasSuspended(notification)) {
+        BOOL startup = BoluoAudioSession_IsStartupAudibleCommitted() == 0;
+        return !foreign && !(startup && background);
+    }
+    return !foreign && !background;
+}
+
 /// 通知栈内同步压增益：赶在 MiniAudio <c>ma_device_stop</c> 之前。
 /// 禁止在此调用 SetMute / Reset / setActive（与 MiniAudio 同栈 stop 会死锁）。
 static void BoluoSyncPreDipForSystemInterruption(NSString *reason) {
@@ -308,9 +337,11 @@ static void BoluoInstallEarlyInterruptionPreDipObserver(void) {
             != AVAudioSessionInterruptionTypeBegan) {
             return;
         }
-        if (BoluoNotificationIsAppWasSuspended(note)) {
+        // 挂起、以及还没有对手的前后台：增益不动。已离开或已看见对方才预压。
+        if (BoluoInterruptionShouldKeepGraph(note)) {
             return;
         }
+        BoluoAudioLog(@"[BoluoAudioFg] switch_class class=guard_mute detail=interruption_began");
         BoluoSyncPreDipForSystemInterruption(@"interruption_began_pre_dip");
     }];
     [nc addObserverForName:AVAudioSessionSilenceSecondaryAudioHintNotification
@@ -322,6 +353,7 @@ static void BoluoInstallEarlyInterruptionPreDipObserver(void) {
             != AVAudioSessionSilenceSecondaryAudioHintTypeBegin) {
             return;
         }
+        BoluoAudioLog(@"[BoluoAudioFg] switch_class class=guard_mute detail=silence_secondary");
         BoluoSyncPreDipForSystemInterruption(@"silence_secondary_pre_dip");
     }];
 }
@@ -412,6 +444,7 @@ static void BoluoTryDelayedUnmute(NSInteger ownerEpoch) {
             BoluoApplyMusicGain(1.0f, false, @"unmute_follow_existing_resume");
         }
         SetMute(false);
+        BoluoMusicPlayerIOS_ClearWeChatSwipeHold();
         BoluoAudioLog(@"[BoluoAudioResume] BoluoSetMute unmute follow existing resume (no dip)");
         return;
     }
@@ -428,6 +461,7 @@ static void BoluoTryDelayedUnmute(NSInteger ownerEpoch) {
     sBoluoEngineHardMuted = NO;
     // SetMute(false) 之后再 Resume_Music，避免仍硬 mute 时事件抢恢复造成听感毛刺
     WanosMusicPlayer_PostGlobalResumeMusic();
+    BoluoMusicPlayerIOS_ClearWeChatSwipeHold();
     BoluoNotifyDelayedUnmuteLanded();
     int stateDone = GetPlaybackState();
     BoluoAudioLog(@"[BoluoAudioResume] BoluoSetMute DONE(mute=NO) SetMute(false) playbackState=%@ rampObjId=%llu",
@@ -638,8 +672,10 @@ extern void UnitySendMessage(const char* obj, const char* method, const char* ms
 /// 本轮竞争曾见 otherAudioPlaying=YES（杀 QQ 音乐后 secondarySilence 可能卡住）
 @property (nonatomic, assign) BOOL competingEpisodeSawOtherAudioPlaying;
 /// 本轮是否曾见 secondarySilenceHint（微信语音输入/ASR）。
-/// 与 sawOtherAudio 组合：仅 otherAudio（QQ/B 站）→ 等回前台续；ASR/来电/RD → 后台可续。
+/// 与 sawOtherAudio 组合：仅 otherAudio（QQ/B 站）→ 等回前台续。
 @property (nonatomic, assign) BOOL competingEpisodeSawSecondarySilence;
+/// 微信发语音取消：保持暂停。回前台显示音频打断，滑动再续。解 mute 后清掉。
+@property (nonatomic, assign) BOOL awaitSwipeAfterWeChatVoice;
 /// 最近一次 Interruption Began 时间；微信语音识别刚启动时 secondarySilence 可能晚于 Began 数百毫秒，
 /// 此窗口内禁止静默确认/独占抢回，否则对方录音/ASR 一上来就被掐。
 @property (nonatomic, assign) NSTimeInterval lastInterruptionBeganEpoch;
@@ -777,6 +813,7 @@ extern void UnitySendMessage(const char* obj, const char* method, const char* ms
 - (void)_scheduleWaitForCompetingAudioToStop;
 - (void)_pollWaitForCompetingAudioToStop;
 - (void)_penalizeBackgroundSilenceConfirmIfMisjudged;
+- (void)_armSilenceConfirmPollsForCurrentEpisode;
 - (void)handleSilenceSecondaryAudioHint:(NSNotification *)notification;
 // 公共方法：暂停播放（供定时器等外部调用）
 // reason: 暂停原因，用于日志记录（如 "Timer"）
@@ -867,6 +904,7 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         instance.lastExternalToBuiltInRouteEpoch = 0;
         instance.competingEpisodeSawOtherAudioPlaying = NO;
         instance.competingEpisodeSawSecondarySilence = NO;
+        instance.awaitSwipeAfterWeChatVoice = NO;
         instance.lastInterruptionBeganEpoch = 0;
         instance.lastRouteDisconnectedResumeEpoch = 0;
         instance.lastRouteDisconnectedInterruptionEpoch = 0;
@@ -966,7 +1004,9 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
 }
 
 - (void)noteInterruptionBegan:(NSString *)reason {
-    self.deviceDirty = YES; // Began 不 Reset，但设备视为脏，Ended 须恢复
+    // 不在这里标脏。焦点/前后台切换时引擎常常还是 Started，
+    // 标脏会强迫 Ended 走 SetPlaybackDevice，听感就是卡一下。
+    // 路由断开、或异步里读到引擎已停，再单独把 deviceDirty 拉上。
     [self transitionToRecoveryPhase:BoluoPlayerRecoveryPhaseInterruptionActive
                              reason:reason ?: @"interruptionBegan"];
 }
@@ -1421,6 +1461,23 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     AVAudioSessionCategoryOptions options = [self optionsFromBits:self.sessionOptions];
     options &= ~AVAudioSessionCategoryOptionMixWithOthers;
 
+    // 引擎还在、没有对方：不要 setActive。0.8s 后的独占重抢是前后台卡一下的另一刀。
+    BOOL mixNow = (session.categoryOptions & AVAudioSessionCategoryOptionMixWithOthers) != 0;
+    BOOL engineStarted = !self.deviceDirty
+        && !self.playbackDeviceRecoveryInFlight
+        && GetPlaybackState() == 2
+        && [session.category isEqualToString:category]
+        && !mixNow;
+    if (engineStarted) {
+        BoluoAudioLog(@"[BoluoAudioResume] Exclusive reclaim NOOP (graph running)");
+        self.exclusiveReclaimRetryCount = 0;
+        [self _reassertNowPlayingAndCommandsWithReason:@"ExclusiveReclaimSoft"];
+        if (self.isMuted) {
+            [self unmuteEngineIfExclusiveAvailableWithReason:@"ExclusiveReclaimSoft"];
+        }
+        return;
+    }
+
     // setCategory/setActive 阻塞调用走串行音频队列，成功/重试处理回主线程
     dispatch_async(BoluoAudioWorkQueue(), ^{
         // 竞态兜底：入队后对方可能刚开始播放/录音，独占 reclaim 此刻会顶停对方。
@@ -1541,20 +1598,7 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         return;
     }
 
-    // QQ/B 站等 otherAudio competing：对方停后仍等回波萝前台再续（禁止后台抢播）。
-    // 微信 ASR / 来电等短暂打断：允许后台自动续（见 shouldAllowBackgroundAutoResume…）。
-    if (![self shouldAllowBackgroundAutoResumeAfterCompetingAudioStopped]) {
-        BoluoAudioLog(@"[BoluoAudioResume] competing-media episode — defer resume until foreground (sawSecondary=%@ sawOtherAudio=%@)",
-              self.competingEpisodeSawSecondarySilence ? @"YES" : @"NO",
-              self.competingEpisodeSawOtherAudioPlaying ? @"YES" : @"NO");
-        self.backgroundSilenceConfirmStreak = 0;
-        self.backgroundResumeArmed = NO;
-        self.wantsResumeAfterRecovery = YES;
-        [self noteCompetingAudioDetected:@"competing-media-defer-foreground"];
-        [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_pollWaitForCompetingAudioToStop) object:nil];
-        self.competingAudioPollCount = 0;
-        return;
-    }
+    [self _armSilenceConfirmPollsForCurrentEpisode];
 
     // 竞争音源停了但菠萝在后台:先做「静默确认」再恢复,不趁瞬时间隙抢占。
     // - 误伤场景一(切歌间隙):对方切视频/切歌的 1-2s 停顿,0.5s 轮询立刻独占复播顶掉对方。
@@ -1629,19 +1673,23 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     }];
 }
 
-/// 后台自动续播门闩（产品矩阵）：
-/// - ASR / 来电 / RD 等短暂打断：允许后台续。
-/// - 本轮见过 otherAudio（QQ 音乐 / B 站等）且不是「仅 secondarySilence」：等回前台再续。
-///   若曾见 secondarySilence（微信按住发语音），即使短暂带上 otherAudio 仍允许后台续。
+/// 后台自动续播门闩（mobile-audio-focus）：
+/// MEDIA / 微信语音结束后均允许后台续；静默窗分档见 _armSilenceConfirmPollsForCurrentEpisode。
 - (BOOL)shouldAllowBackgroundAutoResumeAfterCompetingAudioStopped {
-    if ([UIApplication sharedApplication].applicationState != UIApplicationStateBackground) {
-        return YES;
-    }
-    if (self.competingEpisodeSawOtherAudioPlaying
-            && !self.competingEpisodeSawSecondarySilence) {
-        return NO;
-    }
     return YES;
+}
+
+/// MEDIA → 默认 30s（60×0.5）；仅微信 secondary → 约 2s（4×0.5）。误恢复加倍优先保留。
+- (void)_armSilenceConfirmPollsForCurrentEpisode {
+    if (self.backgroundSilenceConfirmPollsRequired > 60) {
+        // 已处于误恢复加倍窗口，勿压回短窗。
+        return;
+    }
+    if (self.competingEpisodeSawOtherAudioPlaying) {
+        self.backgroundSilenceConfirmPollsRequired = 60;
+    } else if (self.competingEpisodeSawSecondarySilence) {
+        self.backgroundSilenceConfirmPollsRequired = 4;
+    }
 }
 
 /// 后台自动恢复后短窗内又被竞争音源打断 → 上次「对方已退出」是误判（对方 App 还活着，
@@ -1749,6 +1797,11 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
             }
             // SilenceSecondary BEGIN 即 ASR/录音/部分语音播放抢麦信号
             self.competingEpisodeSawSecondarySilence = YES;
+            // skill：语音结束后约 1.5–2s 后台续；短静默窗，禁止 swipe 门闩。
+            if (self.backgroundSilenceConfirmPollsRequired <= 60) {
+                self.backgroundSilenceConfirmPollsRequired = 4;
+            }
+            self.awaitSwipeAfterWeChatVoice = NO;
             if (wasAudible) {
                 self.wantsResumeAfterRecovery = YES;
                 [self noteCompetingAudioDetected:@"silenceSecondaryBegin"];
@@ -1997,6 +2050,9 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     // 切微信等常走 transient_duck 且没有可靠 InterruptionEnded → Unity 增益粘在 0.4；
     // 回前台必须清 duck，否则回岛切预设听感一直偏小。
     [self clearTransientDuckOnForegroundReturn];
+
+    // skill：回前台立刻抢回；微信语音也不再等滑动。
+    self.awaitSwipeAfterWeChatVoice = NO;
 
     // QQ 音乐等：回前台时 otherAudio 常仍为 YES；旧逻辑 defer → 焦点留在 QQ。
     // 用户主动切回菠萝 → 强制独占抢回（可顶停对方），再 tryResume unmute。
@@ -2402,10 +2458,8 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     return NO;
 }
 
-/// 导航/短信等短暂介入：前台 + 无 otherAudio、无 secondarySilence、非 RD → duck；电话/微信/QQ 仍 mute。
-/// 后台一律禁止 duck：切 QQ 等 Began 常早于 otherAudio，duck 增益骤降即「卡一下」
-/// （线上 D89E1DC4410E：transient_duck → 2.5s escalate；对齐 BoluoAudioFocusLossBranchPolicy）。
-/// 误判风险：电话刚开始可能短暂符合条件 → 2.5s 后 escalate 到 mute（见 escalateTransientDuckToMuteIfNeeded）。
+/// 不再用于 Began 的立即降音。切 QQ / 微信时 Began 常早于 otherAudio，
+/// 先降到四成再护栏就是「卡一下」。导航若人还在前台且没有对手，走 keep-graph，不经过这里。
 - (BOOL)shouldPreferTransientDuckForInterruption:(NSNotification *)notification
                               isRouteDisconnected:(BOOL)isRouteDisconnected {
     // Inactive/Background 都视为已切走：WillResignActive 后 Began 时 state 可能仍是 Inactive
@@ -3048,13 +3102,9 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     info[MPMediaItemPropertyTitle] = self.nowPlayingTitle ?: @"直播";
     info[MPMediaItemPropertyArtist] = self.nowPlayingArtist ?: @"";
     info[MPMediaItemPropertyAlbumTitle] = self.nowPlayingAlbum ?: @"";
-    // 进岛占位：人还在前台时，引擎 mute 也按播放中出卡。后台且仍 mute 则不占负一屏。
-    BOOL inBackground = [UIApplication sharedApplication].applicationState == UIApplicationStateBackground;
-    BOOL showPlaying = !self.userManuallyPaused && !self.isMuted;
-    if (!showPlaying && self.nowPlayingAdvertisedPlaying && !inBackground) {
-        showPlaying = YES;
-    }
-    // PlaybackRate: 0=暂停，1=播放
+    // 对齐线上 96ec0d5f：PlaybackRate 只看 isMuted。暂停=0，播放=1。
+    // 不用「前台占位仍显示播放中」盖掉用户暂停或系统静音，否则负一屏按钮和真实出声相反。
+    BOOL showPlaying = !self.isMuted;
     info[MPNowPlayingInfoPropertyPlaybackRate] = @(showPlaying ? 1.0 : 0.0);
     // DefaultPlaybackRate: 提供稳定默认速率（公开字段，不需要 entitlement）
     info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = @(1.0);
@@ -3152,11 +3202,18 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         [self updateNowPlayingInfoCenter];
         return;
     }
+    if (!mute) {
+        self.awaitSwipeAfterWeChatVoice = NO;
+    }
     
     // 1. Logic aligned with WanosAudioSession.mm
     
     if (isUserAction) {
         self.userManuallyPaused = mute;
+        // 用户暂停后禁止占位卡再把 Rate 刷回 1。
+        if (mute) {
+            self.nowPlayingAdvertisedPlaying = NO;
+        }
         // REMOVED: UnitySendMessage here caused double-notifications (once in Handler, once here).
         // WanosAudioSession.mm does NOT send message here.
         // NSString *gameObjectName = self.unityGameObjectName ?: @"BoluoMusicPlayerIOS";
@@ -3779,35 +3836,37 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         options &= ~AVAudioSessionCategoryOptionDefaultToSpeaker;
     }
 
-    // 幂等 guard（对齐 BoluoAudioFocusLossBranchPolicy.ShouldNoopRestoreExclusiveWhenEngineAlreadyAudible）：
-    // 引擎已 Started、未 mute、category/options 达标、无 otherAudio、无恢复 in-flight 时，
-    // **无视**粘住的 pendingResume / deviceReset / interruptionActive（AppWasSuspended 误标脏后的 sticky），
-    // 直接 NOOP 并清 sticky——否则每次回前台 setCategory+setActive 重启 IO = 「咯噔」。
-    // force 也走该 guard：DidBecomeActive 每次都 force，已 audible 独占时无可抢回之物。
-    // 对方仍在出声 / 仍 mute / 恢复 in-flight 时绝不 NOOP。
-    BOOL categoryOptionsMatch =
-        [session.category isEqualToString:category] && session.categoryOptions == options;
+    // 幂等 guard：引擎已 Started、category 仍是独占 Playback、无 otherAudio、设备没脏时，
+    // 跳过 setCategory+setActive。已 active 再 setActive 会重开 IO，前后台/切微信就是卡一下。
+    // 静音但引擎还在跑同样跳过激活，解静音交给恢复链。option 位差（蓝牙旗标）不值得重启。
+    BOOL mixWanted = (options & AVAudioSessionCategoryOptionMixWithOthers) != 0;
+    BOOL mixNow = (session.categoryOptions & AVAudioSessionCategoryOptionMixWithOthers) != 0;
+    BOOL categoryCloseEnough = [session.category isEqualToString:category] && mixWanted == mixNow;
     BOOL engineStarted = (GetPlaybackState() == 2 /* Started */);
     BOOL otherAudioPlaying = [session isOtherAudioPlaying];
     BOOL allowNoop =
         engineStarted
-        && !self.isMuted
-        && categoryOptionsMatch
+        && categoryCloseEnough
         && !otherAudioPlaying
-        && !self.isRestoringFromInterruption;
+        && !self.deviceDirty
+        && !self.playbackDeviceRecoveryInFlight
+        && self.recoveryPhase != BoluoPlayerRecoveryPhaseRecoveringDevice;
     if (allowNoop) {
-        // 旧 sticky 布尔已迁到 recoveryPhase / wantsResume / deviceDirty；NOOP 时清掉以免下次误判。
-        BOOL hadSticky = self.wantsResumeAfterRecovery
-            || self.deviceDirty
-            || self.recoveryPhase != BoluoPlayerRecoveryPhaseNone;
-        self.wantsResumeAfterRecovery = NO;
-        self.deviceDirty = NO;
-        if (self.recoveryPhase != BoluoPlayerRecoveryPhaseNone) {
-            [self transitionToRecoveryPhase:BoluoPlayerRecoveryPhaseNone reason:@"restoreExclusiveNoop"];
+        if (!self.isMuted) {
+            BOOL hadSticky = self.wantsResumeAfterRecovery
+                || self.deviceDirty
+                || self.recoveryPhase != BoluoPlayerRecoveryPhaseNone;
+            self.wantsResumeAfterRecovery = NO;
+            self.deviceDirty = NO;
+            if (self.recoveryPhase != BoluoPlayerRecoveryPhaseNone) {
+                [self transitionToRecoveryPhase:BoluoPlayerRecoveryPhaseNone reason:@"restoreExclusiveNoop"];
+            }
+            BoluoAudioLog(@"[BoluoMusicPlayerIOS] restoreExclusiveForResume NOOP (idempotent) category=%@ stickyCleared=%@",
+                  category, hadSticky ? @"YES" : @"NO");
+        } else {
+            BoluoAudioLog(@"[BoluoMusicPlayerIOS] restoreExclusiveForResume NOOP (engine running, stay muted until unmute)");
         }
         [self updateNowPlayingInfoCenter];
-        BoluoAudioLog(@"[BoluoMusicPlayerIOS] restoreExclusiveForResume NOOP (idempotent) category=%@ opts=0x%lx engine=Started stickyCleared=%@",
-              category, (unsigned long)options, hadSticky ? @"YES" : @"NO");
         return YES;
     }
 
@@ -3892,6 +3951,32 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
     
     AVAudioSession *session = [AVAudioSession sharedInstance];
 
+    // 引擎还在跑、category 已经是目标独占/混音：不要 setCategory+setActive。
+    // 前后台和切微信都会进到这里，再激活就是卡一下。设备停了才往下重建。
+    AVAudioSessionCategory category = [self categoryFromValue:self.sessionCategory];
+    AVAudioSessionCategoryOptions options = [self optionsFromBits:self.sessionOptions];
+    if (category == AVAudioSessionCategoryPlayback) {
+        if (allowMix) {
+            options |= AVAudioSessionCategoryOptionMixWithOthers;
+        } else {
+            options &= ~AVAudioSessionCategoryOptionMixWithOthers;
+        }
+    }
+    BOOL mixWanted = (options & AVAudioSessionCategoryOptionMixWithOthers) != 0;
+    BOOL mixNow = (session.categoryOptions & AVAudioSessionCategoryOptionMixWithOthers) != 0;
+    BOOL engineStarted = !self.deviceDirty
+        && !self.playbackDeviceRecoveryInFlight
+        && GetPlaybackState() == 2;
+    if (engineStarted
+        && [session.category isEqualToString:category]
+        && mixWanted == mixNow
+        && ![self shouldDeferForCompetingOrSecondarySilence]) {
+        BoluoAudioLog(@"[BoluoAudioResume] session activation NOOP (graph running) allowMix=%@",
+              allowMix ? @"YES" : @"NO");
+        if (completion) completion(YES);
+        return;
+    }
+
     // 独占激活(非 Mix)前必须确认无人出声、且系统未要求次要静音：
     // 对方在播时 setActive 独占会直接把对方顶停；微信语音输入等录音场景
     // isOtherAudioPlaying 常为 NO，但 secondaryAudioShouldBeSilencedHint=YES，同样不可抢。
@@ -3909,20 +3994,8 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
         }
     }
 
-    // Ensure session category is correctly set before activation.
-    // ALWAYS re-apply the category. The system often changes it during interruption (e.g. to PlayAndRecord).
-    // Even if it looks correct, re-setting it is the signal to the OS that we want to reclaim the "Playback" role.
-    AVAudioSessionCategory category = [self categoryFromValue:self.sessionCategory];
-    AVAudioSessionCategoryOptions options = [self optionsFromBits:self.sessionOptions];
-    
-  // 仅电话/高优先级中断恢复路径允许 Mix；从其它音乐 App 回前台用独占 Playback（options 不含 Mix）
-    if (category == AVAudioSessionCategoryPlayback) {
-        if (allowMix) {
-            options |= AVAudioSessionCategoryOptionMixWithOthers;
-        } else {
-            options &= ~AVAudioSessionCategoryOptionMixWithOthers;
-        }
-    }
+    // 设备已停，或 category 被系统改掉：才重新 setCategory + setActive。
+    // 仅电话/高优先级中断恢复路径允许 Mix；从其它音乐 App 回前台用独占 Playback（options 不含 Mix）
     BoluoAudioLog(@"[BoluoAudioResume] session activation attempt=%ld allowMix=%@ options=0x%lx",
           (long)(retryCount + 1), allowMix ? @"YES" : @"NO", (unsigned long)options);
     
@@ -4173,28 +4246,21 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
 
     if (type == AVAudioSessionInterruptionTypeBegan) {
         CFTimeInterval beganT0 = CACurrentMediaTime();
-        // AppWasSuspended：人还在前台、也没有别的播放器时整段 no-op（不是抢焦点）。
-        // 启动期已经进后台，或对方正在播：不能 no-op，否则切抖音 / QQ 音乐叠播。
-        // 旧路径对所有挂起都 mute+标脏，回前台 setActive 会咯噔。
-        if (BoluoNotificationIsAppWasSuspended(notification)) {
-            AVAudioSession *suspendedSession = [AVAudioSession sharedInstance];
-            BOOL foreign = [suspendedSession isOtherAudioPlaying]
-                || suspendedSession.secondaryAudioShouldBeSilencedHint;
-            BOOL startup = BoluoAudioSession_IsStartupAudibleCommitted() == 0;
-            BOOL background = [UIApplication sharedApplication].applicationState
-                == UIApplicationStateBackground;
-            // 已在前台出过声、且没有别的播放器：挂起不是抢焦点，保持后台续播。
-            // 启动期人已经离开，或对方已在播：必须继续往下静音，否则切抖音 / QQ 音乐叠播。
-            if (!foreign && !(startup && background)) {
-                CFTimeInterval noopMs = (CACurrentMediaTime() - beganT0) * 1000.0;
-                BoluoAudioLog(@"[BoluoAudioResume] Interruption BEGAN AppWasSuspended no-op");
-                [self reportAudioFocusLossToBLSWithTag:@"audio_focus_loss_began"
-                                                detail:@"reason=AppWasSuspended phase=noop"
-                                            durationMs:noopMs];
-                return;
-            }
-            BoluoAudioLog(@"[BoluoAudioResume] Interruption BEGAN AppWasSuspended continue foreign=%d startup=%d",
-                  foreign ? 1 : 0, startup ? 1 : 0);
+        // 搜索框 / 控制中心 / 纯前后台：没有外来播放器，整段不动音频图。
+        // 挂起且已有对方、或启动期人已经离开：不能 no-op，否则切抖音 / QQ 叠播。
+        if (BoluoInterruptionShouldKeepGraph(notification)) {
+            CFTimeInterval noopMs = (CACurrentMediaTime() - beganT0) * 1000.0;
+            BOOL suspended = BoluoNotificationIsAppWasSuspended(notification);
+            BoluoAudioLog(@"[BoluoAudioFg] switch_class class=keep_graph detail=%@",
+                  suspended ? @"app_was_suspended" : @"no_opponent");
+            BoluoAudioLog(@"[BoluoAudioResume] Interruption BEGAN keep-graph no-op suspended=%d",
+                  suspended ? 1 : 0);
+            [self reportAudioFocusLossToBLSWithTag:@"audio_focus_loss_began"
+                                            detail:suspended
+                                                ? @"reason=AppWasSuspended phase=noop"
+                                                : @"reason=transient_ui phase=noop"
+                                        durationMs:noopMs];
+            return;
         }
 
         // 通知栈内同步压增益（constructor observer 已抢一次；此处再钉一次防漏）。
@@ -4245,18 +4311,16 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
             BoluoAudioLog(@"[BoluoAudioResume] Interruption BEGAN wantsResumeAfterRecovery=%@",
                   self.wantsResumeAfterRecovery ? @"YES" : @"NO");
         }
-        // noteInterruptionBegan：标 deviceDirty + recoveryPhase=InterruptionActive
+        // 只记中断相位。deviceDirty 等离开通知栈后看引擎是否真停了再标。
         [self noteInterruptionBegan:@"InterruptionBegan"];
         // 静音与 RouteDisconnected 恢复调度挪出 AVAudioSession 通知栈：
         // 1) 避免与 MiniAudio 同栈 ma_device_stop 争锁（Began 已禁 Reset，但 SetMute 仍危险）；
         // 2) 系统 mute 不再 cancel 恢复链（仅用户 Pause 才 cancel）；此处 mute 后直接 schedule RD。
         BOOL preservePending = pendingResumeSnapshot && !self.userManuallyPaused;
         BOOL needMute = !self.isMuted || engineHot;
-        // 必须用 shouldPrefer（后台一律禁 duck）。旧 shouldUseTransientDuck 忽略后台
-        // → 切微信/QQ Began 尚无 otherAudio 时误 duck，满能量硬停/硬 mute = 电流音。
-        BOOL canDuck = [self shouldPreferTransientDuckForInterruption:notification
-                                                  isRouteDisconnected:isRouteDisconnected]
-            && preservePending;
+        // 能走到这里的是已离开，或已经看见对方。直接护栏，禁止先降到四成。
+        BOOL canDuck = NO;
+        BoluoAudioLog(@"[BoluoAudioFg] switch_class class=guard_mute detail=direct_guard");
         __weak __typeof(self) weakSelf = self;
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong __typeof(weakSelf) strongSelf = weakSelf;
@@ -4268,11 +4332,27 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
             }
             strongSelf.wantsResumeAfterRecovery = preservePending && !strongSelf.userManuallyPaused;
 
-            // 短暂可 duck（导航/短信）本可只降音乐增益；但微信语音 Began 常早于
-            // isOtherAudioPlaying，误走 duck → 音乐几乎听不到、环境音效仍满。
-            // 产品：抢焦时音乐与音效一起停，禁止误 duck，统一走护栏 mute + Pause_ALL。
+            // 路由断开必须重建输出。其它焦点切换：引擎还在 Started 就别标脏，
+            // 否则回前台 SetPlaybackDevice 会把正在播的声音卡一下。
+            if (isRouteDisconnected) {
+                strongSelf.deviceDirty = YES;
+            } else if (!BoluoAudio_IsPlaybackDeviceRecoveryInFlight()) {
+                int engineNow = GetPlaybackState();
+                if (engineNow == 0 || engineNow == 1) {
+                    strongSelf.deviceDirty = YES;
+                    BoluoAudioLog(@"[BoluoAudioResume] Interruption Began engine stopped — mark deviceDirty");
+                } else {
+                    BoluoAudioLog(@"[BoluoAudioResume] Interruption Began engine still %@ — keep graph, no deviceDirty",
+                          BoluoPlaybackStateName(engineNow));
+                }
+            }
+
+            // skill：前台无 competing/secondary 时真 duck≈0.4；微信晚到由 escalate 升 mute。
             if (canDuck) {
-                BoluoAudioLog(@"[BoluoAudioResume] Interruption Began skip transient_duck → guarded mute (WeChat-safe)");
+                BoluoAudioLog(@"[BoluoAudioResume] Interruption Began transient_duck≈0.4");
+                [strongSelf beginAudioFocusDuck];
+                [strongSelf scheduleDuckEscalateCheck];
+                return;
             }
 
             [strongSelf endAudioFocusDuck];
@@ -4309,6 +4389,7 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
                 if (s.secondaryAudioShouldBeSilencedHint) {
                     strongSelf.competingEpisodeSawSecondarySilence = YES;
                 }
+                [strongSelf _armSilenceConfirmPollsForCurrentEpisode];
                 BoluoAudioLog(@"[BoluoAudioResume] Interruption Began → competing-audio wait (not RD) guardedMute=%@ sawOtherAudio=%@ sawSecondary=%@",
                       guardedMuteFirst ? @"YES" : @"NO",
                       strongSelf.competingEpisodeSawOtherAudioPlaying ? @"YES" : @"NO",
@@ -4416,24 +4497,15 @@ static void BoluoNotifyDelayedUnmuteLanded(void) {
 BOOL shouldAutoResume = shouldResume
             && !self.userManuallyPaused
             && BoluoAudioSession_IsLogoutSilenced() == 0;
-        // shouldResume=YES：来电挂断 / 微信语音结束等系统明确允许续播 → 前后台均可立刻续
-        // （不再因 ASR-only 后台 defer）。QQ/B 站抢焦通常 shouldResume=NO，走下方 pending。
-        if (shouldAutoResume
-                && ![self shouldAllowBackgroundAutoResumeAfterCompetingAudioStopped]
-                && self.competingEpisodeSawOtherAudioPlaying
-                && !self.competingEpisodeSawSecondarySilence) {
-            // 极少：shouldResume 却仍是纯 otherAudio competing → 等回前台，避免后台抢 QQ。
-            BoluoAudioLog(@"[BoluoAudioResume] InterruptionEnded shouldResume=YES but competing-media BG — keep pending until foreground");
-            self.wantsResumeAfterRecovery = YES;
-            [self noteCompetingAudioDetected:@"competing-media-BG-defer"];
-            [self noteFocusState:BoluoAudioFocusStateCompetingWait
-                          reason:@"competing-media-BG-defer"];
-            [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_pollWaitForCompetingAudioToStop) object:nil];
-            self.competingAudioPollCount = 0;
-            self.backgroundSilenceConfirmStreak = 0;
-            self.backgroundResumeArmed = NO;
-            return;
+        // skill：微信语音结束后允许后台短静默窗续播，不再等滑动。
+        self.awaitSwipeAfterWeChatVoice = NO;
+        if (shouldAutoResume && self.competingEpisodeSawSecondarySilence
+                && !self.competingEpisodeSawOtherAudioPlaying
+                && self.backgroundSilenceConfirmPollsRequired <= 60) {
+            self.backgroundSilenceConfirmPollsRequired = 4;
         }
+        // shouldResume=YES：来电挂断 / 微信语音结束等系统明确允许续播。
+        // QQ/B 站抢焦通常 shouldResume=NO，走下方 pending + 静默确认（约 30s 后台亦可续）。
         if (shouldAutoResume) {
             int state = GetPlaybackState();
             // 0: Uninitialized, 1: Stopped
@@ -4441,6 +4513,24 @@ BOOL shouldAutoResume = shouldResume
             // deviceDirty=YES 表示设备已脏，必须走设备恢复（脏则只 Set）。
             BOOL engineReallyStopped = (state == 0 || state == 1) || self.deviceDirty;
             
+            // 引擎还在跑且没标脏：只解静音，禁止 setActive / SetPlaybackDevice。
+            // 前后台和切微信焦点都会打出 Ended，再激活会话就是卡一下。
+            if (!engineReallyStopped) {
+                BoluoAudioLog(@"[BoluoMusicPlayerIOS] Engine already running (%d), soft resume without setActive.", state);
+                // 先离开 InterruptionActive，否则 unmute 会被 recoveryPhase 挡住。
+                [self noteInterruptionEnded:@"InterruptionEndedEngineRunning"];
+                if ([self shouldDeferForCompetingOrSecondarySilence]) {
+                    [self noteCompetingAudioDetected:@"InterruptionEndedOtherAudio"];
+                    [self _scheduleWaitForCompetingAudioToStop];
+                } else if (self.isMuted && !self.userManuallyPaused) {
+                    [self finishResumeAfterDeviceReady];
+                } else {
+                    [self noteCompetingAudioCleared:@"InterruptionEndedGraphKept"];
+                    self.wantsResumeAfterRecovery = NO;
+                }
+                [self cancelPendingInterruptionRecovery];
+                [self _reassertNowPlayingAndCommandsWithReason:@"InterruptionEndedGraphKept"];
+            } else {
             // 电话/高优先级中断：允许 Mix 抢 session；其它 App 仍在播或要求次要静音则推迟 unmute
             self.resumeActivationUsesMixWithOthers = YES;
             if ([self shouldDeferForCompetingOrSecondarySilence]) {
@@ -4449,8 +4539,8 @@ BOOL shouldAutoResume = shouldResume
             } else {
                 [self noteCompetingAudioCleared:@"InterruptionEndedNoOtherAudio"];
             }
-            
-            // 不论引擎状态如何，都先抢回 session/NowPlaying（电话挂断后常见：声音已恢复，但控制中心卡片不是我们的）
+
+            // 设备已停才抢回 session。已在播时 setActive 会重开 IO。
             [self attemptSessionActivationWithRetry:^(BOOL success) {
                 if (success) {
                     [self _reassertNowPlayingAndCommandsWithReason:@"InterruptionEndedActivated"];
@@ -4458,20 +4548,9 @@ BOOL shouldAutoResume = shouldResume
                 }
             }];
 
-            if (engineReallyStopped) {
-                BoluoAudioLog(@"[BoluoMusicPlayerIOS] Interruption ended with ShouldResume. Scheduling device recovery.");
-                self.resumeActivationUsesMixWithOthers = YES;
-                [self scheduleInterruptionRecovery];
-            } else {
-                BoluoAudioLog(@"[BoluoMusicPlayerIOS] Engine already running (%d), skip device recovery but keep session reclaim.", state);
-                // 中断期间已静音：引擎状态可能仍为 Started，但仍需解除静音
-                if (self.isMuted && !self.userManuallyPaused) {
-                    BoluoAudioLog(@"[BoluoMusicPlayerIOS] Engine running but muted after interruption - finishing resume");
-                    [self finishResumeAfterDeviceReady];
-                }
-                [self noteInterruptionEnded:@"InterruptionEndedEngineRunning"];
-                self.wantsResumeAfterRecovery = NO;
-                [self cancelPendingInterruptionRecovery];
+            BoluoAudioLog(@"[BoluoMusicPlayerIOS] Interruption ended with ShouldResume. Scheduling device recovery.");
+            self.resumeActivationUsesMixWithOthers = YES;
+            [self scheduleInterruptionRecovery];
             }
         } else {
             // 切换音乐 App 等场景：shouldResume=NO，但用户回菠萝后仍应恢复
@@ -5411,6 +5490,20 @@ void BoluoMusicPlayerIOS_MarkAwaitingFirstPlayUnmute(void) {
     } else {
         dispatch_async(dispatch_get_main_queue(), mark);
     }
+}
+
+int32_t BoluoAudioSession_ShouldHoldWeChatInterruptForSwipe(void) {
+    BoluoMusicPlayerIOSBridge *player = [BoluoMusicPlayerIOSBridge sharedInstance];
+    return player.awaitSwipeAfterWeChatVoice ? 1 : 0;
+}
+
+void BoluoMusicPlayerIOS_ClearWeChatSwipeHold(void) {
+    BoluoMusicPlayerIOSBridge *player = [BoluoMusicPlayerIOSBridge sharedInstance];
+    if (!player.awaitSwipeAfterWeChatVoice) {
+        return;
+    }
+    player.awaitSwipeAfterWeChatVoice = NO;
+    BoluoAudioLog(@"[BoluoAudioResume] wechat voice swipe hold cleared");
 }
 
 void BoluoMusicPlayerIOS_ApplyUserResumeFromExternal(void) {

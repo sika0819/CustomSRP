@@ -55,7 +55,8 @@ namespace Game.Editor.BuildTool
 
         /// <summary>
         /// 导出 Android Gradle 后跑宿主 gradlew assemble。
-        /// 可选：-boluoHostRelease true / BOLUO_CI_HOST_RELEASE；-boluoInstallApk true。
+        /// 宿主 buildType 默认跟 BOLUO_CI_ENV（dev→debug / test→alpha / …）；
+        /// 可用 -boluoHostBuildType / BOLUO_CI_HOST_BUILD_TYPE 覆盖；-boluoInstallApk true 装机。
         /// </summary>
         public static void ExportAndroidAndAssemble()
         {
@@ -74,13 +75,21 @@ namespace Game.Editor.BuildTool
                 return;
             }
 
-            bool release = ParseBool(
-                BoluoCIArgParser.Resolve("BOLUO_CI_HOST_RELEASE", "boluoHostRelease"), false);
+            string hostBt = BoluoCIArgParser.Resolve("BOLUO_CI_HOST_BUILD_TYPE", "boluoHostBuildType");
+            if (string.IsNullOrWhiteSpace(hostBt))
+            {
+                // 兼容旧开关：-boluoHostRelease true → release；否则跟 API 环境
+                hostBt = ParseBool(
+                        BoluoCIArgParser.Resolve("BOLUO_CI_HOST_RELEASE", "boluoHostRelease"), false)
+                    ? "release"
+                    : BoluoHostGradleBuilder.HostBuildTypeFromEnvironment(config.Environment);
+            }
+
             bool install = ParseBool(
                 BoluoCIArgParser.Resolve("BOLUO_CI_INSTALL_APK", "boluoInstallApk"), false);
 
             if (!BoluoHostGradleBuilder.Assemble(
-                    config.AndroidFlavor, release, msg => UnityEngine.Debug.Log($"[BoluoCI] {msg}"),
+                    config.AndroidFlavor, hostBt, msg => UnityEngine.Debug.Log($"[BoluoCI] {msg}"),
                     out string apk, out string gradleError))
             {
                 BoluoCIBuildSupport.LogCiFailure(gradleError);

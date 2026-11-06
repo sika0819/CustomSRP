@@ -78,23 +78,37 @@ namespace Game
         readonly Dictionary<string, GameObject> _prefabCache = new Dictionary<string, GameObject>(192);
         readonly Dictionary<string, AssetHandle> _prefabHandles = new Dictionary<string, AssetHandle>(192);
         readonly Dictionary<string, int> _locationUsers = new Dictionary<string, int>(192);
+        /// <summary>罩下 warm 写入的缓存；users=0 时也不被 reclaim 清掉，直到 Spawn 或 Release。</summary>
+        readonly HashSet<string> _prefabWarmPins = new HashSet<string>();
         readonly HashSet<string> _loadingLocations = new HashSet<string>();
         readonly List<AssetHandle> _inflightHandles = new List<AssetHandle>(4);
         readonly List<int> _spawnQueue = new List<int>(256);
         readonly List<int> _despawnQueue = new List<int>(256);
         readonly HashSet<int> _spawnQueued = new HashSet<int>();
         readonly HashSet<int> _despawnQueued = new HashSet<int>();
+        int _jianzhuColdInstFrame = -1;
+        int _jianzhuColdInstCount;
 
         Transform _focus;
         EnvMeshColliderLod _colliderLod;
         EnvNativeInstancing _native;
         readonly Stopwatch _sliceSw = new Stopwatch();
+        readonly Stopwatch _hitchSw = new Stopwatch();
         int _sliceFrame = -1;
         bool _running;
         bool _spawnBacklog;
         bool _prefillActive;
-        /// <summary>退登后再进岛。流送改走同步加载，避免卡在上一次 <c>Handle.IsDone</c> 上。</summary>
+        /// <summary>
+        /// 仅补洞窗口为真（Resume/CatchUp/截图升级）。补完必须立刻关掉，
+        /// 否则 <see cref="SpawnItem"/> 永久 <c>LoadAssetSync</c> → 走路尖刺。
+        /// 勿再用本标志当「允许切预设 CatchUp」——那是 <see cref="_allowPresetCatchUp"/>。
+        /// </summary>
         bool _syncLoads;
+        /// <summary>
+        /// keep-scene 再进调用过 <see cref="ResumeAtCurrentPose"/> 后为真。
+        /// 与 <c>EnterCount &gt; 1</c> 一起放行切预设同步补洞；与加载同步闩无关。
+        /// </summary>
+        bool _allowPresetCatchUp;
         /// <summary>正在跑的 <see cref="StreamLoop"/> 条数。停协程不会走收尾，重开前要清零。</summary>
         int _streamLoopCount;
         readonly PrefillFrameGate _prefillGate = new PrefillFrameGate();
@@ -140,6 +154,7 @@ namespace Game
             _spawnQueued.Clear();
             _despawnQueued.Clear();
             _locationUsers.Clear();
+            _prefabWarmPins.Clear();
             _loadingLocations.Clear();
             _spawnBacklog = false;
             _evalCursor = 0;
@@ -272,7 +287,6 @@ namespace Game
             // 旧 StreamLoop 可能正停在 LoadPrefab 的 WaitUntilDone 里。
             // 退登后再读 Handle.IsDone 经常不返回，后面的生成全部排不上。
             _prefillActive = true;
-            _syncLoads = true;
             _running = true;
             _streamLoopCount = 0;
             StopAllCoroutines();
@@ -285,7 +299,21 @@ namespace Game
             _evalCursor = 0;
             CollectFinishedInflight();
 
-            int filled = FillAroundFocusSync();
+            // 同步只用于补洞；补完立刻关掉，避免 StreamLoop 永久 LoadAssetSync 走路尖刺。
+            int filled;
+            _syncLoads = true;
+            try
+            {
+                filled = FillAroundFocusSync();
+            }
+            finally
+            {
+                _syncLoads = false;
+            }
+
+            // 与 _syncLoads 分离：Resume 后首进切预设仍须能 CatchUp（EnterCount 可能仍为 1）。
+            _allowPresetCatchUp = true;
+
             AllowStream();
             if (!enabled && gameObject.activeInHierarchy)
                 enabled = true;
@@ -384,7 +412,8 @@ namespace Game
         {
             if (Current == null || Current._released)
                 return;
-            if (ProcedureIsland.EnterCount <= 1 && !Current._syncLoads)
+            // 冷首进靠 Prefill；二次进岛或 keep-scene Resume 后再切预设才同步补洞。
+            if (ProcedureIsland.EnterCount <= 1 && !Current._allowPresetCatchUp)
                 return;
             Current.CatchUpNow();
         }
@@ -408,9 +437,19 @@ namespace Game
             if (_focus == null)
                 return;
 
-            _syncLoads = true;
+            // 同步只用于补洞；补完立刻关掉，避免 StreamLoop 永久 LoadAssetSync。
             CollectFinishedInflight();
-            int filled = FillAroundFocusSync();
+            int filled;
+            _syncLoads = true;
+            try
+            {
+                filled = FillAroundFocusSync();
+            }
+            finally
+            {
+                _syncLoads = false;
+            }
+
             if (_prefillActive)
                 AllowStream();
             if (_running && _streamLoopCount <= 0 && isActiveAndEnabled)
@@ -437,38 +476,45 @@ namespace Game
                 return;
 
             _syncLoads = true;
-            Vector3 p = _focus.position;
-            float full = Mathf.Max(1f, EnvStreamingConfig.TreeFullMeshMaxDist);
-            float fullSq = full * full;
-            int upgraded = 0;
-
-            for (int i = 0; i < _items.Count; i++)
+            try
             {
-                Item item = _items[i];
-                if (item.Go == null || item.LodTier != TierBillboard)
-                    continue;
-                if (!EnvStreamingConfig.IsBigTreeCategory(item.Category))
-                    continue;
-                if (DistSqXZ(item.Pos, p) > fullSq)
-                    continue;
-                if (!TryPrefabImmediate(
-                        item.Location, item.EditorPath, "capture-upgrade", out GameObject prefab))
-                    continue;
+                Vector3 p = _focus.position;
+                float full = Mathf.Max(1f, EnvStreamingConfig.TreeFullMeshMaxDist);
+                float fullSq = full * full;
+                int upgraded = 0;
 
-                item.PendingTier = TierFull;
-                _items[i] = item;
-                var spawned = CreateInstanceForTier(item, prefab, TierFull);
-                if (spawned.Go == null)
-                    continue;
-                FinalizeSpawned(i, spawned.Go, prefab, TierFull);
-                upgraded++;
+                for (int i = 0; i < _items.Count; i++)
+                {
+                    Item item = _items[i];
+                    if (item.Go == null || item.LodTier != TierBillboard)
+                        continue;
+                    if (!EnvStreamingConfig.IsBigTreeCategory(item.Category))
+                        continue;
+                    if (DistSqXZ(item.Pos, p) > fullSq)
+                        continue;
+                    if (!TryPrefabImmediate(
+                            item.Location, item.EditorPath, "capture-upgrade", out GameObject prefab))
+                        continue;
+
+                    item.PendingTier = TierFull;
+                    _items[i] = item;
+                    var spawned = CreateInstanceForTier(item, prefab, TierFull);
+                    if (spawned.Go == null)
+                        continue;
+                    FinalizeSpawned(i, spawned.Go, prefab, TierFull);
+                    upgraded++;
+                }
+
+                if (upgraded > 0)
+                {
+                    Log.Info(
+                        "[EnvItemStreamerLite] capture billboard→full upgraded=" + upgraded
+                        + " radius=" + full.ToString("F0"));
+                }
             }
-
-            if (upgraded > 0)
+            finally
             {
-                Log.Info(
-                    "[EnvItemStreamerLite] capture billboard→full upgraded=" + upgraded
-                    + " radius=" + full.ToString("F0"));
+                _syncLoads = false;
             }
         }
 
@@ -566,9 +612,112 @@ namespace Game
             Log.Info("[EnvItemStreamerLite] prefill tail end hold=stream+render settle");
             yield return null;
             Log.Info("[EnvItemStreamerLite] prefill settled");
+            // Prefill 同步刚结束时异步 Load 易 status=None；先多空几帧再 warm。
+            // warm 仍在 NotifyPrefillNearReady 之前，罩下完成。
+            yield return null;
+            yield return null;
+            yield return WarmJianZhuPrefabCache();
             _prefillGate.End();
             GameEntry.World?.NotifyPrefillNearReady();
             yield break;
+        }
+
+        /// <summary>
+        /// Prefill 后、AllowStream 前：预热近距 JianZhu 缓存。不 Instantate、不写 locationUsers。
+        /// 按距离取最近若干 unique Location（不硬截 FarResident，避免出生点远离农舍时暖不到）。
+        /// 异步失败时同帧同步兜底，避免 Prefill 后 async status=None。
+        /// </summary>
+        public IEnumerator WarmJianZhuPrefabCache()
+        {
+            if (_focus == null || _released)
+                yield break;
+
+            Vector3 p = _focus.position;
+            var candidates = new List<(float DistSq, string Location, string EditorPath)>(64);
+            var seen = new HashSet<string>();
+            for (int i = 0; i < _items.Count; i++)
+            {
+                Item item = _items[i];
+                if (item.Category != "JianZhu")
+                    continue;
+                if (string.IsNullOrEmpty(item.Location) || !seen.Add(item.Location))
+                    continue;
+                if (_prefabCache.TryGetValue(item.Location, out GameObject cached) && cached != null)
+                {
+                    _prefabWarmPins.Add(item.Location);
+                    continue;
+                }
+
+                float dx = item.Pos.x - p.x;
+                float dz = item.Pos.z - p.z;
+                candidates.Add((dx * dx + dz * dz, item.Location, item.EditorPath));
+            }
+
+            candidates.Sort((a, b) => a.DistSq.CompareTo(b.DistSq));
+            int maxLocs = EnvStreamingConfig.PrefabCacheWarmMaxLocations;
+            if (candidates.Count > maxLocs)
+                candidates.RemoveRange(maxLocs, candidates.Count - maxLocs);
+
+            if (candidates.Count == 0)
+            {
+                Log.Info("[EnvItemStreamerLite] prefab warm skip empty");
+                yield break;
+            }
+
+            float timeoutSec = EnvStreamingConfig.PrefabCacheWarmTimeoutSeconds;
+            var sw = Stopwatch.StartNew();
+            int warmed = 0;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (_released)
+                    yield break;
+                if (sw.Elapsed.TotalSeconds >= timeoutSec)
+                {
+                    Log.Info(
+                        $"[EnvItemStreamerLite] prefab warm timeout after {warmed}/{candidates.Count} " +
+                        $"ms={sw.ElapsedMilliseconds}");
+                    yield break;
+                }
+
+                string loc = candidates[i].Location;
+                if (_prefabCache.TryGetValue(loc, out GameObject hit) && hit != null)
+                {
+                    _prefabWarmPins.Add(loc);
+                    warmed++;
+                    continue;
+                }
+
+                // Prefill 后异步 Load 稳定 status=None；罩下同步逐个填缓存（不 Instantate）。
+                GameObject prefab = LoadPrefabNow(loc, candidates[i].EditorPath, "warm");
+                if (_released)
+                    yield break;
+                if (prefab != null)
+                {
+                    _prefabWarmPins.Add(loc);
+                    warmed++;
+                }
+
+                yield return null;
+            }
+
+            Log.Info(
+                $"[EnvItemStreamerLite] prefab warm done {warmed}/{candidates.Count} " +
+                $"ms={sw.ElapsedMilliseconds}");
+        }
+
+        bool TryAcquireJianZhuColdInstantiate()
+        {
+            int frame = Time.frameCount;
+            if (_jianzhuColdInstFrame != frame)
+            {
+                _jianzhuColdInstFrame = frame;
+                _jianzhuColdInstCount = 0;
+            }
+
+            if (_jianzhuColdInstCount >= 1)
+                return false;
+            _jianzhuColdInstCount++;
+            return true;
         }
 
         /// <summary>铺装尾帧的 CoverOnly Submit 只打一次，用来区分卡在提交还是更早。</summary>
@@ -622,12 +771,42 @@ namespace Game
             });
 
             // 真机硬顶：远的留给揭罩后流送，缩短 ReleaseRenderHold 后首屏 GPU 上传。
+            // 配额内优先保留近场 JianZhu，避免近树挤掉农舍；不增加 Instantate 数。
             int hardCap = EnvStreamingConfig.PrefillNearHardCap;
             if (hardCap > 0 && hardCap < int.MaxValue && near.Count > hardCap)
             {
+                float priR = EnvStreamingConfig.PrefillJianZhuPriorityRadius;
+                float priSq = priR * priR;
+                var keep = new List<int>(hardCap);
+                var kept = new HashSet<int>();
+                int jianzhuPri = 0;
+                for (int i = 0; i < near.Count && keep.Count < hardCap; i++)
+                {
+                    int idx = near[i];
+                    Item it = _items[idx];
+                    if (it.Category != "JianZhu")
+                        continue;
+                    float dx = it.Pos.x - p.x;
+                    float dz = it.Pos.z - p.z;
+                    if (dx * dx + dz * dz > priSq)
+                        continue;
+                    keep.Add(idx);
+                    kept.Add(idx);
+                    jianzhuPri++;
+                }
+
+                for (int i = 0; i < near.Count && keep.Count < hardCap; i++)
+                {
+                    int idx = near[i];
+                    if (kept.Contains(idx))
+                        continue;
+                    keep.Add(idx);
+                }
+
                 Log.Info(
-                    $"[EnvItemStreamerLite] prefill near hardCap {near.Count}->{hardCap}");
-                near.RemoveRange(hardCap, near.Count - hardCap);
+                    $"[EnvItemStreamerLite] prefill near hardCap {near.Count}->{keep.Count} " +
+                    $"jianzhuPri≤{priR:0}m={jianzhuPri}");
+                near = keep;
             }
 
             int total = near.Count;
@@ -1124,13 +1303,23 @@ namespace Game
             GameObject prefab = null;
             if (_syncLoads)
             {
-                // 再进岛后异步 IsDone 经常不返回，一条加载会把整个距离循环卡住。
+                // 仅补洞窗口：异步 IsDone 可能不返回时同步取。常态走路走下面异步分支。
                 if (!TryPrefabImmediate(item.Location, item.EditorPath, "stream", out prefab))
                     yield break;
             }
             else
             {
+                // 缓存命中则 LoadPrefab 立即返回；未命中异步加载，不堵主线程。
+                int loadStartFrame = Time.frameCount;
                 yield return LoadPrefab(item.Location, item.EditorPath, go => prefab = go, "stream");
+                // 仅 JianZhu 冷 Load（跨帧）后 Instantate 每帧最多 1，削同帧多房叠峰。
+                if (prefab != null
+                    && item.Category == "JianZhu"
+                    && Time.frameCount != loadStartFrame)
+                {
+                    while (!TryAcquireJianZhuColdInstantiate())
+                        yield return null;
+                }
             }
 
             if (prefab == null)
@@ -1138,6 +1327,8 @@ namespace Game
 
             // Focus / thin may have changed while the prefab loaded — drop a stale swap.
             item = _items[index];
+            if (item.State == StateVisible && item.Go != null && !tierSwap)
+                yield break;
             if (tierSwap)
             {
                 if (item.Go == null || item.State != StateVisible
@@ -1159,11 +1350,19 @@ namespace Game
             if (tier != TierFull && tier != TierBillboard)
                 tier = ResolveSpawnTier(item, DistSqToFocus(item.Pos));
 
+            // Instantiate+Finalize 同帧完成：保证 Full↔Billboard 无空窗，远树不被额外 yield 饿死。
+            // ≥8ms 才打 Hitch，避免走路刷屏拖垮 logcat。
+            string loc = item.Location;
+            _hitchSw.Restart();
             var spawned = CreateInstanceForTier(item, prefab, tier);
+            long instMs = _hitchSw.ElapsedMilliseconds;
             if (spawned.Go == null)
                 yield break;
 
             FinalizeSpawned(index, spawned.Go, prefab, spawned.Tier);
+            long totalMs = _hitchSw.ElapsedMilliseconds;
+            if (totalMs >= 8)
+                Log.Info($"[Hitch] stream spawn loc={loc} instMs={instMs} totalMs={totalMs}");
         }
 
         static byte ResolveSpawnTier(Item item, float distSq)
@@ -1260,10 +1459,30 @@ namespace Game
 
         void FinalizeSpawned(int index, GameObject instance, GameObject prefab, byte tier)
         {
-            if (instance == null || index < 0 || index >= _items.Count)
+            if (!TryBeginFinalize(index, instance, tier, out Item item, out bool isBillboard, out Vector3 pos))
                 return;
 
-            Item item = _items[index];
+            ApplySpawnTransform(index, instance, ref item, isBillboard, ref pos);
+            ApplySpawnExtras(instance, item, isBillboard);
+            int proto = BindNativeInstance(instance, prefab, item, isBillboard, out bool inNative);
+            CommitSpawnedItem(index, ref item, instance, isBillboard, proto, inNative, pos, registerCollider: true);
+        }
+
+        bool TryBeginFinalize(
+            int index,
+            GameObject instance,
+            byte tier,
+            out Item item,
+            out bool isBillboard,
+            out Vector3 pos)
+        {
+            item = default;
+            isBillboard = false;
+            pos = default;
+            if (instance == null || index < 0 || index >= _items.Count)
+                return false;
+
+            item = _items[index];
             bool tierSwap = item.State == StateVisible
                 && item.Go != null
                 && item.PendingTier != item.LodTier
@@ -1272,7 +1491,7 @@ namespace Game
             if (item.State == StateVisible && item.Go != null && !tierSwap)
             {
                 Destroy(instance);
-                return;
+                return false;
             }
 
             // New GO is ready — tear down the previous tier in the same frame so
@@ -1280,13 +1499,22 @@ namespace Game
             if (tierSwap)
                 DestroyCurrentGo(ref item, destroyImmediate: false);
 
-            bool isBillboard = tier == TierBillboard
+            isBillboard = tier == TierBillboard
                 && EnvStreamingConfig.IsBigTreeCategory(item.Category);
+            pos = item.Pos;
+            return true;
+        }
 
+        void ApplySpawnTransform(
+            int index,
+            GameObject instance,
+            ref Item item,
+            bool isBillboard,
+            ref Vector3 pos)
+        {
             // 设坐标、SetActive、合批登记之前重接，下一次 yield 才不会踩到兄弟环。
             AttachSpawned(instance, item.Parent, index, isBillboard);
 
-            Vector3 pos = item.Pos;
             LogStepBegin("ground", item.PrefabName);
             EnvGroundFit ground = GameEntry.GroundFit;
             if (ground != null && ground.TrySnapMapItemY(ref pos, item.Category, item.PrefabName))
@@ -1310,28 +1538,40 @@ namespace Game
             LogStepBegin("set-active", item.PrefabName);
             instance.SetActive(item.IsActive);
             LogStepEnd("set-active", item.PrefabName);
+        }
 
-            if (!isBillboard)
+        void ApplySpawnExtras(GameObject instance, Item item, bool isBillboard)
+        {
+            if (isBillboard)
+                return;
+
+            // Mesh LOD leaf volume: normalize Y per MeshFilter bounds (LOD0/1/2… + 灌木).
+            if (EnvStreamingConfig.IsTreeCategory(item.Category))
+                EnvStreamerFoliageVolumeFit.ApplyOn(instance);
+
+            if (EnvStreamingConfig.IsBridgeCategory(item.Category))
             {
-                // Mesh LOD leaf volume: normalize Y per MeshFilter bounds (LOD0/1/2… + 灌木).
-                if (EnvStreamingConfig.IsTreeCategory(item.Category))
-                    EnvStreamerFoliageVolumeFit.ApplyOn(instance);
-
-                if (EnvStreamingConfig.IsBridgeCategory(item.Category))
-                {
-                    LogStepBegin("bridge", item.PrefabName);
-                    EnvBridgePillarFit.Ensure(instance);
-                    LogStepEnd("bridge", item.PrefabName);
-                }
-                if (EnvStreamingConfig.IsRockCategory(item.Category) &&
-                    EnvStreamingConfig.IsSmallRockForFarCull(item.PrefabName))
-                {
-                    EnvStreamerReflectionSkip.Apply(instance);
-                }
+                LogStepBegin("bridge", item.PrefabName);
+                EnvBridgePillarFit.Ensure(instance);
+                LogStepEnd("bridge", item.PrefabName);
             }
 
+            if (EnvStreamingConfig.IsRockCategory(item.Category) &&
+                EnvStreamingConfig.IsSmallRockForFarCull(item.PrefabName))
+            {
+                EnvStreamerReflectionSkip.Apply(instance);
+            }
+        }
+
+        int BindNativeInstance(
+            GameObject instance,
+            GameObject prefab,
+            Item item,
+            bool isBillboard,
+            out bool inNative)
+        {
             int proto = -1;
-            bool inNative = false;
+            inNative = false;
 #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
             if (_native != null && prefab != null)
             {
@@ -1357,8 +1597,22 @@ namespace Game
                         inNative = true;
                 }
             }
+#else
+            _ = (instance, prefab, item, isBillboard);
 #endif
+            return proto;
+        }
 
+        void CommitSpawnedItem(
+            int index,
+            ref Item item,
+            GameObject instance,
+            bool isBillboard,
+            int proto,
+            bool inNative,
+            Vector3 pos,
+            bool registerCollider)
+        {
             item.Go = instance;
             item.State = StateVisible;
             item.LodTier = isBillboard ? TierBillboard : TierFull;
@@ -1381,7 +1635,8 @@ namespace Game
             _items[index] = item;
             _spawnedCount++;
             AddLocationUser(item.Location);
-            _colliderLod?.Register(instance, pos);
+            if (registerCollider)
+                _colliderLod?.Register(instance, pos);
         }
 
         /// <summary>
@@ -1727,6 +1982,7 @@ namespace Game
             _spawnedCount = 0;
             _spawnBacklog = false;
             _locationUsers.Clear();
+            _prefabWarmPins.Clear();
             _loadingLocations.Clear();
             if (Current == this)
                 Current = null;
@@ -1764,6 +2020,8 @@ namespace Game
                 if (string.IsNullOrEmpty(kv.Key))
                     continue;
                 if (_loadingLocations.Contains(kv.Key))
+                    continue;
+                if (_prefabWarmPins.Contains(kv.Key))
                     continue;
                 if (_locationUsers.TryGetValue(kv.Key, out int users) && users > 0)
                     continue;

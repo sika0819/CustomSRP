@@ -14,6 +14,7 @@ namespace Game
     /// 本帧已经慢于目标帧时间，就整帧不做。
     /// 先丢掉空的合批原型，再在这一毫秒里放掉多个预制体句柄。
     /// 放掉之后隔一段没有生成的时间，再请框架切一次 <c>Resources.UnloadUnusedAssets</c>（不 <c>GC.Collect</c>）。
+    /// 走路窗（含松杆后 0.75s 消抖）跳过 Yoo / Bank / Resources 重卸；句柄释放预算仍保留。
     /// 闲置回收另外只启动一轮按 2 毫秒切片的 Yoo 卸载。
     /// </summary>
     public sealed class IslandAssetReclaimScheduler : MonoBehaviour
@@ -22,6 +23,8 @@ namespace Game
         const long WorkBudgetMs = 1;
         const int YooUnloadLoops = 8;
         const float ResourceUnloadQuietSeconds = 1.5f;
+        /// <summary>松杆后再等这么久才允许重卸，避免 IsWalking 抖一下就开火。</summary>
+        const float HeavyUnloadStandStillSeconds = 0.75f;
 
         static readonly Stopwatch Work = new Stopwatch();
         static readonly List<string> BankScratch = new List<string>(32);
@@ -42,6 +45,8 @@ namespace Game
         static long _reservedAtStart;
         static bool _needResourceUnload;
         static float _resourceUnloadNotBefore;
+        static float _lastWalkingRealtime = -1000f;
+        static float _yooUnloadHitchStartedAt;
 
         /// <summary>进岛流送开始后就挂上，走动中也能放零引用句柄。</summary>
         public static void EnsureForIsland()
@@ -106,6 +111,23 @@ namespace Game
                 _runner = host.gameObject.AddComponent<IslandAssetReclaimScheduler>();
         }
 
+        /// <summary>
+        /// 走路中，或松杆后未满 <see cref="HeavyUnloadStandStillSeconds"/>：禁止 Yoo / Bank / Resources 重卸。
+        /// </summary>
+        static bool IsReclaimHeavyBusy
+        {
+            get
+            {
+                if (IslandLocomotionState.IsWalking)
+                {
+                    _lastWalkingRealtime = Time.realtimeSinceStartup;
+                    return true;
+                }
+
+                return Time.realtimeSinceStartup - _lastWalkingRealtime < HeavyUnloadStandStillSeconds;
+            }
+        }
+
         static void Tick()
         {
             if (_op != null)
@@ -115,7 +137,9 @@ namespace Game
                 int destroyed = _op.DestroyedLoaderCount;
                 _op = null;
                 RestoreSlice();
-                Log.Info($"[IslandAssetReclaim] yoo destroyedLoaders={destroyed}");
+                float hitchMs = (Time.realtimeSinceStartup - _yooUnloadHitchStartedAt) * 1000f;
+                Log.Info(
+                    $"[IslandAssetReclaim] yoo destroyedLoaders={destroyed} hitchMs={hitchMs:F0}");
                 if (!_wantRun)
                     Report("cancel");
                 return;
@@ -147,10 +171,16 @@ namespace Game
             if (streamer != null && streamer.HasPendingSpawn)
                 return;
 
+            bool heavyBusy = IsReclaimHeavyBusy;
+
             if (_yooPending)
             {
                 if (_wantRun)
+                {
+                    if (heavyBusy)
+                        return;
                     StartYooUnload();
+                }
                 else
                     _yooPending = false;
                 return;
@@ -194,6 +224,9 @@ namespace Game
             if (!_wantRun)
                 return;
 
+            if (heavyBusy)
+                return;
+
             if (TryUnloadOneBank())
             {
                 _bankUnloads++;
@@ -228,6 +261,9 @@ namespace Game
                 return;
             if (_op != null || _yooPending)
                 return;
+            // 走路窗 + 松杆消抖：不做重 Unload；句柄 1ms 释放仍可走。
+            if (IsReclaimHeavyBusy)
+                return;
 
             ResourceComponent resource = GameEntry.Resource;
             if (resource == null || resource.UnloadUnusedAssetsBusy)
@@ -236,18 +272,27 @@ namespace Game
             resource.ForceUnloadUnusedAssets(false);
             _needResourceUnload = false;
             _resourceUnloadNotBefore = Time.realtimeSinceStartup + ResourceUnloadQuietSeconds;
-            Log.Info("[IslandAssetReclaim] resources unload");
+            // ForceUnload 只入队；真正耗时在 ResourceComponent.Update，勿把入队耗时当成 hitchMs。
+            Log.Info("[IslandAssetReclaim] resources unload queued");
         }
 
         static void StartYooUnload()
         {
             _yooPending = false;
+            if (IsReclaimHeavyBusy)
+            {
+                // 走路中保留 pending，站定后再卸。
+                _yooPending = true;
+                return;
+            }
+
             if (!YooResourceModule.IsInitialized || YooResourceModule.DefaultPackage == null)
                 return;
 
             _savedSlice = YooAssets.OperationSystemMaxTimeSlice;
             YooAssets.SetOperationSystemMaxTimeSliceExact(ReclaimTimeSliceMs);
             _sliceLowered = true;
+            _yooUnloadHitchStartedAt = Time.realtimeSinceStartup;
             _op = YooResourceModule.DefaultPackage.UnloadUnusedAssetsAsync(YooUnloadLoops);
             if (_op == null)
                 RestoreSlice();
@@ -312,11 +357,11 @@ namespace Game
                 && _bankUnloads == 0)
                 return;
 
-            float ms = (Time.realtimeSinceStartup - _startedAt) * 1000f;
+            float sessionMs = (Time.realtimeSinceStartup - _startedAt) * 1000f;
             long reserved = Profiler.GetTotalReservedMemoryLong();
             Log.Info(
                 $"[IslandAssetReclaim] {reason} prefabs={_prefabReleases} " +
-                $"protos={_prototypeDrops} banks={_bankUnloads} ms={ms:F0} " +
+                $"protos={_prototypeDrops} banks={_bankUnloads} sessionMs={sessionMs:F0} " +
                 $"reserved={_reservedAtStart}->{reserved}");
         }
     }

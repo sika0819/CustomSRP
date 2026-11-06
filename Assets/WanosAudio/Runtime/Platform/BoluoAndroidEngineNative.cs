@@ -63,6 +63,28 @@ namespace WanosAudio
         }
 
         /// <summary>
+        /// 清退登/离岛 teardown 钉住的 shouldStop+userPaused。
+        /// Arm / InitializeAfterLogin 必须对称调用，否则上滑 Recents 会误走 unity_pause_preview。
+        /// </summary>
+        public static void ClearLogoutStopLatch()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("clearLogoutStopLatch");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] clearLogoutStopLatch failed: {ex.Message}");
+            }
+#endif
+        }
+
+        /// <summary>
         /// 退登拆除：撤 native 排队 NowPlaying、关闸、停 FGS（须在 LoadScene Login 前）。
         /// </summary>
         public static void TeardownForLogout()
@@ -80,6 +102,28 @@ namespace WanosAudio
             {
                 Debug.LogWarning($"[BoluoAndroidEngineNative] teardownForLogout failed: {ex.Message}");
                 SetPlaybackActive(false);
+            }
+#endif
+        }
+
+        /// <summary>
+        /// 只同步 Java 会话的到点闩，不 Pause、不 SetMute。
+        /// Unity 醒着时停播仍由 <c>StopPaired</c> 完成；传 false 用于弹窗续播和离岛。
+        /// </summary>
+        public static void NotePausedForTimerEnd(bool paused)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("notePausedForTimerEnd", paused);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] notePausedForTimerEnd failed: {ex.Message}");
             }
 #endif
         }
@@ -102,6 +146,25 @@ namespace WanosAudio
 #endif
         }
 
+        /// <summary>Unity Playing / 超时 settle：清原生 skipInFlight，放行下一笔负一屏 skip。</summary>
+        public static void NoteSkipSettled()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("noteSkipSettled");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] noteSkipSettled failed: {ex.Message}");
+            }
+#endif
+        }
+
         public static bool IsUserPaused()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -120,6 +183,46 @@ namespace WanosAudio
             }
 #endif
             return false;
+        }
+
+        /// <summary>系统更新等弹窗盖住游戏、且没有外来音源。进后台时不要因此停声。</summary>
+        public static bool IsSystemDialogCover()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    if (obj != null)
+                        return obj.Call<bool>("isSystemDialogCover");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] isSystemDialogCover failed: {ex.Message}");
+            }
+#endif
+            return false;
+        }
+
+        /// <summary>进后台读到系统弹窗标志后清掉，避免下一次按 Home 仍 KeepPlaying。</summary>
+        public static void ClearSystemDialogCover()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    obj?.Call("clearSystemDialogCover");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] clearSystemDialogCover failed: {ex.Message}");
+            }
+#endif
         }
 
         public static void ResumeFromUserAction()
@@ -351,13 +454,19 @@ namespace WanosAudio
         /// </summary>
         public static void ReclaimFocusOnForeground()
         {
+            ReclaimFocusOnForeground(false);
+        }
+
+        /// <param name="userGesture">滑动 / 播放键。微信发语音取消的自动回前台必须传 false。</param>
+        public static void ReclaimFocusOnForeground(bool userGesture)
+        {
 #if UNITY_ANDROID && !UNITY_EDITOR
             try
             {
                 using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
                 {
                     var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
-                    obj?.Call("reclaimFocusOnForeground");
+                    obj?.Call("reclaimFocusOnForeground", userGesture);
                 }
             }
             catch (System.Exception ex)
@@ -365,6 +474,51 @@ namespace WanosAudio
                 Debug.LogWarning($"[BoluoAndroidEngineNative] reclaimFocusOnForeground failed: {ex.Message}");
             }
 #endif
+        }
+
+        /// <summary>微信发语音取消后回到波萝：保持暂停，显示音频打断，滑动再续。</summary>
+        public static bool ShouldHoldWeChatInterruptOnReturn()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    if (obj != null)
+                        return obj.Call<bool>("shouldHoldWeChatInterruptOnReturn");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning(
+                    $"[BoluoAndroidEngineNative] shouldHoldWeChatInterruptOnReturn failed: {ex.Message}");
+            }
+#endif
+            return false;
+        }
+
+        /// <summary>
+        /// 原生是否仍处丢焦 yield。陈旧 OnCompetingAudioMuted 若已 Restored 必须丢弃。
+        /// </summary>
+        public static bool IsFocusYieldLatched()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(WanosMusicPlayerNativeClass))
+                {
+                    var obj = jc.CallStatic<AndroidJavaObject>("getInstance");
+                    if (obj != null)
+                        return obj.Call<bool>("isFocusYieldLatched");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[BoluoAndroidEngineNative] isFocusYieldLatched failed: {ex.Message}");
+            }
+#endif
+            return true;
         }
 
         /// <summary>

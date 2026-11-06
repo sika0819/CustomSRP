@@ -499,8 +499,7 @@ namespace Game.BoluoApi
                 ticket = UiDialogService.OpenDownloadProgress();
             try
             {
-                BankDownloader.SetStartupParallelSlots(1);
-                // 静默 Critical 走 Startup，勿 preempt 进 User 队首抢区域/预设进度批。
+                // 静默 Critical 走 Startup（≤3 并发），勿 preempt 进 User 队首抢区域/预设进度批。
                 // 用户可见进度路径（showProgressDialog）仍可插队。
                 await BankDownloader.DownloadBanks(
                     remotes,
@@ -554,6 +553,14 @@ namespace Game.BoluoApi
         /// <summary>单测：Critical 是否仍需 HTTP / 申请窗。</summary>
         public static bool EditorCriticalNeedsHttpUpdate(string name) =>
             CriticalNeedsHttpUpdate(name);
+
+        /// <summary>单测：Rest 收集 + 音乐优先排序（排除 Critical 名）。</summary>
+        public static List<BankRemoteInfo> EditorCollectRestRemotes(IList<string> criticalNames) =>
+            CollectRestRemotes(criticalNames);
+
+        /// <summary>单测：Music* 是否排在非 Music 前。</summary>
+        public static int EditorCompareRestRemoteMusicFirst(BankRemoteInfo a, BankRemoteInfo b) =>
+            CompareRestRemoteMusicFirst(a, b);
 #endif
 
         static async UniTask DownloadRest(bool loadIntoEngine)
@@ -562,7 +569,7 @@ namespace Game.BoluoApi
             if (rest.Count == 0)
                 return;
 
-            BankDownloader.SetStartupParallelSlots(1);
+            // 音乐优先排序后走 Normal（≤3）：等 Critical Startup 排空再泵，多路并发但不全开。
             await BankDownloader.DownloadBanks(
                 rest,
                 loadIntoEngine: loadIntoEngine,
@@ -656,18 +663,18 @@ namespace Game.BoluoApi
                 rest.Add(info);
             }
 
-            // 非 Music 前置：静默 Rest 时先补预设/氛围，避免几十首 BGM 占满单槽。
-            rest.Sort(CompareRestRemotePresetFirst);
+            // Music 前置：静默 Rest 先下完曲目列表，再下预设/氛围（≤3 窗口内填满音乐）。
+            rest.Sort(CompareRestRemoteMusicFirst);
             return rest;
         }
 
-        static int CompareRestRemotePresetFirst(BankRemoteInfo a, BankRemoteInfo b)
+        static int CompareRestRemoteMusicFirst(BankRemoteInfo a, BankRemoteInfo b)
         {
             bool aMusic = IsMusicBankName(a?.bankName);
             bool bMusic = IsMusicBankName(b?.bankName);
             if (aMusic == bMusic)
                 return 0;
-            return aMusic ? 1 : -1;
+            return aMusic ? -1 : 1;
         }
 
         static bool IsMusicBankName(string bankName)

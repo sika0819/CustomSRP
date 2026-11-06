@@ -52,7 +52,7 @@ namespace Game.Tests
         }
 
         [Test]
-        public void Presenter_UnknownSpeed_KeepsPreviousEta()
+        public void Presenter_ApplyProgress_ShowsEmptyEtaAndZeroFill()
         {
             var root = new VisualElement();
             var card = new VisualElement();
@@ -67,7 +67,7 @@ namespace Game.Tests
             secondary.Add(new Label { name = "secondaryLabel" });
             var fill = new VisualElement { name = "progress-fill" };
             var sentence = new Label { name = "sentence" };
-            var eta = new Label { name = "eta", text = string.Empty };
+            var eta = new Label { name = "eta", text = "估算中" };
             var downloaded = new Label { name = "downloaded" };
             var sizeDetail = new Label { name = "size-detail" };
             card.Add(title);
@@ -92,10 +92,12 @@ namespace Game.Tests
                 ShowProgress = true,
             });
 
-            // 模拟已有速度算出的剩余，再丢速度：应保持「剩余4s」，不写成「剩余--」。
-            eta.text = "剩余4s";
-            presenter.SetProgress(7.66f, 66f, 862f);
-            Assert.AreEqual("剩余4s", eta.text);
+            Assert.AreEqual(string.Empty, eta.text);
+            Assert.AreEqual(0f, fill.style.width.value.value, 0.01f);
+
+            // 仍无速度：留空，不写「估算中」/「剩余--」/「剩余1s」。
+            presenter.SetProgress(0f, 0f, 862f);
+            Assert.AreEqual(string.Empty, eta.text);
             Assert.AreEqual("MB/862MB  速度--MB/秒", sizeDetail.text);
 
             presenter.Unbind();
@@ -218,7 +220,8 @@ namespace Game.Tests
             Assert.AreEqual("场景资源加载中...", title.text);
             Assert.AreEqual("我知道了", primary.Q<Label>("primaryLabel").text);
             Assert.AreEqual(expected.Prefix, sentence.text);
-            Assert.AreEqual(expected.Eta, eta.text);
+            // 冷启动无速度：Presenter / Copy ETA 均留空。
+            Assert.AreEqual(string.Empty, eta.text);
             Assert.AreEqual(expected.Downloaded, downloaded.text);
             Assert.AreEqual(expected.SizeDetail, sizeDetail.text);
 

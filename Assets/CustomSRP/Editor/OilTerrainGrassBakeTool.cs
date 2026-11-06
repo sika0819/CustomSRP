@@ -16,7 +16,8 @@ namespace CustomSRP.Editor
     {
         const int SandLayerIndex = 0;
         const int GrassLayerIndex = 1;
-        const float GrassThreshold = 0.18f;
+        /// <summary>草地纹理权重下限；绿地层一有信号就种，避免大片浅绿空秃。</summary>
+        const float GrassThreshold = 0.08f;
         const float PlantSpacing = 0.36f;
         /// <summary>沙层≥此值视为路面/沙径，禁止种草。</summary>
         const float MaxSandOnRoad = 0.38f;
@@ -30,7 +31,8 @@ namespace CustomSRP.Editor
         const float LavenderMaxX = 206.5f;
         const float LavenderMinZ = 728.9f;
         const float LavenderMaxZ = 765.9f;
-        const float MaxSlopeDeg = 42f;
+        /// <summary>草地纹理区域：坡度大于此值不种。</summary>
+        const float MaxSlopeDeg = 45f;
         /// <summary>海面约 5.7m；再低一点留给滩涂草。</summary>
         const float MinPlantWorldY = 6.2f;
         const float SeaLevelY = 5.7f;
@@ -45,22 +47,19 @@ namespace CustomSRP.Editor
         [InitializeOnLoadMethod]
         static void WatchBakeFlag()
         {
-            EditorApplication.delayCall += TryConsumeBakeFlag;
+            EditorApplication.update -= PollBakeFlag;
+            EditorApplication.update += PollBakeFlag;
         }
 
-        static void TryConsumeBakeFlag()
+        static void PollBakeFlag()
         {
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
-            {
-                EditorApplication.delayCall += TryConsumeBakeFlag;
                 return;
-            }
+            if (EditorApplication.isPlaying)
+                return;
 
             string flag = Path.GetFullPath(Path.Combine(Application.dataPath, "..", BakeFlagRelPath));
             if (!File.Exists(flag))
-                return;
-            // Don't eat the flag while Playing — otherwise dry rebake is silently skipped.
-            if (EditorApplication.isPlaying)
                 return;
             try { File.Delete(flag); } catch { /* ignore */ }
             Log.Info("[OilTerrainGrass] Flag detected — baking island grass");
@@ -141,9 +140,6 @@ namespace CustomSRP.Editor
                         Vector3 normal = data.GetInterpolatedNormal(u, v);
                         float slope = Mathf.Acos(Mathf.Clamp(normal.y, -1f, 1f));
                         if (slope > maxSlopeRad)
-                            continue;
-
-                        if (Hash01(ix, iz, 47f) > Mathf.Lerp(0.35f, 1f, grass))
                             continue;
 
                         float sand = hasSand ? maps[az, ax, SandLayerIndex] : 0f;
@@ -599,4 +595,5 @@ namespace CustomSRP.Editor
     }
 }
 #endif
+
 

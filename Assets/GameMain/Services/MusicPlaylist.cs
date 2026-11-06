@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using Game.BoluoApi;
 using Game.BoluoApi.Music;
 using UnityEngine;
 using UnityGameFramework.Runtime;
@@ -83,6 +84,14 @@ namespace Game
         /// <summary>Bumped on PlayIndex / user Stop so superseded deferred Play is dropped.</summary>
         int _playGeneration;
 
+        /// <summary>
+        /// <c>Play_*</c> 已 Post、引擎尚未 Playing。此窗口 Stop 会被吞，不能再 Post 下一首。
+        /// </summary>
+        bool _voiceCreateInFlight;
+
+        int _voiceCreateGeneration;
+        ulong _voiceCreateId;
+
         /// <summary>Break_Music already posted for this voice (ListLoop / Shuffle).</summary>
         bool _breakPostedForVoice;
 
@@ -91,6 +100,37 @@ namespace Game
         /// 但「暂停」要恢复（需求：不管什么暂停状态，回前台都恢复音乐）。
         /// </summary>
         bool _stoppedByUser;
+
+        /// <summary>硬续已排队、Playing 还没到。这段时间回前台不得再 Pause_ALL。</summary>
+        bool _hardReplayScheduled;
+
+        /// <summary>硬续进行中：静音原因留到这次 voice 进入 Playing。</summary>
+        bool _holdSilenceUntilPost;
+
+        /// <summary>PlaySound 已返回编号，还在等引擎 Playing。编号不算已经出声。</summary>
+        bool _hardReplayAwaitingPlaying;
+
+        /// <summary>这轮硬续开始时的静音原因。失败时写回去，不把到点改成用户暂停。</summary>
+        SilenceReason _hardReplayReason = SilenceReason.UserPause;
+
+        /// <summary>硬续已排上、声音还没进入 Playing。</summary>
+        public bool HardReplayPending =>
+            _hardReplayScheduled || _holdSilenceUntilPost || _hardReplayAwaitingPlaying;
+
+        /// <summary>再滑时看这轮硬续该等、该发，还是闸丢了要重试。</summary>
+        public PendingReplayNudge PeekPendingReplay()
+        {
+            bool waitingToPost = !_hardReplayAwaitingPlaying
+                                 && (_hardReplayScheduled || _holdSilenceUntilPost);
+            return SilenceResumePolicy.ClassifyPendingReplay(
+                _hardReplayAwaitingPlaying, waitingToPost, _voiceCreateInFlight);
+        }
+
+        /// <summary>闸已经开、硬续还没 Post：现在发出去。不走对账。</summary>
+        public void ContinuePendingHardReplay() => ContinueHardReplayAfterGate();
+
+        /// <summary>等 Playing 但闸没了：写回静音原因，让这次滑动再硬续。</summary>
+        public void AbandonStuckHardReplay() => NoteHardReplayMissed("gate-lost");
 
         /// <summary>当前有可恢复的曲目（选过曲且没被用户主动停掉）。</summary>
         public bool HasRestorableTrack =>
@@ -120,32 +160,51 @@ namespace Game
 
         /// <summary>
         /// 采用原生已经在播的曲目（后台负一屏切歌后回前台对账）。
-        /// 只更新索引与播放态：引擎里已经是原生起播的那一轨，不能再发一次 Play 事件（避免中途掐断）。
-        /// Loop/Shuffle 时尽量重挂 voice + Break，等本曲 Ended 再自动下一首。
+        /// 只更新索引：引擎里已经是原生起播的那一轨，不能再发一次 Play 事件（避免中途掐断）。
+        /// <paramref name="paused"/> 为 true 时不得强行 <see cref="IsPlaying"/>=true（对齐 PlaybackGate）。
         /// </summary>
-        public void AdoptTrack(int albumIndex, int trackIndex)
+        public void AdoptTrack(int albumIndex, int trackIndex, bool paused = false)
         {
             if (albumIndex < 0 || trackIndex < 0)
                 return;
+
+            bool albumChanged = albumIndex != CurrentAlbumIndex;
+            bool trackChanged = albumChanged || trackIndex != CurrentTrackIndex;
+            bool playingChanged = IsPlaying != (!paused && !_stoppedByUser);
+
             // 后台负一屏切过来的曲也算已听（对齐 Boluo MarkCurrentMusicPlayedIfAny）。
             MarkTrackHeard(albumIndex, trackIndex);
             CurrentAlbumIndex = albumIndex;
             CurrentTrackIndex = trackIndex;
-            IsPlaying = true;
-            _stoppedByUser = false;
+            IsPlaying = !paused && !_stoppedByUser;
+            if (!paused)
+                _stoppedByUser = false;
+
+            BoluoPlatformMusicBridge.NoteUnityMusicContext(
+                PlayMode, CurrentAlbumIndex, CurrentTrackIndex);
 
             EnsureVoiceHook();
             if (WanosSoundAgentHelper.TryGetActiveMusicVoice(out ulong agentVoice) && agentVoice != 0)
             {
                 AttachMusicVoice(agentVoice);
-                Log.Info($"[MusicPlaylist] AdoptTrack album={albumIndex} track={trackIndex} rebind voice={agentVoice} mode={PlayMode}");
-                return;
+                Log.Info(
+                    $"[MusicPlaylist] AdoptTrack album={albumIndex} track={trackIndex}"
+                    + $" paused={(paused ? 1 : 0)} rebind voice={agentVoice} mode={PlayMode}");
+            }
+            else if (_musicVoiceId != 0 && IsListAdvanceMode(PlayMode) && !_breakPostedForVoice)
+            {
+                TryPostBreak("adopt-keep-voice");
+            }
+            else
+            {
+                Log.Info(
+                    $"[MusicPlaylist] AdoptTrack album={albumIndex} track={trackIndex}"
+                    + $" paused={(paused ? 1 : 0)} voice={_musicVoiceId} mode={PlayMode}");
             }
 
-            if (_musicVoiceId != 0 && IsListAdvanceMode(PlayMode) && !_breakPostedForVoice)
-                TryPostBreak("adopt-keep-voice");
-            else
-                Log.Info($"[MusicPlaylist] AdoptTrack album={albumIndex} track={trackIndex} voice={_musicVoiceId} mode={PlayMode}");
+            // 与 PlayIndex 同通道：列表高亮 / 播放栏曲名必须跟会话，禁止静默改索引。
+            if (trackChanged || playingChanged)
+                TrackChanged?.Invoke();
         }
 
         // -----------------------------------------------------------------------
@@ -162,6 +221,7 @@ namespace Game
                 _instance._breakPostedForVoice = false;
                 _instance._voiceGeneration++;
                 _instance._playGeneration++;
+                _instance.ClearVoiceCreateGate();
                 _instance.IsPlaying = false;
                 _instance._stoppedByUser = false;
             }
@@ -171,12 +231,13 @@ namespace Game
         /// <summary>
         /// 离岛：解绑 voice、作废进行中的切歌兜底，并保持「用户已停」。
         /// 不要走 <see cref="ResetSession"/>：那里会把 <c>_stoppedByUser</c> 抬回 false，
-        /// 回前台 <c>EnsureMusicRestored</c> 会把曲目拉起来。
+        /// 回前台 <c>TrySoftResume</c> 会把曲目拉起来。
         /// </summary>
         public void DisarmAfterLeave()
         {
             UnhookVoiceStates();
             _playGeneration++;
+            ClearVoiceCreateGate();
             if (_musicSerialId >= 0 && GameEntry.Sound != null)
             {
                 GameEntry.Sound.StopSound(_musicSerialId);
@@ -352,7 +413,8 @@ namespace Game
         // -----------------------------------------------------------------------
 
         /// <summary>
-        /// Play a specific track. Always stops any previous BGM first (one song at a time).
+        /// Play a specific track. One song at a time.
+        /// 上一首 <c>Play_*</c> 已发出但引擎还没 Playing 时，只记下这次点选，不再 Post。
         /// </summary>
         public void PlayIndex(int albumIndex, int trackIndex, bool restart = false)
         {
@@ -376,14 +438,38 @@ namespace Game
             if (same && !restart)
                 return;
 
-            // 作废在途延帧起播；HardStop 对齐原生 Stop_Music+Break_Music，下一帧再 Play。
+            // 作废在途延帧起播。createInst 窗口内 Stop 会被吞，不能再 HardStop+Post。
+            // 硬续撞上这个窗口：保持已排队，等闸打开再 Post，不要当成失败。
+            bool holdSilence = _holdSilenceUntilPost;
+            if (!holdSilence)
+                _hardReplayScheduled = false;
             int gen = ++_playGeneration;
-            HardStopMusicVoices(markStoppedByUser: false);
-            // 延帧起播前先乐观标记，避免 RefreshAll 一帧闪回「未播放」。
             _stoppedByUser = false;
-            IsPlaying = true;
+            if (!holdSilence && SilenceResumePolicy.WantsPlayback(PlaybackGate.Silence))
+                IsPlaying = true;
+            if (MusicPlayOverlapPolicy.ShouldDeferPost(_voiceCreateInFlight))
+            {
+                if (holdSilence)
+                    _hardReplayScheduled = true;
+                Log.Info(
+                    $"[MusicPlaylist] defer post until Playing album={albumIndex} track={trackIndex} gen={gen}");
+                TrackChanged?.Invoke();
+                NowPlayingService.PublishFromPlaylist();
+                return;
+            }
+
+            HardStopMusicVoices(markStoppedByUser: false);
+            // HardStop 会把 IsPlaying 拉回 false。普通点歌先乐观标记，避免列表闪回「未播放」。
+            // 硬续要等真正 Post 成功才算在播，否则滑动续播闩会被提前清掉。
+            _stoppedByUser = false;
+            if (!holdSilence && SilenceResumePolicy.WantsPlayback(PlaybackGate.Silence))
+                IsPlaying = true;
+            if (holdSilence)
+                _hardReplayScheduled = true;
             StartTrackDeferred(gen, track.Value).Forget();
             TrackChanged?.Invoke();
+            // 索引已提交：先刷负一屏曲名/计划，等 TryStartTrack 再 PublishPlayingForced 钉播放态。
+            NowPlayingService.PublishFromPlaylist();
         }
 
         /// <summary>
@@ -392,6 +478,11 @@ namespace Game
         /// </summary>
         public void Stop(bool publish = true)
         {
+            // 先闩用户停，避免 Playing 回调在 HardStop 前把曲子又拉起来。
+            _holdSilenceUntilPost = false;
+            _hardReplayScheduled = false;
+            _hardReplayAwaitingPlaying = false;
+            _stoppedByUser = true;
             _playGeneration++;
             HardStopMusicVoices(markStoppedByUser: true);
             if (publish)
@@ -403,6 +494,10 @@ namespace Game
         /// </summary>
         void HardStopMusicVoices(bool markStoppedByUser)
         {
+            // 停播即放行闸，避免超时兜底把刚停的曲子又拉起来。
+            ClearVoiceCreateGate();
+            // agent.Stop 会 Post 一次 Stop_Music；有 serial 时此处只再补 Break，避免双 Stop。
+            bool stopPostedByAgent = _musicSerialId >= 0 && GameEntry.Sound != null;
             StopCurrentMusic();
             WanosSoundAgentHelper.SilenceAllMusicAgentsLocal();
             _musicVoiceId = 0;
@@ -410,10 +505,10 @@ namespace Game
             _voiceGeneration++;
             if (markStoppedByUser)
                 _stoppedByUser = true;
-            // Always post even if serialId was lost — prevents overlapping Play_Music* voices.
             try
             {
-                WanosInteraction.PostMusicEvent("Stop_Music");
+                if (!stopPostedByAgent)
+                    WanosInteraction.PostMusicEvent("Stop_Music");
                 WanosInteraction.PostMusicEvent("Break_Music");
             }
             catch (Exception ex)
@@ -428,11 +523,18 @@ namespace Game
 
         async UniTaskVoid StartTrackDeferred(int generation, MusicTrack track)
         {
-            // 让引擎消化 Stop/Break（对齐原生 ~50ms，这里用一帧避免主线程 sleep）。
+            // 对齐原生 forceStop 后 ~50ms，让引擎消化 Stop/Break 再建 Sequence。
             await UniTask.Yield(PlayerLoopTiming.Update);
             if (generation != _playGeneration)
                 return;
-            TryStartTrack(track, generation);
+            await UniTask.Delay(50, DelayType.Realtime);
+            if (generation != _playGeneration)
+                return;
+            if (!TryStartTrack(track, generation))
+            {
+                if (generation == _playGeneration)
+                    NoteHardReplayMissed("post-skipped");
+            }
         }
 
         /// <summary>
@@ -486,6 +588,38 @@ namespace Game
         // Navigation
         // -----------------------------------------------------------------------
 
+        /// <summary>
+        /// <b>仅</b>负一屏 / remote 手动切歌（<see cref="NowPlayingService"/>）。
+        /// 本专辑 ±1 取模；邻接未下载完 → 重播当前；已就绪 → 切过去。
+        /// 禁止给音乐列表用：列表未下载点行仍走 <c>MusicForm.TriggerMusicDownload</c>→下完
+        /// <see cref="PlayIndex"/>，岛内按钮走 <see cref="Next"/>/<see cref="Prev"/>。
+        /// </summary>
+        public void SkipAdjacentInAlbum(int direction)
+        {
+            if (!MusicCatalog.IsReady || MusicCatalog.AlbumCount == 0)
+                return;
+            if (direction == 0)
+                direction = 1;
+
+            var tracks = MusicCatalog.GetTracks(CurrentAlbumIndex);
+            int next = MusicAlbumNav.ResolveManualSkipIndex(
+                tracks.Count,
+                CurrentTrackIndex,
+                direction,
+                i => IsTrackBankLocallyReady(tracks[i]));
+            if (next < 0)
+                return;
+            PlayIndex(CurrentAlbumIndex, next, restart: true);
+        }
+
+        /// <summary>与列表 / 传输计划一致：盘上 <see cref="BankDownloader.IsLocalReady"/> 才可切播。</summary>
+        static bool IsTrackBankLocallyReady(MusicTrack track)
+        {
+            if (string.IsNullOrEmpty(track.BankName))
+                return false;
+            return BankDownloader.IsLocalReady(track.BankName);
+        }
+
         public void Next()
         {
             if (!MusicCatalog.IsReady || MusicCatalog.AlbumCount == 0)
@@ -498,18 +632,10 @@ namespace Game
                 return;
             }
 
-            // Advance within the current album.
+            // Advance within the current album（列表环绕；单曲到边界停；单曲专辑重播）。
             var tracks = MusicCatalog.GetTracks(CurrentAlbumIndex);
-            // 空专辑，或 Loop 下仅 1 首（服务器目录裁薄）：跨专辑，否则负一屏/下一首原地打转。
-            if (tracks.Count == 0
-                || (PlayMode == MusicPlayMode.Loop && tracks.Count == 1))
-            {
-                if (TryPlayAdjacentAlbum(+1))
-                    return;
-                if (tracks.Count == 1)
-                    PlayIndex(CurrentAlbumIndex, 0, restart: true);
+            if (tracks.Count == 0)
                 return;
-            }
 
             int next = CurrentTrackIndex + 1;
             if (next >= tracks.Count)
@@ -530,40 +656,13 @@ namespace Game
             }
 
             var tracks = MusicCatalog.GetTracks(CurrentAlbumIndex);
-            if (tracks.Count == 0
-                || (PlayMode == MusicPlayMode.Loop && tracks.Count == 1))
-            {
-                if (TryPlayAdjacentAlbum(-1))
-                    return;
-                if (tracks.Count == 1)
-                    PlayIndex(CurrentAlbumIndex, 0, restart: true);
+            if (tracks.Count == 0)
                 return;
-            }
 
             int prev = CurrentTrackIndex - 1;
             if (prev < 0)
                 prev = PlayMode == MusicPlayMode.Loop ? tracks.Count - 1 : 0;
             PlayIndex(CurrentAlbumIndex, prev, restart: true);
-        }
-
-        /// <summary>Loop 跨专辑：找相邻非空专辑的首/末曲。</summary>
-        bool TryPlayAdjacentAlbum(int direction)
-        {
-            if (MusicCatalog.AlbumCount <= 1)
-                return false;
-            for (int i = 1; i < MusicCatalog.AlbumCount; i++)
-            {
-                int idx = (CurrentAlbumIndex + direction * i) % MusicCatalog.AlbumCount;
-                if (idx < 0)
-                    idx += MusicCatalog.AlbumCount;
-                var t = MusicCatalog.GetTracks(idx);
-                if (t.Count <= 0)
-                    continue;
-                int track = direction > 0 ? 0 : t.Count - 1;
-                PlayIndex(idx, track, restart: true);
-                return true;
-            }
-            return false;
         }
 
         void PickShuffle(out int albumIndex, out int trackIndex)
@@ -691,17 +790,17 @@ namespace Game
 
         void OnMusicVoiceState(ulong instanceId, int state)
         {
-            if (instanceId == 0 || instanceId != _musicVoiceId)
+            if (instanceId == 0)
                 return;
 
             if (state == WanosInstanceState.Playing)
             {
-                // ListLoop / Shuffle: Break → 本曲播完进 Ended → Next（不中途掐断）。
-                // Single: 不 Break → 引擎自循环。
-                if (IsListAdvanceMode(PlayMode))
-                    TryPostBreak("Playing");
+                HandleVoicePlaying(instanceId);
                 return;
             }
+
+            if (instanceId != _musicVoiceId)
+                return;
 
             if (state != WanosInstanceState.Ended)
                 return;
@@ -729,6 +828,177 @@ namespace Game
             _breakPostedForVoice = false;
             _voiceGeneration++;
             AdvanceAfterTrackEnded();
+        }
+
+        void HandleVoicePlaying(ulong instanceId)
+        {
+            bool matches = instanceId == _musicVoiceId;
+            // voiceId 尚未回填时只认当前绑定；禁止把任意 Playing 都当成 in-flight。
+            bool isCreateVoice = _voiceCreateInFlight
+                && (_voiceCreateId != 0 ? _voiceCreateId == instanceId : matches);
+            int postedGen = isCreateVoice
+                ? _voiceCreateGeneration
+                : (matches ? _playGeneration : -1);
+            // 这次硬续的 voice 真正 Playing 了，才清暂停闩。编号到手之前不算。
+            if (_hardReplayAwaitingPlaying
+                && isCreateVoice
+                && postedGen == _playGeneration
+                && SilenceResumePolicy.ShouldCommitHardReplay(voiceEnteredPlaying: true))
+            {
+                CommitHardReplayPosted();
+            }
+
+            bool wantPlay = !_stoppedByUser
+                && CurrentAlbumIndex >= 0
+                && CurrentTrackIndex >= 0
+                && SilenceResumePolicy.WantsPlayback(PlaybackGate.Silence);
+
+            var disposition = MusicPlayOverlapPolicy.DecidePlaying(
+                matches,
+                isCreateVoice,
+                postedGen,
+                _playGeneration,
+                _stoppedByUser,
+                wantPlay);
+
+            if (disposition == MusicPlayOverlapPolicy.PlayingDisposition.Continue)
+            {
+                ClearVoiceCreateGate();
+                // Sequence createInst 已落地：放开远程 skip in-flight。
+                NowPlayingService.NoteSkipSettled();
+                // ListLoop / Shuffle: Break → 本曲播完进 Ended → Next（不中途掐断）。
+                // Single: 不 Break → 引擎自循环。
+                if (IsListAdvanceMode(PlayMode))
+                    TryPostBreak("Playing");
+                return;
+            }
+
+            if (disposition == MusicPlayOverlapPolicy.PlayingDisposition.StopThenPlayCurrent)
+            {
+                Log.Info(
+                    $"[MusicPlaylist] Playing superseded voice={instanceId} → stop then play"
+                    + $" {CurrentAlbumIndex}/{CurrentTrackIndex}");
+                ClearVoiceCreateGate();
+                HardStopMusicVoices(markStoppedByUser: false);
+                if (_stoppedByUser || !SilenceResumePolicy.WantsPlayback(PlaybackGate.Silence))
+                    return;
+                var track = MusicCatalog.GetTrack(CurrentAlbumIndex, CurrentTrackIndex);
+                if (track == null)
+                    return;
+                int gen = ++_playGeneration;
+                _stoppedByUser = false;
+                IsPlaying = true;
+                StartTrackDeferred(gen, track.Value).Forget();
+                TrackChanged?.Invoke();
+                NowPlayingService.PublishFromPlaylist();
+                return;
+            }
+
+            // 硬续还占着闸：不是这次 voice 的 Playing 只停那一条，不能清闸。
+            // 清掉之后超时会直接退出，等待标志却还在，再滑就永远被挡死。
+            if (HardReplayPending && _voiceCreateInFlight && !isCreateVoice)
+            {
+                StopStaleVoice(instanceId);
+                return;
+            }
+
+            // StopOnly：用户已停，或迟到 Playing 不属于当前会话。
+            ClearVoiceCreateGate();
+            if (matches || isCreateVoice)
+                HardStopMusicVoices(markStoppedByUser: _stoppedByUser);
+            else
+                StopStaleVoice(instanceId);
+
+            ContinueHardReplayAfterGate();
+        }
+
+        void StopStaleVoice(ulong instanceId)
+        {
+            try
+            {
+                WanosInteraction.StopVoice(instanceId, 0);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[MusicPlaylist] StopVoice stale Playing failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>上一条 createInst 结束或超时后，把还在等的硬续发出去。</summary>
+        void ContinueHardReplayAfterGate()
+        {
+            if (_hardReplayAwaitingPlaying)
+                return;
+            if (!_hardReplayScheduled && !_holdSilenceUntilPost)
+                return;
+            if (MusicPlayOverlapPolicy.ShouldDeferPost(_voiceCreateInFlight))
+                return;
+            if (CurrentAlbumIndex < 0 || CurrentTrackIndex < 0)
+                return;
+            PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
+        }
+
+        void NoteVoiceCreateInFlight(int generation, ulong voiceId)
+        {
+            _voiceCreateInFlight = true;
+            _voiceCreateGeneration = generation;
+            _voiceCreateId = voiceId;
+            ScheduleVoiceCreateTimeout(generation, voiceId).Forget();
+        }
+
+        void ClearVoiceCreateGate()
+        {
+            _voiceCreateInFlight = false;
+            _voiceCreateGeneration = 0;
+            _voiceCreateId = 0;
+        }
+
+        async UniTaskVoid ScheduleVoiceCreateTimeout(int generation, ulong voiceId)
+        {
+            try
+            {
+                await UniTask.Delay(
+                    MusicPlayOverlapPolicy.VoiceCreateTimeoutMs,
+                    DelayType.Realtime);
+            }
+            catch
+            {
+                return;
+            }
+
+            if (!_voiceCreateInFlight)
+                return;
+            if (_voiceCreateGeneration != generation)
+                return;
+            if (_voiceCreateId != 0 && voiceId != 0 && _voiceCreateId != voiceId)
+                return;
+
+            Log.Warning(
+                $"[MusicPlaylist] Playing missing after {MusicPlayOverlapPolicy.VoiceCreateTimeoutMs}ms"
+                + $" — release gate gen={generation} voice={voiceId}");
+            bool awaitingThis = _hardReplayAwaitingPlaying;
+            bool waitingToPost = _hardReplayScheduled && !_hardReplayAwaitingPlaying;
+            ClearVoiceCreateGate();
+            if (awaitingThis)
+            {
+                NoteHardReplayMissed("playing-timeout");
+                return;
+            }
+
+            if (waitingToPost)
+            {
+                ContinueHardReplayAfterGate();
+                return;
+            }
+
+            if (_stoppedByUser
+                || !SilenceResumePolicy.TimeoutMayReplay(PlaybackGate.Silence))
+                return;
+            if (CurrentAlbumIndex < 0 || CurrentTrackIndex < 0)
+                return;
+
+            // 闸失效后硬切当前索引，避免永远 defer；若原 voice 仍在，HardStop 此刻已可停。
+            PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
         }
 
         void AdvanceAfterTrackEnded()
@@ -773,13 +1043,29 @@ namespace Game
 
         public void Pause()
         {
+            PauseEngine();
+            // 调用方已经写好静音原因。这里只拦住原生自动续播，不再把 TimerEnd 改成用户暂停。
+#if UNITY_ANDROID && !UNITY_EDITOR
+            BoluoAndroidEngineNative.MarkUserPausedFromUnity(true);
+#endif
+            NowPlayingService.PublishFromPlaylist();
+        }
+
+        /// <summary>
+        /// 音乐和音效一起暂停，保留曲目实例。不改 <see cref="PlaybackGate"/>，也不写原生 userPaused。
+        /// </summary>
+        public void PauseEngine()
+        {
+            _holdSilenceUntilPost = false;
+            _hardReplayScheduled = false;
+            _hardReplayAwaitingPlaying = false;
+            _playGeneration++;
             if (_musicSerialId >= 0 && GameEntry.Sound != null)
             {
                 GameEntry.Sound.PauseSound(_musicSerialId);
             }
             else
             {
-                // serial 已丢时 PauseSound 走不到；仍发 Pause_Music，覆盖原生直控/后台传输仍在出声。
                 try
                 {
                     WanosInteraction.PostMusicEvent("Pause_Music");
@@ -789,10 +1075,7 @@ namespace Game
                     Debug.LogWarning($"[MusicPlaylist] Pause_Music failed: {ex.Message}");
                 }
             }
-            // 定时到点 / 负一屏 / 用户暂停：音乐与音效一起停。
-            // Pause_Music 停 BGM；Pause_ALL 兜住引擎侧仍在响的环境/天气 voice
-            // （对齐原生 handleTransportInBackground / pauseForTimerEnd）。
-            // SetContentAudioPaused 停 C# 侧 Ambience/Weather/雨水，并禁止 Evaluate 重 Post。
+
             try
             {
                 WanosEngine.PauseAll();
@@ -801,58 +1084,15 @@ namespace Game
             {
                 Debug.LogWarning($"[MusicPlaylist] Pause_ALL failed: {ex.Message}");
             }
+
             IsPlaying = false;
             IslandAudioSession.Instance?.SetContentAudioPaused(true);
-            // 同步原生 userPaused，否则定时到点后焦点回归/后台续播会把歌又拉起来。
-#if UNITY_ANDROID && !UNITY_EDITOR
-            BoluoAndroidEngineNative.MarkUserPausedFromUnity(true);
-#endif
-            NowPlayingService.NoteUserPaused(true);
-            NowPlayingService.PublishFromPlaylist();
         }
 
         public void Resume()
         {
-            // 与 EnsureMusicRestored 对齐：GF ResumeSound + 显式 Resume_Music，
-            // 覆盖定时到点 PauseSound / 负一屏 Pause_Music 两条停播路径。
-            NowPlayingService.NoteUserPaused(false);
-#if UNITY_ANDROID && !UNITY_EDITOR
-            BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
-#endif
-            // 先 Resume_ALL（内容声），再 Resume_Music；曲已 Pause_Music 非 Started，
-            // 不会踩「活实例 + Started 禁 Resume_ALL」那条 Ended 切歌坑。
-            try
-            {
-                WanosEngine.ResumeAll();
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[MusicPlaylist] Resume_ALL failed: {ex.Message}");
-            }
-            if (_musicSerialId >= 0 && GameEntry.Sound != null)
-                GameEntry.Sound.ResumeSound(_musicSerialId);
-            try
-            {
-                WanosInteraction.PostMusicEvent("Resume_Music");
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[MusicPlaylist] Resume_Music failed: {ex.Message}");
-            }
-            IsPlaying = CurrentAlbumIndex >= 0 && CurrentTrackIndex >= 0 && !_stoppedByUser;
-            if (WanosEngine.Unmute("music-resume"))
-            {
-                IslandAudioSession.ClearYieldHold();
-                IslandAudioSession.NoteAudibleCommitted();
-                IslandAudioSession.Instance?.SetContentAudioPaused(false);
-            }
-            else
-                Debug.LogWarning("[MusicPlaylist] unmute denied on resume — keep content audio");
-#if UNITY_ANDROID && !UNITY_EDITOR
-            // 定时取消依赖此路径出声：原生 pauseForTimerEnd 已 mute，须补抢焦点 + unmute。
-            BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
-#endif
-            NowPlayingService.PublishFromPlaylist();
+            // 只发引擎续播，不改暂停闩、不解 mute。谁能出声由 AudioAppLifecycle 决定。
+            TrySoftResume("resume");
         }
 
         /// <summary>
@@ -872,21 +1112,23 @@ namespace Game
             IsPlaying = CurrentAlbumIndex >= 0 && CurrentTrackIndex >= 0 && !_stoppedByUser;
         }
 
+        /// <summary>用户暂停后续播：从暂停处续音乐和音效，不从头再播。</summary>
+        public void ResumeFromUserPause(string reason) => AudioAppLifecycle.ResumePaired(reason);
+
         /// <summary>
-        /// 定时结束弹窗「取消」/「重复定时」/关窗：恢复音效闸并硬起重播当前曲。
-        /// <para>
-        /// 真机到点走 Pause_Music+Pause_ALL+mute 后，Resume_Music 经常拉不起 BGM
-        /// （音效 Resume_ALL / ContentAudio 却正常）——不赌 Pause 态，直接 PlayIndex restart。
-        /// 禁止改 Music/Effect 用户音量：到点只 Pause，此处只 Resume + 重推原音量。
-        /// </para>
+        /// 硬起重播当前曲。返回 <see cref="ResumeCommit.WaitingForPost"/> 时闩还在，下一滑可再试。
         /// </summary>
-        public void ResumeAfterTimerEnd(string reason = "timer-end")
+        public ResumeCommit BeginHardReplay(string reason)
         {
-            NowPlayingService.NotePausedForTimerEnd(false);
-            NowPlayingService.NoteUserPaused(false);
-#if UNITY_ANDROID && !UNITY_EDITOR
-            BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
-#endif
+            if (_hardReplayScheduled || _holdSilenceUntilPost || _hardReplayAwaitingPlaying)
+                return ResumeCommit.WaitingForPost;
+
+            _hardReplayReason = PlaybackGate.Silence == SilenceReason.TimerEnd
+                ? SilenceReason.TimerEnd
+                : PlaybackGate.Silence == SilenceReason.None
+                    ? SilenceReason.UserPause
+                    : PlaybackGate.Silence;
+
             try
             {
                 WanosEngine.ResumeAll();
@@ -895,60 +1137,60 @@ namespace Game
             {
                 Debug.LogWarning($"[MusicPlaylist] Resume_ALL failed: {ex.Message}");
             }
+
             IslandAudioSession.ClearYieldHold();
-            IslandAudioSession.Instance?.SetContentAudioPaused(false);
-            // 到点曾 mute：重推用户音量，避免引擎 RTPC 停留在护栏衰减/默认值被听成「音量被调了」。
             PushVolumesToEngine();
 
             if (!HasRestorableTrack)
             {
-                Log.Info($"[MusicPlaylist] ResumeAfterTimerEnd ({reason}): no track, SFX gate only");
+                Log.Info($"[MusicPlaylist] hard replay ({reason}): no track, SFX gate only");
+                CommitHardReplayPosted();
 #if UNITY_ANDROID && !UNITY_EDITOR
                 BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
 #endif
-                return;
+                NowPlayingService.PublishFromGate();
+                return ResumeCommit.Done;
             }
 
             if (!WanosEngine.IsPlaybackEnabled)
                 WanosEngine.EnablePlayback(reason);
 
-            // 硬起播：Stop_Music + Play_*，绕过失效的 Resume_Music。
-            Log.Info($"[MusicPlaylist] ResumeAfterTimerEnd ({reason}): replay {CurrentAlbumIndex}/{CurrentTrackIndex}");
+            _holdSilenceUntilPost = true;
+            Log.Info($"[MusicPlaylist] hard replay ({reason}): schedule {CurrentAlbumIndex}/{CurrentTrackIndex}");
             PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
-#if UNITY_ANDROID && !UNITY_EDITOR
-            // PlayIndex 在 AudibleCommitted 时会跳过 EnsureAudible；定时到点 mute 后必须再抢一次。
-            BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
-#endif
+            bool createBlocked = MusicPlayOverlapPolicy.ShouldDeferPost(_voiceCreateInFlight);
+            if (createBlocked && !_hardReplayScheduled)
+                _hardReplayScheduled = true;
+            ResumeCommit commit = SilenceResumePolicy.ClassifyHardReplaySchedule(
+                createBlocked, _hardReplayScheduled);
+            if (commit != ResumeCommit.WaitingForPost)
+            {
+                NoteHardReplayMissed("not-scheduled");
+                return ResumeCommit.Failed;
+            }
+
+            return ResumeCommit.WaitingForPost;
+        }
+
+        /// <summary>定时结束弹窗「取消」/「重复定时」/关窗：从暂停处续音乐和音效。</summary>
+        public void ResumeAfterTimerEnd(string reason = "timer-end")
+        {
+            AudioAppLifecycle.ResumePaired(reason);
         }
 
         /// <summary>
-        /// 回前台 / 打断后恢复音乐：
-        /// <para>
-        /// GF agent 还在 → 只发 <c>Resume_Music</c>（续进度，不 Stop+Play）；
-        /// agent 已丢（serial &lt; 0）→ 重起当前曲目。
-        /// </para>
-        /// 不要用原生 <c>PlaybackState</c> 决定是否硬重启：该状态在 Editor/macOS 上
-        /// 经常与真实发声不同步，会把正在播的曲反复掐掉重开。
-        /// 用户主动「停止」过的曲目不恢复；用户主动「暂停」的会恢复。
+        /// 系统打断后的软续：agent 还在就 Resume_Music，不 Stop+Play，也不改暂停闩。
+        /// agent 已丢返回 false，调用方再硬起一次。
         /// </summary>
-        public void EnsureMusicRestored(string reason)
+        public bool TrySoftResume(string reason)
         {
             if (!HasRestorableTrack)
-                return;
+                return true;
             if (!WanosEngine.IsPlaybackEnabled)
-                return;
+                return false;
+            if (_musicSerialId < 0 || GameEntry.Sound == null)
+                return false;
 
-            if (_musicSerialId < 0)
-            {
-                if (GameEntry.Sound == null)
-                    return;
-                // GF 侧 sound 已不在 → 没有任何可 Resume 的 voice → 重起当前曲目。
-                Log.Info($"[MusicPlaylist] restore ({reason}): serial lost → replay track");
-                PlayIndex(CurrentAlbumIndex, CurrentTrackIndex, restart: true);
-                return;
-            }
-
-            // agent 还在 → Resume_ALL（负一屏/到点 Pause_ALL）+ GF ResumeSound + Resume_Music。
             try
             {
                 WanosEngine.ResumeAll();
@@ -957,31 +1199,64 @@ namespace Game
             {
                 Debug.LogWarning($"[MusicPlaylist] Resume_ALL failed: {ex.Message}");
             }
-            if (GameEntry.Sound != null)
-                GameEntry.Sound.ResumeSound(_musicSerialId);
+
+            GameEntry.Sound.ResumeSound(_musicSerialId);
             try
             {
-                WanosInteraction.PostMusicEvent("Resume_Music");
+                // 与原生 resumePaired 共用短窗口。第二发 Resume_Music 打在已续上的曲子上会 Ended。
+                if (!BoluoAndroidEngineNative.ClaimVoiceResume("Resume_Music"))
+                {
+                    Log.Info($"[BoluoAudioFg] Resume_Music coalesced ({reason})");
+                }
+                else
+                {
+                    WanosInteraction.PostMusicEvent("Resume_Music");
+                }
             }
             catch (Exception ex)
             {
                 Debug.LogWarning($"[MusicPlaylist] Resume_Music failed: {ex.Message}");
             }
+
             IsPlaying = true;
+            Log.Info($"[MusicPlaylist] soft resume ({reason}): track {CurrentAlbumIndex}/{CurrentTrackIndex}");
+            return true;
+        }
+
+        void CommitHardReplayPosted()
+        {
+            _holdSilenceUntilPost = false;
+            _hardReplayScheduled = false;
+            _hardReplayAwaitingPlaying = false;
+            NowPlayingService.NotePausedForTimerEnd(false);
             NowPlayingService.NoteUserPaused(false);
-            if (WanosEngine.Unmute("music-restore"))
-            {
-                IslandAudioSession.ClearYieldHold();
-                IslandAudioSession.NoteAudibleCommitted();
-                IslandAudioSession.Instance?.SetContentAudioPaused(false);
-            }
+            IslandAudioSession.Instance?.RestoreContentAudio("hard-replay");
+            AudioAppLifecycle.NoteUserResumeCommitted();
+        }
+
+        void NoteHardReplayMissed(string why)
+        {
+            if (!_holdSilenceUntilPost && !_hardReplayScheduled && !_hardReplayAwaitingPlaying)
+                return;
+            SilenceReason reason = _hardReplayReason;
+            _holdSilenceUntilPost = false;
+            _hardReplayScheduled = false;
+            _hardReplayAwaitingPlaying = false;
+            IsPlaying = false;
+            IslandAudioSession.Instance?.SetContentAudioPaused(true);
+            if (reason == SilenceReason.TimerEnd || NowPlayingService.PausedForTimerEnd)
+                PlaybackGate.SetSilence(SilenceReason.TimerEnd, "hard-replay-miss");
+            else if (reason == SilenceReason.SystemInterrupt)
+                PlaybackGate.SetSilence(SilenceReason.SystemInterrupt, "hard-replay-miss");
             else
-                Debug.LogWarning("[MusicPlaylist] unmute denied on restore — keep content audio");
-            PushVolumesToEngine();
+                NowPlayingService.NoteUserPaused(true);
+            if (PlaybackGate.Silence == SilenceReason.UserPause)
+                AudioAppLifecycle.ArmSwipeResumeAfterMissedReplay();
 #if UNITY_ANDROID && !UNITY_EDITOR
-            BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
+            BoluoAndroidEngineNative.MarkUserPausedFromUnity(true);
 #endif
-            Log.Info($"[MusicPlaylist] restore ({reason}): resumed track {CurrentAlbumIndex}/{CurrentTrackIndex}");
+            Log.Info($"[MusicPlaylist] hard replay not posted ({why}) — keep silence");
+            NowPlayingService.PublishFromGate();
         }
 
         // -----------------------------------------------------------------------
@@ -992,7 +1267,7 @@ namespace Game
         {
             if (_musicSerialId >= 0 && GameEntry.Sound != null)
             {
-                // StopSound → agent.Stop 也会 Post Stop_Music；随后 HardStop 再统一发一次。
+                // StopSound → agent.Stop 会 Post Stop_Music；HardStop 有 serial 时只再补 Break。
                 GameEntry.Sound.StopSound(_musicSerialId);
                 _musicSerialId = -1;
             }
@@ -1003,6 +1278,18 @@ namespace Game
         {
             if (generation >= 0 && generation != _playGeneration)
                 return false;
+            // 上一首 Play 还在 createInst：这次延帧起播作废，等 Playing / 超时再播当前索引。
+            if (MusicPlayOverlapPolicy.ShouldDeferPost(_voiceCreateInFlight))
+                return false;
+
+            // 系统打断 / 用户暂停：禁止再 Post、禁止 Unmute。硬续自己会先抬 _holdSilenceUntilPost。
+            if (!_holdSilenceUntilPost
+                && !SilenceResumePolicy.WantsPlayback(PlaybackGate.Silence))
+            {
+                Debug.Log("[MusicPlaylist] skip play — silenced");
+                PublishNowPlaying();
+                return false;
+            }
 
             // 起播新曲目 = 用户不再处于「主动停止」状态（回前台恢复可以拉回来）。
             _stoppedByUser = false;
@@ -1043,23 +1330,58 @@ namespace Game
             if (generation >= 0 && generation != _playGeneration)
                 return false;
 
+            if (_holdSilenceUntilPost)
+            {
+#if UNITY_ANDROID && !UNITY_EDITOR
+                BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
+#endif
+            }
+
             _musicSerialId = GameEntry.Sound.PlaySound(asset, MusicGroup);
+            ulong postedVoice = _musicVoiceId;
             if (generation >= 0 && generation != _playGeneration)
             {
-                // 连点抢先：刚起的 agent 立刻清掉，避免叠在下一首上。
+                // 连点抢先：刚起的 agent 立刻清掉。Stop 若被吞，记下 voice，Playing 时再停。
                 StopCurrentMusic();
                 WanosSoundAgentHelper.SilenceAllMusicAgentsLocal();
+                NoteVoiceCreateInFlight(generation, postedVoice);
                 return false;
             }
 
             IsPlaying = _musicSerialId >= 0;
+            bool replaying = _holdSilenceUntilPost;
+            if (replaying)
+            {
+                if (!IsPlaying
+                    || !SilenceResumePolicy.ShouldCommitHardReplay(voiceEnteredPlaying: false))
+                {
+                    if (!IsPlaying)
+                    {
+                        NoteHardReplayMissed("no-serial");
+                        return false;
+                    }
+
+                    // 编号只表示排上了。暂停闩留到这次 voice 进入 Playing。
+                    _hardReplayAwaitingPlaying = true;
+                }
+                else
+                {
+                    CommitHardReplayPosted();
+                }
+            }
+
             if (IsPlaying)
             {
-                // 在 NoteAudibleCommitted 之前采样：首播仍要 EnsureAudible，切歌跳过。
-                bool needEnsureAudible = !IslandAudioSession.AudibleCommitted
+                NoteVoiceCreateInFlight(generation >= 0 ? generation : _playGeneration, postedVoice);
+                bool needEnsureAudible = replaying
+                    || !IslandAudioSession.AudibleCommitted
                     || IslandAudioSession.IsYieldHeld;
-                if (WanosEngine.Unmute("music-play"))
+                bool allowAudible = replaying
+                    || SilenceResumePolicy.WantsPlayback(PlaybackGate.Silence);
+                if (allowAudible && WanosEngine.Unmute("music-play"))
                     IslandAudioSession.NoteAudibleCommitted();
+                else if (!allowAudible)
+                    Debug.Log("[MusicPlaylist] skip unmute — silenced");
                 else
                 {
                     // 切歌 Unmute 失败只记日志，不 HoldYield 闩住整岛声景（雨/环境）。
@@ -1069,7 +1391,7 @@ namespace Game
                 PushVolumesToEngine();
 #if UNITY_ANDROID && !UNITY_EDITOR
                 // 已在前台出声时的切歌不刷 EnsureAudible，避免连点取消半截 unmute ramp。
-                if (needEnsureAudible)
+                if (needEnsureAudible && allowAudible)
                     BoluoAndroidEngineNative.EnsureAudibleForUnityPlayback();
 #endif
                 // 首播/切歌成功同一帧强制 isPlaying=true，并确保已 Arm，避免负一屏空白。

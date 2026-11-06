@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using CustomSRP;
+using Game;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -39,6 +40,7 @@ namespace CustomSRP.Editor
         const string BakeFlagRelPath = "Temp/bake_tree_billboard_noon.flag";
 
         static bool _flagBakeQueued;
+        static HashSet<string> _nameFilter;
 
         [InitializeOnLoadMethod]
         static void WatchBakeFlag()
@@ -56,18 +58,58 @@ namespace CustomSRP.Editor
             string flag = Path.GetFullPath(Path.Combine(Application.dataPath, "..", BakeFlagRelPath));
             if (!File.Exists(flag))
                 return;
-            try { File.Delete(flag); } catch { return; }
+
+            HashSet<string> filter = null;
+            try
+            {
+                string body = File.ReadAllText(flag);
+                filter = ParseNameFilter(body);
+                File.Delete(flag);
+            }
+            catch
+            {
+                return;
+            }
 
             _flagBakeQueued = true;
-            Debug.Log("[BakeTreeBillboardFromLod0] Flag detected — baking albedo atlases");
+            _nameFilter = filter;
+            string filterDesc = filter == null || filter.Count == 0
+                ? "all"
+                : string.Join(", ", filter);
+            Debug.Log($"[BakeTreeBillboardFromLod0] Flag detected — baking albedo atlases ({filterDesc})");
             try
             {
                 ExecuteMethodEntry();
             }
             finally
             {
+                _nameFilter = null;
                 _flagBakeQueued = false;
             }
+        }
+
+        /// <summary>
+        /// Flag body: empty = all trees; otherwise one prefab name per line
+        /// (e.g. SM_Env_Tree_Forest_01). Lines starting with # are ignored.
+        /// </summary>
+        static HashSet<string> ParseNameFilter(string body)
+        {
+            if (string.IsNullOrWhiteSpace(body))
+                return null;
+            var set = new HashSet<string>(System.StringComparer.Ordinal);
+            using (var reader = new StringReader(body))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    line = line.Trim();
+                    if (line.Length == 0 || line[0] == '#')
+                        continue;
+                    set.Add(line);
+                }
+            }
+
+            return set.Count == 0 ? null : set;
         }
 
         [MenuItem("Window/Game/Bake Tree Billboards From LOD0 (Albedo)")]
@@ -94,15 +136,23 @@ namespace CustomSRP.Editor
         public static int BakeAll(out string report)
         {
             var sb = new StringBuilder();
-            var paths = CollectPrefabPaths();
+            var paths = CollectPrefabPaths(_nameFilter);
             int ok = 0;
             EnsureBackupDir();
 
+            if (paths.Count == 0)
+            {
+                sb.AppendLine("FAIL no prefabs matched filter");
+                report = sb.ToString();
+                Debug.LogWarning($"[BakeTreeBillboardFromLod0]\n{report}");
+                return 0;
+            }
+
             int cachedMip = QualitySettings.globalTextureMipmapLimit;
             QualitySettings.globalTextureMipmapLimit = 0;
-            // Include-only edits do not always invalidate the parent shader cache.
-            AssetDatabase.ImportAsset(
-                "Assets/CustomSRP/Shaders/OilNPR.shader", ImportAssetOptions.ForceUpdate);
+            // Do not ForceUpdate OilNPR here — reimport drops the albedo-capture
+            // variant and the first ortho frame often comes back empty (Y-card UV
+            // lives in that left atlas half).
 
             using (var env = new BakeEnvironmentScope())
             {
@@ -136,7 +186,7 @@ namespace CustomSRP.Editor
             return ok;
         }
 
-        static List<string> CollectPrefabPaths()
+        static List<string> CollectPrefabPaths(HashSet<string> nameFilter = null)
         {
             var list = new List<string>(32);
             for (int f = 0; f < Folders.Length; f++)
@@ -149,6 +199,8 @@ namespace CustomSRP.Editor
                 {
                     string path = files[i].Replace('\\', '/');
                     string name = Path.GetFileNameWithoutExtension(path);
+                    if (nameFilter != null && nameFilter.Count > 0 && !nameFilter.Contains(name))
+                        continue;
                     string albedo = BillboardAlbedoPath(path, name);
                     if (!File.Exists(ToAbs(albedo)))
                         continue;
@@ -213,7 +265,10 @@ namespace CustomSRP.Editor
             }
         }
 
-        /// <summary>Reject flat/garbage captures (e.g. -nographics RT create failure).</summary>
+        /// <summary>
+        /// Reject flat/garbage captures (CoverOnly loading cover, -nographics, etc.).
+        /// CoverOnly clear is ~RGB(23,18,13) with 100% opaque — must not pass.
+        /// </summary>
         static bool AtlasLooksValid(Texture2D atlas)
         {
             if (atlas == null)
@@ -222,21 +277,87 @@ namespace CustomSRP.Editor
             if (px == null || px.Length < 64)
                 return false;
             int opaque = 0;
+            int chromaOk = 0;
+            long sumR = 0, sumG = 0, sumB = 0;
             Color32 first = px[0];
             bool allSame = true;
             for (int i = 0; i < px.Length; i++)
             {
-                if (px[i].a >= 80)
+                Color32 c = px[i];
+                if (c.a >= 80)
+                {
                     opaque++;
+                    sumR += c.r;
+                    sumG += c.g;
+                    sumB += c.b;
+                    int max = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+                    int min = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+                    if (max - min >= 20)
+                        chromaOk++;
+                }
+
                 if (allSame
-                    && (px[i].r != first.r || px[i].g != first.g
-                        || px[i].b != first.b || px[i].a != first.a))
+                    && (c.r != first.r || c.g != first.g || c.b != first.b || c.a != first.a))
                     allSame = false;
             }
 
-            // At least ~0.5% opaque and not a single flat color.
+            // Real foliage has transparency around the card and green/brown chroma.
             float opaqueFrac = opaque / (float)px.Length;
-            return !allSame && opaqueFrac >= 0.005f;
+            if (allSame || opaqueFrac < 0.01f || opaqueFrac > 0.92f)
+                return false;
+            if (opaque < 64)
+                return false;
+            float chromaFrac = chromaOk / (float)opaque;
+            if (chromaFrac < 0.05f)
+                return false;
+            float avg = (sumR + sumG + sumB) / (3f * opaque);
+            // CoverOnly / empty RT tends to sit near black-brown with no leaf signal.
+            if (avg < 18f)
+                return false;
+
+            // Y-card UVs live in the left atlas half — both frames must have foliage.
+            int mid = atlas.width / 2;
+            if (mid >= 8 && !FrameHalfLooksPopulated(px, atlas.width, atlas.height, 0, mid))
+                return false;
+            if (mid >= 8
+                && !FrameHalfLooksPopulated(px, atlas.width, atlas.height, mid, atlas.width))
+                return false;
+            return true;
+        }
+
+        static bool FrameHalfLooksPopulated(Color32[] px, int w, int h, int x0, int x1)
+        {
+            int opaque = 0;
+            int chroma = 0;
+            int n = (x1 - x0) * h;
+            if (n <= 0)
+                return false;
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * w;
+                for (int x = x0; x < x1; x++)
+                {
+                    Color32 c = px[row + x];
+                    if (c.a < 80)
+                        continue;
+                    opaque++;
+                    int max = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+                    int min = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+                    if (max - min >= 20)
+                        chroma++;
+                }
+            }
+
+            float opaqueFrac = opaque / (float)n;
+            return opaqueFrac >= 0.01f && chroma >= opaque * 0.05f;
+        }
+
+        static bool FrameTexLooksPopulated(Texture2D tex)
+        {
+            if (tex == null)
+                return false;
+            return FrameHalfLooksPopulated(
+                tex.GetPixels32(), tex.width, tex.height, 0, tex.width);
         }
 
         static bool TryBakeAtlas(GameObject prefab, out Texture2D atlas, out Vector2 quadSize)
@@ -271,6 +392,9 @@ namespace CustomSRP.Editor
                 var camGo = new GameObject("NoonBbCam") { hideFlags = HideFlags.HideAndDontSave };
                 camGo.transform.SetParent(camPivot.transform, false);
                 var cam = camGo.AddComponent<Camera>();
+                // Preview bypasses Game-only locomotion bookkeeping; targetTexture
+                // also bypasses CoverOnly early-out in CameraRenderer.
+                cam.cameraType = CameraType.Preview;
                 cam.orthographic = true;
                 cam.orthographicSize = maxSize * 0.5f;
                 cam.nearClipPlane = 0.01f;
@@ -294,18 +418,71 @@ namespace CustomSRP.Editor
                 var read = new Texture2D(frameRes, frameRes, TextureFormat.RGBA32, false, false);
                 atlas = new Texture2D(AtlasWidth, frameRes, TextureFormat.RGBA32, false, false);
 
+                // Warm up SRP + keyword variants; first real capture after CoverOnly
+                // clear / domain reload can otherwise land as a punched-clear frame.
+                camPivot.transform.rotation = Quaternion.identity;
+                for (int warm = 0; warm < 3; warm++)
+                    cam.Render();
+
+                var framePixels = new Color[FrameCount][];
                 for (int f = 0; f < FrameCount; f++)
                 {
                     camPivot.transform.rotation = Quaternion.AngleAxis(step * f, Vector3.up);
-                    cam.Render();
-                    var prev = RenderTexture.active;
-                    RenderTexture.active = frameRt;
-                    read.ReadPixels(new Rect(0, 0, frameRes, frameRes), 0, 0, false);
-                    PunchClearKey(read);
-                    read.Apply(false, false);
-                    RenderTexture.active = prev;
-                    atlas.SetPixels(f * frameRes, 0, frameRes, frameRes, read.GetPixels());
+                    bool ok = false;
+                    for (int attempt = 0; attempt < 6; attempt++)
+                    {
+                        cam.Render();
+                        // One extra submit — some editor frames only flush on the next Render.
+                        cam.Render();
+                        var prev = RenderTexture.active;
+                        RenderTexture.active = frameRt;
+                        read.ReadPixels(new Rect(0, 0, frameRes, frameRes), 0, 0, false);
+                        PunchClearKey(read);
+                        read.Apply(false, false);
+                        RenderTexture.active = prev;
+                        if (FrameTexLooksPopulated(read))
+                        {
+                            framePixels[f] = read.GetPixels();
+                            ok = true;
+                            break;
+                        }
+                    }
+
+                    if (!ok)
+                        framePixels[f] = null;
                 }
+
+                // Y-card UVs are in atlas half 0. If only a later yaw landed, copy it left.
+                if (framePixels[0] == null)
+                {
+                    for (int f = 1; f < FrameCount; f++)
+                    {
+                        if (framePixels[f] == null)
+                            continue;
+                        framePixels[0] = (Color[])framePixels[f].Clone();
+                        Debug.LogWarning(
+                            $"[BakeTreeBillboardFromLod0] {prefab.name}: frame0 empty, "
+                            + $"copied frame{f} into left atlas half");
+                        break;
+                    }
+                }
+
+                for (int f = 1; f < FrameCount; f++)
+                {
+                    if (framePixels[f] == null && framePixels[0] != null)
+                        framePixels[f] = (Color[])framePixels[0].Clone();
+                }
+
+                if (framePixels[0] == null)
+                {
+                    Object.DestroyImmediate(read);
+                    Object.DestroyImmediate(atlas);
+                    atlas = null;
+                    return false;
+                }
+
+                for (int f = 0; f < FrameCount; f++)
+                    atlas.SetPixels(f * frameRes, 0, frameRes, frameRes, framePixels[f]);
 
                 atlas.Apply(false, false);
                 Object.DestroyImmediate(read);
@@ -777,6 +954,8 @@ namespace CustomSRP.Editor
             readonly float _prevSkyPeriod;
             readonly Vector4 _prevSunDir;
             readonly bool _prevAlbedoCapture;
+            readonly bool _prevCoverOnly;
+            readonly bool _prevPrefillSuppress;
             readonly GameObject _lightGo;
 
             public BakeEnvironmentScope()
@@ -791,6 +970,12 @@ namespace CustomSRP.Editor
                 _prevSkyPeriod = Shader.GetGlobalFloat(OilSkyPeriodId);
                 _prevSunDir = Shader.GetGlobalVector(OilSkySunDirId);
                 _prevAlbedoCapture = Shader.IsKeywordEnabled(AlbedoCaptureKeyword);
+                _prevCoverOnly = IslandGpuReclaim.CoverOnly;
+                _prevPrefillSuppress = EnvItemStreamerLite.PrefillSuppressRender;
+
+                // Sticky CoverOnly after leave/login would bake the loading cover into atlases.
+                IslandGpuReclaim.End();
+                EnvItemStreamerLite.ReleaseRenderHold();
 
                 RenderSettings.ambientMode = AmbientMode.Flat;
                 RenderSettings.ambientLight = Color.black;
@@ -835,6 +1020,15 @@ namespace CustomSRP.Editor
                     Shader.EnableKeyword(AlbedoCaptureKeyword);
                 else
                     Shader.DisableKeyword(AlbedoCaptureKeyword);
+
+                // Do not re-arm CoverOnly/Prefill via Begin() — that fires leave reclaim.
+                // Edit-mode bake clears sticky holds; play-mode re-entry sets them again.
+                if (_prevCoverOnly || _prevPrefillSuppress)
+                {
+                    Debug.LogWarning(
+                        "[BakeTreeBillboardFromLod0] Cleared sticky CoverOnly/Prefill for bake; "
+                        + $"was cover={_prevCoverOnly} prefill={_prevPrefillSuppress}");
+                }
             }
         }
     }

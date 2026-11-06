@@ -199,7 +199,7 @@ namespace Game
             WeatherService weather = GameEntry.Weather;
             if (weather != null && weather.IsWeatherBusy)
             {
-                ShowToast();
+                UiDialogService.ShowToast("天气正在改变,稍后再操作", anchoredY: 0f);
                 return false;
             }
 
@@ -468,9 +468,5 @@ namespace Game
             return 0;
         }
 
-        void ShowToast()
-        {
-            UiTipToast.ShowMessage("天气正在改变,稍后再操作", anchoredY: 0f);
-        }
     }
 }

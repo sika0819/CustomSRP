@@ -2,7 +2,8 @@
     "name": "Game.Tests.Editor",
     "rootNamespace": "Game.Tests",
     "references": [
-        "Game"
+        "Game",
+        "WanosAudio"
     ],
     "includePlatforms": [
         "Editor"

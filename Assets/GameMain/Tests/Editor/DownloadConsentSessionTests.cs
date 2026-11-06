@@ -75,6 +75,32 @@ namespace Game.Tests
         }
 
         [Test]
+        public void Consent_ReplaceDuringPrompt_InvokesPreviousCancel()
+        {
+            int firstReady = 0;
+            int firstCancel = 0;
+            int secondReady = 0;
+            var banks = new List<string> { PendingBank };
+
+            DownloadConsentSession.EditorArmMobilePending(
+                banks,
+                onReady: () => firstReady++,
+                onCancel: () => firstCancel++);
+
+            DownloadConsentSession.EnsureReady(
+                banks,
+                onReady: () => secondReady++,
+                new DownloadUiOptions { OnCancel = () => { } });
+
+            Assert.AreEqual(1, firstCancel, "replaced prompt must cancel previous EnsureReady");
+            Assert.AreEqual(0, firstReady);
+
+            DownloadConsentSession.EditorInvokeMobileAllow();
+            Assert.AreEqual(0, firstReady);
+            Assert.AreEqual(1, secondReady);
+        }
+
+        [Test]
         public void NotifyThenEnsureReady_FeatureOff_NotifyStaysIdle_UserEnsureAutoAllows()
         {
             BoluoAppLaunchCache.EditorCancelAccountOverride = BoluoAppLaunchCache.FeatureOff;

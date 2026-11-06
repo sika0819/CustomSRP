@@ -23,6 +23,10 @@ namespace Game.Editor.BuildTool
             if (options.target != BuildTarget.Android)
                 return BuildPipeline.BuildPlayer(options);
 
+            // 曾用「Export Project」写到同名路径时，Game.apk 会变成非空目录；
+            // Unity 挪最终包时 Delete 失败 → Moving final Android package(s) failed。
+            ClearConflictingApkOutput(options.locationPathName);
+
             bool exportProject = EditorUserBuildSettings.exportAsGoogleAndroidProject;
             bool appBundle = EditorUserBuildSettings.buildAppBundle;
             EditorUserBuildSettings.exportAsGoogleAndroidProject = false;
@@ -38,6 +42,28 @@ namespace Game.Editor.BuildTool
             {
                 EditorUserBuildSettings.exportAsGoogleAndroidProject = exportProject;
                 EditorUserBuildSettings.buildAppBundle = appBundle;
+            }
+        }
+
+        /// <summary>
+        /// 清掉与 APK 输出冲突的路径：误留下的 Gradle 工程目录，或旧 .apk 文件。
+        /// </summary>
+        public static void ClearConflictingApkOutput(string locationPathName)
+        {
+            if (string.IsNullOrEmpty(locationPathName))
+                return;
+
+            if (Directory.Exists(locationPathName))
+            {
+                Debug.LogWarning(
+                    $"[BoluoBuild][Android] 输出路径是目录（多半上次 Export Project），删除后重打 APK: {locationPathName}");
+                Directory.Delete(locationPathName, recursive: true);
+                return;
+            }
+
+            if (File.Exists(locationPathName))
+            {
+                File.Delete(locationPathName);
             }
         }
 

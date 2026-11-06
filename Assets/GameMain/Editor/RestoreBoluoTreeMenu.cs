@@ -7,7 +7,7 @@ using UnityGameFramework.Runtime;
 namespace Game.Editor
 {
     /// <summary>
-    /// 用 Models/JianZhu/boluo1.fbx + Textures/Boluo1 自带贴图重建菠萝树预制体，
+    /// 用 boluo-main 的 boluo1.fbx + 菠萝贴图重建预制体，
     /// 并按目标世界高度缩放写入 AllMapItem。
     /// MapItem 会覆盖实例根 localScale，故预制体根必须为 (1,1,1)。
     /// </summary>
@@ -16,6 +16,8 @@ namespace Game.Editor
         const string ModelPath = "Assets/GameMain/Environment/Models/JianZhu/boluo1.fbx";
         const string PrefabPath = "Assets/GameMain/Environment/Prefabs/DaoYu1/JianZhu/boluo1.prefab";
         const string MatPath = "Assets/GameMain/Environment/Materials/boluo1.mat";
+        const string TrunkMatPath = "Assets/GameMain/Environment/Materials/Shugan_02.mat";
+        const string PropMatPath = "Assets/GameMain/Environment/Materials/Zawu_01.mat";
         const string BaseColorPath = "Assets/GameMain/Environment/Textures/Boluo1/boluo1_BaseColor.png";
         const string NormalPath = "Assets/GameMain/Environment/Textures/Boluo1/boluo1_Normal.png";
         const string OilNprShaderName = "CustomSRP/OilNPR";
@@ -236,8 +238,28 @@ namespace Game.Editor
                     modelImporter.animationType = ModelImporterAnimationType.None;
                     dirty = true;
                 }
+                // boluo-main 的模型按文件单位导入（globalScale 1）。世界高度由 MapItem 缩放对齐。
+                if (modelImporter.globalScale != 1f)
+                {
+                    modelImporter.globalScale = 1f;
+                    dirty = true;
+                }
+                if (!modelImporter.useFileScale)
+                {
+                    modelImporter.useFileScale = true;
+                    dirty = true;
+                }
                 if (dirty)
+                {
                     modelImporter.SaveAndReimport();
+                    model = AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
+                }
+            }
+
+            if (model == null)
+            {
+                Log.Error("[BoluoTree] Missing model after reimport " + ModelPath);
+                return false;
             }
 
             string dir = Path.GetDirectoryName(PrefabPath);
@@ -279,8 +301,14 @@ namespace Game.Editor
             return true;
         }
 
-        static void ApplyMaterial(GameObject root, Material mat)
+        /// <summary>
+        /// boluo-main DaoYu 上的覆盖：叶 / 主体用菠萝贴图，Cylinder001 树干，Cylinder002 杂物图集。
+        /// 合成成单个多子网格时按 FBX 顺序：Buoluoye001、030、Cylinder001、Cylinder002。
+        /// </summary>
+        static void ApplyMaterial(GameObject root, Material foliage)
         {
+            var trunk = AssetDatabase.LoadAssetAtPath<Material>(TrunkMatPath);
+            var prop = AssetDatabase.LoadAssetAtPath<Material>(PropMatPath);
             var renderers = root.GetComponentsInChildren<Renderer>(true);
             for (int i = 0; i < renderers.Length; i++)
             {
@@ -288,16 +316,46 @@ namespace Game.Editor
                 if (r == null)
                     continue;
 
+                var mf = r.GetComponent<MeshFilter>();
+                Mesh mesh = mf != null ? mf.sharedMesh : null;
+                string meshName = mesh != null ? mesh.name : string.Empty;
+                string key = meshName + " " + r.gameObject.name;
+                int subCount = mesh != null ? mesh.subMeshCount : 1;
+
                 var mats = r.sharedMaterials;
-                if (mats == null || mats.Length == 0)
+                int slotCount = mats != null && mats.Length > 0 ? mats.Length : subCount;
+                if (slotCount < 1)
+                    slotCount = 1;
+                if (mats == null || mats.Length != slotCount)
+                    mats = new Material[slotCount];
+
+                bool combined = slotCount >= 4
+                    && key.IndexOf("Cylinder", System.StringComparison.OrdinalIgnoreCase) < 0;
+                for (int m = 0; m < mats.Length; m++)
                 {
-                    r.sharedMaterial = mat;
-                    continue;
+                    Material use = foliage;
+                    if (combined)
+                    {
+                        if (m == 2)
+                            use = trunk != null ? trunk : foliage;
+                        else if (m == 3)
+                            use = prop != null ? prop : foliage;
+                    }
+                    else if (key.IndexOf("Cylinder002", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        use = prop != null ? prop : foliage;
+                    else if (key.IndexOf("Cylinder", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        use = trunk != null ? trunk : foliage;
+                    mats[m] = use;
                 }
 
-                for (int m = 0; m < mats.Length; m++)
-                    mats[m] = mat;
                 r.sharedMaterials = mats;
+                Bounds mb = mesh != null ? mesh.bounds : new Bounds();
+                Debug.Log("[BoluoTree] go=" + r.gameObject.name +
+                          " mesh=" + meshName +
+                          " verts=" + (mesh != null ? mesh.vertexCount : 0) +
+                          " sub=" + subCount +
+                          " size=" + mb.size +
+                          " mat=" + mats[0].name);
             }
         }
 
@@ -365,6 +423,11 @@ namespace Game.Editor
             using (var fs = File.Create(absPath))
                 MapItemData.WriteBinary(items, fs);
             AssetDatabase.ImportAsset(SceneAssets.AllMapItemAssetPath);
+
+            string streaming = Path.GetFullPath(
+                Path.Combine(Application.dataPath, "StreamingAssets/AllMapItem.bytes"));
+            File.Copy(absPath, streaming, true);
+            AssetDatabase.ImportAsset("Assets/StreamingAssets/AllMapItem.bytes");
         }
     }
 }

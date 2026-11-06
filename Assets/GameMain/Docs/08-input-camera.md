@@ -107,7 +107,7 @@ ApplyAspectFov
 - `Teleport` 先 `ForceRefreshNear` 再贴地；若高度图落在禁水区且提示高度已在命名甲板带内，改贴 Dock/Pier/Bridge/Qiao/Deck（避免桥上读档掉桥底）。
 - 渲染缩放（`IslandCameraSrpSetup`）：
   `弹窗 0.375` / `闲置沉浸 0.375` / `走动 0.375` / `静止 0.5`。
-- 水面禁行只认海（高度图 `<= oceanY`，平坦海底也禁；**不要**用听感 `OceanLandClearanceMeters(0.4)`，否则湿岸站着走不了）。河不禁，可沿河床走上岛。海水上的桥/码头（名称含 `Dock/Pier/Bridge/Qiao/Deck`，含流式改名后的子节点 / `Qiao` 父节点；桥面不低于海平面 0.25m）可走，岸比桥面低不超过 1.75m 时允许抬上去；水下结构和海里石头不算。探测 footprint 半径约 3.5m（中心+四向），`DeckFootSlop=1` + 约 0.4s 宽限，避免桥段 Box 缝把过桥摇杆清零。甲板上用弱 stick + 眼高稳定，禁海硬恢复有死区且 relief 时不拽；`minMoveDistance≈0.02`。人已经站在桥面上时 last-safe 跟着桥走；海床误站点仍不写入 safe。海面盒为 Trigger。
+- 水面禁行只认海（高度图 `<= oceanY`，平坦海底也禁；**不要**用听感 `OceanLandClearanceMeters(0.4)`，否则湿岸站着走不了）。河不禁，可沿河床走上岛。海水上的桥/码头（名称含 `Dock/Pier/Bridge/Qiao/Deck`，含流式改名后的子节点 / `Qiao` 父节点；桥面不低于海平面 0.25m）可走，岸比桥面低不超过 1.75m 时允许抬上去；水下结构和海里石头不算。探测 footprint 半径约 3.5m（中心+四向）只用于禁水放行/抬步高；**已站桥**须贴面高度（`OceanDeckStandFootSlop`）+ 水平贴边。上台阶：未上板时才硬抬 Y，已上板交给 CC；不钳 XZ。`DeckFootSlop=1` + 约 0.4s 宽限盖桥段缝。甲板 stick≈0.05，CC 路径不拧眼高；禁海硬恢复有死区且 relief 时不拽；`minMoveDistance≈0.02`。人已经站在桥面上时 last-safe 跟着桥走；海床误站点仍不写入 safe。海面盒为 Trigger。
 
 ### 相机 → SRP 桥（`IslandCameraSrpSetup`）
 
@@ -137,7 +137,9 @@ static void SetRenderScale(GameObject cameraGo, float scale);
 | 摇杆在死区内也算「在移动」 | `TryGetMove` 死区内仍返回 true（速度 0） | 消费方按 `speedRatio` 判断 |
 | 点 HUD 图标会同时拉出摇杆 | 摇杆用名字黑名单排除 HUD | 改名后需同步黑名单 |
 | 过桥中途卡住 / 被拽回岸 | 禁水只认命名甲板；单点射线落进相邻 Pier Box 缝 → `FilterMotionAwayFromWater` 清零 XZ | footprint 探测 + `DeckFootSlop` + named-deck grace；查 Pier `BoxCollider` 是否断开 |
-| 桥/石头附近疯狂抖动 | 薄 Pier/Dock Box + `GroundStick` 与禁海硬瞬移（`ApplyWaterWalkBan`/`ClampFoot`）互顶；石头 `MeshCollider` LOD 在胶囊重叠时突然启用挤出 | `minMoveDistance`、甲板弱 stick + Y 稳定、禁海恢复死区/甲板 relief 跳过硬拽；Pier/Dock Box 加厚略重叠；`EnvMeshColliderLod` 重叠推迟启用 |
+| 桥头站着被吸走 / 过桥头视角抖 | `IsStandingOnNamedDeck` 仅靠 3.5m 探针 + 高度 → 岸上误判已站桥；`TryClimbOceanDeck` 钳 XZ 瞬移进 Box | 站桥须贴面高度（`OceanDeckStandFootSlop`）+ 水平贴边；硬抬只改 Y 且未上板才助推 |
+| 上桥后不停抖 | 已在板上仍 `ShouldAssist`/`Stabilize` 每帧硬改 Y，与 stick 压薄 Box 互顶 | 板上禁止硬抬；CC 路径禁止拧眼高；甲板 stick≈0.05；上台阶靠 stepOffset |
+| 桥/石头附近疯狂抖动 | 薄 Pier/Dock Box + `GroundStick` 与禁海硬瞬移（`ApplyWaterWalkBan`/`ClampFoot`）互顶；石头 `MeshCollider` LOD 在胶囊重叠时突然启用挤出 | `minMoveDistance`、甲板弱 stick、禁海恢复死区/甲板 relief 跳过硬拽；Pier/Dock Box 加厚略重叠；`EnvMeshColliderLod` 重叠推迟启用 |
 | 海边码头走不上去 | 流式 `SealSpawnedNames` 把根改成 `envN`，`IsNamedDeckCollider` 只看自/父名 → JianZhu 下的 `SM_Env_Dock_02` 认不出 | 同时认子节点名（`SM_Env_Dock_02_LOD1` / `Prefab_Docks`）；分类父 `Qiao` 仍命中 |
 | 相机卡在地面里 | 地形采样用 AABB 最近点 + 法线朝上筛选；大 mesh 可能取不到 | 看 `GroundNormalMinY=0.45` |
 | 走快了穿过石头 | 已用子步拆分；仍有漏判时检查石头碰撞体是否被 LOD 关掉 | 见 [07-environment.md](07-environment.md) |

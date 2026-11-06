@@ -32,7 +32,6 @@ namespace Game
                 return;
             }
 
-            PendingDownloadIntent.SetPreset(presetId, source);
             string[] banks = preset.BankNames;
             if (banks == null || banks.Length == 0 || AreBanksLocallyReady(banks))
             {
@@ -42,6 +41,13 @@ namespace Game
                 return;
             }
 
+            if (UserBankDownloadFlow.ShouldRejectNewBatch(preemptBusyBatch: true))
+            {
+                UiDialogService.ShowToast(UserBankDownloadFlow.BusyToastText);
+                return;
+            }
+
+            PendingDownloadIntent.SetPreset(presetId, source);
             int captured = presetId;
             UserBankDownloadFlow.Start(
                 banks,
@@ -56,7 +62,9 @@ namespace Game
                 },
                 onBanksDone: _ => OnBanksDone(captured).Forget(),
                 prioritize: false,
-                preempt: true);
+                preempt: true,
+                abortOtherUserDownloads: true,
+                preemptBusyBatch: true);
         }
 
         static async UniTaskVoid OnBanksDone(int presetId)

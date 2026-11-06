@@ -120,6 +120,7 @@ namespace Game.Editor.BuildTool
                 OutputDir = outputDir,
                 Channel = channel,
                 Version = versionRaw,
+                // 环境变量 / CLI 优先；否则读 AndroidProject/gradle.properties（与宿主签名同源）。
                 AndroidKeystorePass = BoluoCIArgParser.Resolve("BOLUO_ANDROID_KEYSTORE_PASS", "boluoKeystorePass"),
                 AndroidKeyPass = BoluoCIArgParser.Resolve("BOLUO_ANDROID_KEY_PASS", "boluoKeyPass"),
                 ResourceVersion = resourceVersion,
@@ -469,6 +470,11 @@ namespace Game.Editor.BuildTool
 
             if (!config.SkipYooAsset)
             {
+                // 磁盘上的 AllMapItem.bytes 可能被外部脚本改过；强制再导入，避免 Yoo 打到旧 TextAsset。
+                if (!string.IsNullOrEmpty(SceneAssets.AllMapItemAssetPath))
+                    AssetDatabase.ImportAsset(
+                        SceneAssets.AllMapItemAssetPath, ImportAssetOptions.ForceUpdate);
+
                 if (!BoluoYooAssetBuildPipeline.Run(BuildTarget.Android, copyToStreamingAssets: true))
                 {
                     LogCiFailure("YooAsset 前置构建失败");
@@ -508,8 +514,14 @@ namespace Game.Editor.BuildTool
                     return 1;
                 }
 
-                // 导出会覆盖 Gradle/CMake；对齐宿主 :unityLibraryNeo|:unityLibraryYishu + CMake≥3.22.1
-                BoluoAndroidUnityExportHostPatch.Apply(gradleRoot);
+                // 导出会覆盖 Gradle/CMake；对齐宿主 + 剥 Hub 本机路径（Python SSOT）
+                if (!BoluoAndroidUnityExportHostPatch.Apply(gradleRoot))
+                {
+                    LogCiFailure(
+                        "host patch 失败（需 python3 + AndroidProject/scripts/patch_unity_export_for_host.py）。" +
+                        "未清洗的 UnityExport 勿提交，否则无 Unity 机器 Sync 会挂。");
+                    return 1;
+                }
 
                 Debug.Log($"[BoluoCI] Android unityLibrary 导出成功: {unityLibrary}");
                 return 0;
@@ -606,6 +618,8 @@ namespace Game.Editor.BuildTool
                 apkPath = Path.Combine(apkPath, "Game.apk");
 
             Directory.CreateDirectory(Path.GetDirectoryName(apkPath) ?? ".");
+            // 防止上次 Export Project 把 Gradle 工程写进 Game.apk 目录，导致挪包失败。
+            BoluoAndroidBuildHelper.ClearConflictingApkOutput(apkPath);
 
             var options = new BuildPlayerOptions
             {
@@ -643,10 +657,22 @@ namespace Game.Editor.BuildTool
             if (PlayerSettings.Android.predictiveBackSupport)
                 PlayerSettings.Android.predictiveBackSupport = false;
 
+            // CI CLI/env 缺省时，回落 gradle.properties，避免 Editor 重启后导出弹密码框。
+            if (string.IsNullOrEmpty(config.AndroidKeystorePass)
+                || string.IsNullOrEmpty(config.AndroidKeyPass))
+            {
+                BoluoAndroidKeystorePasswords.TryResolve(out string storePass, out string keyPass);
+                if (string.IsNullOrEmpty(config.AndroidKeystorePass))
+                    config.AndroidKeystorePass = storePass;
+                if (string.IsNullOrEmpty(config.AndroidKeyPass))
+                    config.AndroidKeyPass = keyPass;
+            }
+
             if (!string.IsNullOrEmpty(config.AndroidKeystorePass))
                 PlayerSettings.Android.keystorePass = config.AndroidKeystorePass;
             if (!string.IsNullOrEmpty(config.AndroidKeyPass))
                 PlayerSettings.Android.keyaliasPass = config.AndroidKeyPass;
+            PlayerSettings.Android.useCustomKeystore = true;
 
             ApplyAdrenoVulkanDenyFallback();
 

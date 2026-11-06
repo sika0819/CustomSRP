@@ -22,10 +22,6 @@ namespace Game.Tests
         [Test]
         public void FeatureOff_Cellular_NoMobileTotalPrompt_AutoAllow()
         {
-            Assert.IsFalse(
-                BackgroundDownloadPolicy.ShouldBootstrapPromptMobileForAll(
-                    wifiConfirmEnabled: false,
-                    needsMobileDataPrompt: true));
             Assert.IsTrue(BackgroundDownloadPolicy.ShouldAutoAllowCellular(false));
             Assert.IsTrue(
                 BackgroundDownloadPolicy.ShouldUseSessionCellularAllow(false));

@@ -18,7 +18,7 @@ namespace Game.Editor.BuildTool
     ///   flavor=skyworthUltra|skyworthNeo|yishu|phone*  （yishu→YiShu，其余→Boluo_Android）
     ///   env=dev|test|prerelease|product   环境宏（对齐壳工程 ENVIRONMENT）
     ///   mode=export|export+assemble  只导出（默认给 CLI）／导出后顺手 assemble
-    ///   release=true|false            assemble 时是否 release 变体
+    ///   type=debug|alpha|beta|release  宿主 buildType（可空：跟 env；旧 release=true→release）
     ///   version=1.1.60               版本号，缺省用 PlayerSettings.bundleVersion
     ///   skip_yoo=true|false           跳过 YooAsset 前置（默认 false：打 Yoo → 拷 StreamingAssets）
     ///
@@ -135,7 +135,8 @@ namespace Game.Editor.BuildTool
             public string Flavor = "skyworthUltra";
             public BoluoCIBuildSupport.CIEnvironment Environment = BoluoCIBuildSupport.CIEnvironment.Dev;
             public bool Assemble = true;
-            public bool Release;
+            /// <summary>宿主 Gradle buildType：debug|alpha|beta|release；空则跟 Environment。</summary>
+            public string HostBuildType;
             public string Version;
             /// <summary>true = 跳过 YooAsset；默认 false（打 Yoo → 拷 StreamingAssets → 再导出）。</summary>
             public bool SkipYooAsset;
@@ -177,9 +178,19 @@ namespace Game.Editor.BuildTool
                 request.Assemble = !mode.Equals("export", StringComparison.OrdinalIgnoreCase);
             }
 
-            if (values.TryGetValue("release", out string release))
-                request.Release = release.Equals("true", StringComparison.OrdinalIgnoreCase) ||
-                                 release.Equals("1", StringComparison.Ordinal);
+            if (values.TryGetValue("type", out string type) ||
+                values.TryGetValue("buildType", out type) ||
+                values.TryGetValue("host_build_type", out type))
+            {
+                request.HostBuildType = BoluoHostGradleBuilder.NormalizeHostBuildType(type);
+            }
+            else if (values.TryGetValue("release", out string release) &&
+                     (release.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                      release.Equals("1", StringComparison.Ordinal)))
+            {
+                // 旧协议 release=true → product/release 变体
+                request.HostBuildType = "release";
+            }
 
             if (values.TryGetValue("version", out string version) && !string.IsNullOrWhiteSpace(version))
                 request.Version = version;
@@ -260,8 +271,11 @@ namespace Game.Editor.BuildTool
                 return;
             }
 
+            string hostBt = string.IsNullOrEmpty(request.HostBuildType)
+                ? BoluoHostGradleBuilder.HostBuildTypeFromEnvironment(request.Environment)
+                : request.HostBuildType;
             if (!BoluoHostGradleBuilder.Assemble(
-                    request.Flavor, request.Release, msg => Debug.Log("[HostShell] " + msg),
+                    request.Flavor, hostBt, msg => Debug.Log("[HostShell] " + msg),
                     out string apk, out string err))
             {
                 Debug.LogError("[HostShell] gradle failed: " + err);
@@ -286,7 +300,8 @@ namespace Game.Editor.BuildTool
                 sb.Append("flavor=").Append(request.Flavor).Append('\n');
                 sb.Append("env=").Append(request.Environment).Append('\n');
                 sb.Append("mode=").Append(request.Assemble ? "export+assemble" : "export").Append('\n');
-                sb.Append("release=").Append(request.Release ? "true" : "false").Append('\n');
+                if (!string.IsNullOrEmpty(request.HostBuildType))
+                    sb.Append("type=").Append(request.HostBuildType).Append('\n');
                 sb.Append("skip_yoo=").Append(request.SkipYooAsset ? "true" : "false").Append('\n');
                 if (!string.IsNullOrEmpty(request.Version))
                     sb.Append("version=").Append(request.Version).Append('\n');

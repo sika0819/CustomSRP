@@ -53,7 +53,8 @@ namespace Game
         /// </summary>
         protected virtual bool AllowsLocomotionWhileOpen => false;
 
-        const float SlideDuration = 0.32f;
+        /// <summary>底栏 / 弹窗上滑时长。进度窗要等这段结束再关，百分比才看得见。</summary>
+        protected const float SlideDuration = 0.32f;
         const float SlideDistance = 2436f;
 
         /// <summary>
@@ -99,6 +100,8 @@ namespace Game
                 _hidBottomIcons = true;
             }
 
+            // 优先滑 .game-form-stage：全屏蒙层（灰色背景框）原地出现，只弹窗/底栏上滑。
+            _slideTarget = SlideTarget();
             if (SlidesUpFromBottom)
             {
                 _slideY = SlideDistance;
@@ -107,7 +110,6 @@ namespace Game
             else
             {
                 _slideY = 0f;
-                _slideTarget = PageRoot();
                 ApplySlideTranslate(0f);
             }
 
@@ -488,11 +490,18 @@ namespace Game
         /// Lift / lower <c>.game-form-stage</c> so the open sheet gap matches
         /// <see cref="SheetBottomOffset"/>. USS stays authored at
         /// <see cref="UssAuthoredSheetBottom"/> (Boluo 120).
+        /// Folded into <see cref="ApplySlideTranslate"/> when the stage is the slide target.
         /// </summary>
         void ApplySheetBottomOffset()
         {
             if (Root == null)
                 return;
+
+            if (_slideTarget != null && _slideTarget.ClassListContains("game-form-stage"))
+            {
+                ApplySlideTranslate(_slideY);
+                return;
+            }
 
             float ty = UssAuthoredSheetBottom - SheetBottomOffset;
             Root.Query(className: "game-form-stage").ForEach(stage =>
@@ -505,18 +514,32 @@ namespace Game
         }
 
         /// <summary>
-        /// UXML 页面根。文档根的 translate 会被 <c>UIDocument</c> 写掉，滑它等于没动画。
+        /// 滑动目标：有 stage 就滑 stage，蒙层留在页面根上原地出现。
+        /// 文档根 translate 会被 UIDocument 写掉，不能滑文档根。
         /// </summary>
-        VisualElement PageRoot()
+        VisualElement SlideTarget()
         {
             if (Root == null)
                 return null;
-            return Root.Q("root") ?? Root;
+            return Root.Q(className: "game-form-stage")
+                ?? Root.Q("root")
+                ?? Root;
+        }
+
+        /// <summary>入场上滑还要多久。没在滑，或正在向下收起时为 0。</summary>
+        protected float OpenSlideRemaining
+        {
+            get
+            {
+                if (!SlidesUpFromBottom || !_slidePlaying || _slideTo > _slideFrom)
+                    return 0f;
+                return Mathf.Max(0f, SlideDuration - _slideElapsed);
+            }
         }
 
         void BeginSlide(float targetY, Action onComplete)
         {
-            _slideTarget = PageRoot();
+            _slideTarget = SlideTarget();
             if (_slideTarget == null)
             {
                 StopSlide();
@@ -561,10 +584,16 @@ namespace Game
         {
             if (_slideTarget == null)
                 return;
-            if (Mathf.Approximately(y, 0f))
+
+            // Stage 同时承担 SheetBottomOffset，避免和上滑 translate 互相覆盖。
+            float sheetTy = _slideTarget.ClassListContains("game-form-stage")
+                ? UssAuthoredSheetBottom - SheetBottomOffset
+                : 0f;
+            float totalY = y + sheetTy;
+            if (Mathf.Approximately(totalY, 0f))
                 _slideTarget.style.translate = StyleKeyword.Null;
             else
-                _slideTarget.style.translate = new Translate(0, y);
+                _slideTarget.style.translate = new Translate(0, totalY);
         }
     }
 }

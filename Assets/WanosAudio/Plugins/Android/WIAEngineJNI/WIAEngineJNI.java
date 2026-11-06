@@ -528,6 +528,11 @@ public class WIAEngineJNI {
                 Log.d(TAG, "updateNowPlayingInfoImpl skipped: playback inactive");
                 return;
             }
+            if (isPlaying && WanosMusicPlayerNative.isFocusSuspendedForCard()) {
+                // Unity 闸还停在 Playing 时会把刚写成的暂停盖回去。抢焦期间卡片保持暂停。
+                Log.i(TAG, "updateNowPlayingInfo clamp to paused (focus suspended)");
+                isPlaying = false;
+            }
             try {
                 boolean allEmpty = (trackName == null || trackName.isEmpty())
                         && (coverUrl == null || coverUrl.isEmpty());
@@ -543,6 +548,7 @@ public class WIAEngineJNI {
                     }
                     sendNowPlayingBroadcast(ctx, "", "", false);
                     Log.i(TAG, "updateNowPlayingInfo: all empty, cleared");
+                    Log.i(TAG, "[BoluoAudioFg] card cleared title=empty buttons=off");
                     return;
                 }
 
@@ -635,6 +641,11 @@ public class WIAEngineJNI {
                         .setActions(actions)
                         .setState(state, playbackPositionMs(isPlaying), rate);
                 session.setPlaybackState(stateBuilder.build());
+                Log.i(TAG, "[BoluoAudioFg] card title=" + title
+                        + " playing=" + isPlaying
+                        + " art=" + (art != null ? "set" : "empty")
+                        + " buttons=on"
+                        + " sessionActive=true");
 
                 sendNowPlayingBroadcast(ctx, trackName, coverUrl, isPlaying);
                 if (isPlaying && !areNotificationsEnabled(ctx)) {

@@ -71,7 +71,7 @@ class DoHostShellExport
         // 3) Gradle 编 APK
         Debug.Log("[DoHostShellExport] Running Gradle assemble...");
         if (!Game.Editor.BuildTool.BoluoHostGradleBuilder.Assemble(
-                "skyworthUltra", false,
+                "skyworthUltra", "debug",
                 msg => Debug.Log("[Gradle] " + msg),
                 out string apk, out string err))
         {

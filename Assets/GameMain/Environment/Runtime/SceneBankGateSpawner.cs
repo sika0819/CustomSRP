@@ -410,11 +410,11 @@ namespace Game
                 SceneBankGate gate = _gates[i];
                 if (gate == null)
                     continue;
-                // 只看区域 bank（ZoneBanks == BankNames）。
-                bool blocked = HasBankNames(gate.ZoneBanks) && !BanksSatisfied(gate.ZoneBanks);
-                // 下完的那一帧要先把人推出触发区，不能先拆掉碰撞，否则推距是 0。
-                if (_busy && gate == _downloadGate && HasBankNames(gate.ZoneBanks))
-                    blocked = true;
+                // 只看区域 bank（ZoneBanks == BankNames）。盘齐即开。
+                bool satisfied = !HasBankNames(gate.ZoneBanks) || BanksSatisfied(gate.ZoneBanks);
+                bool busyThisGate = _busy && gate == _downloadGate && HasBankNames(gate.ZoneBanks);
+                bool blocked = !satisfied
+                    || SceneBankGateProgressPolicy.ShouldForceBlockWhileBusy(busyThisGate, satisfied);
                 if (gate.IsBlocked != blocked)
                     gate.SetBlocked(blocked);
             }
@@ -427,6 +427,18 @@ namespace Game
             if (GameEntry.UI == null)
             {
                 gate.PromptLatched = false;
+                return;
+            }
+
+            // 硬占用（已有区域进度票）：Toast 拒绝，不叠同意链。
+            // 软占用（预设环/音乐行无票）→ 抢占 + abortOtherUser，弹本区申请/进度并优先。
+            // 本门进度重开走 TryReopenActiveProgress，不进这里。
+            if (UserBankDownloadFlow.ShouldRejectNewBatch(preemptBusyBatch: true))
+            {
+                UiDialogService.ShowToast(UserBankDownloadFlow.BusyToastText);
+                Log.Info(
+                    "[SceneBankGate] reject busy — " + UserBankDownloadFlow.BusyToastText +
+                    " gate=" + gate.name);
                 return;
             }
 
@@ -443,12 +455,14 @@ namespace Game
             bool showRequest = BackgroundDownloadPolicy.ShouldShowGateRequestFirst(
                 wifiConfirm,
                 acceptedOrBusy);
+            bool softBusy = UserBankDownloadFlow.IsBusy;
             Log.Info(
                 "[SceneBankGate] UserBankDownloadFlow size=" + size +
                 " gate=" + gate.name +
                 " wifiConfirm=" + wifiConfirm +
                 " acceptedOrBusy=" + acceptedOrBusy +
-                " showRequest=" + showRequest);
+                " showRequest=" + showRequest +
+                " preemptSoftBusy=" + softBusy);
             SceneBankGate captured = gate;
             _busy = true;
             _downloadGate = captured;
@@ -477,7 +491,9 @@ namespace Game
                 },
                 onProgressDismissed: OnProgressDismissed,
                 prioritize: true,
-                preempt: true);
+                preempt: true,
+                abortOtherUserDownloads: true,
+                preemptBusyBatch: true);
         }
 
         /// <summary>返回、无网、存储不足、只等 Wi-Fi：链结束。后退由 LateUpdate 还移动。</summary>

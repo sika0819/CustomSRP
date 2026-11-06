@@ -37,8 +37,28 @@ namespace Game
         /// <summary>
         /// 沿移动方向提前认出桥面的距离。
         /// 须盖住贴水岸到码头边的湿沙带，以及 CharacterController 半径（约 1.1m）。
+        /// 只用于禁水放行 / 抬步高探测，不得拿来把人水平吸上桥。
         /// </summary>
         public const float OceanDeckClimbReachMeters = 3.5f;
+
+        /// <summary>
+        /// 算「已站在甲板」时脚到甲板 AABB 的最大水平距离。
+        /// 远小于 <see cref="OceanDeckClimbReachMeters"/>，避免桥头岸上被探针误判成已上桥。
+        /// 须盖住相邻 Pier Box 缝（约几十厘米），调用方再与 BodyRadius 取大。
+        /// </summary>
+        public const float OceanDeckStandEdgeMeters = 0.55f;
+
+        /// <summary>
+        /// 「已站甲板」竖直容差。必须明显小于岸→桥高差（约 0.9m），
+        /// 也小于禁水用的 <c>DeckFootSlop</c>，否则岸上会被判成已上桥。
+        /// </summary>
+        public const float OceanDeckStandFootSlopMeters = 0.4f;
+
+        /// <summary>
+        /// 硬抬上桥所需的最小水平意图（米/帧量级由调用方换算）。
+        /// 站着不动或只被 stick 压地时禁止吸上桥。
+        /// </summary>
+        public const float OceanDeckClimbMinHorizMeters = 0.04f;
 
         public static bool MatchesObjectName(string name)
         {
@@ -136,6 +156,37 @@ namespace Game
             float rise = deckY - footY;
             // 小于一步的下沉交给 CharacterController，避免每帧把人从板子上弹一下。
             return rise > 0.25f && rise <= OceanDeckClimbMeters;
+        }
+
+        /// <summary>
+        /// 脚高度在甲板带内，且水平已贴着甲板边（不是 3.5m 外的岸上探针命中）。
+        /// </summary>
+        public static bool IsStandingNearOceanDeck(
+            float footY, float deckY, float oceanY, float xzDistToDeck, float edgeSlop, float footSlop)
+        {
+            if (!IsOceanDeckSurface(deckY, oceanY))
+                return false;
+            if (footY < deckY - footSlop)
+                return false;
+            return xzDistToDeck <= edgeSlop;
+        }
+
+        /// <summary>
+        /// 硬抬上桥：仅「朝板走 + 被竖直面挡住 + 意图已压进板」。
+        /// 已在板面上（XZ 重叠）禁止再硬抬——否则 stick 下压与抬 Y 每帧互顶狂抖。
+        /// </summary>
+        public static bool ShouldAssistOceanDeckClimb(
+            float plannedHorizMeters,
+            bool intentOverlapsDeck,
+            bool alreadyOverlapsDeck,
+            bool motionBlockedTowardDeck)
+        {
+            if (plannedHorizMeters < OceanDeckClimbMinHorizMeters)
+                return false;
+            // 已在板上：高度交给 CharacterController，绝不再写 transform.Y。
+            if (alreadyOverlapsDeck)
+                return false;
+            return intentOverlapsDeck && motionBlockedTowardDeck;
         }
 
         /// <summary>Teleport 掉到桥底时是否暂留存档眼位。</summary>

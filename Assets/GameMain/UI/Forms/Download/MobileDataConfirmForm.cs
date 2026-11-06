@@ -20,6 +20,7 @@ namespace Game
         NoticeCardPresenter _card;
 
         protected override bool CloseWhenAnyButtonClicked => false;
+        // 蒙层原地出现；卡片仍上滑（GameFormLogic 滑 stage）。
         protected override bool SlidesUpFromBottom => true;
         protected override bool CloseOnBackdropClick => true;
         protected override bool PinDocumentOrder => true;

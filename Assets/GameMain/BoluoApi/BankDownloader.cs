@@ -50,7 +50,7 @@ namespace Game.BoluoApi
 
     /// <summary>
     /// 按 upgrade/bank 返回的 banks[] 下载到 <see cref="PersistentBankPath"/>。
-    /// 三队列：用户点击 / 启动优先 / 后台。启动最多 3 路，后台 1 路；点击插队并打断。
+    /// 三队列：用户点击 / 启动优先 / 后台。启动最多 3 路，后台最多 3 路；点击插队并打断。
     /// </summary>
     public static class BankDownloader
     {
@@ -63,7 +63,8 @@ namespace Game.BoluoApi
         const int LoadBanksPerFrame = 2;
 
         const int MaxStartupSlots = 3;
-        const int MaxBackgroundSlots = 1;
+        /// <summary>静默 Rest（Normal）并发上限；与 Startup 同为≤3，避免全串行过慢、也禁止全开。</summary>
+        const int MaxBackgroundSlots = 3;
         static int _startupParallelSlots = MaxStartupSlots;
 
         static readonly Dictionary<string, QueueEntry> Entries =
@@ -234,7 +235,7 @@ namespace Game.BoluoApi
             if (string.IsNullOrEmpty(bankName))
                 LocalReadyCache.Clear();
             else
-                LocalReadyCache.Remove(bankName);
+                LocalReadyCache.Remove(AudioEnginePaths.StripBankExtension(bankName));
             BumpProgressEpoch();
         }
 
@@ -283,6 +284,11 @@ namespace Game.BoluoApi
             public string BankName;
             public BankQueueKind Kind;
             public bool Abort;
+            /// <summary>
+            /// 被 User 插队 AbortConflicting 时为 true：Abort 后 FireDone 释放旧批 await。
+            /// 蜂窝 Hold / 离岛 Pause 为 false：保持 await，等回队续传后再 CompleteOne。
+            /// </summary>
+            public bool ReleaseWaitersOnAbort;
         }
 
         sealed class QueueEntry
@@ -339,6 +345,106 @@ namespace Game.BoluoApi
 
         /// <summary>单测：走完成通知（MarkLocalReady + OnBankLocalReady）。</summary>
         public static void EditorNotifyBankReady(string bankName) => NotifyBankReady(bankName);
+
+        /// <summary>单测：注入活跃槽（测 AbortConflictingActives）。</summary>
+        public static void EditorPutActiveSlot(string bankName, BankQueueKind kind)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                return;
+            Actives.Add(new ActiveSlot { BankName = bankName, Kind = kind });
+        }
+
+        /// <summary>单测：触发 AbortConflictingActives。</summary>
+        public static void EditorAbortConflictingActives(
+            string keepBankName,
+            bool abortOtherUserDownloads,
+            ICollection<string> keepBatch = null) =>
+            AbortConflictingActives(keepBankName, abortOtherUserDownloads, keepBatch);
+
+        /// <summary>单测：某活跃槽是否被标 Abort。</summary>
+        public static bool EditorIsActiveAbort(string bankName)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                return false;
+            for (int i = 0; i < Actives.Count; i++)
+            {
+                var slot = Actives[i];
+                if (slot == null)
+                    continue;
+                if (string.Equals(slot.BankName, bankName, StringComparison.OrdinalIgnoreCase))
+                    return slot.Abort;
+            }
+
+            return false;
+        }
+
+        /// <summary>单测：抢占 Abort 是否标记 ReleaseWaitersOnAbort。</summary>
+        public static bool EditorIsReleaseWaitersOnAbort(string bankName)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                return false;
+            for (int i = 0; i < Actives.Count; i++)
+            {
+                var slot = Actives[i];
+                if (slot == null)
+                    continue;
+                if (string.Equals(slot.BankName, bankName, StringComparison.OrdinalIgnoreCase))
+                    return slot.ReleaseWaitersOnAbort;
+            }
+
+            return false;
+        }
+
+        /// <summary>单测：给已有 entry 挂 OnDone（模拟 DownloadBanks CompleteOne）。</summary>
+        public static void EditorAttachDoneCallback(string bankName, Action<BankDownloadItem> onDone)
+        {
+            if (string.IsNullOrEmpty(bankName) || onDone == null)
+                return;
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (!Entries.TryGetValue(stem, out QueueEntry entry) || entry == null)
+                return;
+            entry.OnDone.Add(onDone);
+        }
+
+        /// <summary>
+        /// 单测：模拟 RunSlot 抢占 Abort 收尾（Requeue + FireDone），验证旧批 OnDone 立刻触发。
+        /// </summary>
+        public static bool EditorSimulatePreemptAbortFireDone(string bankName)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                return false;
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (!Entries.TryGetValue(stem, out QueueEntry entry) || entry?.Item == null)
+                return false;
+
+            ActiveSlot slot = null;
+            for (int i = 0; i < Actives.Count; i++)
+            {
+                if (Actives[i] != null
+                    && string.Equals(Actives[i].BankName, stem, StringComparison.OrdinalIgnoreCase))
+                {
+                    slot = Actives[i];
+                    break;
+                }
+            }
+
+            if (slot == null || !slot.Abort || !slot.ReleaseWaitersOnAbort)
+                return false;
+
+            entry.Item.State = BankDownloadState.Pending;
+            entry.Item.Progress = 0f;
+            entry.Item.Error = null;
+            RequeueAfterAbort(stem, entry.Kind);
+            FireDone(entry);
+            Actives.Remove(slot);
+            return true;
+        }
+
+        /// <summary>单测：当前 Startup 并行槽上限。</summary>
+        public static int EditorStartupParallelSlots => _startupParallelSlots;
+
+        /// <summary>单测：Normal/Rest 并发上限。</summary>
+        public static int EditorMaxBackgroundSlots => MaxBackgroundSlots;
 #endif
 
         /// <summary>队列里正在下 / 等待的条目。UI 进度用这个，不要只看磁盘上是否已有旧文件。</summary>
@@ -376,27 +482,31 @@ namespace Game.BoluoApi
                 if (item.State == BankDownloadState.Downloading)
                 {
                     bool probeWhileDl = ProbeLocalSatisfiesCatalog(bankName);
-                    CacheLocalReady(bankName, probeWhileDl);
+                    CacheLocalReady(AudioEnginePaths.StripBankExtension(bankName), probeWhileDl);
                     return probeWhileDl;
                 }
             }
 
+            string cacheKey = AudioEnginePaths.StripBankExtension(bankName);
             float now = Time.unscaledTime;
-            if (LocalReadyCache.TryGetValue(bankName, out var cached))
+            if (LocalReadyCache.TryGetValue(cacheKey, out var cached))
             {
                 if (cached.Ready || now < cached.ExpireUnscaled)
                     return cached.Ready;
             }
 
             bool ready = ProbeLocalSatisfiesCatalog(bankName);
-            CacheLocalReady(bankName, ready);
+            CacheLocalReady(cacheKey, ready);
             return ready;
         }
 
         static void CacheLocalReady(string bankName, bool ready)
         {
+            if (string.IsNullOrEmpty(bankName))
+                return;
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
             float now = Time.unscaledTime;
-            LocalReadyCache[bankName] = new LocalReadyCacheEntry
+            LocalReadyCache[stem] = new LocalReadyCacheEntry
             {
                 Ready = ready,
                 ExpireUnscaled = ready
@@ -578,7 +688,7 @@ namespace Game.BoluoApi
             return IsLocalReady(bankName);
         }
 
-        /// <summary>Critical 波用 3，Fill / Weather 用 1。点击进行中强制单槽。</summary>
+        /// <summary>Startup 并发上限（默认≤3）。用户点击进行中 DesiredMaxSlots 仍强制单槽。</summary>
         public static void SetStartupParallelSlots(int slots)
         {
             _startupParallelSlots = Mathf.Clamp(slots, 1, MaxStartupSlots);
@@ -646,7 +756,7 @@ namespace Game.BoluoApi
         /// 下载 banks 队列。已 Ready（本地 MD5 / 缓存命中）跳过；完成后可选 loadIntoEngine。
         /// <paramref name="prioritize"/> 走启动优先队列（最多 3 路）。
         /// <paramref name="preempt"/> 为用户点击：插队首并打断当前非本 bank。
-        /// <paramref name="abortOtherUserDownloads"/> 为 true 时只中止其它 Music* User 槽（音乐连点；不误杀预设）。
+        /// <paramref name="abortOtherUserDownloads"/> 为 true 时中止其它 User 槽（用户点击优先当前项）。
         /// </summary>
         public static async UniTask<IReadOnlyList<BankDownloadItem>> DownloadBanks(
             IList<BankRemoteInfo> banks,
@@ -688,6 +798,18 @@ namespace Game.BoluoApi
                 $"pending={CountState(all, BankDownloadState.Pending)} " +
                 $"maxAttempts={Retry.MaxAttempts} stall={Retry.StallTimeoutSeconds}s " +
                 $"verifyWallMs={(Time.realtimeSinceStartup - tBeforeQueue) * 1000f:F0}");
+
+            // 本批白名单：abortOtherUser 时勿自相残杀同批多 bank。
+            var keepBatch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < all.Count; i++)
+            {
+                var item = all[i];
+                if (item == null || string.IsNullOrEmpty(item.BankName))
+                    continue;
+                if (item.State == BankDownloadState.Ready || item.State == BankDownloadState.Skipped)
+                    continue;
+                keepBatch.Add(item.BankName);
+            }
 
             int remaining = 0;
             var tcs = new UniTaskCompletionSource();
@@ -738,6 +860,7 @@ namespace Game.BoluoApi
                         prioritize,
                         preempt,
                         abortOtherUserDownloads,
+                        keepBatch,
                         done =>
                         {
                             CopyItemState(batchItem, done);
@@ -831,6 +954,7 @@ namespace Game.BoluoApi
             bool prioritize,
             bool preempt,
             bool abortOtherUserDownloads,
+            ICollection<string> keepBatch,
             Action<BankDownloadItem> onDone,
             Action<BankDownloadItem> onProgress)
         {
@@ -876,7 +1000,7 @@ namespace Game.BoluoApi
                     return;
                 }
 
-                PlaceInQueue(item.BankName, entry.Kind, abortOtherUserDownloads);
+                PlaceInQueue(item.BankName, entry.Kind, abortOtherUserDownloads, keepBatch);
                 return;
             }
 
@@ -891,10 +1015,14 @@ namespace Game.BoluoApi
             if (onProgress != null)
                 entry.OnProgress.Add(onProgress);
             Entries[item.BankName] = entry;
-            PlaceInQueue(item.BankName, kind, abortOtherUserDownloads);
+            PlaceInQueue(item.BankName, kind, abortOtherUserDownloads, keepBatch);
         }
 
-        static void PlaceInQueue(string bankName, BankQueueKind kind, bool abortOtherUserDownloads = false)
+        static void PlaceInQueue(
+            string bankName,
+            BankQueueKind kind,
+            bool abortOtherUserDownloads = false,
+            ICollection<string> keepBatch = null)
         {
             RemoveFromQueue(UserQueue, bankName);
             RemoveFromQueue(StartupQueue, bankName);
@@ -903,7 +1031,7 @@ namespace Game.BoluoApi
             if (kind == BankQueueKind.User)
             {
                 UserQueue.Insert(0, bankName);
-                AbortConflictingActives(bankName, abortOtherUserDownloads);
+                AbortConflictingActives(bankName, abortOtherUserDownloads, keepBatch);
                 Log.Info(
                     $"[BankDownloader] User enqueue {bankName} abortOtherUser={abortOtherUserDownloads}");
             }
@@ -920,11 +1048,15 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 默认不打断已在下的 User bank（预设连点避免进度清零）。
-        /// <paramref name="abortOtherUserDownloads"/> 为 true 时只中止其它 <c>Music*</c> User 槽
-        /// （音乐连点优先当前曲）；预设等非音乐 User 不杀。Startup/Normal 仍一律中止。
+        /// 默认不打断已在下的 User bank（同批多 bank 入队时避免自相残杀）。
+        /// <paramref name="abortOtherUserDownloads"/> 为 true 时中止其它 User 槽
+        /// （用户点击优先当前项，含音乐打断预设 / 预设打断音乐）。Startup/Normal 仍一律中止。
+        /// <paramref name="keepBatch"/> 本批 stem 白名单；同批 Active 不 Abort。
         /// </summary>
-        static void AbortConflictingActives(string keepBankName, bool abortOtherUserDownloads)
+        static void AbortConflictingActives(
+            string keepBankName,
+            bool abortOtherUserDownloads,
+            ICollection<string> keepBatch = null)
         {
             for (int i = 0; i < Actives.Count; i++)
             {
@@ -933,16 +1065,31 @@ namespace Game.BoluoApi
                     continue;
                 if (string.Equals(slot.BankName, keepBankName, StringComparison.OrdinalIgnoreCase))
                     continue;
-                if (slot.Kind == BankQueueKind.User)
-                {
-                    if (!abortOtherUserDownloads || !IsMusicBankName(slot.BankName))
-                        continue;
-                }
+                if (keepBatch != null && ContainsBankIgnoreCase(keepBatch, slot.BankName))
+                    continue;
+                if (slot.Kind == BankQueueKind.User && !abortOtherUserDownloads)
+                    continue;
 
                 slot.Abort = true;
+                slot.ReleaseWaitersOnAbort = true;
                 Log.Info(
                     $"[BankDownloader] abort {slot.BankName} kind={slot.Kind} for user {keepBankName}");
             }
+        }
+
+        static bool ContainsBankIgnoreCase(ICollection<string> batch, string bankName)
+        {
+            if (batch == null || string.IsNullOrEmpty(bankName))
+                return false;
+            if (batch is HashSet<string> set)
+                return set.Contains(bankName);
+            foreach (string n in batch)
+            {
+                if (string.Equals(n, bankName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>曲目 bank 约定：stem 以 Music 开头（与 AmbienceEventCatalog / MusicLists 一致）。</summary>
@@ -1190,7 +1337,11 @@ namespace Game.BoluoApi
                     entry.Item.Progress = 0f;
                     entry.Item.Error = null;
                     RequeueAfterAbort(bankName, entry.Kind);
-                    FireProgress(entry);
+                    // 抢占 Abort：FireDone 立刻放旧批 await；蜂窝/离岛 Abort 只刷进度等续传。
+                    if (slot.ReleaseWaitersOnAbort)
+                        FireDone(entry);
+                    else
+                        FireProgress(entry);
                     Log.Info($"[BankDownloader] aborted before transfer, requeue {bankName} kind={entry.Kind}");
                     return;
                 }
@@ -1208,7 +1359,10 @@ namespace Game.BoluoApi
                     entry.Item.Progress = 0f;
                     entry.Item.Error = null;
                     RequeueAfterAbort(bankName, entry.Kind);
-                    FireProgress(entry);
+                    if (slot.ReleaseWaitersOnAbort)
+                        FireDone(entry);
+                    else
+                        FireProgress(entry);
                     Log.Info($"[BankDownloader] aborted, requeue {bankName} kind={entry.Kind}");
                     return;
                 }
@@ -1818,12 +1972,48 @@ namespace Game.BoluoApi
                     continue;
                 }
 
+                // HTTP 齐后先 Move → Ready → NotifyBankReady，再 MD5。
+                // 大文件校验可长达数十秒；区域门 / 列表须在传输完成后立刻 IsLocalReady。
+                try
+                {
+                    string dir = Path.GetDirectoryName(item.LocalPath);
+                    if (!string.IsNullOrEmpty(dir))
+                        Directory.CreateDirectory(dir);
+                    if (File.Exists(tmpPath))
+                    {
+                        if (File.Exists(item.LocalPath))
+                            File.Delete(item.LocalPath);
+                        File.Move(tmpPath, item.LocalPath);
+                    }
+                    else if (!File.Exists(item.LocalPath))
+                    {
+                        // Probe 可能已 size-promote；两边都没有才算失败。
+                        throw new FileNotFoundException(
+                            "tmp missing after HTTP and final bank absent", tmpPath);
+                    }
+                }
+                catch (Exception e)
+                {
+                    TryDelete(tmpPath);
+                    item.State = BankDownloadState.Failed;
+                    item.Error = e.Message;
+                    Log.Error($"[BankDownloader] move fail {item.BankName}: {e.Message}");
+                    break;
+                }
+
+                item.State = BankDownloadState.Ready;
+                item.Progress = 1f;
+                item.Error = null;
+                NotifyBankReady(item.BankName);
+                onProgress?.Invoke(item);
+
                 if (!string.IsNullOrEmpty(item.Md5))
                 {
-                    string actual = await RunOffMainAsync(() => ComputeMd5(tmpPath));
+                    string actual = await RunOffMainAsync(() => ComputeMd5(item.LocalPath));
                     if (!string.Equals(actual, item.Md5, StringComparison.OrdinalIgnoreCase))
                     {
-                        TryDelete(tmpPath);
+                        TryDelete(item.LocalPath);
+                        InvalidateLocalReadyCache(item.BankName);
                         item.State = BankDownloadState.Failed;
                         item.Error = $"md5 mismatch expect={item.Md5} actual={actual}";
                         item.Progress = 0f;
@@ -1840,28 +2030,7 @@ namespace Game.BoluoApi
                     }
                 }
 
-                try
-                {
-                    string dir = Path.GetDirectoryName(item.LocalPath);
-                    if (!string.IsNullOrEmpty(dir))
-                        Directory.CreateDirectory(dir);
-                    if (File.Exists(item.LocalPath))
-                        File.Delete(item.LocalPath);
-                    File.Move(tmpPath, item.LocalPath);
-                }
-                catch (Exception e)
-                {
-                    TryDelete(tmpPath);
-                    item.State = BankDownloadState.Failed;
-                    item.Error = e.Message;
-                    Log.Error($"[BankDownloader] move fail {item.BankName}: {e.Message}");
-                    break;
-                }
-
                 RememberLocalMd5(item);
-                item.State = BankDownloadState.Ready;
-                item.Progress = 1f;
-                item.Error = null;
                 Log.Info($"[BankDownloader] ready {item.BankName} path={item.LocalPath} attempts={attempt}");
                 return false;
             }
@@ -1909,19 +2078,20 @@ namespace Game.BoluoApi
         static float ResolveDownloadProgress01(
             BankDownloadItem item, UnityWebRequest req, long resumeFrom = 0)
         {
-            float p = req != null ? req.downloadProgress : 0f;
+            // 体积已知时只信已写字节。downloadProgress 提前变成 1 会把窗在条还是空的时关掉。
             if (item != null
-                && req != null
                 && int.TryParse(item.SizeKb, out int kb)
                 && kb > 0)
             {
                 double total = kb * 1024.0;
-                double got = resumeFrom + (double)req.downloadedBytes;
-                float fromBytes = (float)(got / total);
-                if (fromBytes > p)
-                    p = fromBytes;
+                double got = resumeFrom;
+                if (req != null)
+                    got += req.downloadedBytes;
+                if (total > 0d)
+                    return Mathf.Clamp01((float)(got / total));
             }
 
+            float p = req != null ? req.downloadProgress : 0f;
             return Mathf.Clamp01(p);
         }
 

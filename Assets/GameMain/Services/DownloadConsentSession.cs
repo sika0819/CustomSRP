@@ -77,7 +77,7 @@ namespace Game
 
         /// <summary>
         /// 传输层：蜂窝未开闸且队列仍忙。
-        /// FeatureOn → 弹流量窗续传；FeatureOff 由闸自动开闸，此处只 Merge。
+        /// FeatureOn → 弹流量窗续传；FeatureOff 由闸自动开闸（零弹窗），此处只记账。
         /// </summary>
         public static void NotifyNeedCellularConsent(IList<string> busyBanks)
         {
@@ -220,102 +220,6 @@ namespace Game
         }
 #endif
 
-        // —— 旧 DownloadNetworkGate UI 转发（迁移期）——
-
-        public static bool TryShowOfflineCompat(Action onConfirm = null)
-        {
-            if (!DownloadCellularGate.IsOffline())
-                return false;
-            if (GameEntry.UI != null)
-                UiDialogService.ShowNoNetwork(onConfirm);
-            else
-                onConfirm?.Invoke();
-            return true;
-        }
-
-        public static bool TryBlockStorageCompat(IList<string> bankNames, Action onConfirm = null)
-        {
-            long kb = DownloadNetworkGate.PendingKilobytes(bankNames);
-            if (kb <= 0)
-                return false;
-            long requiredBytes = kb * 1024L;
-            if (DownloadNetworkGate.AvailableStorageBytes() >= requiredBytes * 2L)
-                return false;
-            long mb = Math.Max(1L, (requiredBytes + 1024L * 1024L - 1L) / (1024L * 1024L));
-            UiDialogService.ShowInsufficientStorage(
-                mb.ToString(CultureInfo.InvariantCulture),
-                onConfirm);
-            return true;
-        }
-
-        /// <summary>
-        /// 旧语义：拦截返回 false（窗会调 onAllow）；全过返回 true（调用方自己开下）。
-        /// 窗已开时替换 continue，不丢回调。
-        /// </summary>
-        public static bool TryPassGatesCompat(
-            IList<string> bankNames,
-            Action onAllowAfterMobile = null,
-            Action onWifiOnly = null,
-            Action onBlockedRetreat = null)
-        {
-            if (TryShowOfflineCompat(onBlockedRetreat))
-                return false;
-
-            if (TryBlockStorageCompat(bankNames, onBlockedRetreat))
-                return false;
-
-            if (!DownloadCellularGate.NeedsMobileDataPrompt())
-                return true;
-
-            Capture(
-                bankNames,
-                onAllowAfterMobile,
-                () =>
-                {
-                    onWifiOnly?.Invoke();
-                    onBlockedRetreat?.Invoke();
-                },
-                onWifiLater: null,
-                lockMove: false);
-
-            if (_phase == Phase.MobileConfirm || IsMobileConfirmPresent())
-            {
-                _phase = Phase.MobileConfirm;
-                return false;
-            }
-
-            ShowMobileConfirm();
-            return false;
-        }
-
-        /// <summary>
-        /// 旧 API / 编辑器预览强制弹流量窗。玩法路径请用 <see cref="EnsureReady"/>，
-        /// 勿在 Rest / RunLoop 里调本方法。
-        /// </summary>
-        public static bool TryShowMobileCompat(
-            IList<string> banks,
-            Action onAllowContinue = null,
-            Action onWifiOnly = null,
-            string sizeMb = null)
-        {
-            if (!DownloadCellularGate.NeedsMobileDataPrompt())
-                return false;
-
-            if (onAllowContinue != null || onWifiOnly != null)
-                Capture(banks, onAllowContinue, onWifiOnly, onWifiLater: null, lockMove: false);
-            else
-                MergeBanks(banks);
-
-            if (_phase == Phase.MobileConfirm || IsMobileConfirmPresent())
-            {
-                _phase = Phase.MobileConfirm;
-                return true;
-            }
-
-            ShowMobileConfirm();
-            return true;
-        }
-
         static void Capture(
             IList<string> banks,
             Action onReady,
@@ -323,6 +227,19 @@ namespace Game
             Action onWifiLater,
             bool lockMove)
         {
+            // 弹窗 / 门禁占用中被新 EnsureReady 覆盖：先取消上一笔（Music/Preset OnCancel
+            // 已捕获旧 album/presetId，不会误清新 Intent），再挂新回调。
+            Action prevCancel = null;
+            if (_phase != Phase.Idle
+                && (_onReady != null || _onCancel != null)
+                && !ReferenceEquals(_onReady, onReady))
+            {
+                prevCancel = _onCancel;
+                _onReady = null;
+                _onCancel = null;
+                _onWifiLater = null;
+            }
+
             _banks.Clear();
             MergeBanks(banks);
             _onReady = onReady;
@@ -332,6 +249,17 @@ namespace Game
                 _onWifiLater = onWifiLater;
             if (lockMove)
                 _lockMove = true;
+
+            if (prevCancel == null)
+                return;
+            try
+            {
+                prevCancel();
+            }
+            catch (Exception e)
+            {
+                Log.Warning("[DownloadConsent] prev OnCancel: " + e.Message);
+            }
         }
 
         static void MergeBanks(IList<string> banks)

@@ -67,12 +67,15 @@ namespace Game.Editor
                 Path = "Assets/GameMain/Environment/Prefabs/DaoYu1/Common/River_03.prefab",
                 Position = new Vector3(352.2f, 64.2f, 435.9f),
                 Rotation = Quaternion.identity,
+                // 与 River_03.prefab PrefabInstance 上 m_LocalScale 一致；禁种烘焙必须带上，否则河面偏小长草。
+                Scale = new Vector3(2.45f, 2.45f, 2.45f),
             },
             new Placement
             {
                 Path = "Assets/GameMain/Environment/Prefabs/DaoYu1/Common/River_04.prefab",
                 Position = new Vector3(352.2f, 64.2f, 435.9f),
                 Rotation = Quaternion.identity,
+                Scale = new Vector3(2.45f, 2.45f, 2.45f),
             },
             new Placement
             {

@@ -11,13 +11,19 @@ namespace Game
     /// 用户主动下载统一流水线（区域 / 预设 / 音乐）：
     /// <see cref="DownloadConsentSession.EnsureReady"/> →（可选）进度窗 → <see cref="BankDownloader"/> → 关窗。
     /// FeatureOn+WiFi：同意链体积可按全部剩余；确认后 KickSilentAll；进度/await 只用本次 banks。
-    /// FeatureOn+流量：仅本次 banks，一次性开闸，批次结束 Revoke。
-    /// FeatureOff：通常 Bootstrap 已静默/全量确认；点下载走常规 pending。
+    /// FeatureOn+流量：仅本次 banks；「继续下载」会话开闸至回 Wi‑Fi / 离岛（批次结束不 Revoke）。
+    /// FeatureOff：Bootstrap 静默全量 + 蜂窝自动开闸零弹窗；点下载走常规 pending。
+    /// Busy：区域进度窗占用时新批 Toast 拒绝；无进度窗的软占用可被列表点击或区域门抢占并优先插队。
     /// </summary>
     public static class UserBankDownloadFlow
     {
+        /// <summary>用户批次占用中拒绝新批时的提示文案。</summary>
+        public const string BusyToastText = "已有资源包在下载中";
+
         static int _activeTicket;
         static bool _busy;
+        /// <summary>占批代数：软占用被抢占时自增，旧批 finally 不得清掉新批的 busy。</summary>
+        static int _busySerial;
 
         /// <summary>进行中的进度窗票据（区域门重开进度用）。</summary>
         public static int ActiveProgressTicket => _activeTicket;
@@ -27,7 +33,9 @@ namespace Game
         /// <summary>
         /// 跑同意链；通过后按选项开进度窗并下载。
         /// <paramref name="onComplete"/> 在关窗之后调用（成功或失败都调）。
-        /// <paramref name="onBanksDone"/> 在下载 await 返回后、关窗前调用（可空）。
+        /// <paramref name="onBanksDone"/> 在下载 await 返回后调用（可空）；进度窗在传输齐时已关，不等本回调。
+        /// <paramref name="occupyUserBusy"/> false：邻近环境音等自动 Kick，不挡列表点击。
+        /// <paramref name="preemptBusyBatch"/> true：无进度窗软占用时可抢占并优先当前项。
         /// </summary>
         public static void Start(
             IList<string> banks,
@@ -39,7 +47,9 @@ namespace Game
             bool prioritize = true,
             bool preempt = true,
             bool loadIntoEngine = true,
-            bool abortOtherUserDownloads = false)
+            bool abortOtherUserDownloads = false,
+            bool occupyUserBusy = true,
+            bool preemptBusyBatch = false)
         {
             string[] clicked = FilterPending(Snapshot(banks));
             if (clicked.Length == 0)
@@ -48,9 +58,47 @@ namespace Game
                 return;
             }
 
+            int busySerial = 0;
+            if (occupyUserBusy)
+            {
+                if (ShouldRejectNewBatch(preemptBusyBatch))
+                {
+                    RejectBusyBatch(onComplete, opts.OnCancel);
+                    return;
+                }
+
+                if (_busy)
+                {
+                    // 无票软占用（预设环/音乐行）被列表点击抢占。
+                    _busySerial++;
+                    Log.Info(
+                        "[UserBankDownloadFlow] preempt soft busy — serial=" + _busySerial);
+                }
+                else
+                {
+                    _busy = true;
+                }
+
+                busySerial = _busySerial;
+            }
+
             // 同意链体积：FeatureOn+WiFi 未确认前用全部剩余；下载/进度始终只用本次。
             string[] consentBanks = BackgroundDownloadCoordinator.BanksForWifiConsentSize(clicked);
             bool showProgress = !opts.SuppressProgressDialog;
+
+            Action prevCancel = opts.OnCancel;
+            opts.OnCancel = () =>
+            {
+                ReleaseBusy(occupyUserBusy, busySerial);
+                try
+                {
+                    prevCancel?.Invoke();
+                }
+                catch (Exception e)
+                {
+                    Log.Warning("[UserBankDownloadFlow] OnCancel: " + e.Message);
+                }
+            };
 
             DownloadConsentSession.EnsureReady(
                 consentBanks,
@@ -72,6 +120,7 @@ namespace Game
                     {
                         BackgroundDownloadCoordinator.KickSilentAllIfNeeded();
                         InvokeSafe(onBanksDone, Array.Empty<BankDownloadItem>(), "onBanksDone");
+                        ReleaseBusy(occupyUserBusy, busySerial);
                         InvokeSafe(onComplete, "onComplete");
                         return;
                     }
@@ -85,7 +134,10 @@ namespace Game
                             preempt,
                             loadIntoEngine,
                             showProgress,
-                            abortOtherUserDownloads)
+                            abortOtherUserDownloads,
+                            busyAlreadyHeld: occupyUserBusy,
+                            occupyUserBusy: occupyUserBusy,
+                            busySerial: busySerial)
                         .Forget();
 
                     // FeatureOn+WiFi：确认后（及之后）静默全量，同关弹窗；不占 User 进度批。
@@ -114,7 +166,37 @@ namespace Game
                 preempt,
                 loadIntoEngine,
                 showProgressDialog,
-                abortOtherUserDownloads);
+                abortOtherUserDownloads,
+                busyAlreadyHeld: false,
+                occupyUserBusy: true,
+                busySerial: _busySerial);
+
+        static UniTask DownloadWithProgress(
+            IList<string> banks,
+            Action onComplete,
+            Action<IReadOnlyList<BankDownloadItem>> onBanksDone,
+            Action onProgressDismissed,
+            bool prioritize,
+            bool preempt,
+            bool loadIntoEngine,
+            bool showProgressDialog,
+            bool abortOtherUserDownloads,
+            bool busyAlreadyHeld,
+            bool occupyUserBusy,
+            int busySerial) =>
+            DownloadWithProgressAsync(
+                banks,
+                onComplete,
+                onBanksDone,
+                onProgressDismissed,
+                prioritize,
+                preempt,
+                loadIntoEngine,
+                showProgressDialog,
+                abortOtherUserDownloads,
+                busyAlreadyHeld,
+                occupyUserBusy,
+                busySerial);
 
         static async UniTask DownloadWithProgressAsync(
             IList<string> banks,
@@ -125,32 +207,36 @@ namespace Game
             bool preempt,
             bool loadIntoEngine,
             bool showProgressDialog,
-            bool abortOtherUserDownloads)
+            bool abortOtherUserDownloads,
+            bool busyAlreadyHeld,
+            bool occupyUserBusy,
+            int busySerial)
         {
             string[] pending = FilterPending(Snapshot(banks));
             if (pending.Length == 0)
             {
+                if (busyAlreadyHeld)
+                    ReleaseBusy(occupyUserBusy, busySerial);
                 InvokeSafe(onBanksDone, Array.Empty<BankDownloadItem>(), "onBanksDone");
                 InvokeSafe(onComplete, "onComplete");
                 return;
             }
 
-            if (_busy)
+            if (!busyAlreadyHeld)
             {
-                await MergeIntoBusyDownload(
-                    pending,
-                    onComplete,
-                    onBanksDone,
-                    onProgressDismissed,
-                    prioritize,
-                    preempt,
-                    loadIntoEngine,
-                    showProgressDialog,
-                    abortOtherUserDownloads);
-                return;
+                if (occupyUserBusy)
+                {
+                    if (_busy)
+                    {
+                        RejectBusyBatch(onComplete, onCancel: null);
+                        return;
+                    }
+
+                    _busy = true;
+                    busySerial = _busySerial;
+                }
             }
 
-            _busy = true;
             int ticket = 0;
             IReadOnlyList<BankDownloadItem> result = Array.Empty<BankDownloadItem>();
             try
@@ -179,12 +265,18 @@ namespace Game
                     preempt,
                     abortOtherUserDownloads);
 
+                // 传输齐时 PushProgress 已关窗；批结束再关一次兜底（失败/未推满进度）。
+                // 必须在 onBanksDone 之前关，避免同步翻牌/进场拖住弹窗。
                 if (ticket > 0)
+                {
                     PushProgress(ticket, pending);
+                    UiDialogService.CloseDownloadProgress(ticket);
+                }
 
-                // 先 onBanksDone；就绪 bank 写入正向缓存（勿全量 Invalidate，多预设并下会把已完成卡闪回未下载）。
-                InvokeSafe(onBanksDone, result, "onBanksDone");
+                // 先写正向缓存再 onBanksDone：PresetForm 同步段内 IsLocalReady 须已为正，
+                // 否则会清 _userTriggered 并 force 刷成「未下载」，且闲置后不再翻牌。
                 MarkResultLocalReady(result);
+                InvokeSafe(onBanksDone, result, "onBanksDone");
             }
             catch (Exception e)
             {
@@ -196,74 +288,31 @@ namespace Game
                     UiDialogService.CloseDownloadProgress(ticket);
                 if (_activeTicket == ticket)
                     _activeTicket = 0;
-                _busy = false;
+                ReleaseBusy(occupyUserBusy, busySerial);
                 InvokeSafe(onComplete, "onComplete");
             }
         }
 
-        /// <summary>
-        /// 已有批次在跑：并入 <see cref="BankDownloader"/> 队列。
-        /// 复用已有进度票；若持有方 SuppressProgress（无票）而本路要进度，则在此开窗，并在本路结束时关。
-        /// 不清 <see cref="_busy"/>（由首路 finally 负责）。
-        /// </summary>
-        static async UniTask MergeIntoBusyDownload(
-            string[] pending,
-            Action onComplete,
-            Action<IReadOnlyList<BankDownloadItem>> onBanksDone,
-            Action onProgressDismissed,
-            bool prioritize,
-            bool preempt,
-            bool loadIntoEngine,
-            bool showProgressDialog,
-            bool abortOtherUserDownloads)
+        /// <summary>仅当前占批代数可清 busy（被抢占的旧批忽略）。</summary>
+        static void ReleaseBusy(bool occupyUserBusy, int busySerial)
         {
-            int ticket = _activeTicket;
-            bool openedProgressHere = false;
-            if (showProgressDialog
-                && GameEntry.UI != null
-                && (ticket <= 0 || UiDialogService.IsProgressRetired(ticket)))
-            {
-                ticket = UiDialogService.OpenDownloadProgress(onProgressDismissed);
-                _activeTicket = ticket;
-                openedProgressHere = ticket > 0;
-                if (ticket > 0)
-                    PushProgress(ticket, pending);
-            }
+            if (!occupyUserBusy)
+                return;
+            if (_busySerial != busySerial)
+                return;
+            _busy = false;
+            if (_activeTicket != 0)
+                _activeTicket = 0;
+        }
 
-            IReadOnlyList<BankDownloadItem> result = Array.Empty<BankDownloadItem>();
-            try
-            {
-                Log.Info(
-                    $"[UserBankDownloadFlow] merge into busy count={pending.Length} " +
-                    $"ticket={ticket} openedProgress={openedProgressHere} " +
-                    $"abortOtherUser={abortOtherUserDownloads}");
-                result = await RunDownloadBanks(
-                    pending,
-                    ticket,
-                    loadIntoEngine,
-                    prioritize,
-                    preempt,
-                    abortOtherUserDownloads);
-                if (ticket > 0)
-                    PushProgress(ticket, pending);
-                InvokeSafe(onBanksDone, result, "onBanksDone");
-                MarkResultLocalReady(result);
-            }
-            catch (Exception e)
-            {
-                Log.Warning("[UserBankDownloadFlow] merge download failed: " + e.Message);
-            }
-            finally
-            {
-                if (openedProgressHere && ticket > 0)
-                {
-                    UiDialogService.CloseDownloadProgress(ticket);
-                    if (_activeTicket == ticket)
-                        _activeTicket = 0;
-                }
-
-                InvokeSafe(onComplete, "onComplete");
-            }
+        /// <summary>Busy 拒绝：Toast + 收尾回调；不入队、不调成功 onBanksDone。</summary>
+        static void RejectBusyBatch(Action onComplete, Action onCancel)
+        {
+            Log.Info("[UserBankDownloadFlow] reject busy — " + BusyToastText);
+            if (GameEntry.UI != null)
+                UiDialogService.ShowToast(BusyToastText);
+            InvokeSafe(onCancel, "OnCancel");
+            InvokeSafe(onComplete, "onComplete");
         }
 
         static void MarkResultLocalReady(IReadOnlyList<BankDownloadItem> result)
@@ -339,6 +388,36 @@ namespace Game
         {
             AggregateBanksProgress(banks, out float downloaded, out float total, out float percent);
             UiDialogService.SetDownloadProgress(ticket, percent, downloaded, total);
+            // HTTP 写完 Progress=1 后仍要 MD5/Move；传输齐就关窗，勿等 DownloadBanks await。
+            if (AreBanksTransferComplete(banks))
+                UiDialogService.CloseDownloadProgress(ticket);
+        }
+
+        /// <summary>
+        /// 本批传输是否已齐：已 <see cref="BankDownloader.IsLocalReady"/>，
+        /// 或活跃项 <c>Progress≥1</c>（HTTP 写完、MD5 校验前）。
+        /// 用于进度窗早关，避免大文件校验拖住弹窗。
+        /// </summary>
+        public static bool AreBanksTransferComplete(IList<string> banks)
+        {
+            if (banks == null || banks.Count == 0)
+                return true;
+
+            for (int i = 0; i < banks.Count; i++)
+            {
+                string name = banks[i];
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                if (BankDownloader.IsLocalReady(name))
+                    continue;
+                if (BankDownloader.TryGetActiveItem(name, out BankDownloadItem item)
+                    && item != null
+                    && item.Progress >= 0.999f)
+                    continue;
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -438,6 +517,23 @@ namespace Game
 
             return list.ToArray();
         }
+
+        /// <summary>
+        /// 是否应 Toast 拒绝新批：硬占用（有进度窗）始终拒；软占用仅当未请求抢占时拒。
+        /// </summary>
+        public static bool ShouldRejectNewBatch(bool preemptBusyBatch) =>
+            _busy && (!preemptBusyBatch || _activeTicket > 0);
+
+#if UNITY_EDITOR
+        /// <summary>单测：注入 busy / 进度票。</summary>
+        public static void EditorForceBusy(bool busy, int activeTicket = 0)
+        {
+            _busy = busy;
+            _activeTicket = activeTicket;
+            if (!busy)
+                _busySerial = 0;
+        }
+#endif
 
         static void InvokeSafe(Action action, string label)
         {

@@ -71,23 +71,35 @@ namespace WanosAudio
             // 对称 teardownForLogout：二次进岛 / 冷启动 Awake 拆闸后重新打开 NowPlaying / FGS 闸。
             // 已 initialized 也要重开闸——GameEntry.Awake 的 Cleanup 会关闸但未必清 sIsInitialized 竞态。
             BoluoAndroidEngineNative.SetPlaybackActive(true);
+            // teardown 钉的 shouldStop/userPaused 必须在此清掉。只开闸不清闩时：
+            // 负一屏已 PLAYING，上滑 Recents 却因 isUserStoppedPlayback=true 走 unity_pause_preview
+            // → 岛内静音、卡仍 PLAYING（日志：silenceBefore… userPaused=true shouldStop=true）。
+            BoluoAndroidEngineNative.ClearLogoutStopLatch();
 
             bool bgDisable = BackgroundPlayPolicyCallback.GetBackgroundPlayDisable();
-            // 加载中途已进后台时不能谎报前台，否则随后抢焦会在抖音 / QQ 音乐之上出声。
-            BoluoAndroidEngineNative.NotifyAppLifecycle(inBackground, bgDisable);
+            // 热路径（PublishPlayingForced → EnsurePlatformSession）：禁止再 NotifyAppLifecycle。
+            // AudioAppLifecycle 已同步前后台；重复 notify 会造成双重 fg enter + FGS 刷屏 + 音效卡顿。
+            // 仅首次进岛 / Cleanup 后重初始化才报生命周期（加载中途已进后台也不能谎报前台）。
+            if (!sIsInitialized)
+            {
+                BoluoAndroidEngineNative.NotifyAppLifecycle(inBackground, bgDisable);
+                sIsInitialized = true;
+
+                // 不在这里推 paused「波萝」：paused 不拉 FGS，创维等 OEM 负一屏不绑 MediaStyle。
+                // 真正出卡走 PublishPlayingForced（isPlaying=true）。关后台播放才清卡。
+                if (bgDisable)
+                    ClearNowPlaying();
+
+                Debug.Log("[BoluoMusicPlayerAndroid] InitializeAfterLogin"
+                    + " inBackground=" + inBackground + " bgDisable=" + bgDisable);
+            }
+            else
+            {
+                Debug.Log("[BoluoAudioFg] InitializeAfterLogin already initialized"
+                    + " inBackground=" + inBackground + " bgDisable=" + bgDisable);
+            }
 
             EnsurePostNotificationsPermission();
-
-            if (sIsInitialized)
-                return;
-            sIsInitialized = true;
-
-            // 不在这里推 paused「波萝」：paused 不拉 FGS，创维等 OEM 负一屏不绑 MediaStyle。
-            // 真正出卡走 PublishPlayingForced（isPlaying=true）。关后台播放才清卡。
-            if (bgDisable)
-                ClearNowPlaying();
-
-            Debug.Log("[BoluoMusicPlayerAndroid] InitializeAfterLogin");
         }
 
         /// <summary>
@@ -146,6 +158,7 @@ namespace WanosAudio
         {
             if (Instance == null)
             {
+                Debug.Log("[BoluoAudioFg] CleanupAfterLogout no instance, teardown native");
                 BoluoAndroidEngineNative.TeardownForLogout();
                 return;
             }
@@ -164,10 +177,15 @@ namespace WanosAudio
         public void UpdateNowPlayingInfo(string title, string artworkPath, bool isPlaying)
         {
             if (!sIsInitialized)
+            {
+                Debug.Log("[BoluoAudioFg] UpdateNowPlaying dropped not initialized"
+                    + " playing=" + isPlaying);
                 return;
+            }
 
             if (BackgroundPlayPolicyCallback.GetBackgroundPlayDisable())
             {
+                Debug.Log("[BoluoAudioFg] UpdateNowPlaying bg play disabled, clear card");
                 ClearNowPlaying();
                 return;
             }
@@ -182,6 +200,7 @@ namespace WanosAudio
                 }
                 else
                 {
+                    Debug.Log("[BoluoAudioFg] UpdateNowPlaying empty meta, clear card");
                     ClearNowPlaying();
                     return;
                 }
@@ -191,6 +210,9 @@ namespace WanosAudio
                 title = "波萝";
             if (string.IsNullOrEmpty(artworkPath))
                 artworkPath = ArtworkDefault ?? "";
+            Debug.Log("[BoluoAudioFg] UpdateNowPlaying title=" + title
+                + " playing=" + isPlaying
+                + " art=" + (string.IsNullOrEmpty(artworkPath) ? "empty" : "set"));
             BoluoAndroidEngineNative.UpdateNowPlayingInfo(title, artworkPath, isPlaying);
             if (isPlaying)
                 BoluoAndroidEngineNative.NoteForegroundCardPublished();
@@ -200,42 +222,64 @@ namespace WanosAudio
 
         public void ClearNowPlaying()
         {
+            Debug.Log("[BoluoAudioFg] ClearNowPlaying title=empty buttons=off");
             BoluoAndroidEngineNative.UpdateNowPlayingInfo("", "", false);
         }
 
-        /// <summary>MediaSession / 通知栏 Play。</summary>
+        /// <summary>
+        /// MediaSession / 通知栏 Play。
+        /// reason=ui：原生 focus resume 已 Resume+unmute，只收 tip（对齐 iOS / Policy）。
+        /// </summary>
         public void OnNowPlayingPlay(string reason)
         {
             if (!sIsInitialized)
+            {
+                Debug.Log("[BoluoAudioFg] OnNowPlayingPlay dropped not initialized reason=" + reason);
                 return;
-            MusicPauseUICallback.Hide();
-            BoluoAndroidEngineNative.ResumeFromUserAction();
-            if (string.Equals(reason, "ui", System.StringComparison.Ordinal))
+            }
+            if (!BoluoNowPlayingRemoteCommandPolicy.ShouldDriveEngineResumeFromNowPlayingPlay(reason))
+            {
+                Debug.Log("[BoluoAudioFg] OnNowPlayingPlay ui-only refresh card reason=" + reason);
+                MusicPauseUICallback.Hide();
                 return;
+            }
+            // Java 已经合并过这一次意图。只走 Unity 续播，不再 ResumeFromUserAction。
+            Debug.Log("[BoluoAudioFg] OnNowPlayingPlay drive engine RequestResumeAll reason=" + reason);
             GlobalPlaybackIntentCallback.RequestResumeAll();
         }
 
         public void OnNowPlayingPause(string empty)
         {
             if (!sIsInitialized)
+            {
+                Debug.Log("[BoluoAudioFg] OnNowPlayingPause dropped not initialized");
                 return;
+            }
+            Debug.Log("[BoluoAudioFg] OnNowPlayingPause user pause");
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.ProgrammaticPause);
-            BoluoAndroidEngineNative.MarkUserPausedFromUnity(true);
             GlobalPlaybackIntentCallback.RequestPauseAll();
         }
 
         public void ShowPauseUIFromMediaControl()
         {
+            Debug.Log("[BoluoAudioFg] ShowPauseUIFromMediaControl");
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.ProgrammaticPause);
         }
 
         public void HidePauseUIFromMediaControl()
         {
+            Debug.Log("[BoluoAudioFg] HidePauseUIFromMediaControl");
             MusicPauseUICallback.Hide();
         }
 
         public void OnSystemAudioMuted(string empty)
         {
+            if (!BoluoAndroidEngineNative.IsFocusYieldLatched())
+            {
+                UnityEngine.Debug.Log("[BoluoAudioFg] drop stale OnSystemAudioMuted (not yielding)");
+                return;
+            }
+            Debug.Log("[BoluoAudioFg] OnSystemAudioMuted interrupt not userPaused");
             WanosEngine.MarkInterrupted("android-system-mute");
             GlobalPlaybackIntentCallback.NotifySystemAudioInterrupted();
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.TransientInterrupt);
@@ -243,6 +287,14 @@ namespace WanosAudio
 
         public void OnCompetingAudioMuted(string empty)
         {
+            // 后台积压的 CompetingMuted 若在 Restored 之后到达，会把刚续上的音乐再 Pause。
+            // 原生已不在 focus yield：丢弃陈旧 Interrupted。
+            if (!BoluoAndroidEngineNative.IsFocusYieldLatched())
+            {
+                UnityEngine.Debug.Log("[BoluoAudioFg] drop stale OnCompetingAudioMuted (not yielding)");
+                return;
+            }
+            Debug.Log("[BoluoAudioFg] OnCompetingAudioMuted interrupt not userPaused");
             WanosEngine.MarkInterrupted("android-competing-mute");
             GlobalPlaybackIntentCallback.NotifySystemAudioInterrupted();
             MusicPauseUICallback.Show(MusicPauseUICallback.TipKind.CompetingLong);
@@ -251,48 +303,89 @@ namespace WanosAudio
         /// <summary>原生 focus resume / 蓝牙路由恢复后：清 yield 并恢复音效。</summary>
         public void OnSystemAudioRestored(string empty)
         {
+            Debug.Log("[BoluoAudioFg] OnSystemAudioRestored");
             GlobalPlaybackIntentCallback.NotifySystemAudioRestored();
         }
 
-        public void OnAudioFocusDuck(string factorStr) { }
-        public void OnAudioFocusUnduck(string empty) { }
+        /// <summary>系统更新弹窗：没有外来媒体，不停音乐音效，焦点也不抢回。</summary>
+        public void OnSystemDialogCover(string empty)
+        {
+            Debug.Log("[BoluoAudioFg] OnSystemDialogCover keep playing");
+            GlobalPlaybackIntentCallback.NotifySystemDialogCover();
+        }
+
+        public void OnAudioFocusDuck(string factorStr)
+        {
+            Debug.Log("[BoluoAudioFg] OnAudioFocusDuck factor=" + factorStr);
+        }
+
+        public void OnAudioFocusUnduck(string empty)
+        {
+            Debug.Log("[BoluoAudioFg] OnAudioFocusUnduck");
+        }
+
         public void OnAudioFocusRequestFailed(string empty)
         {
+            Debug.Log("[BoluoAudioFg] OnAudioFocusRequestFailed exclusive activate failed keep mute");
             WanosEngine.MarkInterrupted("android-focus-request-failed");
             GlobalPlaybackIntentCallback.NotifySystemAudioInterrupted();
         }
-        public void SetUserAudioSettings(string payload) { }
+
+        public void SetUserAudioSettings(string payload)
+        {
+            Debug.Log("[BoluoAudioFg] SetUserAudioSettings payload=" + (payload ?? ""));
+        }
 
         public void OnNativeTrackChanged(string payload)
         {
+            Debug.Log("[BoluoAudioFg] OnNativeTrackChanged payload=" + payload);
             GlobalPlaybackIntentCallback.NotifyMediaTrackChanged();
         }
 
         public void OnNativePlaybackStateChanged(string value)
         {
             if (!sIsInitialized)
+            {
+                Debug.Log("[BoluoAudioFg] OnNativePlaybackStateChanged dropped not initialized value=" + value);
                 return;
+            }
 
-            // 原生已落地控播（resumeFromMediaControl / pauseForTimerEnd 等）后的状态回传。
+            // 原生已落地控播（resumeFromMediaControl / 负一屏切歌起播 / pauseForTimerEnd 等）。
             // 禁止再进 OnNowPlayingPlay / OnNowPlayingPause：
             // play → ResumeFromUserAction 会重入 unmute 爬坡（bump generation）→ 音量一顿一顿甚至卡死；
             // pause → RequestPauseAll 会把刚恢复的播放再掐掉。
-            // Unity 播放态由 MediaCommand / MusicPlaylist 对账；此处只收起暂停 tip。
+            // 播放态走 Resync（读 native paused + event），不重驱引擎。
             if (value == "1")
+            {
+                Debug.Log("[BoluoAudioFg] OnNativePlaybackStateChanged playing resync only");
                 MusicPauseUICallback.Hide();
+                GlobalPlaybackIntentCallback.NotifyMediaTrackChanged();
+            }
+            else
+            {
+                Debug.Log("[BoluoAudioFg] OnNativePlaybackStateChanged value=" + value + " resync only");
+            }
         }
 
         public void OnMediaSkipNext(string empty)
         {
             if (!sIsInitialized)
+            {
+                Debug.Log("[BoluoAudioFg] OnMediaSkipNext dropped not initialized");
                 return;
+            }
+            Debug.Log("[BoluoAudioFg] OnMediaSkipNext");
             NowPlayingSkipBridge.RequestNext();
         }
 
         public void OnMediaSkipPrev(string empty)
         {
             if (!sIsInitialized)
+            {
+                Debug.Log("[BoluoAudioFg] OnMediaSkipPrev dropped not initialized");
                 return;
+            }
+            Debug.Log("[BoluoAudioFg] OnMediaSkipPrev");
             NowPlayingSkipBridge.RequestPrev();
         }
     }

@@ -75,11 +75,6 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 兼容旧名：等同 <see cref="UserAllowCellularAlways"/>（会话开闸到回 Wi‑Fi）。
-        /// </summary>
-        public static void UserAllowCellularOnce() => UserAllowCellularAlways();
-
-        /// <summary>
         /// FeatureOff：蜂窝上自动开闸（零弹窗）。已开闸 / 非蜂窝 / FeatureOn 则 no-op。
         /// </summary>
         public static void EnsureFeatureOffCellularAutoAllow()

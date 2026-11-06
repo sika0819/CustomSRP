@@ -41,8 +41,7 @@ namespace CustomSRP
         }
 
         /// <summary>
-        /// Public entry point for external hit detection (e.g. raycasting from
-        /// OilRainGPUParticles when particle bounds intersect water colliders).
+        /// Public entry point for external hit detection (raycast against water).
         /// </summary>
         public void OnRainHit(Vector3 worldPos, Vector3 normal)
         {

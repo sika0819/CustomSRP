@@ -53,8 +53,11 @@ namespace Game
         const float WalkRenderScaleThreshold = 0.05f;
         const float InputSmooth = 10f;
         const float GroundStickSpeed = 2f;
-        /// <summary>桥/码头贴地用更弱 stick，避免 CC 每帧压进薄 Box 再弹起。</summary>
-        const float DeckGroundStickSpeed = 0.4f;
+        /// <summary>
+        /// 桥/码头贴地 stick。必须极弱：再大就会压进薄 Box，
+        /// 若同时有硬抬/眼高纠偏 → 上桥不停抖。
+        /// </summary>
+        const float DeckGroundStickSpeed = 0.05f;
         /// <summary>丢弃 CC 微修正，减轻薄板 / 石缝微抖。</summary>
         const float MinMoveDistance = 0.02f;
         /// <summary>禁海硬恢复与当前眼点过近则跳过，避免缝边闪烁。</summary>
@@ -147,7 +150,6 @@ namespace Game
         float _namedDeckGraceUntil;
 
         Vector2 _smoothedMove;
-        float _speedRatio;
         float _yaw;
         bool _downloadMoveLock;
         bool _retreatActive;
@@ -327,42 +329,62 @@ namespace Game
         /// 罩还盖着、摇杆还没放开时，按出生朝向左右各画几帧。
         /// 侧面物体的着色器变体，以及走路档那套中间 RT，都在这一段里第一次提交。
         /// 墙钟到顶就停，避免把「即将进入」拖成几十秒。调用时必须仍在 <see cref="HoldSpawnPose"/>。
+        /// <paramref name="sweepYaw"/> 为 false 时不左右扫（二次进岛 PSO 已热），
+        /// 只在出生朝向站稳几帧，避免揭幕吃到侧视倒影或转头残留。
         /// </summary>
-        public async UniTask WarmupEntryLookAsync(Func<bool> stale)
+        public async UniTask WarmupEntryLookAsync(Func<bool> stale, bool sweepYaw = true)
         {
             if (!_spawnHold)
                 return;
 
             float wallStart = Time.realtimeSinceStartup;
             int frames = 0;
-            Log.Info("[Hitch] EntryLookWarmup begin yaw=" + _yaw.ToString("F1"));
-            _entryLookWarmup = true;
-            _entryLookWalking = true;
+            Log.Info(
+                "[Hitch] EntryLookWarmup begin yaw="
+                + _yaw.ToString("F1")
+                + " sweep="
+                + (sweepYaw ? 1 : 0));
             try
             {
-                for (int i = 0; i < EntryLookYawOffsets.Length; i++)
+                if (sweepYaw)
                 {
-                    if (!_spawnHold || (stale != null && stale()))
-                        return;
-                    if (Time.realtimeSinceStartup - wallStart >= EntryLookWarmupCapSeconds)
-                        break;
-                    _entryLookYaw = _yaw + EntryLookYawOffsets[i];
-                    // LateUpdate 之前就摆好，原生实例的视锥和管线剔除看到的是同一朝向。
-                    SnapHeldYaw(_entryLookYaw);
-                    await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
-                    frames++;
+                    _entryLookWarmup = true;
+                    _entryLookWalking = true;
+                    for (int i = 0; i < EntryLookYawOffsets.Length; i++)
+                    {
+                        if (!_spawnHold || (stale != null && stale()))
+                            return;
+                        if (Time.realtimeSinceStartup - wallStart >= EntryLookWarmupCapSeconds)
+                            break;
+                        _entryLookYaw = _yaw + EntryLookYawOffsets[i];
+                        // LateUpdate 之前就摆好，原生实例的视锥和管线剔除看到的是同一朝向。
+                        SnapHeldYaw(_entryLookYaw);
+                        await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
+                        frames++;
+                    }
                 }
 
-                if (_spawnHold
-                    && (stale == null || !stale())
-                    && Time.realtimeSinceStartup - wallStart < EntryLookWarmupCapSeconds)
+                // 揭幕前必须站回出生朝向 + 站立分辨率，并等走路档 renderScale 宽限过去，
+                // 再强制重画一帧倒影；否则二次进岛音频很快结束时，淡出会吃到 ±90° 残留镜子。
+                if (_spawnHold && (stale == null || !stale()))
                 {
-                    // 最后一帧回到出生朝向和站立分辨率，淡出时看到的是站立画面。
+                    _entryLookWarmup = false;
                     _entryLookWalking = false;
+                    IslandLocomotionState.IsWalking = false;
                     _entryLookYaw = _yaw;
                     SnapHeldYaw(_yaw);
-                    await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
-                    frames++;
+                    ApplyRenderScale(false);
+                    for (int i = 0; i < 3; i++)
+                    {
+                        if (!_spawnHold || (stale != null && stale()))
+                            return;
+                        // 前两帧给 ApplyRenderScale 的 grace 用；第三帧清掉，按出生朝向重抓倒影。
+                        if (i >= 2)
+                            IslandLocomotionState.MirrorTurnGraceFrames = 0;
+                        SnapHeldYaw(_yaw);
+                        await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
+                        frames++;
+                    }
                 }
             }
             finally
@@ -374,11 +396,13 @@ namespace Game
                 {
                     SnapHeldYaw(_yaw);
                     ApplyRenderScale(false);
+                    IslandLocomotionState.MirrorTurnGraceFrames = 0;
                 }
                 Log.Info(
                     "[Hitch] EntryLookWarmup end wallMs="
                     + ((Time.realtimeSinceStartup - wallStart) * 1000f).ToString("F0")
-                    + " frames=" + frames);
+                    + " frames=" + frames
+                    + " sweep=" + (sweepYaw ? 1 : 0));
             }
         }
 
@@ -497,7 +521,6 @@ namespace Game
             _verticalSpeed = 0f;
             _heightTransitioning = false;
             _smoothedMove = Vector2.zero;
-            _speedRatio = 0f;
             LocomotionInput.ClearAll();
             _drive = EyeDrive.Locked;
             _lockedEye = worldEye;
@@ -838,21 +861,16 @@ namespace Game
                 return;
             }
 
-            // speedRatio defaults to 0 unless input arrived this frame.
-            _speedRatio = 0f;
+            // 摇杆长度是拖拽行程（0..1）。方向本身是单位向量。
             Vector2 want = Vector2.zero;
             if (LocomotionInput.Consume(out Vector2 dir, out float speed))
-            {
-                want = dir;
-                _speedRatio = Mathf.Clamp01(speed);
-            }
+                want = dir * Mathf.Clamp01(speed);
             _smoothedMove = Vector2.MoveTowards(_smoothedMove, want, InputSmooth * dt);
         }
 
         void HaltHorizontalMotion()
         {
             _smoothedMove = Vector2.zero;
-            _speedRatio = 0f;
             LocomotionInput.ClearAll();
         }
 
@@ -879,22 +897,18 @@ namespace Game
 
         void ApplyStickYaw(float dt)
         {
-            float mag = _smoothedMove.magnitude;
-            if (mag <= 1e-4f)
+            if (_smoothedMove.sqrMagnitude <= 1e-8f)
                 return;
-            float rate = Mathf.Max(_speedRatio, mag);
-            _yaw += _smoothedMove.x * StickYawSpeed * rate * dt;
+            _yaw += _smoothedMove.x * StickYawSpeed * dt;
         }
 
         Vector3 ComputeMotion(float dt)
         {
-            float mag = _smoothedMove.magnitude;
-            if (mag <= 1e-4f)
+            if (_smoothedMove.sqrMagnitude <= 1e-8f)
                 return Vector3.zero;
             ApplyStickYaw(dt);
-            float rate = Mathf.Max(_speedRatio, mag);
             Vector3 forward = Quaternion.Euler(0f, _yaw, 0f) * Vector3.forward;
-            return forward * (_smoothedMove.y * MoveSpeed * rate * dt);
+            return forward * (_smoothedMove.y * MoveSpeed * dt);
         }
 
         // ─── Height transition ────────────────────────────────────────────────────
@@ -1435,11 +1449,15 @@ namespace Game
         }
 
         /// <summary>
-        /// 站在命名甲板或 grace 内：减弱贴地、禁止禁海硬拽、把眼高钳回甲板顶。
+        /// 无 CharacterController 时（FreeCam）才拧甲板眼高。
+        /// 有 CC 时禁止改 Y：与 stick / 台阶硬抬互顶是「上桥不停抖」根因。
         /// </summary>
         void StabilizeNamedDeckEye()
         {
             if (_heightTransitioning)
+                return;
+            // 行走路径：Y 只交给 CharacterController。
+            if (_cc != null && _cc.enabled)
                 return;
 
             Vector3 eye = transform.position;
@@ -1459,13 +1477,7 @@ namespace Game
                 return;
 
             eye.y = targetEyeY;
-            bool ccOn = _cc != null && _cc.enabled;
-            if (ccOn)
-                _cc.enabled = false;
             transform.position = eye;
-            Physics.SyncTransforms();
-            if (ccOn)
-                _cc.enabled = true;
             if (_verticalSpeed < 0f)
                 _verticalSpeed = -DeckGroundStickSpeed;
         }
@@ -1555,8 +1567,8 @@ namespace Game
         }
 
         /// <summary>
-        /// 摇杆已经指向海水上的桥面，但胶囊被竖直面挡住：直接把脚放到桥面上。
-        /// 只处理高差在上台阶范围内的命名甲板。高桥底下的河床不会被吸上去。
+        /// 摇杆已指向海水上的桥面、台阶跨不过竖直面时：只抬 Y 助上一小步。
+        /// 不钳 XZ、不瞬移进 Box——桥头站着/路过不得被吸走。
         /// </summary>
         void TryClimbOceanDeck(Vector3 beforeEye, Vector3 plannedMotion)
         {
@@ -1565,6 +1577,7 @@ namespace Game
             if (!TryGetOceanSurfaceY(out float oceanY))
                 return;
 
+            float plannedHoriz = new Vector2(plannedMotion.x, plannedMotion.z).magnitude;
             Vector3 beforeFoot = beforeEye;
             beforeFoot.y = beforeEye.y - EyeHeight;
             Vector3 afterEye = transform.position;
@@ -1574,22 +1587,37 @@ namespace Game
             if (!TryDeckForClimb(beforeFoot, afterFoot, plannedMotion, out float deckY, out Collider deckCol))
                 return;
             Bounds box = deckCol.bounds;
-            if (!TargetsDeckBounds(beforeFoot, afterFoot, plannedMotion, box))
-                return;
-            if (!NamedDeckSpawnPolicy.ShouldLiftOntoOceanDeck(beforeFoot.y, deckY, oceanY, targetsDeck: true))
-                return;
 
             Vector3 intent = beforeFoot;
             intent.x += plannedMotion.x;
             intent.z += plannedMotion.z;
-            Vector3 stand = ContainsXZ(box, intent)
-                ? intent
-                : ContainsXZ(box, afterFoot) ? afterFoot : intent;
-            stand.x = Mathf.Clamp(stand.x, box.min.x, box.max.x);
-            stand.z = Mathf.Clamp(stand.z, box.min.z, box.max.z);
+            bool alreadyOn = ContainsXZ(box, beforeFoot) || ContainsXZ(box, afterFoot);
+            bool intentOn = ContainsXZ(box, intent);
+            float advanced = Vector2.Distance(
+                new Vector2(beforeEye.x, beforeEye.z),
+                new Vector2(afterEye.x, afterEye.z));
+            bool blockedToward = plannedHoriz > 1e-4f && advanced < plannedHoriz * 0.35f;
 
-            Vector3 eye = stand;
-            eye.y = deckY + EyeHeight + 0.02f;
+            // 脚已贴在甲板高度带：绝不再硬抬，否则与 stick 互顶不停抖。
+            if (beforeFoot.y >= deckY - NamedDeckSpawnPolicy.OceanDeckStandFootSlopMeters)
+                return;
+            if (!NamedDeckSpawnPolicy.ShouldAssistOceanDeckClimb(
+                    plannedHoriz, intentOn, alreadyOn, blockedToward))
+                return;
+            // 胶囊顶在桥沿时脚大约在 radius 外；仍远小于 3.5m 探针，避免岸上远距吸人。
+            float contactReach = Mathf.Max(
+                NamedDeckSpawnPolicy.OceanDeckStandEdgeMeters, BodyRadius * 1.25f);
+            if (!alreadyOn && DistanceToBoundsXZ(beforeFoot, box) > contactReach)
+                return;
+            if (!NamedDeckSpawnPolicy.ShouldLiftOntoOceanDeck(beforeFoot.y, deckY, oceanY, targetsDeck: true))
+                return;
+
+            // 只改高度；水平位置交给摇杆 + CharacterController。一帧助推一次。
+            Vector3 eye = afterEye;
+            float targetY = deckY + EyeHeight + 0.02f;
+            if (eye.y >= targetY - DeckYStabilizeDeadzone)
+                return;
+            eye.y = targetY;
             bool ccOn = _cc != null && _cc.enabled;
             if (ccOn)
                 _cc.enabled = false;
@@ -1598,8 +1626,8 @@ namespace Game
             if (ccOn)
                 _cc.enabled = true;
             if (_verticalSpeed < 0f)
-                _verticalSpeed = -GroundStickSpeed;
-            RememberNamedDeck(new Vector3(stand.x, deckY, stand.z), deckY);
+                _verticalSpeed = -DeckGroundStickSpeed;
+            RememberNamedDeck(new Vector3(eye.x, deckY, eye.z), deckY);
         }
 
         bool TryDeckForClimb(
@@ -1667,6 +1695,7 @@ namespace Game
 
         /// <summary>
         /// 脚确实站在高出水面的命名码头/桥上。礁石/地形最高点不算甲板。
+        /// 竖直用贴面容差（拒岸上 0.9m 落差）；水平放宽到 BodyRadius 盖桥段缝。
         /// </summary>
         bool IsStandingOnNamedDeck(
             Vector3 foot, bool hasDeck, float deckY, Collider deckCol, float minDeckY)
@@ -1675,7 +1704,17 @@ namespace Game
                 return false;
             if (deckY < minDeckY)
                 return false;
-            if (foot.y < deckY - DeckFootSlop)
+            if (!TryGetOceanSurfaceY(out float oceanY))
+                return false;
+            float edge = Mathf.Max(
+                NamedDeckSpawnPolicy.OceanDeckStandEdgeMeters, BodyRadius);
+            if (!NamedDeckSpawnPolicy.IsStandingNearOceanDeck(
+                    foot.y,
+                    deckY,
+                    oceanY,
+                    DistanceToBoundsXZ(foot, deckCol.bounds),
+                    edge,
+                    NamedDeckSpawnPolicy.OceanDeckStandFootSlopMeters))
                 return false;
             RememberNamedDeck(foot, deckY);
             return true;
@@ -1952,7 +1991,8 @@ namespace Game
 
         void ApplyRenderScale(bool walking)
         {
-            // 预设面板固定 0.375（含闺蜜机标准版）。其它弹窗 / 原生半层 / 闲置沉浸同档。
+            // 预设面板固定 0.375。4K 沉浸画满 1920 缓冲，弹窗再乘 0.5。
+            // 标准版站立画满缓冲，走路 0.75，弹窗 0.5，沉浸长边 1280。其余机弹窗与沉浸同档。
             // 定时窗只抬 BottomIconsHidden、不抬 OverlayPresent，保持场景正常分辨率。
             float scale = PresetForm.IsOpen
                 ? IslandCameraSrpSetup.PresetPanelRenderScale

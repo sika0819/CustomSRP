@@ -448,8 +448,28 @@ namespace Game
                 return;
             }
 
+            // 闲置时若 MarkLocalReady 只 bump epoch（无 OnBankLocalReady），
+            // 粘住的未下载/失败/转圈卡靠局部自愈翻到红点，不全表扫。
             if (!busy && !hasUser && !idsChanged)
+            {
+                if (epoch == _lastProgressEpoch)
+                    return;
+                _lastProgressEpoch = epoch;
+                for (int i = 0; i < _items.Count; i++)
+                {
+                    ItemBinding stuck = _items[i];
+                    if (!stuck.HasAppliedState)
+                        continue;
+                    if (stuck.AppliedState != BankUiState.NotDownloaded
+                        && stuck.AppliedState != BankUiState.Failed
+                        && stuck.AppliedState != BankUiState.Downloading)
+                        continue;
+                    ApplyItemState(i, force: true);
+                }
+
+                SyncPlayingAnimTick();
                 return;
+            }
 
             _lastProgressEpoch = epoch;
             _lastSeenCurrentId = currentId;
@@ -779,14 +799,14 @@ namespace Game
                 IslandMainForm.Current?.HealStalePresetTransitionLatch();
                 if (presets.IsTransitioning)
                 {
-                    ShowToast(BusyToastText);
+                    UiDialogService.ShowToast(BusyToastText, anchoredY: 0f);
                     return;
                 }
             }
 
             if (GameEntry.Weather != null && GameEntry.Weather.IsWeatherBusy)
             {
-                ShowToast(BusyToastText);
+                UiDialogService.ShowToast(BusyToastText, anchoredY: 0f);
                 return;
             }
 
@@ -811,7 +831,13 @@ namespace Game
                     TriggerPresetDownload(item);
                     break;
                 case BankUiState.Downloading:
-                    // Already downloading — keep priority warm, no MoveTo.
+                    // 同一预设已在下：只暖优先队列，避免 Start+abortOther 重入。
+                    if (PendingDownloadIntent.IsPresetMatch(item.PresetId))
+                    {
+                        BankDownloader.PriorityBanks(item.BankNames);
+                        break;
+                    }
+
                     TriggerPresetDownload(item);
                     break;
             }
@@ -835,11 +861,18 @@ namespace Game
                 return;
             }
 
+            // 区域进度窗硬占用：先判再钉意图，避免环闪一下。
+            if (UserBankDownloadFlow.ShouldRejectNewBatch(preemptBusyBatch: true))
+            {
+                UiDialogService.ShowToast(UserBankDownloadFlow.BusyToastText, anchoredY: 0f);
+                return;
+            }
+
             ItemBinding captured = item;
             int presetId = captured.PresetId;
             bool saveSuppressPushed = false;
 
-            // 点击当下钉死「下完进场」意图（仅 UserClick / 健康推荐可自动切；静默全量不得进场）。
+            // 点击当下钉死意图并翻进度环；软占用由 Flow 抢占。
             _userTriggered.Add(presetId);
             PendingDownloadIntent.SetPreset(
                 presetId,
@@ -865,7 +898,7 @@ namespace Game
                     if (saveSuppressPushed)
                         IslandPlayerPosSave.PopSaveSuppress();
                 },
-                onBanksDone: _ => OnPresetBanksDone(presetId),
+                onBanksDone: result => OnPresetBanksDone(presetId, result),
                 onDownloadStarting: () =>
                 {
                     // 意图已在点击时写入；这里只做保存抑制，避免同意链晚到覆盖已点的下一张。
@@ -874,19 +907,29 @@ namespace Game
                     RefreshAllStates(force: true);
                 },
                 prioritize: false,
-                preempt: true);
+                preempt: true,
+                // 未下载点击：打断其它 User，本卡优先出进度。
+                abortOtherUserDownloads: true,
+                preemptBusyBatch: true);
         }
 
-        void OnPresetBanksDone(int presetId) =>
-            OnPresetBanksDoneAsync(presetId).Forget();
+        void OnPresetBanksDone(int presetId, IReadOnlyList<BankDownloadItem> result) =>
+            OnPresetBanksDoneAsync(presetId, result).Forget();
 
-        async UniTaskVoid OnPresetBanksDoneAsync(int presetId)
+        async UniTaskVoid OnPresetBanksDoneAsync(
+            int presetId,
+            IReadOnlyList<BankDownloadItem> result)
         {
             // 注意：保存抑制的出栈由 DownloadBanksAsync 的 finally 统一负责，这里不要重复 Pop。
             IslandPresetAsset preset = GameEntry.Presets?.GetById(presetId);
             string[] banks = preset != null ? preset.BankNames : null;
 
-            // 多预设并下：本路 pending 可能先结束，同包其它 bank 仍在队列；
+            // 双保险：Flow 已 MarkResultLocalReady；这里再钉 result 就绪项，
+            // 避免 Entries.Remove 后探针窗导致同步段 AreBanksLocallyReady=false。
+            // 勿对本卡未齐 bank 盲 Mark——会把仍在静默队列的包假成已下载。
+            MarkReadyBanksFromResult(result);
+
+            // 本路 pending 可能先结束，同包其它 bank 仍在后台队列；
             // 等本卡 banks 齐或队列空闲，勿过早清 _userTriggered 导致图标闪回未下载。
             bool allLocal = AreBanksLocallyReady(banks);
             if (!allLocal)
@@ -902,6 +945,7 @@ namespace Game
                     return;
                 }
 
+                // 确认不齐且空闲：才清意图并刷失败/未下载。
                 _userTriggered.Remove(presetId);
                 if (PendingDownloadIntent.IsPresetMatch(presetId))
                     PendingDownloadIntent.Clear();
@@ -910,9 +954,12 @@ namespace Game
                 return;
             }
 
-            _userTriggered.Remove(presetId);
+            // 本卡齐了：正向缓存 + 先 force 翻红点/Ready，再清 _userTriggered。
             if (banks != null && banks.Length > 0)
                 BankDownloader.MarkLocalReady(banks);
+            if (Root != null)
+                RefreshAllStates(force: true);
+            _userTriggered.Remove(presetId);
 
             // 仅用户点卡 / 健康智慧推荐才自动进场；静默 KickSilentAll 落盘不得切预设。
             if (!PendingDownloadIntent.ShouldAutoEnterPreset(presetId))
@@ -1018,6 +1065,25 @@ namespace Game
                     return false;
             }
             return true;
+        }
+
+        static void MarkReadyBanksFromResult(IReadOnlyList<BankDownloadItem> result)
+        {
+            if (result == null || result.Count == 0)
+                return;
+            for (int i = 0; i < result.Count; i++)
+            {
+                BankDownloadItem item = result[i];
+                if (item == null || string.IsNullOrEmpty(item.BankName))
+                    continue;
+                if (item.State == BankDownloadState.Ready
+                    || (item.State == BankDownloadState.Skipped
+                        && !string.Equals(
+                            item.Error,
+                            BankDownloadItem.UrlEmptyError,
+                            StringComparison.Ordinal)))
+                    BankDownloader.MarkLocalReady(item.BankName);
+            }
         }
 
         // -----------------------------------------------------------------------
@@ -1417,6 +1483,10 @@ namespace Game
 
         void TickPlayingBars()
         {
+            // 后台直接返回，不 Pause schedule。停掉之后要等下一次 Playing 才会再挂上。
+            if (!BackgroundVectorUi.ShouldAnimateVectorUi(AudioAppLifecycle.IsInBackground))
+                return;
+
             if (!_anyPlaying || _items.Count == 0 || PlayingCycleDuration <= 0f)
                 return;
 
@@ -1443,11 +1513,6 @@ namespace Game
                 _playingAnimTick?.Pause();
                 _playingAnimTick = null;
             }
-        }
-
-        void ShowToast(string message)
-        {
-            UiTipToast.ShowMessage(message ?? BusyToastText, anchoredY: 0f);
         }
 
         static void MarkHeard(string displayName)

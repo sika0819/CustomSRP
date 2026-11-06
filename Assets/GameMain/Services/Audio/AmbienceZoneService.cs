@@ -615,6 +615,13 @@ namespace Game
             if (!_proximityBankKick.Add(bank))
                 return;
 
+            // 用户批占用中：静默放弃本次邻近 Kick（不 Toast，避免走路刷屏）。
+            if (UserBankDownloadFlow.IsBusy)
+            {
+                _proximityBankKick.Remove(bank);
+                return;
+            }
+
             Log.Info($"[AmbienceZone] proximity prioritize download+load bank={bank}");
             string kickBank = bank;
             UserBankDownloadFlow.Start(
@@ -628,7 +635,9 @@ namespace Game
                 },
                 prioritize: true,
                 preempt: true,
-                loadIntoEngine: true);
+                loadIntoEngine: true,
+                // 邻近自动 Kick 不占用户批：勿挡音乐/预设「未下载」点击优先插队。
+                occupyUserBusy: false);
         }
 
         bool IsForceEvalWindowActive()

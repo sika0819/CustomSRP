@@ -8,7 +8,7 @@ namespace CustomSRP
     /// the wet-surface shader globals once per frame.
     ///
     /// Use this on a scene rain manager GameObject next to
-    /// OilRainGPUParticles. Reads OilRainSettings on the same object.
+    /// OilRainStreakQuad. Reads OilRainSettings on the same object.
     /// </summary>
     public class OilRainRenderHook : MonoBehaviour
     {

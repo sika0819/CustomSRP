@@ -19,7 +19,7 @@ namespace Game
 
         protected override bool CloseWhenAnyButtonClicked => false;
         // 尺寸必须写在模板实例上。再套一层盒子时，中间的 TemplateContainer 没有尺寸，绝对定位的卡片会塌成 0，白底 panel 消失。
-        // 入场仍整页上滑，不改卡片层级。
+        // 蒙层原地出现；卡片仍上滑（GameFormLogic 滑 stage）。
         protected override bool SlidesUpFromBottom => true;
         protected override bool CloseOnBackdropClick => true;
         protected override bool PinDocumentOrder => true;

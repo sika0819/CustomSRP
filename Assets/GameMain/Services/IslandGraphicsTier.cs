@@ -62,34 +62,25 @@ namespace Game
         }
 
         /// <summary>
-        /// 后处理分档（可与 <see cref="GpuTier"/> 不同）：
-        /// 闺蜜机标准版全关；4K 按中档；其它跟 GpuTier。
+        /// 后处理总闸（Bloom / 调色等）。全档开（含低端 / 中端 / 闺蜜机）；
+        /// 湿油另走 <see cref="AllowsOilFilter"/>。
         /// </summary>
-        static Tier PostFxTier
-        {
-            get
-            {
-                if (BoluoDeviceInfo.IsSkyworthGmjStandard())
-                    return Tier.Low;
-                if (BoluoDeviceInfo.IsSkyworthGmj4K())
-                    return Tier.Mid;
-                return GpuTier;
-            }
-        }
+        public static bool AllowsPostFx => true;
+
+        /// <summary>Bloom：全档开（含低端 / 中端 / 闺蜜机）。</summary>
+        public static bool AllowsBloom => true;
+
+        /// <summary>Color Adjustments（对比度/饱和度等）：全档开。</summary>
+        public static bool AllowsColorGrading => true;
 
         /// <summary>
-        /// 后处理总闸（Bloom / 调色等）。低档关；湿油另走 <see cref="AllowsOilFilter"/>。
+        /// White Balance：中档 / 低档 / 闺蜜机（标准版压中档、4K 低档）开；
+        /// 高档手机关（即使资产 enabled 也不生效）。
         /// </summary>
-        public static bool AllowsPostFx => PostFxTier != Tier.Low;
+        public static bool AllowsWhiteBalance => GpuTier != Tier.High;
 
-        /// <summary>Bloom：仅高档。</summary>
-        public static bool AllowsBloom => PostFxTier == Tier.High;
-
-        /// <summary>Color Adjustments + White Balance：中档及以上。</summary>
-        public static bool AllowsColorGrading => PostFxTier >= Tier.Mid;
-
-        /// <summary>Split Toning：仅高档。</summary>
-        public static bool AllowsSplitToning => PostFxTier == Tier.High;
+        /// <summary>Split Toning：全档开。</summary>
+        public static bool AllowsSplitToning => true;
 
         /// <summary>边缘湿油：全机型开；强度由 PostFXSettings.OilFilter.strength 压弱。</summary>
         public static bool AllowsOilFilter => true;

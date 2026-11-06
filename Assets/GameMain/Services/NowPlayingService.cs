@@ -18,29 +18,58 @@ namespace Game
 
         static bool _handlersBound;
         static bool _armed;
-        static bool _userManuallyPaused;
-        /// <summary>
-        /// 定时到点停播闩：弹窗「取消/重复」前禁止回前台 / 点场景自动续播。
-        /// 否则 <see cref="AudioAppLifecycle.RestoreForegroundAudio"/> 会清 userPaused 并
-        /// Resume_ALL，音乐常续不上、声景却被拉起来。
-        /// </summary>
-        static bool _pausedForTimerEnd;
-        static float _pendingPlayPauseAt = -1f;
-        static bool _pendingWantMute;
-        static bool _skipCancelPending;
 
-        public static bool UserManuallyPaused => _userManuallyPaused;
-        public static bool PausedForTimerEnd => _pausedForTimerEnd;
+        /// <summary>
+        /// 负一屏 / IMP 播放、暂停、切歌的唯一防呆会话。
+        /// 曲目下标仍由 <see cref="MusicPlaylist"/> 推进；这里只决定忽略、合并和到点丢播放。
+        /// </summary>
+        static readonly BoluoNowPlayingRemoteSession Commands =
+            new BoluoNowPlayingRemoteSession(64, isPlaying: false, userManuallyPaused: false);
+
+        public static bool UserManuallyPaused =>
+            PlaybackGate.Silence == SilenceReason.UserPause
+            || PlaybackGate.Silence == SilenceReason.TimerEnd;
+
+        /// <summary>定时到点。回前台和滑动都不续，只有弹窗。</summary>
+        public static bool PausedForTimerEnd =>
+            PlaybackGate.Silence == SilenceReason.TimerEnd;
+
         public static bool IsArmed => _armed;
 
-        public static void NoteUserPaused(bool paused) => _userManuallyPaused = paused;
+        public static void NoteUserPaused(bool paused)
+        {
+            PlaybackGate.NoteUserPaused(paused, paused ? "note-user-paused" : "note-user-resumed");
+            Commands.AdoptPlayback(PlaybackGate.CardShouldShowPlaying, UserManuallyPaused);
+        }
 
-        /// <summary>定时到点 / 弹窗续播：抬或清到点停播闩（抬时同步 userPaused）。</summary>
+        /// <summary>Resync 写完 <see cref="PlaybackGate.Silence"/> 后，把远程会话对齐过去。</summary>
+        public static void MirrorSilenceLatch()
+        {
+            if (PausedForTimerEnd)
+            {
+                Commands.NotePausedForTimerEnd(true);
+                BoluoAndroidEngineNative.NotePausedForTimerEnd(true);
+            }
+            else
+                Commands.AdoptPlayback(PlaybackGate.CardShouldShowPlaying, UserManuallyPaused);
+        }
+
+        /// <summary>定时到点 / 弹窗续播：抬或清到点停播闩，并丢掉尚未落地的播放。</summary>
         public static void NotePausedForTimerEnd(bool paused)
         {
-            _pausedForTimerEnd = paused;
             if (paused)
-                _userManuallyPaused = true;
+            {
+                PlaybackGate.SetSilence(SilenceReason.TimerEnd, "timer-end");
+                Commands.NotePausedForTimerEnd(true);
+                BoluoAndroidEngineNative.NotePausedForTimerEnd(true);
+            }
+            else if (PlaybackGate.Silence == SilenceReason.TimerEnd)
+            {
+                Commands.NotePausedForTimerEnd(false);
+                BoluoAndroidEngineNative.NotePausedForTimerEnd(false);
+                PlaybackGate.SetSilence(SilenceReason.None, "timer-end-clear");
+                Commands.AdoptPlayback(PlaybackGate.CardShouldShowPlaying, false);
+            }
         }
 
         /// <summary>
@@ -70,11 +99,15 @@ namespace Game
             GlobalPlaybackIntentCallback.SetMediaTrackChangedHandler(OnMediaTrackChanged);
             GlobalPlaybackIntentCallback.SetSystemAudioInterruptedHandler(OnSystemAudioInterrupted);
             GlobalPlaybackIntentCallback.SetSystemAudioRestoredHandler(OnSystemAudioRestored);
+            GlobalPlaybackIntentCallback.SetSystemDialogCoverHandler(AudioAppLifecycle.NoteSystemDialogCover);
             NowPlayingSkipBridge.SetHandlers(OnSkipNext, OnSkipPrev);
 
+            // tip/toast 同一全局气泡；按 TipKind 粘滞/瞬态；到点不弹（KeepMute 侧拦截）。
             MusicPauseUICallback.SetCallbacks(
-                () => { /* IslandMainForm polls Music.IsPlaying */ },
-                () => { });
+                () => UiDialogService.ShowAudioPauseTip(MusicPauseUICallback.TipKind.ProgrammaticPause),
+                UiDialogService.DismissToast);
+            MusicPauseUICallback.SetShowWithKindCallback(UiDialogService.ShowAudioPauseTip);
+            MusicPauseUICallback.SetBlankAreaGestureCallback(AudioAppLifecycle.OnSceneInteraction);
 
             if (GameEntry.Event != null)
                 GameEntry.Event.Subscribe(IslandWorldReadyEventArgs.EventId, OnWorldReady);
@@ -91,19 +124,20 @@ namespace Game
             NowPlayingSkipBridge.Clear();
             BackgroundPlayPolicyCallback.ClearCallback();
             _handlersBound = false;
-            _pendingPlayPauseAt = -1f;
+            Commands.CancelPendingPlayPause();
+            Commands.NoteSkipSettled();
         }
 
         static void OnSkipNext()
         {
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
-            AcceptSkip(() => music?.Next());
+            AcceptSkip(+1, () => music?.SkipAdjacentInAlbum(+1));
         }
 
         static void OnSkipPrev()
         {
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
-            AcceptSkip(() => music?.Prev());
+            AcceptSkip(-1, () => music?.SkipAdjacentInAlbum(-1));
         }
 
         public static void SetBackgroundPlayDisable(bool disable)
@@ -137,8 +171,7 @@ namespace Game
         {
             bool firstArm = !_armed;
             _armed = true;
-            _userManuallyPaused = false;
-            _pausedForTimerEnd = false;
+            Commands.AdoptPlayback(false, false);
 
             // 每次 Arm 都确保平台门面 + 开闸：冷启动 Cleanup 会关 sPlaybackActive；
             // 若只在 !_armed 时 Init，已 Arm 但未 Init 会永久吞掉负一屏推送。
@@ -200,8 +233,11 @@ namespace Game
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
             music?.Stop(publish: false);
             music?.DisarmAfterLeave();
-            _userManuallyPaused = false;
-            _pausedForTimerEnd = false;
+            Commands.CancelPendingPlayPause();
+            Commands.NoteSkipSettled();
+            Commands.NotePausedForTimerEnd(false);
+            BoluoAndroidEngineNative.NotePausedForTimerEnd(false);
+            PlaybackGate.NoteStopped("leave-island");
             // 先 Disarm，堵住拆除窗口里 PublishFromPlaylist 再推非空 title。
             _armed = false;
 
@@ -218,10 +254,10 @@ namespace Game
         }
 
         /// <summary>
-        /// 首播 / 切歌成功同一帧强制刷「播放中」卡片。
-        /// 必须已 <see cref="ArmSession"/>：禁止在 <c>CleanupAfterLeaveIsland</c> 后自动重 Arm，
-        /// 否则 LoadScene(Login) 主线程拥堵窗口会 <c>setPlaybackActive(true)</c> + 拉 FGS →
-        /// ForegroundServiceDidNotStartInTimeException（退登杀进程）。
+        /// 首播 / 切歌成功：请求 Gate=Playing 并刷卡。
+        /// 必须已 <see cref="ArmSession"/>：禁止在 <c>CleanupAfterLeaveIsland</c> 后自动重 Arm。
+        /// 不在此清静音原因；真正续播由 <see cref="AudioAppLifecycle.ResumePaired"/> 清闩。
+        /// 若仍处用户暂停 / 到点闩，只推 meta，playing 位仍跟 Gate。
         /// </summary>
         public static void PublishPlayingForced()
         {
@@ -231,12 +267,20 @@ namespace Game
                 return;
             }
 
-            // 已 Arm：补 Init / 开闸（冷启动 Cleanup 可能关过 sPlaybackActive）。
             EnsurePlatformSession();
-            _userManuallyPaused = false;
-            PublishFromPlaylist(forcePlaying: true);
-            Log.Info("[NowPlaying] PublishPlayingForced");
+            if (!UserManuallyPaused
+                && PlaybackGate.State != PlaybackGateState.UserPaused
+                && PlaybackGate.State != PlaybackGateState.SystemSuspended)
+            {
+                PlaybackGate.NotePlaying("publish-forced");
+            }
+
+            PublishFromGate();
+            Log.Info($"[NowPlaying] PublishPlayingForced gate={PlaybackGate.State}");
         }
+
+        /// <summary>按当前 playlist meta + <see cref="PlaybackGate"/> 写卡（playing 只派生自 Gate）。</summary>
+        public static void PublishFromGate() => PublishFromPlaylist(forcePlaying: false);
 
         public static void PublishFromPlaylist(bool forcePlaying = false)
         {
@@ -252,7 +296,21 @@ namespace Game
             var track = MusicCatalog.GetTrack(music.CurrentAlbumIndex, music.CurrentTrackIndex);
             string title = track?.MusicName ?? "";
             string album = MusicCatalog.GetAlbum(music.CurrentAlbumIndex)?.Name ?? "";
-            bool playing = forcePlaying || (music.IsPlaying && !_userManuallyPaused);
+            // forcePlaying 仅用于 Gate 尚未 NotePlaying 的首帧兜底；有暂停/挂起闩时仍跟 Gate。
+            if (forcePlaying
+                && !UserManuallyPaused
+                && PlaybackGate.State != PlaybackGateState.UserPaused
+                && PlaybackGate.State != PlaybackGateState.SystemSuspended)
+            {
+                PlaybackGate.NotePlaying("publish-force-legacy");
+            }
+
+            bool playing = PlaybackGate.CardShouldShowPlaying;
+            // 负一屏点了播放、Post 还没落地：卡片先显示播放。更新的暂停会清掉 HardReplayPending。
+            if (!playing
+                && music.HardReplayPending
+                && !PausedForTimerEnd)
+                playing = true;
             if (string.IsNullOrEmpty(title))
             {
                 // 未 Arm：直接跳过，禁止 Publish("",…) → ClearCard。
@@ -326,63 +384,91 @@ namespace Game
 
         static void OnIntentPauseAll()
         {
-            _userManuallyPaused = true;
-            var music = GameEntry.Music ?? MusicPlaylist.Instance;
-            music?.Pause();
-            PublishFromPlaylist();
+            if (PlaybackGate.Silence != SilenceReason.TimerEnd)
+                NoteUserPaused(true);
+            AudioAppLifecycle.StopPaired("intent-pause", blockAutoResume: true);
+            PublishFromGate();
         }
 
         static void OnIntentResumeAll()
         {
-            _userManuallyPaused = false;
+            if (PausedForTimerEnd)
+                return;
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
-            music?.Resume();
-            PublishFromPlaylist();
-        }
+            if (PlaybackGate.Silence == SilenceReason.None
+                && music != null
+                && music.IsPlaying)
+                return;
 
-        /// <summary>
-        /// 其它播放器抢焦点：音乐已由原生 Pause_Music/mute 停掉，这里补音效。
-        /// 不抬 <see cref="_userManuallyPaused"/>，回前台走打断恢复而非「用户暂停」。
-        /// </summary>
-        static void OnSystemAudioInterrupted()
-        {
-            // 会话可能还没 Start：HoldYield 先记下，避免之后 Post 的声景漏掉这次暂停。
-            IslandAudioSession.HoldYield("system-audio-interrupted");
-            Log.Info("[NowPlaying] system audio interrupted — content paused with music");
-        }
-
-        /// <summary>
-        /// 原生短暂打断结束并自动续播：清 yield + 恢复内容声（前后台均可）。
-        /// 定时结束弹窗未关时禁止拉回声景（与回前台 keep mute 同口径）。
-        /// </summary>
-        static void OnSystemAudioRestored()
-        {
-            if (_pausedForTimerEnd)
+            if (!AudioAppLifecycle.ResumePaired("intent-resume"))
             {
-                Log.Info("[NowPlaying] system audio restored skipped — timer end mute");
+                if (PlaybackGate.Silence != SilenceReason.TimerEnd)
+                    NoteUserPaused(true);
+                PublishFromGate();
+                UiDialogService.ShowAudioPauseTip(MusicPauseUICallback.TipKind.ProgrammaticPause);
                 return;
             }
 
-            WanosEngine.ClearInterrupted("system-audio-restored");
-            MusicPauseUICallback.Hide();
-            IslandAudioSession.Instance?.RestoreContentAudio("system-audio-restored");
-            IslandAudioSession.ClearYieldHold();
-            IslandAudioSession.NoteAudibleCommitted();
-            Log.Info("[NowPlaying] system audio restored — content with music");
+            PublishFromGate();
         }
 
+        /// <summary>
+        /// 其它播放器抢焦点：音乐和音效一起停。不写成用户暂停，回前台能自动续。
+        /// </summary>
+        static void OnSystemAudioInterrupted()
+        {
+            PlaybackGate.NoteSystemSuspended("system-audio-interrupted");
+            IslandAudioSession.HoldYield("system-audio-interrupted");
+            AudioAppLifecycle.StopPaired("system-audio-interrupted", blockAutoResume: false);
+            PublishFromGate();
+            Log.Info("[NowPlaying] system audio interrupted — gate=SystemSuspended");
+        }
+
+        /// <summary>
+        /// 原生短暂打断结束：原生已 Resume+unmute，Unity 只对账闩/Gate/内容声。
+        /// 禁止再走全量 TryPairedAutoRestore（会与 unmute 爬坡叠峰 → 卡顿）。
+        /// 定时结束弹窗未关时禁止拉回（与回前台 keep mute 同口径）。
+        /// </summary>
+        static void OnSystemAudioRestored()
+        {
+            if (PausedForTimerEnd || PlaybackGate.State == PlaybackGateState.UserPaused)
+            {
+                Log.Info("[NowPlaying] system audio restored skipped — user/timer mute");
+                return;
+            }
+
+            if (!AudioAppLifecycle.SyncAfterNativeFocusResume("system-audio-restored"))
+            {
+                UiDialogService.ShowAudioPauseTip(MusicPauseUICallback.TipKind.CompetingLong);
+                PublishFromGate();
+                Log.Info("[NowPlaying] system audio restored failed — tip armed");
+                return;
+            }
+
+            Log.Info("[NowPlaying] system audio restored — sync ok");
+        }
+
+        /// <summary>
+        /// 原生已改曲（后台负一屏 skip）：对账索引 + Gate。
+        /// 禁止挂在 Unity 自有 Next/Prev 后面——那时原生仍是旧曲，Resync 会盖回。
+        /// </summary>
         static void OnMediaTrackChanged()
         {
-            _userManuallyPaused = false;
-            _skipCancelPending = true;
-            _pendingPlayPauseAt = -1f;
-            // 原生在后台切过歌时也会走这里（Unity 恢复后补投递的消息）：
-            // 先对账把当前曲同步过来，再发卡片，避免把旧曲名写回负一屏。
+            Commands.CancelPendingPlayPause();
             BackgroundTransportSync.ResyncFromNative();
-            PublishFromPlaylist();
+            if (!PausedForTimerEnd
+                && !UserManuallyPaused
+                && PlaybackGate.State != PlaybackGateState.UserPaused
+                && PlaybackGate.State != PlaybackGateState.SystemSuspended
+                && PlaybackGate.State != PlaybackGateState.Stopped)
+            {
+                PlaybackGate.NotePlaying("native-track-changed");
+            }
+
+            PublishFromGate();
         }
 
-        /// <summary>IMP 104 / 合并后的远程控播。</summary>
+        /// <summary>IMP 104 / 合并后的远程控播。播放和暂停都进同一会话。</summary>
         public static void HandleMediaCommand(int cmd)
         {
             if (!_armed)
@@ -398,95 +484,111 @@ namespace Game
                     SchedulePlayPause(wantMute: true);
                     break;
                 case MsgType.MediaPlay:
-                    // 定时结束弹窗「取消/重复」：立刻 ResumeAfterTimerEnd（音乐+音效闸+EnsureAudible），
-                    // 跳过 coalesce/skip，与原生 resumeFromUserAction 双保险。
-                    _pausedForTimerEnd = false;
-                    _userManuallyPaused = false;
-                    _pendingPlayPauseAt = -1f;
-                    _skipCancelPending = false;
-                    music.ResumeAfterTimerEnd("media-play");
-                    PublishFromPlaylist();
+                    SchedulePlayPause(wantMute: false);
                     break;
                 case MsgType.MediaNext:
-                    AcceptSkip(() => music.Next());
+                    AcceptSkip(+1, () => music.SkipAdjacentInAlbum(+1));
                     break;
                 case MsgType.MediaPrev:
-                    AcceptSkip(() => music.Prev());
+                    AcceptSkip(-1, () => music.SkipAdjacentInAlbum(-1));
                     break;
             }
         }
 
-        static void AcceptSkip(System.Action skip)
+        /// <summary>
+        /// Unity 前台切歌（负一屏转发 / IMP MediaNext·Prev）。
+        /// 防呆在 <see cref="BoluoNowPlayingRemoteSession"/>。定时到点不因切歌清闩。
+        /// </summary>
+        static void AcceptSkip(int direction, System.Action skip)
         {
-            if (BoluoNowPlayingRemoteCommandPolicy.ShouldCancelPendingPlayPauseOnSkip())
+            long nowMs = NowMs();
+            bool accepted = direction < 0
+                ? Commands.PressPrev(nowMs)
+                : Commands.PressNext(nowMs);
+            if (!accepted)
             {
-                _skipCancelPending = true;
-                _pendingPlayPauseAt = -1f;
+                Log.Info(
+                    $"[NowPlaying] skip ignored dir={direction} inFlight={Commands.SkipInFlight}");
+                return;
             }
+
+            if (!PausedForTimerEnd)
+            {
+                if (PlaybackGate.Silence == SilenceReason.UserPause)
+                    PlaybackGate.SetSilence(SilenceReason.None, "media-skip");
+                PlaybackGate.NotePlaying("media-skip");
+                Commands.AdoptPlayback(true, false);
+#if UNITY_ANDROID && !UNITY_EDITOR
+                BoluoAndroidEngineNative.MarkUserPausedFromUnity(false);
+#endif
+            }
+
             skip?.Invoke();
-            GlobalPlaybackIntentCallback.NotifyMediaTrackChanged();
+            if (BoluoNowPlayingRemoteCommandPolicy.ShouldResyncAfterUnityOwnedSkip())
+                GlobalPlaybackIntentCallback.NotifyMediaTrackChanged();
+            else
+                PublishFromGate();
         }
+
+        /// <summary>引擎 Playing / 超时：放开下一笔远程 skip，并同步原生 inFlight。</summary>
+        public static void NoteSkipSettled()
+        {
+            if (!Commands.SkipInFlight)
+                return;
+            Commands.NoteSkipSettled();
+#if UNITY_ANDROID && !UNITY_EDITOR
+            BoluoAndroidEngineNative.NoteSkipSettled();
+#elif UNITY_IOS && !UNITY_EDITOR
+            BoluoMusicPlayerIOS.NoteSkipSettled();
+#endif
+        }
+
+        static long NowMs() => (long)(Time.realtimeSinceStartupAsDouble * 1000.0);
 
         static void SchedulePlayPause(bool wantMute)
         {
-            _pendingWantMute = wantMute;
-            _skipCancelPending = false;
-            if (BoluoNowPlayingRemoteCommandPolicy.ShouldCoalescePlayPause())
-            {
-                _pendingPlayPauseAt = Time.realtimeSinceStartup
-                    + BoluoNowPlayingRemoteCommandPolicy.PlayPauseCoalesceMs / 1000f;
-            }
-            else
-            {
-                FlushPlayPause(wantMute);
-            }
+            var music = GameEntry.Music ?? MusicPlaylist.Instance;
+            Commands.SeedAndPress(
+                music != null && music.IsPlaying,
+                UserManuallyPaused,
+                wantMute,
+                NowMs());
         }
 
         /// <summary>由 BoluoNativeBridge 或 MusicPlaylist.Tick 泵送。</summary>
         public static void Tick()
         {
-            if (_pendingPlayPauseAt < 0f)
-                return;
-            if (Time.realtimeSinceStartup < _pendingPlayPauseAt)
-                return;
-            if (_skipCancelPending)
-            {
-                _pendingPlayPauseAt = -1f;
-                _skipCancelPending = false;
-                return;
-            }
-            bool want = _pendingWantMute;
-            _pendingPlayPauseAt = -1f;
-            FlushPlayPause(want);
-        }
+            bool skipWasInFlight = Commands.SkipInFlight;
+            int pauses = Commands.EnginePauseCount;
+            int resumes = Commands.EngineResumeCount;
+            Commands.Tick(NowMs());
+            if (skipWasInFlight && !Commands.SkipInFlight)
+                NotifyNativeSkipSettled();
 
-        static void FlushPlayPause(bool wantMute)
-        {
-            var music = GameEntry.Music ?? MusicPlaylist.Instance;
-            bool isPlaying = music != null && music.IsPlaying;
-            bool already = BoluoNowPlayingRemoteCommandPolicy.ShouldSkipFlushBecauseAlreadyConsistent(
-                wantMute, !isPlaying, _userManuallyPaused);
-            if (already)
-            {
-                PublishFromPlaylist();
-                return;
-            }
-
-            if (wantMute)
+            if (Commands.EnginePauseCount != pauses)
                 GlobalPlaybackIntentCallback.RequestPauseAll();
-            else
+            else if (Commands.EngineResumeCount != resumes)
                 GlobalPlaybackIntentCallback.RequestResumeAll();
         }
 
+        static void NotifyNativeSkipSettled()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            BoluoAndroidEngineNative.NoteSkipSettled();
+#elif UNITY_IOS && !UNITY_EDITOR
+            BoluoMusicPlayerIOS.NoteSkipSettled();
+#endif
+        }
+
         /// <summary>
-        /// 插件侧 OnNowPlayingPlay：ui 只刷卡；remote 走 Resume。
+        /// 插件侧 OnNowPlayingPlay：ui 只刷卡；remote 进会话合并。
+        /// Java 已经合并过的前台意图走 <see cref="OnIntentResumeAll"/>，不要再进这里。
         /// </summary>
         public static void OnRemotePlay(string reason)
         {
-            if (string.Equals(reason, "ui", System.StringComparison.Ordinal))
+            if (!BoluoNowPlayingRemoteCommandPolicy.ShouldDriveEngineResumeFromNowPlayingPlay(reason))
             {
-                _userManuallyPaused = false;
-                PublishFromPlaylist();
+                PublishFromGate();
                 return;
             }
             SchedulePlayPause(wantMute: false);

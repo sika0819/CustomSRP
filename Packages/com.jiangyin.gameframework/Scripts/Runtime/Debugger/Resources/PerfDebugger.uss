@@ -10,7 +10,8 @@
 .perf-icon {
     position: absolute;
     right: 12px;
-    top: 12px;
+    /* Fallback before FitPanel; runtime places under island HUD timer icon. */
+    top: 200px;
     min-width: 120px;
     min-height: 52px;
     padding: 8px 12px;

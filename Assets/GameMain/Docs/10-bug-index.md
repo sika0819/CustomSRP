@@ -14,8 +14,15 @@
 | 完全没声音 | 音量 RTPC 没推 / 量纲错 / 名字写成 `SFX_Volume` / Android AudioFocus | [05](05-audio.md) |
 | 音量条能拖但引擎不变 | 推的不是 `Music_Volume` / `Fx_Volume`，或没走 `SetVolumeParameter` | [05](05-audio.md) |
 | 后台负一屏切歌没反应 | 传输计划未推 / bank 未就绪 / `valid=false` | [05](05-audio.md#后台传输计划android-负一屏) |
+| 负一屏切歌岛内曲名/播放态不动 | TrackChanged 发错对象 / 前台 Skip 后 Resync 盖回 / Adopt 无通知 | [05](05-audio.md#后台传输计划android-负一屏) |
 | 回前台曲名错 / Next 跳旧曲 | 没 `ResyncFromNative` 对账原生切过的曲 | [05](05-audio.md#后台传输计划android-负一屏) |
 | 回前台听不到 / 音量变默认 | 没走 `WanosEngine.RestoreForeground`（解 mute + 重推 RTPC） | [05](05-audio.md) |
+| 负一屏暂停后滑动不续播 | 点场景曾软 Resume；或推播放卡误清 userPaused 闩 | [05](05-audio.md)（`CommitPairedHardResume` / `_pendingUserResume`） |
+| 切 QQ 后负一屏仍显示播放中 | 抢焦只 mute 不写卡；卡片公式无 SystemSuspended | [05](05-audio.md)（`PlaybackGate` / 原生 `systemSuspended`） |
+| 其它音频占用后回前台音乐/音效卡顿 | 原生已 Resume+unmute，Unity 又 `TryPairedAutoRestore` + `OnNowPlayingPlay(ui)`→`ResumeFromUserAction` 叠爬坡 | [05](05-audio.md)（`SyncAfterNativeFocusResume` / Policy `ui` 不驱引擎） |
+| 冷启动后上滑任务栏误暂停 | 启动 AllowUnmute / !AudibleCommitted 当后台 yield；`yieldStartupPlaceholderCard` 停 FGS | [05](05-audio.md)（`LifecycleKind` / BackgroundYieldGate） |
+| 上滑任务栏声停、负一屏仍 PLAYING | teardown 陈旧 shouldStop/userPaused → `unity_pause_preview` 静音不写卡 | [05](05-audio.md)（`clearLogoutStopLatch` / `BoluoKeepPlayingPolicy`） |
+| 负一屏与岛内播放态不一致 | 多写者 `PublishPlayingForced` / `IsPlaying` 与 Gate 脱节 | [05](05-audio.md)（`PublishFromGate`） |
 | BGM 播了但环境音没了 | 预设切换 `ClearContent3D()`，或音频交互没启动 | [04](04-services.md) [05](05-audio.md) |
 | 进岛没 HUD | `EnsureUiGroups` / `IslandMainForm` 加载超时（10s） | [06](06-ui.md) [01](01-boot-procedure.md) |
 | 天气改了画面不变 | SRP driver 缓存 / `IAtmosphereVisualDriver` 未实现 | [04](04-services.md) |

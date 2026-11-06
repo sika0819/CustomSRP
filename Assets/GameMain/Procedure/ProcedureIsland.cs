@@ -39,6 +39,10 @@ namespace Game
         bool _worldLoadFinished;
         bool _fadeStarted;
         bool _uncoverForced;
+        /// <summary>罩下已 EnablePlayback。UncoverAsync 与 Warm 共享（static）。</summary>
+        static bool _playbackWarmed;
+        /// <summary>揭罩音频已过 EnablePlayback；之后 Warm 禁止 KeepSilent。</summary>
+        static bool _uncoverAudioStarted;
         float _hudWait;
         float _worldSince;
         float _uncoverSince;
@@ -94,8 +98,6 @@ namespace Game
         {
             base.OnEnter(procedureOwner);
             GameEntry.OpenLeaveHandles();
-            // 旧包会把管线拆掉。没拆过则这里是空操作；拆过的必须装回，否则 Builtin 画岛。
-            IslandLeaveAssetReclaim.RestoreParkedPipeline();
             IslandGpuReclaim.End();
             System.Threading.Interlocked.Exchange(ref _alive, 1);
             int enter = System.Threading.Interlocked.Increment(ref _enterCount);
@@ -105,6 +107,8 @@ namespace Game
             _worldLoadStarted = false;
             _worldLoadFinished = false;
             _fadeStarted = false;
+            _playbackWarmed = false;
+            _uncoverAudioStarted = false;
             _uncoverForced = false;
             _hudWait = 0f;
             _worldSince = 0f;
@@ -171,6 +175,15 @@ namespace Game
         static IslandJoystickCamera EnsureJoystickCamera()
         {
             Camera main = Camera.main;
+            // Leave 关掉行走相机后 Camera.main 为空；含未激活组件找回，避免二次进岛丢主相机。
+            if (main == null)
+            {
+                IslandJoystickCamera existing = UnityEngine.Object.FindFirstObjectByType<IslandJoystickCamera>(
+                    FindObjectsInactive.Include);
+                if (existing != null)
+                    main = existing.GetComponent<Camera>();
+            }
+
             if (main == null)
             {
                 Log.Error("[ProcedureIsland] Launch main camera is missing");
@@ -182,9 +195,12 @@ namespace Game
             IslandJoystickCamera cam = main.GetComponent<IslandJoystickCamera>();
             if (cam == null)
                 cam = main.gameObject.AddComponent<IslandJoystickCamera>();
-            else if (!cam.enabled)
-                cam.enabled = true;
+            // 先 Teleport 出生点，再开 Camera / 行走组件：避免二次进岛先画一帧离岛位姿。
             IslandPlayerPosSave.InitAndArm(cam);
+            if (!main.enabled)
+                main.enabled = true;
+            if (!cam.enabled)
+                cam.enabled = true;
             Log.Info(
                 "[ProcedureIsland] camera pose pos="
                 + main.transform.position.ToString("F1")
@@ -578,8 +594,8 @@ namespace Game
             else
                 Log.Info("[ProcedureIsland] reentry keep roots active");
             GameEntry.Scene.RefreshMainCamera();
-            if (IslandJoystickCamera.Current != null)
-                IslandJoystickCamera.Current.enabled = true;
+            // 二次进岛：相机保持 Leave 时的 disabled，等 Services 恢复天气/出生点后再开，
+            // 避免 OnEnter→OnUpdate 之间闪一帧默认天气或上一账号位姿。
             GameEntry.BindIslandServices();
             _sceneReady = true;
             _phase = Phase.Services;
@@ -611,8 +627,13 @@ namespace Game
             (PresetService.Instance ?? GameEntry.Presets)?.ClearPlaybackForAccountSwitch();
             if (IslandJoystickCamera.Current != null)
             {
-                IslandJoystickCamera.Current.ForceUnlockLocomotion();
-                IslandJoystickCamera.Current.enabled = false;
+                IslandJoystickCamera joy = IslandJoystickCamera.Current;
+                joy.ForceUnlockLocomotion();
+                // 先关 Camera 再关行走组件：Leave→再登之间不得再渲染离岛/上一账号位姿。
+                Camera leaveView = joy.View;
+                joy.enabled = false;
+                if (leaveView != null)
+                    leaveView.enabled = false;
             }
             // 先抬加载罩，再延后拆 Main/Panel——同帧 Close UITK + Show 会撞 UnityGfxDeviceW。
             BootLoadingService.Show("登录中", BootLoadingService.LoginStart);
@@ -999,18 +1020,28 @@ namespace Game
             if (IslandJoystickCamera.Current != null)
                 IslandPlayerPosSave.ReplantAfterTerrainReady(IslandJoystickCamera.Current);
 
-            // 二次进岛 Prefill 抢主线程时，揭罩前整包 PSO 会把「即将进入」拖成几十秒。
-            // 这里只在罩下扫出生朝向左右几帧（墙钟 1.5s 封顶），把侧面变体和走路档 RT 提前画掉。
+            // 冷启动：罩下扫出生朝向左右几帧（墙钟 1.5s 封顶），把侧面变体和走路档 RT 提前画掉。
+            // 二次进岛 / 切账号：PSO 已热，禁止再扫头——音频往往瞬间就绪，淡出易吃到侧视倒影残留，
+            // 看起来像摄像机剧烈闪一下。只在出生朝向站稳后再揭幕。
             // 淡出前不要关 Loading。Close 会拆掉罩，接着再打开就会整页闪一次。
             // 只放渲染。流送留到草地和 extras 结束，避免和淡出抢同一帧。
             EnvItemStreamerLite.ReleaseRenderHold();
+
+            // 罩下开设备与 look warmup 并行；await warm 后再 StartAudio，避免 KeepSilent 盖掉 Unmute。
+            UniTask warmTask = WarmPlaybackUnderCoverAsync(gen);
+
             if (IslandJoystickCamera.Current != null)
             {
                 await IslandJoystickCamera.Current.WarmupEntryLookAsync(
-                    () => gen != _uncoverGeneration);
+                    () => gen != _uncoverGeneration,
+                    sweepYaw: EnterCount <= 1);
             }
 
             if (Stale("afterLookWarmup"))
+                return;
+
+            await warmTask;
+            if (Stale("afterPlaybackWarm"))
                 return;
 
             try
@@ -1109,6 +1140,36 @@ namespace Game
                 + ((Time.realtimeSinceStartup - wallStart) * 1000f).ToString("F0"));
         }
 
+        /// <summary>
+        /// 罩下、静音：banks 就绪后提前 EnablePlayback。不 Arm / 不 Unmute。
+        /// 与 look warmup 并行；调用方须在 StartAudio 前 await 完。
+        /// </summary>
+        static async UniTask WarmPlaybackUnderCoverAsync(int gen)
+        {
+            if (_playbackWarmed)
+                return;
+            if (!IslandLeakProbe.Allow(IslandLeakProbe.Module.Audio))
+                return;
+
+            try
+            {
+                await BankUpgradeBootstrap.EnsureLocalBanksReadyAsync();
+                if (gen != _uncoverGeneration || _playbackWarmed)
+                    return;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                WanosAudio.WanosEngine.EnablePlayback("ProcedureIsland.CoverWarm");
+                // 揭罩音频若已起步（极端竞态），禁止再 KeepSilent。
+                if (!_uncoverAudioStarted)
+                    WanosAudio.WanosEngine.KeepSilent("ProcedureIsland.CoverWarm");
+                _playbackWarmed = true;
+                Log.Info("[Hitch] audio EnablePlayback warm ms=" + sw.ElapsedMilliseconds);
+            }
+            catch (Exception e)
+            {
+                Log.Warning("[ProcedureIsland] playback warm failed: " + e.Message);
+            }
+        }
+
         static async UniTask StartAudioBeforeUncover(int gen)
         {
             if (!IslandLeakProbe.Allow(IslandLeakProbe.Module.Audio))
@@ -1123,9 +1184,16 @@ namespace Game
             if (gen != _uncoverGeneration)
                 return;
 
+            _uncoverAudioStarted = true;
             sw.Restart();
+            // 罩下已预热则走 reuse-device；否则此处首次打开。
             WanosAudio.WanosEngine.EnablePlayback("ProcedureIsland.Uncover");
             Log.Info("[Hitch] audio EnablePlayback ms=" + sw.ElapsedMilliseconds);
+            if (gen != _uncoverGeneration)
+                return;
+
+            // 与揭罩 GPU / StartEngine 拆帧，避免叠峰。
+            await UniTask.Yield(PlayerLoopTiming.Update);
             if (gen != _uncoverGeneration)
                 return;
 

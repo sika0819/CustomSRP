@@ -13,6 +13,7 @@ namespace WanosAudio
         static Action _mediaTrackChanged;
         static Action _systemAudioInterrupted;
         static Action _systemAudioRestored;
+        static Action _systemDialogCover;
 
         public static void SetHandlers(Action requestPauseAll, Action requestResumeAll)
         {
@@ -40,6 +41,12 @@ namespace WanosAudio
             _systemAudioRestored = onSystemAudioRestored;
         }
 
+        /// <summary>系统更新弹窗：没有外来媒体，不停声，也不抢回焦点。</summary>
+        public static void SetSystemDialogCoverHandler(Action onSystemDialogCover)
+        {
+            _systemDialogCover = onSystemDialogCover;
+        }
+
         public static void ClearHandlers()
         {
             _requestPauseAll = null;
@@ -47,6 +54,7 @@ namespace WanosAudio
             _mediaTrackChanged = null;
             _systemAudioInterrupted = null;
             _systemAudioRestored = null;
+            _systemDialogCover = null;
         }
 
         /// <summary>锁屏/通知栏等应走此入口，勿直接 WanosEngine.PauseAll。</summary>
@@ -97,6 +105,12 @@ namespace WanosAudio
 
             WanosEngine.ResumeAll();
             WanosEngine.ClearInterrupted("system-audio-restored");
+        }
+
+        /// <summary>系统弹窗盖住游戏。没有注册时什么都不做，禁止顺便 Resume。</summary>
+        public static void NotifySystemDialogCover()
+        {
+            _systemDialogCover?.Invoke();
         }
     }
 }

@@ -87,8 +87,9 @@ public class WanosMediaPlaybackForegroundService extends Service {
     public static void notifyNowPlayingChanged(Context context) {
         if (context == null) return;
         if (!sRunning) {
-            if (!WIAEngineJNI.getLastIsPlaying() || !WIAEngineJNI.isPlaybackActive()) {
-                Log.d(TAG, "notifyNowPlayingChanged skip start: not playing or inactive");
+            // 登出关闸后禁止拉 FGS。抢焦暂停时会话仍开着，必须拉通知，否则负一屏按钮停在播放图标。
+            if (!WIAEngineJNI.isPlaybackActive()) {
+                Log.d(TAG, "notifyNowPlayingChanged skip start: inactive");
                 return;
             }
             start(context);

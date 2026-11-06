@@ -99,6 +99,7 @@ namespace Game
         {
             _locomotion.ForceEnd();
         }
+
         Label _presetLabel;
         IVisualElementScheduledItem _presetLabelHide;
         float _presetLabelAlpha;
@@ -181,6 +182,7 @@ namespace Game
             SyncVolumeIcon(force: true);
             SyncWeatherIcon();
 
+            // pauseHint 为旧布局残留；滑动续播走全局 TipToast，勿在本 Form 再显隐。
             VisualElement pauseHint = Root.Q("pauseHint");
             if (pauseHint != null)
                 pauseHint.style.opacity = 0;
@@ -391,7 +393,10 @@ namespace Game
 
         void SyncMusicPlaying(float dt)
         {
-            bool playing = GameEntry.Music != null && GameEntry.Music.IsPlaying;
+            // 展示跟 PlaybackGate：抢焦挂起时引擎 IsPlaying 可能仍 true，负一屏/岛内须一致 PAUSED。
+            bool playing = PlaybackGate.CardShouldShowPlaying
+                && GameEntry.Music != null
+                && GameEntry.Music.HasRestorableTrack;
             if (playing != _musicWasPlaying)
             {
                 _musicWasPlaying = playing;
@@ -402,6 +407,10 @@ namespace Game
             }
 
             if (!playing || _eqBars == null)
+                return;
+
+            // 后台不累加相位、不提交 Fill。回前台从上次相位接着走。
+            if (!BackgroundVectorUi.ShouldAnimateVectorUi(AudioAppLifecycle.IsInBackground))
                 return;
 
             _eqTime += dt;

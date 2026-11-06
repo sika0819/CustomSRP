@@ -1,0 +1,44 @@
+---
+description: The Unity Architect 框架接入约定——技能路由、Wiki、诊断脚本，以及与本工程 Custom SRP / GameFramework 的优先级。
+alwaysApply: true
+---
+
+# The Unity Architect（本工程）
+
+框架根目录：`The-Unity-Architect/`。Cursor skills 已 symlink 到 `.cursor/skills/`：
+
+| Skill | 何时用 |
+|-------|--------|
+| `unity-feature-pipeline` | 全新玩法 / 系统 / 大功能，设计优先（Grill → GDD → Issues） |
+| `unity-architecture-and-best-practices` | 新系统结构设计、解耦、重构 |
+| `unity-systematic-debugging` | 非琐碎 bug：先假设与实验，再改代码 |
+| `unity-ui-toolkit` | 通用 UI Toolkit 模式（本工程具体 UI 仍以 `game-framework` 为准） |
+
+诊断脚本（无需开 Editor；已指向本仓 Unity 根，非 `Assets/_Project`）：
+
+```bash
+node The-Unity-Architect/execution/unity-doctor.js
+node The-Unity-Architect/execution/unity-audit.js
+node The-Unity-Architect/execution/unity-project-graph.js --project-only --scene
+python3 The-Unity-Architect/execution/parse_editor_log.py
+```
+
+报告写在 `The-Unity-Architect/doctor-report.md` 与 `project-graph-*.{md,json}`。Wiki 入口：`The-Unity-Architect/Wiki/Index.md`（**中文**）。
+
+Wiki：`The-Unity-Architect/Wiki/`（ADR / Features / Systems / Lore）。说「Update the wiki」时走 Trigger 3；**新写 Wiki 默认中文**。
+
+Editor 工具：`Architect Kit → Tools → Dump Scene Insight`（`Assets/Editor/TheUnityArchitect/`）。
+
+## 与本工程的优先级（硬）
+
+上游模板写的是「Unity 6 / URP」。**本仓库不是 URP**，冲突时以下列项目规则为准：
+
+1. **渲染**：Custom SRP（`custom-srp` skill）——禁止按 URP/HDRP 套路改管线。
+2. **游戏逻辑 / UI**：`game-framework` + `.cursor/rules/gamemain.mdc`（GameEntry、Procedure、Entity、UI Toolkit + `GameFormLogic`）。
+3. **对象 ID**：只用 `GetEntityId()`，禁止 `GetInstanceID()`（见 `unity6-entity-id`）。
+4. **音频**：`wanos-audio` / `preset-bridge-ambience-stutter`。
+
+## Feature Pipeline 适用范围
+
+- **要走 Grill/GDD**：全新大系统、跨模块玩法、会改架构边界的需求。
+- **可跳过**：明确 bugfix、单文件小改、已有模块内增量、用户明确说「直接改 / 跳过设计」。

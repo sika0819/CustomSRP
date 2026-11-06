@@ -1,6 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <Style src="CommonDialog.uss" />
-    <ui:VisualElement name="root" class="game-form-backdrop common-dialog__root">
+    <!-- Dim lives on the host form (.game-form-backdrop); card template stays clear. -->
+    <ui:VisualElement name="root" class="common-dialog__root">
         <ui:VisualElement name="stage" class="game-form-stage">
             <!-- Card container -->
             <ui:VisualElement name="card" class="common-dialog__card">

@@ -569,9 +569,6 @@ namespace CustomSRP
             ApplyEditorPreview();
         }
 
-        /// <summary>Legacy name — hours, not period.</summary>
-        public void ApplyEditorPeriod(float hours) => ApplyEditorHours(hours);
-
         public void ApplyEditorPreview()
         {
             if (skyboxApplyDepth > 0)

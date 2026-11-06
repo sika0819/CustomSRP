@@ -40,13 +40,15 @@ namespace Game.Native
                 _lastUtc = DateTime.UtcNow;
             }
 
-            // 0,-1：到点结束 → 停播（弹窗「取消」/「重复」再 ResumeAfterTimerEnd）。
-            // 先抬到点闩，避免回前台 RestoreForegroundAudio 抢在 Pause 之后把声景 Resume_ALL。
+            // 0,-1：到点结束 → Unity 停播（弹窗「取消」/「重复」再 ResumeAfterTimerEnd）。
+            // 先抬到点闩并同步到 Java 会话，避免回前台 RestoreForegroundAudio 抢在 Pause 之后把声景 Resume_ALL，
+            // 也避免切后台后负一屏把这次暂停当成普通暂停续上。停播只走 StopPaired，不再调 pauseForTimerEnd。
             // 0,0：用户中途取消定时 → 不停播。
             if (remainingSeconds <= 0 && totalSeconds < 0)
             {
                 Game.NowPlayingService.NotePausedForTimerEnd(true);
-                Game.MusicPlaylist.Instance.Pause();
+                Game.AudioAppLifecycle.StopPaired("timer-end", blockAutoResume: true);
+                Game.NowPlayingService.PublishFromGate();
             }
 
             RefreshFill();

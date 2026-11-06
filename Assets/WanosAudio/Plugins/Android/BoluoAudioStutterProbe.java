@@ -97,6 +97,20 @@ public final class BoluoAudioStutterProbe {
         }
     }
 
+    /**
+     * 一次切换决策的听感分类，方便把 QQ / 微信语音 / 只切前后台的第一下拆开。
+     * class 只取 duck、guard_mute、unity_pause_edge、keep_graph。
+     */
+    public static void noteSwitchClass(String clazz, String detail) {
+        String mixer = mixerCache == null ? "unknown" : (mixerCache ? "active" : "gone");
+        String line = "switch_class class=" + clazz
+                + " detail=" + detail
+                + " trace=" + traceId
+                + " mixer=" + mixer;
+        Log.i(TAG, line);
+        Log.i("BoluoAudioFg", line);
+    }
+
     public static void cacheMixer(boolean selfActive) {
         mixerCache = selfActive;
         mixerCacheAt = SystemClock.elapsedRealtime();

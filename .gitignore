@@ -142,3 +142,6 @@ Assets/StreamingAssets/package.meta
 .local/
 _backup/
 .git-filter-paths.txt
+
+# The Unity Architect scene dumps
+SceneDump_*.json

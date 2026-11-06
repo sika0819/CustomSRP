@@ -12,7 +12,8 @@ namespace Game
     public static class SyncBillboardColorsFromLeaf
     {
         const string PrefabsRoot = "Assets/GameMain/Environment/Prefabs/DaoYu1";
-        static readonly string[] Folders = { "Songshu", "Lvshu" };
+        // Guanmu: keep Tropical_04 (etc.) near leaf ↔ far billboard after bush tint edits.
+        static readonly string[] Folders = { "Songshu", "Lvshu", "Guanmu" };
 
         static readonly string[] SyncColorProps =
         {

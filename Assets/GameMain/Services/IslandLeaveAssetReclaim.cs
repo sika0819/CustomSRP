@@ -22,9 +22,6 @@ namespace Game
         bool _busy;
         Coroutine _routine;
 
-        /// <summary>仅旧路径拆过管线时非空。当前退登不拆设备，进岛时若有残留才装回。</summary>
-        static RenderPipelineAsset _parkedPipeline;
-
         public bool IsBusy => _busy;
 
         /// <summary>挂到 Launch 的 Base 上。不缓存静态引用。</summary>
@@ -63,18 +60,6 @@ namespace Game
             _generation++;
             StopRoutine();
             _busy = false;
-            // 作废时把管线装回，避免下一路径（非进岛）一直 Builtin。
-            RestoreParkedPipeline();
-        }
-
-        /// <summary>再进岛前装回退登拆下的 SRP。幂等。</summary>
-        public static void RestoreParkedPipeline()
-        {
-            if (_parkedPipeline == null)
-                return;
-            RestorePipeline(_parkedPipeline);
-            Log.Info("[LeaveMem] pipeline restored name=" + _parkedPipeline.name);
-            _parkedPipeline = null;
         }
 
         void OnDestroy()
@@ -231,46 +216,6 @@ namespace Game
                 + " current=" + current
                 + " quality=" + (quality ? 1 : 0)
                 + " default=" + (fallback ? 1 : 0));
-        }
-
-        /// <summary>
-        /// 退登不要调用。拆掉再装回会换 Vulkan 设备，第二次进岛的 kgsl 映射退不掉。
-        /// </summary>
-        static void TakePipelineOffline()
-        {
-            try
-            {
-                if (_parkedPipeline != null)
-                    return;
-                RenderPipelineAsset asset = QualitySettings.renderPipeline;
-                if (asset == null)
-                    asset = GraphicsSettings.defaultRenderPipeline;
-                if (asset == null)
-                    return;
-                QualitySettings.renderPipeline = null;
-                GraphicsSettings.defaultRenderPipeline = null;
-                _parkedPipeline = asset;
-                Log.Info("[LeaveMem] pipeline parked name=" + asset.name);
-            }
-            catch (System.Exception e)
-            {
-                Log.Warning("[LeaveMem] pipeline off failed " + e.Message);
-            }
-        }
-
-        static void RestorePipeline(RenderPipelineAsset asset)
-        {
-            try
-            {
-                if (QualitySettings.renderPipeline == null)
-                    QualitySettings.renderPipeline = asset;
-                if (GraphicsSettings.defaultRenderPipeline == null)
-                    GraphicsSettings.defaultRenderPipeline = asset;
-            }
-            catch (System.Exception e)
-            {
-                Log.Warning("[LeaveMem] pipeline on failed " + e.Message);
-            }
         }
 
         /// <summary>

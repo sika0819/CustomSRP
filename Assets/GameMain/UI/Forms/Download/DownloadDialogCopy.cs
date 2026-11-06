@@ -95,8 +95,9 @@ namespace Game
 
         /// <summary>
         /// 前缀 + 已下载数字 + 体积/速度，拼成整句。
-        /// 速度用 0.#（一位小数，少闪），未知时为「速度--MB/秒」；无速度时 Eta 为空（界面保持上次有效剩余，不写「剩余--」）；
+        /// 速度用 0.#（一位小数，少闪），未知时为「速度--MB/秒」；无速度时 Eta 为空；
         /// 完成显示「完成」；超过 60 秒用「剩余Nm」，封顶 60。
+        /// 弹窗实际剩余以 <see cref="DownloadProgressDisplayMeter"/> 为准。
         /// </summary>
         public static ProgressCopy Progress(
             float downloadedMb,
@@ -145,15 +146,24 @@ namespace Game
         {
             if (completed)
                 return "完成";
-            // 无速度 / 无总量：不返回「剩余--」，由界面保留上次有效文案。
+            // 无速度 / 无总量：留空（尽快由 Meter 写出剩余，避免「估算中」占位）。
             if (totalMb <= 0.01f || speedMbps <= 0.001f)
                 return string.Empty;
 
             float remaining = UnityEngine.Mathf.Max(0f, totalMb - downloadedMb);
+            float percent = downloadedMb / totalMb * 100f;
+            bool nearDone = remaining <= DownloadProgressDisplayMeter.NearDoneRemainingMb
+                || percent >= DownloadProgressDisplayMeter.NearDonePercent;
             float sec = remaining / speedMbps;
             if (sec >= 60f)
                 return $"剩余{UnityEngine.Mathf.Min(60, UnityEngine.Mathf.CeilToInt(sec / 60f))}m";
-            return $"剩余{UnityEngine.Mathf.Max(1, UnityEngine.Mathf.CeilToInt(sec))}s";
+
+            int shown = UnityEngine.Mathf.CeilToInt(sec);
+            if (!nearDone)
+                shown = UnityEngine.Mathf.Max(2, shown);
+            else
+                shown = UnityEngine.Mathf.Max(1, shown);
+            return $"剩余{shown}s";
         }
 
         static string NormalizeSize(string size, string fallback = "若干")

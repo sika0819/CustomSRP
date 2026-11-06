@@ -7,14 +7,15 @@ using WanosAudio;
 namespace Game
 {
     /// <summary>
-    /// 后台传输计划：Single/Loop 推当前专辑，Shuffle 推全部专辑；回前台对账原生可能切过的曲。
+    /// 后台传输计划：所有 mode 推当前专辑曲序（含未就绪占位；可播才有 path）。
+    /// 负一手动：邻接未就绪 → 原生重播当前；已就绪 → 切过去。
+    /// mode 仍写入 JSON，供曲终 auto（只落可播曲）使用。
     /// iOS 无对等 API → 三方法全部 no-op。
     /// </summary>
     public static class BackgroundTransportSync
     {
         /// <summary>
-        /// 推后台传输计划：Single/Loop = 当前专辑；Shuffle = 全部专辑可播曲。
-        /// 无曲目 / 当前曲 bank 未就绪 → Clear。
+        /// 推后台传输计划：当前专辑 bank 已就绪曲。无曲目 / 当前曲未就绪 → Clear。
         /// </summary>
         public static void PublishPlan()
         {
@@ -74,47 +75,25 @@ namespace Game
 
             Scratch.Clear();
             int currentInPlan = -1;
-            bool shuffleAll = music.PlayMode == MusicPlayMode.Shuffle;
             int catalogInAlbum = MusicCatalog.GetTracks(album).Count;
 
-            if (shuffleAll)
+            // 任意 mode 只推本专辑（含未就绪曲，path 空）：负一手动邻接未下完由原生重播当前；
+            // 已就绪则切过去。曲终 auto 仍只落在可播曲。
+            var tracks = MusicCatalog.GetTracks(album);
+            for (int i = 0; i < tracks.Count; i++)
             {
-                AppendAllAlbumsReady(album, track, ref currentInPlan);
-            }
-            else
-            {
-                var tracks = MusicCatalog.GetTracks(album);
-                for (int i = 0; i < tracks.Count; i++)
-                {
-                    if (!TryAppendPlanTrack(tracks[i], out int addedAt))
-                        continue;
-                    if (i == track)
-                        currentInPlan = addedAt;
-                }
-
-                // 当前专辑可推计划 < 2（服务器目录裁成单曲 / 仅一首 bank 就绪）时，
-                // 负一屏 Loop 切歌会 (0+1)%1=0 原地打转。扩到全库已就绪曲才能真下一切。
-                if (Scratch.Count < 2 || currentInPlan < 0)
-                {
-                    int before = Scratch.Count;
-                    Scratch.Clear();
-                    currentInPlan = -1;
-                    AppendAllAlbumsReady(album, track, ref currentInPlan);
-                    if (Scratch.Count > before)
-                    {
-                        Log.Warning(
-                            $"[BackgroundTransportSync] album plan too thin " +
-                            $"album={album} catalog={catalogInAlbum} readyWas={before} → " +
-                            $"expanded all-albums ready={Scratch.Count} current={currentInPlan}");
-                    }
-                }
+                if (!TryAppendPlanTrack(tracks[i], out int addedAt))
+                    continue;
+                if (i == track)
+                    currentInPlan = addedAt;
             }
 
-            if (Scratch.Count == 0 || currentInPlan < 0)
+            if (Scratch.Count == 0 || currentInPlan < 0
+                || string.IsNullOrEmpty(Scratch[currentInPlan].Path))
             {
                 Log.Warning(
                     $"[BackgroundTransportSync] ClearPlan album={album} track={track} " +
-                    $"catalogInAlbum={catalogInAlbum} ready={Scratch.Count} currentInPlan={currentInPlan}");
+                    $"catalogInAlbum={catalogInAlbum} plan={Scratch.Count} currentInPlan={currentInPlan}");
                 ClearPlan();
                 return;
             }
@@ -141,30 +120,21 @@ namespace Game
             AndroidBackgroundTransport.SetPlan(Sb.ToString());
         }
 
-        static void AppendAllAlbumsReady(int curAlbum, int curTrack, ref int currentInPlan)
-        {
-            for (int a = 0; a < MusicCatalog.AlbumCount; a++)
-            {
-                var albumTracks = MusicCatalog.GetTracks(a);
-                for (int i = 0; i < albumTracks.Count; i++)
-                {
-                    if (!TryAppendPlanTrack(albumTracks[i], out int addedAt))
-                        continue;
-                    if (a == curAlbum && i == curTrack)
-                        currentInPlan = addedAt;
-                }
-            }
-        }
-
         static bool TryAppendPlanTrack(MusicTrack t, out int indexInScratch)
         {
             indexInScratch = -1;
             if (string.IsNullOrEmpty(t.EventName) || string.IsNullOrEmpty(t.BankName))
                 return false;
-            if (!WanosBankPaths.Instance.TryResolve(t.BankName, out string path))
-                return false;
-            if (!WanosBankStore.IsLikelyValidBankFile(path))
-                return false;
+
+            // 未下载完也占位：计划下标 = 专辑曲序，负一手动才能对「下一首」判就绪。
+            string path = "";
+            bool loaded = false;
+            if (WanosBankPaths.Instance.TryResolve(t.BankName, out string resolved)
+                && WanosBankStore.IsLikelyValidBankFile(resolved))
+            {
+                path = resolved;
+                loaded = WanosBankStore.IsLoaded(t.BankName);
+            }
 
             indexInScratch = Scratch.Count;
             Scratch.Add(new PlanEntry
@@ -174,7 +144,7 @@ namespace Game
                 Bank = t.BankName,
                 Guid = t.BankGuid ?? "",
                 Path = path,
-                Loaded = WanosBankStore.IsLoaded(t.BankName),
+                Loaded = loaded,
             });
             return true;
         }
@@ -185,19 +155,27 @@ namespace Game
             if (string.IsNullOrEmpty(json))
                 return;
 
-            if (!TryParseState(json, out string eventName, out bool paused, out bool valid))
+            if (!TryParseState(json, out string eventName, out bool paused, out bool suspended, out bool valid))
                 return;
 
             var music = GameEntry.Music ?? MusicPlaylist.Instance;
-            // 暂停旗始终对账：定时到点 pauseForTimerEnd 时 plan 可能无效/无 event，
-            // 旧逻辑直接 return 会丢掉 userPaused，回前台误 Resume_ALL 把声景拉起。
-            NowPlayingService.NoteUserPaused(paused);
+            // 到点闩不被原生 suspended 盖掉。其余用写入前的 Silence 合并，suspended 不降级用户暂停。
+            if (NowPlayingService.PausedForTimerEnd)
+                PlaybackGate.SetSilence(SilenceReason.TimerEnd, "resync-native");
+            else
+            {
+                bool resumeInFlight = music != null && music.HardReplayPending;
+                PlaybackGate.AdoptFromNative(paused, suspended, "resync-native", resumeInFlight);
+            }
+            NowPlayingService.MirrorSilenceLatch();
+
             if (music == null)
                 return;
 
+            bool latchPaused = paused || suspended;
             if (!valid || string.IsNullOrEmpty(eventName))
             {
-                if (paused)
+                if (latchPaused)
                     music.ApplyNativePausedLatch(true);
                 return;
             }
@@ -205,24 +183,29 @@ namespace Game
             if (!MusicCatalog.TryFindByEventName(eventName, out int albumIdx, out int trackIdx))
             {
                 Log.Warning($"[BackgroundTransportSync] Resync: unknown event={eventName}");
-                music.ApplyNativePausedLatch(paused);
+                music.ApplyNativePausedLatch(latchPaused);
                 return;
             }
 
-            music.AdoptTrack(albumIdx, trackIdx);
-            music.ApplyNativePausedLatch(paused);
-            Log.Info($"[BackgroundTransportSync] Resync adopted album={albumIdx} track={trackIdx} event={eventName} paused={paused}");
+            music.AdoptTrack(albumIdx, trackIdx, latchPaused);
+            music.ApplyNativePausedLatch(latchPaused);
+            Log.Info(
+                $"[BackgroundTransportSync] Resync adopted album={albumIdx} track={trackIdx}"
+                + $" event={eventName} paused={paused} suspended={suspended}");
         }
 
-        static bool TryParseState(string json, out string eventName, out bool paused, out bool valid)
+        static bool TryParseState(
+            string json, out string eventName, out bool paused, out bool suspended, out bool valid)
         {
             eventName = "";
             paused = false;
+            suspended = false;
             valid = false;
             try
             {
                 eventName = ExtractString(json, "event") ?? "";
                 paused = ExtractBool(json, "paused");
+                suspended = ExtractBool(json, "suspended");
                 valid = ExtractBool(json, "valid");
                 return true;
             }

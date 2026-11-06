@@ -209,12 +209,28 @@ namespace Game
                 Log.Warning($"[AudioInteraction] Resume_ALL: {e.Message}");
             }
 
+            FinishContentAudioUnpause(reason, evaluateIfNotContentPaused: true);
+        }
+
+        /// <summary>
+        /// 原生 focus resume 已发过 Resume_ALL：只清内容声闸 + Evaluate，禁止再 Resume。
+        /// </summary>
+        public void SyncContentAudioAfterNativeResume(string reason)
+        {
+            ClearYieldHold();
+            if (!_started)
+                return;
+            FinishContentAudioUnpause(reason, evaluateIfNotContentPaused: true);
+        }
+
+        void FinishContentAudioUnpause(string reason, bool evaluateIfNotContentPaused)
+        {
             bool wasContentPaused = _contentAudioPaused;
             SetContentAudioPaused(false);
             Weather.ReapplyDuckedRtpcs();
             Weather.Refresh();
             // HoldYield 只闩 IsYieldHeld 时 Ambience 未 Stop：清闸后补一次 Evaluate。
-            if (!wasContentPaused)
+            if (evaluateIfNotContentPaused && !wasContentPaused)
                 Ambience?.EvaluateNow();
 
             Log.Info($"[AudioInteraction] content audio restored ({reason})");

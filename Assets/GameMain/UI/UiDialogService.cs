@@ -25,28 +25,57 @@ namespace Game
         /// 表现为进度条被 Critical 等后开窗关掉后无法再开，人却仍被门挡住。
         /// </summary>
         static readonly HashSet<int> _retiredTickets = new HashSet<int>();
+        /// <summary>Open 已发出、OnOpen/Attach 还没到。传输完成时不能先退役。</summary>
+        static readonly HashSet<int> _awaitingOpen = new HashSet<int>();
+        /// <summary>传输已完成，但要等百分比画出、上滑结束再退役。</summary>
+        static readonly HashSet<int> _heldClose = new HashSet<int>();
         static float _pendingPercent = -1f;
         static float _pendingDownloadedMb;
         static float _pendingTotalMb;
+        /// <summary>有过一次真实进度推送。打开时写入的 0 不算。</summary>
+        static bool _pendingExplicit;
         static string _lastRequestFailure;
         static float _lastRequestFailureTime;
 
-        #region Toast
+        #region Toast / Tip（同一全局气泡 TipToastForm，勿在各 Form 自造）
+
+        /// <summary>回岛仍静音时的滑动续播文案（粘滞 tip 直至续播成功）。</summary>
+        public const string AudioInterruptedSwipeToast = "菠萝被暂停，滑动屏幕恢复";
+
+        /// <summary>粘滞 tip 时长：直至 <see cref="DismissToast"/> / 续播成功，避免 3s 闪没。</summary>
+        public const float AudioPauseTipStickySeconds = 3600f;
 
         /// <summary>
-        /// Show a brief info toast on the global tip layer.
+        /// 全局 tip/toast（同一套）。业务侧只调这里，禁止再包一层 ShowXxxToast / 直调 <see cref="UiTipToast"/>。
         /// </summary>
-        public static void ShowToast(string message)
+        public static void ShowToast(
+            string message,
+            float seconds = UiTipToast.DefaultSeconds,
+            float anchoredY = UiTipToast.DefaultAnchoredY,
+            bool error = false,
+            bool aboveLoading = false)
         {
-            UiTipToast.ShowMessage(message);
+            UiTipToast.ShowMessage(message, seconds, anchoredY, error, aboveLoading);
         }
 
         /// <summary>
-        /// Show an error toast (red-tinted bubble) on the global tip layer.
+        /// 音频暂停 tip：按 TipKind 决定粘滞；到点弹窗场景由调用方勿调。
         /// </summary>
-        public static void ShowErrorToast(string message)
+        public static void ShowAudioPauseTip(WanosAudio.MusicPauseUICallback.TipKind kind)
         {
-            UiTipToast.ShowMessage(message, error: true);
+            if (NowPlayingService.PausedForTimerEnd)
+                return;
+
+            float seconds = kind == WanosAudio.MusicPauseUICallback.TipKind.TransientInterrupt
+                ? UiTipToast.DefaultSeconds
+                : AudioPauseTipStickySeconds;
+            ShowToast(AudioInterruptedSwipeToast, seconds);
+        }
+
+        /// <summary>立刻收起当前全局 tip。</summary>
+        public static void DismissToast()
+        {
+            TipToastForm.DismissCurrent();
         }
 
         /// <summary>
@@ -61,7 +90,7 @@ namespace Game
                 return;
             _lastRequestFailure = reason;
             _lastRequestFailureTime = now;
-            UiTipToast.ShowMessage(reason, error: true, aboveLoading: true);
+            ShowToast(reason, error: true, aboveLoading: true);
         }
 
         #endregion
@@ -147,9 +176,12 @@ namespace Game
         {
             int ticket = ++_progressSeq;
             _retiredTickets.Remove(ticket);
+            _heldClose.Remove(ticket);
+            _awaitingOpen.Add(ticket);
             _pendingPercent = 0f;
             _pendingDownloadedMb = 0f;
             _pendingTotalMb = 0f;
+            _pendingExplicit = false;
             var data = new DownloadProgressForm.UserData
             {
                 OnCancel = onCancel,
@@ -187,6 +219,9 @@ namespace Game
         {
             if (ticket <= 0 || IsProgressRetired(ticket))
                 return false;
+            // 第一张还在异步加载：再开一张会叠成两扇，晚到的那张还会被当成重复窗关掉。
+            if (_awaitingOpen.Contains(ticket))
+                return false;
             if (_activeProgressForm != null && _activeProgressTicket == ticket)
             {
                 if (_activeProgressForm.isActiveAndEnabled)
@@ -200,6 +235,7 @@ namespace Game
                 OnCancel = onCancel,
                 Ticket = ticket,
             };
+            _awaitingOpen.Add(ticket);
             UiAssets.OpenDialog(UiAssets.DownloadProgressForm, data);
             return true;
         }
@@ -214,18 +250,32 @@ namespace Game
                 return;
             }
 
+            _awaitingOpen.Remove(ticket);
             _activeProgressForm = form;
             _activeProgressTicket = ticket;
-            if (form != null && _pendingPercent >= 0f)
+            // 只套真实推送。打开时的 0 不要进速度计，否则锚点被钉死。
+            if (form != null && _pendingExplicit && _pendingPercent >= 0f)
                 form.SetProgress(_pendingPercent, _pendingDownloadedMb, _pendingTotalMb);
+            if (form != null && ticket > 0 && _heldClose.Contains(ticket))
+                form.ArmTransferCompleteClose();
         }
 
         public static void DetachProgressForm(DownloadProgressForm form)
         {
             if (_activeProgressForm != form)
                 return;
+            int ticket = _activeProgressTicket;
             _activeProgressForm = null;
             _activeProgressTicket = 0;
+            _awaitingOpen.Remove(ticket);
+            // 传输完成的延迟关窗还没落到退役：人先关掉时把票结束，避免 MD5 期间再被打开。
+            if (ticket > 0 && _heldClose.Contains(ticket) && !IsProgressRetired(ticket))
+            {
+                _retiredTickets.Add(ticket);
+                _heldClose.Remove(ticket);
+                _pendingPercent = -1f;
+                _pendingExplicit = false;
+            }
         }
 
         public static void SetDownloadProgress(
@@ -236,6 +286,7 @@ namespace Game
         {
             if (ticket <= 0 || IsProgressRetired(ticket))
                 return;
+            _pendingExplicit = true;
             _pendingPercent = Mathf.Clamp(percent, 0f, 100f);
             _pendingDownloadedMb = Mathf.Max(0f, downloadedMb);
             _pendingTotalMb = Mathf.Max(0f, totalMb);
@@ -246,13 +297,79 @@ namespace Game
         /// <summary>关掉这一张进度窗。下载器没有按 bank 取消，这里只关界面。</summary>
         public static void CloseDownloadProgress(int ticket)
         {
+            if (ticket <= 0 || IsProgressRetired(ticket))
+                return;
+
+            DownloadProgressForm form = _activeProgressTicket == ticket ? _activeProgressForm : null;
+            bool formOpen = form != null && form.isActiveAndEnabled;
+            bool presented = formOpen && form.HasPresentedProgress;
+            bool ready = formOpen && form.IsTransferCloseReady;
+            if (SceneBankGateProgressPolicy.ShouldRetireOnTransferComplete(presented, ready))
+            {
+                RetireProgressTicket(ticket, dismissForm: true);
+                return;
+            }
+
+            // 有真实进度还没画出来：等 OnOpen 套上，或等上滑结束 / 至少一帧。
+            bool waitingToShow = _pendingExplicit && (formOpen || _awaitingOpen.Contains(ticket)) && !ready;
+            if (waitingToShow)
+            {
+                _heldClose.Add(ticket);
+                if (formOpen)
+                    form.ArmTransferCompleteClose();
+                return;
+            }
+
+            RetireProgressTicket(ticket, dismissForm: formOpen);
+        }
+
+        /// <summary>上滑结束（或至少过了一帧）后，由进度窗调用，这时才退役并关掉。</summary>
+        public static void CompleteHeldDownloadClose(int ticket)
+        {
+            if (ticket <= 0 || IsProgressRetired(ticket) || !_heldClose.Contains(ticket))
+                return;
+
+            DownloadProgressForm form = _activeProgressTicket == ticket ? _activeProgressForm : null;
+            bool wasPresented = form != null && form.HasPresentedProgress;
+            if (form != null && !wasPresented && _pendingExplicit && _pendingPercent >= 0f)
+                form.SetProgress(_pendingPercent, _pendingDownloadedMb, _pendingTotalMb);
+
+            bool presented = form != null && form.HasPresentedProgress;
+            // 刚在这次回调里套上百分比：再留可见时间，不能立刻关掉。
+            if (presented && !wasPresented)
+            {
+                form.ArmTransferCompleteClose();
+                return;
+            }
+
+            if (!SceneBankGateProgressPolicy.ShouldRetireOnTransferComplete(
+                    presented, visibleLongEnough: true))
+            {
+                // 等完了仍然没有百分比：关掉，避免窗挂死。立刻关的路径不会走到这里。
+                RetireProgressTicket(ticket, dismissForm: form != null);
+                return;
+            }
+
+            RetireProgressTicket(ticket, dismissForm: true);
+        }
+
+        static void RetireProgressTicket(int ticket, bool dismissForm)
+        {
             if (ticket <= 0)
                 return;
             _retiredTickets.Add(ticket);
+            _heldClose.Remove(ticket);
+            _awaitingOpen.Remove(ticket);
+            _pendingExplicit = false;
+            DownloadProgressForm form = null;
             if (_activeProgressTicket == ticket)
+            {
                 _pendingPercent = -1f;
-            if (_activeProgressTicket == ticket && _activeProgressForm != null)
-                _activeProgressForm.Dismiss();
+                form = _activeProgressForm;
+            }
+
+            if (dismissForm && form != null)
+                form.Dismiss();
         }
 
         /// <summary>
@@ -327,25 +444,6 @@ namespace Game
         #endregion
 
         #region Pause / Timer
-
-        /// <summary>
-        /// Show pause tip dialog. Auto-hides after a few seconds by default.
-        /// </summary>
-        public static void ShowPauseTip(
-            PauseTipForm.TipMode mode = PauseTipForm.TipMode.Brief,
-            string title = null,
-            string body = null,
-            Action onResume = null)
-        {
-            var data = new PauseTipForm.UserData
-            {
-                Mode = mode,
-                Title = title ?? "音频中断",
-                Body = body ?? "音频被其它应用占用，滑动或点击空白可继续播放。",
-                OnResume = onResume,
-            };
-            UiAssets.OpenDialog(UiAssets.PauseTipForm, data);
-        }
 
         /// <summary>
         /// Show timer end dialog.

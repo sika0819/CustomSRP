@@ -153,7 +153,8 @@ namespace Game.Tests
         [Test]
         public void PreferNewPrompt_WhenFlowBusySuppressNoTicket()
         {
-            // 环境音/预设 SuppressProgress：IsBusy 但无票 → 门口仍要走申请+进度。
+            // Flow 软占用无票时 PreferReopen=false → TryBeginPrompt；
+            // BeginPrompt 对软占用抢占（preemptBusyBatch），硬占用才 Toast。
             Assert.IsFalse(
                 SceneBankGateProgressPolicy.ShouldPreferReopenOverNewPrompt(
                     spawnerBusy: false,
@@ -203,6 +204,47 @@ namespace Game.Tests
                     activeProgressTicket: 0,
                     hasOtherPopup: false,
                     consentPromptActive: true));
+        }
+
+        [Test]
+        public void ForceBlockWhileBusy_OnlyWhenBanksNotSatisfied()
+        {
+            // 进度 100% / 盘齐后即使 Flow 仍 MD5，也不得强制锁门。
+            Assert.IsFalse(
+                SceneBankGateProgressPolicy.ShouldForceBlockWhileBusy(
+                    spawnerBusyDownloadingGate: true,
+                    banksSatisfied: true));
+            Assert.IsTrue(
+                SceneBankGateProgressPolicy.ShouldForceBlockWhileBusy(
+                    spawnerBusyDownloadingGate: true,
+                    banksSatisfied: false));
+            Assert.IsFalse(
+                SceneBankGateProgressPolicy.ShouldForceBlockWhileBusy(
+                    spawnerBusyDownloadingGate: false,
+                    banksSatisfied: false));
+        }
+
+        [Test]
+        public void TransferComplete_DoesNotRetireBeforeProgressPresented()
+        {
+            // 窗还没套上百分比：传输完成不得立刻退役，否则晚到的 OnOpen 来不及画条。
+            Assert.IsFalse(
+                SceneBankGateProgressPolicy.ShouldRetireOnTransferComplete(
+                    progressPresentedOnForm: false,
+                    visibleLongEnough: false));
+            Assert.IsFalse(
+                SceneBankGateProgressPolicy.ShouldRetireOnTransferComplete(
+                    progressPresentedOnForm: false,
+                    visibleLongEnough: true));
+            // 刚写上百分比、上滑还没结束 / 同一帧：也不能退役。
+            Assert.IsFalse(
+                SceneBankGateProgressPolicy.ShouldRetireOnTransferComplete(
+                    progressPresentedOnForm: true,
+                    visibleLongEnough: false));
+            Assert.IsTrue(
+                SceneBankGateProgressPolicy.ShouldRetireOnTransferComplete(
+                    progressPresentedOnForm: true,
+                    visibleLongEnough: true));
         }
     }
 }

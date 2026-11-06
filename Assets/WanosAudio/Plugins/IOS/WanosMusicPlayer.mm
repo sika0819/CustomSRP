@@ -85,6 +85,11 @@ static void WanosMusicPlayer_NoteRemoteSkipSettled(void) {
     g_skipInFlight = NO;
 }
 
+/// Unity Playing / 超时 settle：C# DllImport 调用，放行下一笔 RemoteCommand skip。
+extern "C" void WanosMusicPlayer_NoteUnitySkipSettled(void) {
+    WanosMusicPlayer_NoteRemoteSkipSettled();
+}
+
 static void WanosMusicPlayer_CancelPendingRemoteMuteForSkip(void) {
     Class bridgeClass = NSClassFromString(@"BoluoMusicPlayerIOSBridge");
     if (!bridgeClass) return;
@@ -807,17 +812,22 @@ static void enqueueNativePlay(int listIdx, int musicIdx) {
 }
 
 static MPRemoteCommandHandlerStatus handleRemoteSkip(int direction) {
-    // CustomSRP：曲目权威在 Unity MusicPlaylist，原生只转发并取消 pending play/pause。
+    // CustomSRP：曲目权威在 Unity MusicPlaylist；inFlight 持有到 Playing/超时，勿在 SendMessage 后立刻 Settled。
     if (WanosMusicPlayer_ShouldIgnoreRemoteSkip(direction)) {
         NSLog(@"[WanosMusicPlayer][NextPrev] skip debounce dir=%d inFlight=%d",
               direction, g_skipInFlight ? 1 : 0);
         return MPRemoteCommandHandlerStatusSuccess;
     }
     WanosMusicPlayer_NoteRemoteSkipAccepted(direction);
+    // 对齐线上 96ec0d5f：暂停态切歌先解开用户暂停再换曲，负一屏按钮跟着变成播放中。
+    // 曲目仍由 Unity 播，这里只清暂停闩并解 mute，不在原生空播放列表上再起一首。
+    if (WanosMusicPlayer_IsUserPaused()) {
+        WanosMusicPlayer_ResumeForTrackChange();
+    }
     const char* method = direction > 0 ? "OnMediaSkipNext" : "OnMediaSkipPrev";
     UnitySendMessage("BoluoMusicPlayerIOS", method, "");
-    WanosMusicPlayer_NoteRemoteSkipSettled();
-    NSLog(@"[WanosMusicPlayer][NextPrev] forwarded %@ to Unity", direction > 0 ? @"NEXT" : @"PREV");
+    NSLog(@"[WanosMusicPlayer][NextPrev] forwarded %@ to Unity (inFlight held)",
+          direction > 0 ? @"NEXT" : @"PREV");
     return MPRemoteCommandHandlerStatusSuccess;
 }
 

@@ -30,11 +30,13 @@ namespace Game
 
     /// <summary>
     /// 绑定一张 <c>NoticeCard</c>。进度条即时刷新；速度 / 剩余走
-    /// <see cref="DownloadProgressDisplayMeter"/>（约 1s 提交 + EMA）。
+    /// <see cref="DownloadProgressDisplayMeter"/>（短窗首样 + 约 1s 提交 + EMA）。
     /// </summary>
     public sealed class NoticeCardPresenter
     {
-        const float MinVisual = 0.05f;
+        /// <summary>有真实进度后给 9-slice 的最小可视宽度（准备态为 0）。</summary>
+        const float MinVisualAfterProgress = 0.02f;
+        const float PreparingPercent = 0.5f;
         const string ProgressClass = "notice-card--progress";
         const string IconDownload = "notice-card__icon--download";
         const string IconDownloading = "notice-card__icon--downloading";
@@ -55,6 +57,7 @@ namespace Game
         readonly DownloadProgressDisplayMeter _meter = new DownloadProgressDisplayMeter();
         int _shownPercent = -1;
         int _shownDownloaded = -1;
+        int _shownTotal = -1;
         bool _downloadedApplied;
         bool _downloadedShown;
 
@@ -129,16 +132,29 @@ namespace Game
 
             if (content.ShowProgress)
             {
+                // 未出速度前留空。不要用 0MB 去 Tick：那会把锚点钉死，
+                // 紧接着的真实已下载量会被算进 0.15s，剩余每次打开都是「剩余2s」。
+                // 第一次真实 SetProgress 才是速度锚点。
                 if (_eta != null)
                     _eta.text = string.Empty;
-                SetProgress(0f, 0f, 0f);
+                if (_sentence != null)
+                    _sentence.text = string.Empty;
+                if (_downloaded != null)
+                {
+                    _downloaded.text = string.Empty;
+                    _downloaded.style.display = DisplayStyle.None;
+                }
+                if (_sizeDetail != null)
+                    _sizeDetail.text = string.Empty;
+                if (_fill != null)
+                    _fill.style.width = Length.Percent(0f);
             }
         }
 
         /// <summary>
         /// percent 为 0–100。进度条 / MB 可随推送更新；
         /// 速度始终展示（未知为「速度--MB/秒」），与剩余约 1s 提交一次；
-        /// 无速度时保持上次剩余文案、不写「剩余--」。
+        /// 无速度时 ETA 留空，已公布后无速度则保持上次剩余。
         /// </summary>
         public void SetProgress(float percent, float downloadedMb, float totalMb)
         {
@@ -146,26 +162,41 @@ namespace Game
             downloadedMb = Mathf.Max(0f, downloadedMb);
             totalMb = Mathf.Max(0f, totalMb);
 
+            bool completed = percent >= 100f;
+            bool commitSpeedEta = _meter.Tick(Time.realtimeSinceStartup, downloadedMb, completed);
+            bool preparing = IsPreparing(percent);
+
             if (_fill != null)
             {
                 float t = percent / 100f;
-                float visual = t >= 1f ? 1f : Mathf.Max(t, MinVisual);
+                float visual;
+                if (t >= 1f)
+                    visual = 1f;
+                else if (preparing || t <= 0f)
+                    visual = 0f;
+                else
+                    visual = Mathf.Max(t, MinVisualAfterProgress);
                 // 宽度配合 9-slice，圆角不会被压扁。单条进度，和音量条一样写 width。
                 _fill.style.width = Length.Percent(visual * 100f);
             }
 
-            bool completed = percent >= 100f;
-            bool commitSpeedEta = _meter.Tick(Time.realtimeSinceStartup, downloadedMb, completed);
             int shownPercent = Mathf.RoundToInt(percent);
             int shownDownloaded = Mathf.RoundToInt(downloadedMb);
-            bool sizeChanged = shownPercent != _shownPercent || shownDownloaded != _shownDownloaded;
+            int shownTotal = Mathf.RoundToInt(totalMb);
+            bool sizeChanged = shownPercent != _shownPercent
+                || shownDownloaded != _shownDownloaded
+                || shownTotal != _shownTotal;
             if (!completed && !sizeChanged && !commitSpeedEta)
                 return;
 
             _shownPercent = shownPercent;
             _shownDownloaded = shownDownloaded;
+            _shownTotal = shownTotal;
             WriteTexts(percent, downloadedMb, totalMb, completed, commitSpeedEta);
         }
+
+        bool IsPreparing(float percent) =>
+            percent < PreparingPercent && _meter.DisplaySpeedMbps <= 0.001f;
 
         void WriteTexts(
             float percent,
@@ -187,9 +218,14 @@ namespace Game
             {
                 if (_sentence != null)
                     _sentence.text = string.Empty;
-                // 无速度/无总量：不覆盖成「剩余--」；完成才写「完成」。
-                if (_eta != null && completed)
-                    _eta.text = "完成";
+                if (_eta != null)
+                {
+                    if (completed)
+                        _eta.text = "完成";
+                    else if (!_meter.HasPublishedEta)
+                        _eta.text = string.Empty;
+                }
+
                 if (_sizeDetail != null)
                 {
                     // DisplaySpeed 只在 commit 时变；百分比可跟手。
@@ -215,13 +251,30 @@ namespace Game
             if (_sizeDetail != null)
                 _sizeDetail.text = copy.SizeDetail ?? string.Empty;
 
-            if (!commitSpeedEta || _eta == null)
+            if (_eta == null)
                 return;
 
-            // Meter 侧 sticky：无速度时为空，保持上次有效剩余。
+            if (completed)
+            {
+                _eta.text = "完成";
+                return;
+            }
+
+            // 尚未公布且非 commit 帧：留空。commit 帧问 Meter；空串且已公布则保留上次。
+            if (!_meter.HasPublishedEta && !commitSpeedEta)
+            {
+                _eta.text = string.Empty;
+                return;
+            }
+
+            if (!commitSpeedEta)
+                return;
+
             string eta = _meter.ResolveEta(downloadedMb, totalMb, completed);
             if (!string.IsNullOrEmpty(eta))
                 _eta.text = eta;
+            else if (!_meter.HasPublishedEta)
+                _eta.text = string.Empty;
         }
 
         void ApplyIcon(NoticeCardContent content)
@@ -275,6 +328,7 @@ namespace Game
             _meter.Reset();
             _shownPercent = -1;
             _shownDownloaded = -1;
+            _shownTotal = -1;
             _downloadedApplied = false;
             _downloadedShown = false;
         }
