@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Game.Native;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityGameFramework.Runtime;
@@ -38,6 +39,8 @@ namespace Game
         static Coroutine _fade;
         static Coroutine _poolRelease;
         static Coroutine _extinguish;
+        static bool _extinguishLogged;
+        static float _extinguishLogAt;
         /// <summary>揭罩后安静再卸视频 RT（防泄漏）；Show 时取消。</summary>
         static Coroutine _coverGpuRelease;
         static LoadingCoverLatch _latch;
@@ -134,6 +137,8 @@ namespace Game
             Suppressed = false;
             EntryGpuSettled = false;
             _hiding = false;
+            _extinguishLogged = false;
+            _chainResets = 0;
             // 关掉的 Document 不算活罩。先丢掉引用，再按 UIManager 里仍打开的实例恢复。
             if (!IsCoverLive(_form))
                 _form = null;
@@ -410,15 +415,39 @@ namespace Game
             _smooth = host.StartCoroutine(SmoothRoutine());
         }
 
+        static float _coverBeatAt;
+
         static IEnumerator SmoothRoutine()
         {
+            _coverBeatAt = 0f;
             while (_visible && !_hiding)
             {
                 TickSmooth(Time.unscaledDeltaTime);
+                BeatCover();
                 yield return null;
             }
 
             _smooth = null;
+        }
+
+        /// <summary>
+        /// 罩还在时每 2 秒一条。主线程被同步铺装堵住时这条会停，最后一行就是停点。
+        /// </summary>
+        static void BeatCover()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (_coverBeatAt > 0f && now - _coverBeatAt < 2f)
+                return;
+            _coverBeatAt = now;
+            string tip = string.IsNullOrEmpty(_tip) ? "none" : _tip.Replace(' ', '_');
+            IslandEntryLog.Wait(
+                "cover",
+                "beat",
+                "tip=" + tip
+                + " p=" + _shownProgress.ToString("0.00")
+                + " screen=" + Screen.width + "x" + Screen.height
+                + " prefill=" + (EnvItemStreamerLite.PrefillSuppressRender ? 1 : 0)
+                + " coverOnly=" + (IslandGpuReclaim.CoverOnly ? 1 : 0));
         }
 
         static void TickSmooth(float dt)
@@ -434,12 +463,10 @@ namespace Game
         {
             LoadingForm form = AliveForm();
             if (form != null)
-            {
                 form.SetProgress(progress, tip);
-                return;
-            }
-
-            BootEarlyCover.Instance?.SetProgress(progress, tip);
+            else
+                BootEarlyCover.Instance?.SetProgress(progress, tip);
+            PaintDetachedChrome(progress, tip);
         }
 
         public static void HoldCoverHidden() => ExtinguishOnce();
@@ -582,21 +609,187 @@ namespace Game
                     forms[i].ForceVeilOff();
             }
 
+            // 篝火静帧常被拆到面板根上单独藏掉，标题和进度条还留在同一层，
+            // 揭罩日志已经结束，屏幕上仍是「正在进入世界...」和一条短进度。
+            string[] coverClasses =
+            {
+                "game-loading-form__root",
+                "game-loading-form__uiloading",
+                "game-loading-form__labeltitle",
+                "game-loading-form__sliderprogress-slider",
+                "game-loading-form__fill",
+                "boot-early-cover__root",
+                "boot-early-cover__chrome",
+                "boot-early-cover__tip",
+                "boot-early-cover__fill",
+            };
+            int leftoverCount = 0;
+            int titleVisible = 0;
+            int removed = 0;
             for (int p = 0; p < panels.Count; p++)
             {
                 IPanel panel = panels[p];
                 if (panel?.visualTree == null)
                     continue;
-                var stills = new List<VisualElement>(4);
-                panel.visualTree.Query("campfireStill").ForEach(stills.Add);
-                for (int s = 0; s < stills.Count; s++)
+                var leftovers = new List<VisualElement>(8);
+                panel.visualTree.Query("campfireStill").ForEach(leftovers.Add);
+                panel.visualTree.Query("campfireVideo").ForEach(leftovers.Add);
+                panel.visualTree.Query("labeltitle").ForEach(leftovers.Add);
+                panel.visualTree.Query("tip").ForEach(leftovers.Add);
+                for (int c = 0; c < coverClasses.Length; c++)
+                    panel.visualTree.Query(className: coverClasses[c]).ForEach(leftovers.Add);
+                leftoverCount += leftovers.Count;
+                for (int s = 0; s < leftovers.Count; s++)
                 {
-                    VisualElement top = stills[s];
-                    while (top.parent != null && top.parent != panel.visualTree)
-                        top = top.parent;
-                    top.style.display = DisplayStyle.None;
-                    top.style.opacity = 0f;
-                    top.pickingMode = PickingMode.Ignore;
+                    VisualElement node = leftovers[s];
+                    if (node == null || node.panel == null)
+                        continue;
+                    if (node.name == "labeltitle"
+                        && node.resolvedStyle.display != DisplayStyle.None
+                        && node.resolvedStyle.opacity > 0.05f)
+                        titleVisible++;
+                    // 只摘加载条自己。摘掉 UIDocument 根会在 Custom SRP 上把上一帧冻住。
+                    if (node == panel.visualTree || IsDocumentRoot(node))
+                    {
+                        node.style.display = DisplayStyle.None;
+                        node.style.opacity = 0f;
+                        node.pickingMode = PickingMode.Ignore;
+                        continue;
+                    }
+
+                    node.RemoveFromHierarchy();
+                    removed++;
+                }
+            }
+
+            int chains = 0;
+            if (_chainResets < 3)
+            {
+                _chainResets++;
+                for (int p = 0; p < panels.Count; p++)
+                {
+                    if (ResetOverlayChain(panels[p]))
+                        chains++;
+                }
+            }
+
+            // #region agent log
+            if (!_extinguishLogged || (titleVisible > 0 && Time.unscaledTime >= _extinguishLogAt))
+            {
+                _extinguishLogged = true;
+                _extinguishLogAt = Time.unscaledTime + 1f;
+                Log.Info(
+                    "[CoverDebug] extinguish panels=" + panels.Count
+                    + " leftovers=" + leftoverCount
+                    + " titleVisible=" + titleVisible
+                    + " removed=" + removed
+                    + " chains=" + chains);
+            }
+            // #endregion
+        }
+
+        static int _chainResets;
+
+        /// <summary>
+        /// 节点已经从树上摘掉，DrawUIOverlay 仍画着摘掉前的那一帧。
+        /// 切后台会拆掉这条渲染链。这里直接拆，让下一帧按现在的树重画。
+        /// </summary>
+        static bool ResetOverlayChain(IPanel panel)
+        {
+            if (panel == null)
+                return false;
+            try
+            {
+                const System.Reflection.BindingFlags inst =
+                    System.Reflection.BindingFlags.Instance
+                    | System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.NonPublic;
+                System.Type panelType = panel.GetType();
+                object updater = panelType.GetField("m_VisualTreeUpdater", inst)?.GetValue(panel);
+                if (updater == null)
+                    updater = panelType.GetProperty("visualTreeUpdater", inst)?.GetValue(panel);
+                if (updater == null)
+                    return false;
+
+                System.Type phaseType = System.Type.GetType(
+                    "UnityEngine.UIElements.VisualTreeUpdatePhase, UnityEngine.UIElementsModule");
+                System.Reflection.MethodInfo getUpdater = updater.GetType().GetMethod("GetUpdater", inst);
+                if (phaseType == null || getUpdater == null)
+                    return false;
+
+                object repaintPhase = System.Enum.Parse(phaseType, "Repaint");
+                object repaintUpdater = getUpdater.Invoke(updater, new[] { repaintPhase });
+                System.Reflection.MethodInfo destroy = repaintUpdater?.GetType()
+                    .GetMethod("DestroyRenderChain", inst);
+                if (destroy == null)
+                    return false;
+                destroy.Invoke(repaintUpdater, null);
+                panelType.GetMethod("Repaint", inst)?.Invoke(panel, null);
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                Log.Warning("[CoverDebug] chain reset failed " + e.GetType().Name);
+                return false;
+            }
+        }
+
+        static bool IsDocumentRoot(VisualElement node)
+        {
+            UIDocument[] docs = Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Include);
+            for (int i = 0; i < docs.Length; i++)
+            {
+                if (docs[i] != null && docs[i].rootVisualElement == node)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 面板换过一次之后，屏幕上那份标题和进度条不再是 LoadingForm 缓存的那棵。
+        /// 进度只写缓存的话，真机就停在第一次的「登录中」。
+        /// </summary>
+        static void PaintDetachedChrome(float progress, string tip)
+        {
+            UIDocument[] docs = Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Include);
+            var panels = new List<IPanel>(4);
+            for (int i = 0; i < docs.Length; i++)
+            {
+                VisualElement root = docs[i] != null ? docs[i].rootVisualElement : null;
+                IPanel panel = root != null ? root.panel : null;
+                if (panel == null || panels.Contains(panel))
+                    continue;
+                panels.Add(panel);
+            }
+
+            float width = Mathf.Clamp01(progress) * 100f;
+            if (progress > 0.001f && width < 2f)
+                width = 2f;
+            for (int p = 0; p < panels.Count; p++)
+            {
+                VisualElement tree = panels[p]?.visualTree;
+                if (tree == null)
+                    continue;
+                var titles = new List<Label>(4);
+                tree.Query<Label>("labeltitle").ForEach(titles.Add);
+                tree.Query<Label>("tip").ForEach(titles.Add);
+                for (int i = 0; i < titles.Count; i++)
+                {
+                    if (titles[i] != null && !string.IsNullOrEmpty(tip))
+                        titles[i].text = tip;
+                }
+
+                var fills = new List<VisualElement>(4);
+                tree.Query(className: "game-loading-form__fill").ForEach(fills.Add);
+                tree.Query(className: "boot-early-cover__fill").ForEach(fills.Add);
+                for (int i = 0; i < fills.Count; i++)
+                {
+                    VisualElement fill = fills[i];
+                    if (fill == null)
+                        continue;
+                    fill.style.scale = new Scale(Vector2.one);
+                    fill.style.width = Length.Percent(width);
                 }
             }
         }

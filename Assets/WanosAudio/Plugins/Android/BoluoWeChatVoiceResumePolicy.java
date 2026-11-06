@@ -3,9 +3,8 @@ package com.wanos.app.health;
 /**
  * 微信语音 / MEDIA 打断后的续播门闩（对齐 mobile-audio-focus）。
  * <p>
- * 按住说话期间禁止续播（禁止只拉起音效）。
- * 微信语音结束（录音/通话已停，且不是音乐视频抢占）允许后台成对恢复。
- * QQ / B 站等音乐视频只在回到波萝或用户点负一屏时恢复，后台不自动续。
+ * 微信语音进行中禁止续播，人回到波萝也不续。语音结束、系统送回焦点后，后台把音乐和音效一起拉起。
+ * QQ / B 站等音乐视频后台不自动续。回到波萝显示暂停，滑动或播放键才把音乐和音效一起拉起。
  * 冷启动引擎默认 mute、且没有丢焦闩，不算这次打断。
  */
 public final class BoluoWeChatVoiceResumePolicy {
@@ -75,15 +74,20 @@ public final class BoluoWeChatVoiceResumePolicy {
         if (!interrupted) {
             return hold("not_interrupted");
         }
-        if (in.returnedToBoluo) {
-            // 回到波萝：音乐、音效、解静音一起做。只拉音效会留下音乐仍 Pause。
-            return restore("return_to_boluo");
-        }
-        if (in.weChatVoiceStillActive) {
+        // 微信还在说话：回前台也不续。等录音结束、系统 GAIN 再成对恢复。
+        if (in.weChatVoiceStillActive && !in.competingMediaEpisode) {
             return hold("wechat_voice_hold");
         }
+        if (in.returnedToBoluo) {
+            if (in.competingMediaEpisode) {
+                // QQ / B 站：回前台保持暂停并显示打断。滑动 / 播放键走 userGesture 才成对恢复。
+                return hold("return_show_interrupt");
+            }
+            // 微信语音已经结束：音乐、音效、解静音一起做。
+            return restore("return_to_boluo");
+        }
         if (in.competingMediaEpisode) {
-            // 音乐/视频：后台不续。回前台走上面的 return_to_boluo，负一屏播放不经过这里。
+            // 音乐/视频：后台不续。回前台显示暂停，滑动或负一屏播放才续。
             return hold("wait_foreground_or_user");
         }
         // 微信语音已结束：后台也可以成对恢复。

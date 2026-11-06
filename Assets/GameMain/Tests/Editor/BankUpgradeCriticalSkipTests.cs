@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using Game.BoluoApi;
@@ -6,11 +7,13 @@ using NUnit.Framework;
 namespace Game.Tests
 {
     /// <summary>
-    /// Critical 申请窗：盘上已满足 catalog 时不得因首包版本不等再弹。
+    /// Critical 申请窗：盘上文件须同时对上服务端 version 与 md5 才跳过 HTTP。
     /// </summary>
     public sealed class BankUpgradeCriticalSkipTests
     {
         const string Stem = "CriticalSkip_ReadyBank";
+        const string MatchVersion = "1.0.0";
+        const string MatchMd5 = "abc123";
 
         string _path;
 
@@ -19,6 +22,8 @@ namespace Game.Tests
         {
             PresetBankCatalog.Clear();
             BankDownloader.InvalidateLocalReadyCache();
+            BankDownloader.EditorForgetIdentity(Stem);
+            StreamingBankCatalog.EditorRemove(Stem);
             AudioEnginePaths.EnsureWritableDirs();
             _path = Path.Combine(
                 AudioEnginePaths.PersistentBankPath,
@@ -30,64 +35,158 @@ namespace Game.Tests
         public void TearDown()
         {
             TryDelete(_path);
+            BankDownloader.EditorForgetIdentity(Stem);
+            StreamingBankCatalog.EditorRemove(Stem);
             PresetBankCatalog.Clear();
             BankDownloader.InvalidateLocalReadyCache();
         }
 
         [Test]
-        public void CriticalNeedsHttp_LocalReady_False_EvenWithRemoteVersion()
+        public void CriticalNeedsHttp_FileWithoutIdentity_True()
         {
-            PresetBankCatalog.TryApplyUpgrade(new BankUpgradeData
-            {
-                banks = new List<BankRemoteInfo>
-                {
-                    new BankRemoteInfo
-                    {
-                        bankName = Stem,
-                        url = "https://example.test/critical.wsbk",
-                        size = "2",
-                        version = "9.9.9",
-                        md5 = "",
-                    },
-                },
-            });
+            Apply("9.9.9", "server-md5");
             File.WriteAllBytes(_path, new byte[2048]);
             BankDownloader.InvalidateLocalReadyCache(Stem);
-            Assert.IsTrue(BankDownloader.IsLocalReady(Stem));
 
-            Assert.IsFalse(
+            Assert.IsFalse(BankDownloader.IsLocalReady(Stem));
+            Assert.IsTrue(
                 BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem),
-                "已下完的 Critical 不得因版本字段再申请下载");
+                "没有已接受的 version/md5 时，盘上旧文件不得跳过 Critical HTTP");
+        }
+
+        [Test]
+        public void CriticalNeedsHttp_VersionAndMd5Match_False()
+        {
+            Apply(MatchVersion, MatchMd5);
+            File.WriteAllBytes(_path, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(Stem, MatchVersion, MatchMd5, _path);
+            BankDownloader.InvalidateLocalReadyCache(Stem);
+
+            Assert.IsTrue(BankDownloader.IsLocalReady(Stem));
+            Assert.IsFalse(BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem));
+        }
+
+        [Test]
+        public void CriticalNeedsHttp_VersionChangedMd5Same_UpdatesCacheWithoutHttp()
+        {
+            Apply("9.9.9", MatchMd5);
+            File.WriteAllBytes(_path, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(Stem, MatchVersion, MatchMd5, _path);
+            BankDownloader.InvalidateLocalReadyCache(Stem);
+
+            Assert.IsTrue(BankDownloader.IsLocalReady(Stem));
+            Assert.IsTrue(BankDownloader.EditorTryGetIdentity(Stem, out string version, out string md5));
+            Assert.AreEqual("9.9.9", version);
+            Assert.AreEqual(MatchMd5, md5);
+            Assert.IsFalse(BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem));
+        }
+
+        [Test]
+        public void CriticalNeedsHttp_MtimeDrift_SameSizeAndMd5_StillReady()
+        {
+            Apply(MatchVersion, MatchMd5);
+            File.WriteAllBytes(_path, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(Stem, MatchVersion, MatchMd5, _path);
+            File.SetLastWriteTimeUtc(_path, DateTime.UtcNow.AddHours(-5));
+            BankDownloader.InvalidateLocalReadyCache(Stem);
+
+            Assert.IsTrue(BankDownloader.IsLocalReady(Stem));
+            Assert.IsTrue(BankDownloader.EditorTryGetIdentity(Stem, out string version, out string md5));
+            Assert.AreEqual(MatchVersion, version);
+            Assert.AreEqual(MatchMd5, md5);
+            Assert.IsFalse(BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem));
+        }
+
+        [Test]
+        public void CriticalNeedsHttp_MtimeDrift_Md5Differs_StillNeedsHttp()
+        {
+            Apply(MatchVersion, "new-md5");
+            File.WriteAllBytes(_path, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(Stem, MatchVersion, "old-md5", _path);
+            File.SetLastWriteTimeUtc(_path, DateTime.UtcNow.AddHours(-5));
+            BankDownloader.InvalidateLocalReadyCache(Stem);
+
+            Assert.IsFalse(BankDownloader.IsLocalReady(Stem));
+            Assert.IsTrue(BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem));
+        }
+
+        [Test]
+        public void CriticalNeedsHttp_EmptyVersion_Md5Match_StillReady()
+        {
+            Apply("", MatchMd5);
+            File.WriteAllBytes(_path, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(Stem, "", MatchMd5, _path);
+            BankDownloader.InvalidateLocalReadyCache(Stem);
+
+            Assert.IsTrue(BankDownloader.IsLocalReady(Stem));
+            Assert.IsFalse(BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem));
+        }
+
+        [Test]
+        public void CriticalNeedsHttp_Md5Mismatch_True()
+        {
+            Apply(MatchVersion, "new-md5");
+            File.WriteAllBytes(_path, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(Stem, MatchVersion, "old-md5", _path);
+            BankDownloader.InvalidateLocalReadyCache(Stem);
+
+            Assert.IsFalse(BankDownloader.IsLocalReady(Stem));
+            Assert.IsTrue(BankDownloader.EditorTryGetIdentity(Stem, out string version, out string md5));
+            Assert.AreEqual(MatchVersion, version);
+            Assert.AreEqual("old-md5", md5);
+            Assert.IsTrue(BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem));
+        }
+
+        [Test]
+        public void CriticalNeedsHttp_StreamingVersionSameMd5Differs_True()
+        {
+            Apply(MatchVersion, "server-md5");
+            File.WriteAllBytes(_path, new byte[2048]);
+            StreamingBankCatalog.EditorSet(Stem, MatchVersion, "packaged-md5");
+            BankDownloader.InvalidateLocalReadyCache(Stem);
+
+            Assert.IsFalse(BankDownloader.IsLocalReady(Stem));
+            Assert.IsTrue(
+                BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem),
+                "只对上首包 version、md5 不同，不得跳过 HTTP");
+        }
+
+        [Test]
+        public void CriticalNeedsHttp_StreamingVersionAndMd5Match_False()
+        {
+            Apply(MatchVersion, "packaged-md5");
+            File.WriteAllBytes(_path, new byte[2048]);
+            StreamingBankCatalog.EditorSet(Stem, MatchVersion, "packaged-md5");
+            BankDownloader.InvalidateLocalReadyCache(Stem);
+
+            Assert.IsTrue(BankDownloader.IsLocalReady(Stem));
+            Assert.IsFalse(BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem));
         }
 
         [Test]
         public void CriticalNeedsHttp_MissingLocal_True()
         {
-            PresetBankCatalog.TryApplyUpgrade(new BankUpgradeData
-            {
-                banks = new List<BankRemoteInfo>
-                {
-                    new BankRemoteInfo
-                    {
-                        bankName = Stem,
-                        url = "https://example.test/critical.wsbk",
-                        size = "2",
-                        version = "9.9.9",
-                        md5 = "",
-                    },
-                },
-            });
+            Apply("9.9.9", "server-md5");
             BankDownloader.InvalidateLocalReadyCache(Stem);
             Assert.IsFalse(BankDownloader.IsLocalReady(Stem));
-
             Assert.IsTrue(BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem));
         }
 
         [Test]
         public void CriticalNeedsHttp_MissingLocal_IgnoresStreamingVersionFieldAlone()
         {
-            // 回归：仅 ProjectMetadata 版本一致、盘上无文件时仍须 HTTP，
-            // 否则 Critical 被跳过 + Rest 排除 Critical 名 → 预设永不下。
+            Apply(MatchVersion, "packaged-md5");
+            StreamingBankCatalog.EditorSet(Stem, MatchVersion, "packaged-md5");
+            BankDownloader.InvalidateLocalReadyCache(Stem);
+
+            Assert.IsFalse(BankDownloader.IsLocalReady(Stem));
+            Assert.IsTrue(
+                BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem),
+                "无落盘不得因首包 version+md5 跳过 Critical HTTP");
+        }
+
+        void Apply(string version, string md5)
+        {
             PresetBankCatalog.TryApplyUpgrade(new BankUpgradeData
             {
                 banks = new List<BankRemoteInfo>
@@ -97,16 +196,11 @@ namespace Game.Tests
                         bankName = Stem,
                         url = "https://example.test/critical.wsbk",
                         size = "2",
-                        version = "1.0.0",
-                        md5 = "",
+                        version = version,
+                        md5 = md5,
                     },
                 },
             });
-            BankDownloader.InvalidateLocalReadyCache(Stem);
-            Assert.IsFalse(BankDownloader.IsLocalReady(Stem));
-            Assert.IsTrue(
-                BankUpgradeBootstrap.EditorCriticalNeedsHttpUpdate(Stem),
-                "无落盘不得因 version 字段跳过 Critical HTTP");
         }
 
         static void TryDelete(string path)

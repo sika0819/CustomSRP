@@ -93,7 +93,8 @@ namespace Game
             // 天气 / 预设 / 世界 / 草地跟着 Island 场景创建，不在 Launch 上常驻。
             Music = MusicPlaylist.Instance;
             Music.ApplySavedVolumes();
-            MusicCatalog.LoadAsync();
+            // 勿在此读本地 MusicLists.json。等 upgrade/bank 的 musicLists / banks
+            // 落到 MusicCatalog / PresetBankCatalog 后再展示，否则会先闪错误专辑。
             DevicePresetShotHelper.Ensure();
             EnsureEntityGroups();
             ConfigureDebuggerFps();

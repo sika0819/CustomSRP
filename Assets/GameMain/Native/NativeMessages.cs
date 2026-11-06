@@ -122,26 +122,12 @@ namespace Game.Native
                 if (_fpsBeforeYield == int.MinValue)
                     _fpsBeforeYield = Application.targetFrameRate;
 
-                // 不 UnityPause：pause 清 GL，关页会闪相机蓝。隔帧提交，Surface 留最后一帧。
-                // 雨天：30fps / interval 2，雨帘可滚且仍让出 GPU（配合 renderScale 0.25）。
-                // 晴天：Android 禁止 1fps / interval=60（Push 会被拖死）→ 15/4；iOS 1/60 近冻景。
-                int overlayFps;
-                int overlayInterval;
-                if (RainActiveForYield)
-                {
-                    overlayFps = 30;
-                    overlayInterval = 2;
-                }
-                else
-                {
-#if UNITY_ANDROID
-                    overlayFps = 15;
-                    overlayInterval = 4;
-#else
-                    overlayFps = 1;
-                    overlayInterval = 60;
-#endif
-                }
+                // 不 UnityPause：pause 清 GL，关页会闪相机蓝。
+                // 和沉浸一样直接设目标帧率。实际帧率 = target / interval，interval 必须是 1。
+                // 旧值晴天 15/4≈4、雨天 30/2=15、iOS 1/60，切前后台和原生弹窗都会掉到个位数。
+                const int OverlayMinFrameRate = 20;
+                int overlayFps = RainActiveForYield ? 30 : OverlayMinFrameRate;
+                int overlayInterval = 1;
                 QualitySettings.vSyncCount = 0;
                 Application.targetFrameRate = overlayFps;
                 OnDemandRendering.renderFrameInterval = overlayInterval;

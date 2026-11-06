@@ -105,12 +105,12 @@ namespace Game
         /// <summary>boluo-main <c>CampFire_0/1_Audio</c> SphereCollider：停播球 50。</summary>
         public const float CampfireExitMeters = 50f;
         /// <summary>
-        /// boluo-main <c>WaterFall_Sound_Big_1</c> radius=80（Big_0 为 50；取较大声道，
-        /// 观瀑点 / 瀑边壳距都能进区，不必踩到 Big_0 钉点）。
+        /// 大瀑开播。须大于小瀑开播 50。只量 Loader / Big_0 / Big_1，
+        /// 不把河面距离算成 0。
         /// </summary>
         public const float WaterfallBigEnterMeters = 80f;
-        /// <summary>boluo-main <c>WaterFall_Audio</c> SphereCollider：停播球 117.8。</summary>
-        public const float WaterfallBigExitMeters = 117.8f;
+        /// <summary>大瀑停播。须大于小瀑停播 72，并与增益远端对齐。</summary>
+        public const float WaterfallBigExitMeters = 100f;
         /// <summary>boluo-main <c>WaterFall_Audio</c> unloadwaittime=2。</summary>
         public const float WaterfallBigUnloadDelaySeconds = 2f;
         /// <summary>
@@ -118,10 +118,10 @@ namespace Game
         /// 火边盖音改走 <see cref="AmbienceWaterSilencePolicy.WaterDuckDbNearCampfire"/> 压增益。
         /// </summary>
         public const float WaterfallCampfireMuteMeters = 0f;
-        /// <summary>boluo-main <c>WaterFall_Sound_Small_*</c> / <c>WaterFall_S_Audio</c> radius=50。</summary>
+        /// <summary>boluo-main <c>WaterFall_Sound_Small_*</c> 开播 50（<c>WaterfallSmallPlayMeters</c>）。</summary>
         public const float WaterfallSmallEnterMeters = 50f;
-        /// <summary>boluo-main 小瀑无更大停播球：Exit=Enter。</summary>
-        public const float WaterfallSmallExitMeters = 50f;
+        /// <summary>boluo-main 小瀑停播 72，对齐发射器 radius / 增益远端，避免 50m 还很响就被掐断。</summary>
+        public const float WaterfallSmallExitMeters = 72f;
         /// <summary>boluo-main <c>WaterFall_S_Audio</c> unloadwaittime=0。</summary>
         public const float WaterfallSmallUnloadDelaySeconds = 0f;
         /// <summary>Boluo Forest_Audio SphereCollider：3D 半径 150 才是进出区，曲线 160 只衰减。</summary>
@@ -167,8 +167,7 @@ namespace Game
             // 湖在岛 preset 7 那一侧（出生点 504.67 / 463.85），补一个锚点，
             // 玩家走到湖边才听得到湖面声。
             Lake("Lake_Audio_Preset7", 504.6723f, 38.82f, 463.8487f),
-            // 观瀑：boluo-main WaterFall_Sound_Big_0/1 双落点（见 AmbienceQuadChannelLayout）；
-            // 可听距用特征∪瀑面壳∪瀑盆河，Enter=80 盖观景点与瀑边。
+            // 观瀑：boluo-main WaterFall_Sound_Big_0/1。可听距只量 Loader 与这两条声道。
             Grassland("GrassLand_Audio", 419.46387f, 41.16188f, 362.95004f, GrasslandEnterMeters),
             Grassland("GrassLand_S_Audio", 503.9f, 17.36f, 667.1f, GrasslandSecondaryEnterMeters),
             Plateau("Plateau_Audio", 171.5f, 50.5f, 583.7f),
@@ -256,6 +255,28 @@ namespace Game
                 AmbienceEmitterKind.Waterfall,
                 AmbienceQuadChannelLayout.WaterfallBigRoot,
                 true));
+        }
+
+        /// <summary>
+        /// Boluo <c>WaterFall_S_Audio</c>。本工程没有小瀑 MapItem，必须单独挂上，
+        /// 不能等河床缺失才走 <see cref="AppendNativeRivers"/>。
+        /// </summary>
+        public static void AppendNativeSmallWaterfall(System.Action<AmbienceEmitterSpec> add)
+        {
+            if (add == null)
+                return;
+            AmbienceEmitterSpec spec = Point(
+                "waterfall_native_WaterFall_S_Audio",
+                AmbienceEmitterKind.Waterfall,
+                "Waterfall_Small_Quad",
+                "Play_Waterfall_Small_LR",
+                "Stop_Waterfall_Small",
+                AmbienceQuadChannelLayout.WaterfallSmallRoot,
+                WaterfallSmallEnterMeters,
+                WaterfallSmallExitMeters);
+            spec.UseXzDistance = true;
+            spec.RiverMeshName = "WaterFall_S_Audio";
+            add(spec);
         }
 
         static AmbienceEmitterSpec Native(string name, AmbienceEmitterKind kind, Vector3 pos, bool waterfall)

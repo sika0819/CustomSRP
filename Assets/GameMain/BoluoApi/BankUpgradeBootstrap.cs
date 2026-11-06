@@ -6,8 +6,8 @@ using UnityGameFramework.Runtime;
 namespace Game.BoluoApi
 {
     /// <summary>
-    /// deviceToken → userToken → upgrade/bank catalog → Critical/Rest HTTP 下载；可选灌入 Wanos。
-    /// Critical 完成后可 cue 默认 BGM（不挡揭罩）。
+    /// deviceToken → userToken → upgrade/bank（musicLists + banks，等同 MusicLists / ProjectMetadata）
+    /// 先落目录供揭罩前 UI；揭罩起播后再走 Critical/Rest 静默下载。
     /// </summary>
     public static class BankUpgradeBootstrap
     {
@@ -50,9 +50,58 @@ namespace Game.BoluoApi
         static bool _restWifiConfirmDeclined;
         static UniTaskCompletionSource _catalogTcs = new UniTaskCompletionSource();
         static UniTaskCompletionSource _criticalTcs = new UniTaskCompletionSource();
+        /// <summary>揭罩起播后再放行静默 bank 下载；目录更新不挡在这道门后。</summary>
+        static UniTaskCompletionSource _afterUncoverTcs = new UniTaskCompletionSource();
 
         public static UniTask WaitCatalogAsync() => _catalogTcs.Task;
         public static UniTask WaitCriticalAsync() => _criticalTcs.Task;
+
+        /// <summary>
+        /// 等 upgrade/bank 把 banks / musicLists 落到目录（或失败回落本地）。
+        /// 揭罩 / 音乐列表前应 await，避免先显示旧本地 JSON。
+        /// </summary>
+        public static async UniTask WaitCatalogWithTimeoutAsync(float timeoutSeconds = 20f)
+        {
+            UniTask catalog = _catalogTcs.Task;
+            if (catalog.Status.IsCompleted())
+                return;
+            if (timeoutSeconds <= 0f)
+            {
+                await catalog;
+                return;
+            }
+
+            await UniTask.WhenAny(
+                catalog,
+                UniTask.Delay(TimeSpan.FromSeconds(timeoutSeconds), ignoreTimeScale: true));
+        }
+
+        /// <summary>
+        /// 揭罩并完成起播门禁后调用：放行与以往相同的静默 Rest / Critical bank 下载。
+        /// </summary>
+        public static void NotifyAfterUncover()
+        {
+            _afterUncoverTcs.TrySetResult();
+        }
+
+        static void ResetAfterUncoverGate()
+        {
+            _afterUncoverTcs.TrySetResult();
+            _afterUncoverTcs = new UniTaskCompletionSource();
+        }
+
+        static async UniTask WaitAfterUncoverAsync(int runId)
+        {
+            UniTask gate = _afterUncoverTcs.Task;
+            if (!gate.Status.IsCompleted())
+            {
+                Log.Info("[BankUpgradeBootstrap] wait after uncover before bank downloads");
+                await gate;
+            }
+
+            if (runId >= 0 && runId != _runId)
+                return;
+        }
 
         /// <summary>
         /// 后台弹窗关（或本岛已关 §4.6）：区域门跳过申请窗、优先插队。
@@ -76,6 +125,7 @@ namespace Game.BoluoApi
             _restWifiConfirmDeclined = false;
             _catalogTcs = new UniTaskCompletionSource();
             _criticalTcs = new UniTaskCompletionSource();
+            ResetAfterUncoverGate();
             AudioEnginePaths.ResetSession();
             PresetBankCatalog.Clear();
             BankDownloader.ResetSession();
@@ -89,6 +139,7 @@ namespace Game.BoluoApi
             _runId++;
             _silentDeferred = false;
             _restWifiConfirmDeclined = false;
+            ResetAfterUncoverGate();
             DownloadCellularGate.ResetForNewSession();
             Game.DownloadConsentSession.ResetForLeaveIsland();
         }
@@ -125,6 +176,8 @@ namespace Game.BoluoApi
             }
 
             await EnsureLocalBanksReadyAsync();
+            // banks + musicLists 先齐，再 cue / 展示列表。
+            await WaitCatalogWithTimeoutAsync(20f);
             await MusicCatalog.EnsureReadyAsync(8f);
 
             const string defaultBank = "Music1_1";
@@ -148,6 +201,13 @@ namespace Game.BoluoApi
                         || WanosAudio.WanosBankStore.Load(defaultBank)
                         || TryLoadBankFromDisk(defaultBank)))
                     break;
+                if (!string.IsNullOrEmpty(BankLoadGate.LastBlockReason))
+                {
+                    Log.Warning(
+                        $"[BankUpgradeBootstrap] default bank skipped bank={defaultBank} " +
+                        $"reason={BankLoadGate.LastBlockReason}");
+                    break;
+                }
                 await UniTask.Delay(100, DelayType.UnscaledDeltaTime);
             }
 
@@ -208,7 +268,9 @@ namespace Game.BoluoApi
                         && !TryLoadBankFromDisk(cueBank))
                     {
                         Log.Warning(
-                            $"[BankUpgradeBootstrap] saved bank not ready bank={cueBank} — fallback {defaultBank}");
+                            $"[BankUpgradeBootstrap] saved bank not ready bank={cueBank} " +
+                            $"reason={BankLoadGate.LastBlockReason ?? WanosAudio.WanosBankStore.LastLoadDetail} " +
+                            $"— fallback {defaultBank}");
                         cueBank = defaultBank;
                         if (!MusicCatalog.TryFindByBankName(defaultBank, out album, out track))
                         {
@@ -242,7 +304,7 @@ namespace Game.BoluoApi
 
         static bool TryLoadBankFromDisk(string bankName)
         {
-            if (!AudioEnginePaths.TryFindLocalBank(bankName, out string path))
+            if (!BankLoadGate.TryResolveForEngine(bankName, out string path))
                 return false;
             return WanosAudio.WanosBankStore.LoadFromPath(bankName, path);
         }
@@ -257,13 +319,17 @@ namespace Game.BoluoApi
                 string name = EssentialLocalBankNames[i];
                 if (string.IsNullOrEmpty(name) || WanosAudio.WanosBankStore.IsLoaded(name))
                     continue;
-                if (AudioEnginePaths.TryFindLocalBank(name, out string path))
+                if (BankLoadGate.TryResolveForEngine(name, out string path))
                 {
                     bool ok = WanosAudio.WanosBankStore.LoadFromPath(name, path);
                     Log.Info($"[BankUpgradeBootstrap] essential bank={name} ok={ok} path={path}");
                 }
                 else
-                    Log.Warning($"[BankUpgradeBootstrap] essential bank missing: {name}");
+                {
+                    Log.Warning(
+                        $"[BankUpgradeBootstrap] essential bank skipped: {name} " +
+                        $"reason={BankLoadGate.LastBlockReason}");
+                }
             }
         }
 
@@ -276,6 +342,7 @@ namespace Game.BoluoApi
             await AudioEnginePaths.EnsureStreamingBanksExtractedAsync();
             // productName 改名后复用旧 persistent 里已下完的 bank，避免进度卡在重下。
             await AudioEnginePaths.EnsureLegacyBanksMigratedAsync();
+            await BankLoadGate.PrepareForBootAsync();
             EnsureEssentialBanksLoaded();
         }
 
@@ -310,6 +377,7 @@ namespace Game.BoluoApi
                 // 真机 jar 内 bank 须先落到 persistent；再迁入旧 product 目录已下完的 bank。
                 await AudioEnginePaths.EnsureStreamingBanksExtractedAsync();
                 await AudioEnginePaths.EnsureLegacyBanksMigratedAsync();
+                await BankLoadGate.PrepareForBootAsync();
                 if (loadIntoEngine)
                     EnsureEssentialBanksLoaded();
 
@@ -373,19 +441,28 @@ namespace Game.BoluoApi
                     return;
                 }
 
-                Log.Info($"[BankUpgradeBootstrap] catalog ok banks={data.banks.Count} — Critical local, Rest silent");
+                // musicLists ≈ MusicLists.json；banks ≈ ProjectMetadata banks[]。
+                // 揭罩前只更新目录，让未落盘项显示「未下载」；bank HTTP 等揭罩后。
+                Log.Info(
+                    $"[BankUpgradeBootstrap] catalog ok banks={data.banks.Count} " +
+                    "musicLists=" + (data.musicLists?.Count ?? 0) +
+                    " — apply before uncover, defer bank HTTP");
                 MusicCatalog.SetServerData(data.musicLists);
                 if (!MusicCatalog.IsReady)
                     MusicCatalog.LoadAsync();
+                // 新目录下旧正向 ready 缓存作废，UI 按新 version/md5 显示未下载。
+                BankDownloader.InvalidateLocalReadyCache();
                 if (loadIntoEngine)
                     EnsureEssentialBanksLoaded();
-                _catalogTcs.TrySetResult();
-
-                // Critical：StreamingAssets 复制/落盘即可，不静默 HTTP。
                 await StreamingBankCatalog.EnsureLoadedAsync();
                 ReleaseCriticalFromLocal(loadIntoEngine);
+                _catalogTcs.TrySetResult();
 
-                // 统一策略：关+WiFi 静默全量；关+流量一次总量窗；开则空转等用户点。
+                await WaitAfterUncoverAsync(runId);
+                if (runId >= 0 && runId != _runId)
+                    return;
+
+                // 揭罩起播后：与以往相同的静默全量 / 流量窗 / FeatureOn 空转链路。
                 await StartBackgroundDownloads(loadIntoEngine, runId);
             }
             catch (Exception e)
@@ -448,8 +525,8 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 静默全量：Critical（优先）+ Rest。FeatureOff Bootstrap / FeatureOn+WiFi 确认后共用。
-        /// 无 pending 时幂等 return；已在队列中的 bank 由 <see cref="BankDownloader"/> 去重。
+        /// 静默全量：先整波 Music*，再 Critical/Rest 非音乐。
+        /// FeatureOff Bootstrap / FeatureOn+WiFi 确认后共用。
         /// </summary>
         public static void KickSilentAllRemaining(bool loadIntoEngine = true)
         {
@@ -465,17 +542,53 @@ namespace Game.BoluoApi
             DownloadAllSilent(loadIntoEngine);
         }
 
-        /// <summary>静默全量：Critical（优先）+ Rest。</summary>
+        /// <summary>
+        /// 静默全量：必须先下完曲目列表，再下预设/氛围。
+        /// 禁止 Critical 与 Rest Forget 并行——氛围会抢在 Music* 入队前占满槽，列表看起来「完全没开始」。
+        /// </summary>
         static void DownloadAllSilent(bool loadIntoEngine)
         {
-            TrySilentCriticalUpdates(loadIntoEngine);
-            DownloadRest(loadIntoEngine).Forget();
+            DownloadSilentOrdered(loadIntoEngine).Forget();
         }
 
-        /// <summary>静默补 Critical（FeatureOff 巡检 / 可传后）。</summary>
+        static async UniTaskVoid DownloadSilentOrdered(bool loadIntoEngine)
+        {
+            List<BankRemoteInfo> music = CollectPendingMusicRemotes();
+            if (music.Count > 0)
+            {
+                Log.Info(
+                    "[BankUpgradeBootstrap] silent Music wave first count=" + music.Count);
+                await BankDownloader.DownloadBanks(
+                    music,
+                    loadIntoEngine: loadIntoEngine,
+                    onComplete: null,
+                    onItemDone: null,
+                    onItemProgress: null,
+                    prioritize: false,
+                    preempt: false);
+                Log.Info(
+                    "[BankUpgradeBootstrap] silent Music wave done count=" + music.Count);
+            }
+
+            List<string> criticalNonMusic = CollectCriticalNeedingUpdateNonMusic();
+            if (criticalNonMusic.Count > 0)
+            {
+                Log.Info(
+                    "[BankUpgradeBootstrap] silent Critical (non-Music) count=" +
+                    criticalNonMusic.Count);
+                await DownloadCriticalUpdates(
+                    criticalNonMusic,
+                    loadIntoEngine,
+                    showProgressDialog: false);
+            }
+
+            await DownloadRestNonMusic(loadIntoEngine);
+        }
+
+        /// <summary>静默补 Critical 非音乐（FeatureOff 巡检；Music* 已在 Music wave）。</summary>
         static void TrySilentCriticalUpdates(bool loadIntoEngine)
         {
-            List<string> needUpdate = CollectCriticalNeedingUpdate();
+            List<string> needUpdate = CollectCriticalNeedingUpdateNonMusic();
             if (needUpdate.Count == 0)
                 return;
             Log.Info(
@@ -483,7 +596,7 @@ namespace Game.BoluoApi
             DownloadCriticalUpdates(needUpdate, loadIntoEngine, showProgressDialog: false).Forget();
         }
 
-        static async UniTaskVoid DownloadCriticalUpdates(
+        static async UniTask DownloadCriticalUpdates(
             List<string> bankNames,
             bool loadIntoEngine,
             bool showProgressDialog)
@@ -499,15 +612,15 @@ namespace Game.BoluoApi
                 ticket = UiDialogService.OpenDownloadProgress();
             try
             {
-                // 静默 Critical 走 Startup（≤3 并发），勿 preempt 进 User 队首抢区域/预设进度批。
-                // 用户可见进度路径（showProgressDialog）仍可插队。
+                // 静默不走 Startup：非 Music 若 prioritize，会排在 Normal 里的曲目前面。
+                // 用户进度窗路径仍 preempt 进用户槽。出队闸门保证静默时 Music* 先于预设。
                 await BankDownloader.DownloadBanks(
                     remotes,
                     loadIntoEngine: loadIntoEngine,
                     onComplete: null,
                     onItemDone: null,
                     onItemProgress: null,
-                    prioritize: true,
+                    prioritize: false,
                     preempt: showProgressDialog);
                 Log.Info($"[BankUpgradeBootstrap] Critical update done count={remotes.Count}");
             }
@@ -531,11 +644,46 @@ namespace Game.BoluoApi
             return names;
         }
 
+        /// <summary>Critical 待下且非 Music*（Music1_1 归 Music wave）。</summary>
+        static List<string> CollectCriticalNeedingUpdateNonMusic()
+        {
+            List<string> all = CollectCriticalNeedingUpdate();
+            var nonMusic = new List<string>(all.Count);
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (!IsMusicBankName(all[i]))
+                    nonMusic.Add(all[i]);
+            }
+
+            return nonMusic;
+        }
+
+        /// <summary>catalog 内全部待下的 Music*（含 Critical 的 Music1_1）。</summary>
+        static List<BankRemoteInfo> CollectPendingMusicRemotes()
+        {
+            var all = PresetBankCatalog.AllRemotes();
+            var music = new List<BankRemoteInfo>(all.Count);
+            for (int i = 0; i < all.Count; i++)
+            {
+                BankRemoteInfo info = all[i];
+                if (info == null || string.IsNullOrEmpty(info.bankName))
+                    continue;
+                if (string.IsNullOrEmpty(info.url))
+                    continue;
+                if (!IsMusicBankName(info.bankName))
+                    continue;
+                if (BankDownloader.IsLocalReady(info.bankName))
+                    continue;
+                music.Add(info);
+            }
+
+            return music;
+        }
+
         /// <summary>
         /// Critical 要不要 HTTP：catalog 有 url 且盘上未就绪 → 要。
-        /// 禁止只凭 ProjectMetadata 版本一致就跳过——首包未必解压该 bank，
-        /// 跳过后再被 Rest 排除 Critical 名 → 预设氛围包永久不下（Grassland/Campfire 等）。
-        /// 盘上已齐（含上次 HTTP）→ 否，避免重启反复弹申请窗。
+        /// 就绪须服务端 version 与 md5 都对上；只对上首包 version 或体积不算。
+        /// 禁止无落盘就跳过——否则 Rest 排除 Critical 名后预设氛围包永久不下。
         /// </summary>
         static bool CriticalNeedsHttpUpdate(string name)
         {
@@ -543,7 +691,7 @@ namespace Game.BoluoApi
                 return false;
             if (!PresetBankCatalog.TryGet(name, out BankRemoteInfo remote) || remote == null)
                 return false;
-            if (string.IsNullOrEmpty(remote.url))
+            if (string.IsNullOrEmpty(remote.url) || string.IsNullOrEmpty(remote.md5))
                 return false;
 
             return !BankDownloader.IsLocalReady(name);
@@ -558,28 +706,48 @@ namespace Game.BoluoApi
         public static List<BankRemoteInfo> EditorCollectRestRemotes(IList<string> criticalNames) =>
             CollectRestRemotes(criticalNames);
 
+        /// <summary>单测：静默 Music wave 收集。</summary>
+        public static List<BankRemoteInfo> EditorCollectPendingMusicRemotes() =>
+            CollectPendingMusicRemotes();
+
         /// <summary>单测：Music* 是否排在非 Music 前。</summary>
         public static int EditorCompareRestRemoteMusicFirst(BankRemoteInfo a, BankRemoteInfo b) =>
             CompareRestRemoteMusicFirst(a, b);
 #endif
 
-        static async UniTask DownloadRest(bool loadIntoEngine)
+        /// <summary>Rest 非音乐：Music* 已在 Music wave；Critical 名仍排除。</summary>
+        static async UniTask DownloadRestNonMusic(bool loadIntoEngine)
         {
             var rest = CollectRestRemotes(CriticalBankNames);
-            if (rest.Count == 0)
+            var nonMusic = new List<BankRemoteInfo>(rest.Count);
+            for (int i = 0; i < rest.Count; i++)
+            {
+                BankRemoteInfo info = rest[i];
+                if (info == null || IsMusicBankName(info.bankName))
+                    continue;
+                if (string.IsNullOrEmpty(info.url))
+                    continue;
+                if (BankDownloader.IsLocalReady(info.bankName))
+                    continue;
+                nonMusic.Add(info);
+            }
+
+            if (nonMusic.Count == 0)
                 return;
 
-            // 音乐优先排序后走 Normal（≤3）：等 Critical Startup 排空再泵，多路并发但不全开。
             await BankDownloader.DownloadBanks(
-                rest,
+                nonMusic,
                 loadIntoEngine: loadIntoEngine,
                 onComplete: null,
                 onItemDone: null,
                 onItemProgress: null,
                 prioritize: false,
                 preempt: false);
-            Log.Info($"[BankUpgradeBootstrap] Rest wave finished count={rest.Count}");
+            Log.Info($"[BankUpgradeBootstrap] Rest non-Music wave finished count={nonMusic.Count}");
         }
+
+        static async UniTask DownloadRest(bool loadIntoEngine) =>
+            await DownloadRestNonMusic(loadIntoEngine);
 
         /// <summary>
         /// FeatureOff：等可传后静默全量（蜂窝自动开闸，无弹窗）。
@@ -639,8 +807,14 @@ namespace Game.BoluoApi
                     string name = CriticalBankNames[i];
                     if (string.IsNullOrEmpty(name))
                         continue;
-                    if (AudioEnginePaths.TryFindLocalBank(name, out string path))
+                    if (BankLoadGate.TryResolveForEngine(name, out string path))
                         WanosAudio.WanosBankStore.LoadFromPath(name, path);
+                    else
+                    {
+                        Log.Warning(
+                            $"[BankUpgradeBootstrap] critical bank skipped: {name} " +
+                            $"reason={BankLoadGate.LastBlockReason}");
+                    }
                 }
             }
 

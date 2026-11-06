@@ -47,6 +47,16 @@ half3 OilWeaveTint(half3 color, float2 p)
     return color * tooth;
 }
 
+// Moon_Oil sits at about 0.70–0.90 linear. Keep the body under the sun and
+// leave its warm bias — a cream wash was reading as gray, not oil yellow.
+half3 OilMoonAlbedo(half3 albedo)
+{
+    half luma = dot(albedo, half3(0.2126h, 0.7152h, 0.0722h));
+    half shade = saturate(0.32h + (luma - 0.78h) * 0.50h);
+    half3 graded = albedo * (shade * rcp(max(luma, 1e-3h)));
+    return graded * half3(1.05h, 0.97h, 0.80h);
+}
+
 // Hundreds of meters. Value climate only — no warm/cool palette drift.
 half3 OilClimateTint(half3 albedo, float3 positionWS)
 {

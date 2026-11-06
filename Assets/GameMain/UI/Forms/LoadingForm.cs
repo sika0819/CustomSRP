@@ -128,13 +128,16 @@ namespace Game
         public void SetProgress(float progress01, string title = null)
         {
             progress01 = Mathf.Clamp01(progress01);
+            if ((_fill != null && _fill.panel == null) || (_titleLabel != null && _titleLabel.panel == null))
+                RebindChrome(Root);
             if (_fill != null)
             {
-                // Boluo LoadUpdateUI fillAmount: left→right. UITK scale from left origin.
+                // 用宽度表示进度。scale 乘在 9-slice 上会把色条压短，文案已经是「正在进入世界」时条还停在三成。
                 float x = progress01;
                 if (progress01 > 0.001f && x < 0.02f)
                     x = 0.02f;
-                _fill.style.scale = new Scale(new Vector2(x, 1f));
+                _fill.style.scale = new Scale(Vector2.one);
+                _fill.style.width = Length.Percent(x * 100f);
                 _fill.style.display = DisplayStyle.Flex;
             }
 
@@ -454,7 +457,20 @@ namespace Game
             Texture2D still = landscape ? LandscapeStill : PortraitStill;
             if (still != null)
                 _still.style.backgroundImage = new StyleBackground(still);
+            _still.style.position = Position.Absolute;
+            _still.style.left = 0f;
+            _still.style.right = 0f;
+            _still.style.top = 0f;
+            _still.style.bottom = 0f;
             _still.style.display = DisplayStyle.Flex;
+            if (_coverRoot != null)
+            {
+                _coverRoot.style.position = Position.Absolute;
+                _coverRoot.style.left = 0f;
+                _coverRoot.style.right = 0f;
+                _coverRoot.style.top = 0f;
+                _coverRoot.style.bottom = 0f;
+            }
         }
 
         void ApplyOrientation()

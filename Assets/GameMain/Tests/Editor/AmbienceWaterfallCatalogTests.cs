@@ -47,10 +47,16 @@ namespace Game.Tests
             Assert.AreEqual(50f, AmbienceZoneCatalog.CampfireExitMeters, 0.01f);
             Assert.AreEqual(5f, AmbienceZoneCatalog.CampfireUnloadDelaySeconds, 0.01f);
             Assert.AreEqual(80f, AmbienceZoneCatalog.WaterfallBigEnterMeters, 0.01f);
-            Assert.AreEqual(117.8f, AmbienceZoneCatalog.WaterfallBigExitMeters, 0.01f);
+            Assert.AreEqual(100f, AmbienceZoneCatalog.WaterfallBigExitMeters, 0.01f);
+            Assert.Greater(
+                AmbienceZoneCatalog.WaterfallBigEnterMeters,
+                AmbienceZoneCatalog.WaterfallSmallEnterMeters);
+            Assert.Greater(
+                AmbienceZoneCatalog.WaterfallBigExitMeters,
+                AmbienceZoneCatalog.WaterfallSmallExitMeters);
             Assert.AreEqual(2f, AmbienceZoneCatalog.WaterfallBigUnloadDelaySeconds, 0.01f);
             Assert.AreEqual(50f, AmbienceZoneCatalog.WaterfallSmallEnterMeters, 0.01f);
-            Assert.AreEqual(50f, AmbienceZoneCatalog.WaterfallSmallExitMeters, 0.01f);
+            Assert.AreEqual(72f, AmbienceZoneCatalog.WaterfallSmallExitMeters, 0.01f);
             Assert.AreEqual(0f, AmbienceZoneCatalog.WaterfallSmallUnloadDelaySeconds, 0.01f);
         }
 
@@ -80,7 +86,7 @@ namespace Game.Tests
         [Test]
         public void BigFeature_OverlookWithinEnter_FarBeyondExit()
         {
-            // Preset7 观景点 ≈ (504.67, 38.82, 463.85)；到 Big_1 约 33m < 80。
+            // Preset7 观景点 ≈ (504.67, 38.82, 463.85)；到 Big_1 约 33m，在开播圈内。
             var overlook = new Vector3(504.6723f, 38.82f, 463.8487f);
             float d = AmbienceQuadChannelLayout.DistanceToWaterfallBigFeature(
                 overlook, out _);
@@ -93,35 +99,17 @@ namespace Game.Tests
         }
 
         [Test]
-        public void BasinRiver_CountsTowardWaterfallAudible()
+        public void RiverBesideFall_DoesNotExtendBigAudibleRange()
         {
-            // 瀑底河圈：河样点在盆内、听者贴河 → 可听距≈0，不必站到 Big_1。
-            var listener = new Vector3(435.4f, 22f, 430f);
-            var riverPt = new Vector3(435.4f, 22f, 424.85f); // 近 WaterFall_Audio 盆
-            float d = AmbienceQuadChannelLayout.DistanceToWaterfallAudible(
-                listener,
-                fallShellDist: 999f,
-                fallShellPoint: listener,
-                hasFallShell: false,
-                riverShellDist: 5f,
-                riverShellPoint: riverPt,
-                hasRiverShell: true,
-                out _);
-            Assert.Less(d, AmbienceZoneCatalog.WaterfallBigEnterMeters);
+            // 贴着瀑底河、但离 Loader/Big_0/Big_1 已超出停播：不得再把距离打成 0。
+            var listener = new Vector3(435.4f, 22f, 330f);
+            float d = AmbienceQuadChannelLayout.DistanceToWaterfallBigFeature(listener, out _);
+            Assert.Greater(d, AmbienceZoneCatalog.WaterfallBigExitMeters);
 
-            // 远处河（听者与河样点都在岛北、离瀑盆远）：贴河不得误开瀑。
-            var northListener = new Vector3(240f, 100f, 640f);
-            var farRiverPt = new Vector3(238.85f, 101f, 637f);
-            float dFar = AmbienceQuadChannelLayout.DistanceToWaterfallAudible(
-                northListener,
-                fallShellDist: 999f,
-                fallShellPoint: northListener,
-                hasFallShell: false,
-                riverShellDist: 2f,
-                riverShellPoint: farRiverPt,
-                hasRiverShell: true,
-                out _);
-            Assert.Greater(dFar, AmbienceZoneCatalog.WaterfallBigEnterMeters);
+            // 小瀑音源附近也不在大瀑停播圈里，两条瀑的满音量区不重叠。
+            var nearSmall = AmbienceQuadChannelLayout.WaterfallSmallRoot;
+            float dSmall = AmbienceQuadChannelLayout.DistanceToWaterfallBigFeature(nearSmall, out _);
+            Assert.Greater(dSmall, AmbienceZoneCatalog.WaterfallBigExitMeters);
         }
 
         [Test]

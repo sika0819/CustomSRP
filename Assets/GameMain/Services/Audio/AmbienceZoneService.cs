@@ -131,20 +131,20 @@ namespace Game
             new Vector2(24f, -12f),
             new Vector2(30f, -17.25f),
         };
-        /// <summary>boluo-main WaterFall_Sound_Big_1 CurveForGain（radius=80，盖观瀑点）。</summary>
+        /// <summary>大瀑增益：64m 内 0dB，100m 收到 -17.25，与停播对齐。</summary>
         static readonly Vector2[] WaterfallBigGainCurve =
         {
-            new Vector2(27.473417f, 0f),
-            new Vector2(52.000847f, -5.9664736f),
-            new Vector2(80f, -17.25f),
+            new Vector2(8f, 0f),
+            new Vector2(64f, 0f),
+            new Vector2(100f, -17.25f),
         };
-        /// <summary>boluo-main WaterFall_Sound_Small_* CurveForGain（radius=50）。</summary>
+        /// <summary>boluo-main WaterFall_Sound_Small_* CurveForGain（远端 72，对齐停播）。</summary>
         static readonly Vector2[] WaterfallSmallGainCurve =
         {
-            new Vector2(7.6839657f, 0f),
-            new Vector2(23.299768f, -5.0735292f),
-            new Vector2(40f, -12.460581f),
-            new Vector2(50f, -17.25f),
+            new Vector2(4f, 0f),
+            new Vector2(29.093904f, -5.0735292f),
+            new Vector2(55.930443f, -12.460581f),
+            new Vector2(72f, -17.25f),
         };
 
         public const string HostName = "AmbienceZones";
@@ -577,7 +577,7 @@ namespace Game
 
         /// <summary>
         /// 走进河/瀑/火可听圈：Critical 常 <c>loadIntoEngine=false</c>，只靠走路 Retain 会 miss；
-        /// 未落盘时 preempt+prioritize 插队下载并灌引擎，已落盘则立刻 <see cref="WanosBankStore.Load"/>。
+        /// 未落盘时排进静默预设相位（不进用户槽、不打断音乐列表），已落盘则立刻 <see cref="WanosBankStore.Load"/>。
         /// </summary>
         void EnsureProximityBankReady(AmbienceEmitterSpec spec)
         {
@@ -622,7 +622,7 @@ namespace Game
                 return;
             }
 
-            Log.Info($"[AmbienceZone] proximity prioritize download+load bank={bank}");
+            Log.Info($"[AmbienceZone] proximity silent download+load bank={bank}");
             string kickBank = bank;
             UserBankDownloadFlow.Start(
                 new[] { kickBank },
@@ -633,10 +633,10 @@ namespace Game
                         && !BankDownloader.IsLocalReady(kickBank))
                         _proximityBankKick.Remove(kickBank);
                 },
-                prioritize: true,
-                preempt: true,
+                prioritize: false,
+                preempt: false,
                 loadIntoEngine: true,
-                // 邻近自动 Kick 不占用户批：勿挡音乐/预设「未下载」点击优先插队。
+                // 邻近自动 Kick 不占用户批，也不插到音乐列表前面。
                 occupyUserBusy: false);
         }
 
@@ -980,6 +980,7 @@ namespace Game
             // 仅统计真正的 River_* 床位。MapItem 里的 WaterfallSplash/Mist 不能挡住
             // AppendNativeRivers，否则河链（River_01..03）整组丢失。
             bool hasRiverBed = false;
+            bool hasSmallWaterfall = false;
             if (items != null)
             {
                 for (int i = 0; i < items.Count; i++)
@@ -989,6 +990,9 @@ namespace Game
                     {
                         if (spec.Kind == AmbienceEmitterKind.River)
                             hasRiverBed = true;
+                        if (spec.Kind == AmbienceEmitterKind.Waterfall
+                            && !AmbienceQuadChannelLayout.IsWaterfallBig(spec))
+                            hasSmallWaterfall = true;
                         AddSource(spec);
                     }
                 }
@@ -996,6 +1000,8 @@ namespace Game
 
             if (!hasRiverBed)
                 AmbienceZoneCatalog.AppendNativeRivers(AddSource);
+            if (!hasSmallWaterfall)
+                AmbienceZoneCatalog.AppendNativeSmallWaterfall(AddSource);
 
             AppendCampfireExtras();
         }
@@ -1593,35 +1599,21 @@ namespace Game
                 return anchor;
             }
 
-            // 大瀑：固定特征（Big_0/1/Splash）∪ 瀑面探针 ∪ 瀑盆内河面。
-            // 禁止只认 Big_1——观瀑点才响、瀑底一圈河不响。
+            // 大瀑：Boluo 只量 WaterFall_Audio 与 Big_0/Big_1。
+            // 禁止并河面 / 飞溅探针：贴河会把距离打成 0，满音量拖出观瀑点，
+            // 再一跨出样本就停，同时踩进小瀑的满音量圈。
             if (spec.Kind == AmbienceEmitterKind.Waterfall
                 && AmbienceQuadChannelLayout.IsWaterfallBig(spec))
             {
-                TryWaterfallProbeShells(
-                    listener,
-                    ref src.StickyShoreIndex,
-                    out float fallShell,
-                    out Vector3 fallPt,
-                    out bool hasFall,
-                    out float riverShell,
-                    out Vector3 riverPt,
-                    out bool hasRiver);
-                float dFall = AmbienceQuadChannelLayout.DistanceToWaterfallAudible(
-                    listener,
-                    fallShell,
-                    fallPt,
-                    hasFall,
-                    riverShell,
-                    riverPt,
-                    hasRiver,
-                    out Vector3 nearestFall);
+                float dFall = AmbienceQuadChannelLayout.DistanceToWaterfallBigFeature(
+                    listener, out Vector3 nearestFall);
                 bool mutedFall = IsWaterfallMutedByCampfire(spec, listener);
                 want = !mutedFall && KeepPlayingWithExitGrace(src, dFall, enter, exit, nearExtra);
                 return nearestFall;
             }
 
-            // 小瀑：MapItem 根 + Small_0/1，再并瀑面探针。
+            // 小瀑：Boluo 只量 WaterFall_S_Audio 和两条声道。
+            // 禁止并瀑面探针：探针是大瀑飞溅 / River_04，会把小瀑声拽到大瀑。
             if (spec.Kind == AmbienceEmitterKind.Waterfall)
             {
                 Vector3 root = ResolveEmitterPosition(spec);
@@ -1633,21 +1625,6 @@ namespace Game
                 float d1 = Distance(spec, listener, lr);
                 if (d0 < dFall) { dFall = d0; nearestFall = lsRs; }
                 if (d1 < dFall) { dFall = d1; nearestFall = lr; }
-                WaterSurfaceProbe probe = GameEntry.World?.WaterProbe;
-                int sticky = src.StickyShoreIndex;
-                if (probe != null
-                    && probe.TryNearestShell(
-                        WaterSurfaceProbe.SurfaceKind.Waterfall,
-                        listener,
-                        ref sticky,
-                        out Vector3 fallPt,
-                        out float fallShell)
-                    && fallShell < dFall)
-                {
-                    dFall = fallShell;
-                    nearestFall = fallPt;
-                    src.StickyShoreIndex = sticky;
-                }
                 bool mutedFall = IsWaterfallMutedByCampfire(spec, listener);
                 want = !mutedFall && KeepPlayingWithExitGrace(src, dFall, enter, exit, nearExtra);
                 return nearestFall;
@@ -1685,48 +1662,6 @@ namespace Game
             return fallback;
         }
 
-        void TryWaterfallProbeShells(
-            Vector3 listener,
-            ref int stickyIndex,
-            out float fallShell,
-            out Vector3 fallPt,
-            out bool hasFall,
-            out float riverShell,
-            out Vector3 riverPt,
-            out bool hasRiver)
-        {
-            fallShell = float.PositiveInfinity;
-            fallPt = listener;
-            hasFall = false;
-            riverShell = float.PositiveInfinity;
-            riverPt = listener;
-            hasRiver = false;
-            WaterSurfaceProbe probe = GameEntry.World?.WaterProbe;
-            if (probe == null)
-                return;
-
-            int fallSticky = stickyIndex;
-            if (probe.TryNearestShell(
-                    WaterSurfaceProbe.SurfaceKind.Waterfall,
-                    listener,
-                    ref fallSticky,
-                    out fallPt,
-                    out fallShell))
-            {
-                hasFall = true;
-                stickyIndex = fallSticky;
-            }
-
-            int riverSticky = -1;
-            if (probe.TryNearestShell(
-                    WaterSurfaceProbe.SurfaceKind.River,
-                    listener,
-                    ref riverSticky,
-                    out riverPt,
-                    out riverShell))
-                hasRiver = true;
-        }
-
         /// <summary>探针未就绪时：所有河床位世界点取最近（含 native / MapItem）。</summary>
         bool TryNearestRiverCatalogPoint(Vector3 listener, out Vector3 nearest, out float dist)
         {
@@ -1759,8 +1694,8 @@ namespace Game
         {
             if (spec.Kind != AmbienceEmitterKind.Waterfall)
                 return false;
-            // 仅大瀑受篝火静音圈；Enter 明显大于 Big 常量的（旧观景代理）跳过。
-            if (spec.EnterRadius > AmbienceZoneCatalog.WaterfallBigEnterMeters + 0.5f)
+            // 仅大瀑受篝火静音圈。禁止再比 Enter：大瀑开播 42、小瀑 50，比半径会认反。
+            if (!AmbienceQuadChannelLayout.IsWaterfallBig(spec))
                 return false;
             return IsInsideCampfireWaterfallMute(listener);
         }
@@ -1787,25 +1722,7 @@ namespace Game
             if (spec.Kind == AmbienceEmitterKind.Waterfall
                 && AmbienceQuadChannelLayout.IsWaterfallBig(spec))
             {
-                int sticky = -1;
-                TryWaterfallProbeShells(
-                    listener,
-                    ref sticky,
-                    out float fallShell,
-                    out Vector3 fallPt,
-                    out bool hasFall,
-                    out float riverShell,
-                    out Vector3 riverPt,
-                    out bool hasRiver);
-                AmbienceQuadChannelLayout.DistanceToWaterfallAudible(
-                    listener,
-                    fallShell,
-                    fallPt,
-                    hasFall,
-                    riverShell,
-                    riverPt,
-                    hasRiver,
-                    out Vector3 nearest);
+                AmbienceQuadChannelLayout.DistanceToWaterfallBigFeature(listener, out Vector3 nearest);
                 return nearest;
             }
             if (spec.Kind == AmbienceEmitterKind.Waterfall)

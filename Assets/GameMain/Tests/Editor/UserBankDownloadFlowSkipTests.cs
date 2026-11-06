@@ -13,6 +13,8 @@ namespace Game.Tests
     {
         const string ReadyStem = "FlowSkip_ReadyBank";
         const string PendingStem = "FlowSkip_PendingBank";
+        const string ReadyVersion = "1.0.0";
+        const string ReadyMd5 = "flow-skip-md5";
 
         string _readyPath;
 
@@ -27,6 +29,7 @@ namespace Game.Tests
                 AudioEnginePaths.PersistentBankPath,
                 ReadyStem + AudioEnginePaths.BankExtension);
             File.WriteAllBytes(_readyPath, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(ReadyStem, ReadyVersion, ReadyMd5, _readyPath);
 
             PresetBankCatalog.TryApplyUpgrade(new BankUpgradeData
             {
@@ -37,7 +40,8 @@ namespace Game.Tests
                         bankName = ReadyStem,
                         url = "https://example.test/ready.wsbk",
                         size = "2",
-                        md5 = "",
+                        version = ReadyVersion,
+                        md5 = ReadyMd5,
                     },
                     new BankRemoteInfo
                     {
@@ -56,6 +60,7 @@ namespace Game.Tests
         {
             if (!string.IsNullOrEmpty(_readyPath) && File.Exists(_readyPath))
                 File.Delete(_readyPath);
+            BankDownloader.EditorForgetIdentity(ReadyStem);
             PresetBankCatalog.Clear();
             BankDownloader.InvalidateLocalReadyCache();
         }

@@ -51,7 +51,7 @@
     background-image: url("../Textures/PresetItem/bofangzhuangtai.png");
     -unity-background-scale-mode: stretch-to-fill;
     -unity-background-image-tint-color: rgba(255, 255, 255, 1.000);
-    picking-mode: Ignore;
+    picking-mode: Position;
 }
 .game-preset-item__statewaitdownload {
     position: absolute;

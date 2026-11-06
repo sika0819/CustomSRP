@@ -687,17 +687,16 @@ namespace Game
         {
             if (string.IsNullOrEmpty(bankName))
                 return true;
-            // IsLocalReady 已对空 url Skipped 回落 Probe；保留显式拒绝作双保险。
-            if (!BankDownloader.IsLocalReady(bankName))
+            // IsLocalReady 对「线上缺 url/md5 且有本地文件」会当成就绪。
+            // 只有仍是空 url / 空 md5 的 Skipped，且本地不可用，才不让过门。
+            if (!BankDownloader.IsLocalReady(bankName)
+                && !BankLoadGate.CanEnterWithoutOfficialFile(bankName))
                 return false;
             if (BankDownloader.TryGetActiveItem(bankName, out BankDownloadItem item)
                 && item != null
                 && item.State == BankDownloadState.Skipped
-                && (string.IsNullOrEmpty(item.Url)
-                    || string.Equals(
-                        item.Error,
-                        BankDownloadItem.UrlEmptyError,
-                        System.StringComparison.Ordinal)))
+                && (string.Equals(item.Error, BankDownloadItem.UrlEmptyError, System.StringComparison.Ordinal)
+                    || string.Equals(item.Error, BankDownloadItem.Md5EmptyError, System.StringComparison.Ordinal)))
                 return false;
             return true;
         }

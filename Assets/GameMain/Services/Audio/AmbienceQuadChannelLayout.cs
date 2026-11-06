@@ -47,6 +47,17 @@ namespace Game
         public static readonly Vector3 WaterfallSmall1Local =
             new Vector3(0.5646448f, 7.465202f, 8.449369f);
 
+        /// <summary>Boluo <c>WaterFall_S_Audio</c> 世界坐标（父节点在原点）。</summary>
+        public static readonly Vector3 WaterfallSmallRoot =
+            new Vector3(431.07202f, 22.45272f, 592.6883f);
+
+        /// <summary>
+        /// Boluo <c>WaterFall_S_Audio</c> 旋转。Small_0/1 是这个旋转下的局部坐标，
+        /// 直接相加会把声道钉偏。
+        /// </summary>
+        public static readonly Quaternion WaterfallSmallRootRotation =
+            new Quaternion(0.3234863f, -0.38012636f, 0.14369887f, 0.854524f);
+
         /// <summary>
         /// 河：朝向只跟站位到河面，不跟角色脸（Boluo StableFacingFromFeatureToListener）。
         /// 转头位置不变 → 四角不动 → 左右不会甩。
@@ -121,8 +132,7 @@ namespace Game
         }
 
         /// <summary>
-        /// 大/小瀑用 bank / 事件名区分。禁止再比 ExitRadius——boluo-main Big 可听到 80、
-        /// Small 到 50，Exit 大小会反转。
+        /// 大/小瀑用 bank / 事件名区分。禁止再比 ExitRadius：停播距离会改，比大小会认错。
         /// </summary>
         public static bool IsWaterfallBig(AmbienceEmitterSpec spec)
         {
@@ -158,62 +168,18 @@ namespace Game
         }
 
         /// <summary>
-        /// 瀑底河盆：河面样点落在瀑根水平这么远内时，贴河也算进瀑可听
-        /// （禁止只认 Big_1 观瀑点，否则「走到发射器才响」）。
-        /// 与 boluo-main Big 可听圈同量级。
-        /// </summary>
-        public const float WaterfallBasinRiverMeters = 80f;
-
-        /// <summary>场景飞溅特效锚（WaterfallSplash），补 Big_* 未盖住的瀑口。</summary>
-        public static readonly Vector3 WaterfallSplashFeature =
-            new Vector3(423.81f, 66.34f, 457.4f);
-
-        /// <summary>
-        /// Boluo <c>DistanceToWaterfallFeature</c>：loader + Big_0/1 + Splash 取最近水平距。
+        /// Boluo <c>DistanceToWaterfallFeature</c>：Loader + Big_0 + Big_1 取最近水平距。
+        /// 不含水面探针、飞溅、河样点。那些点会把贴河距离打成 0，满音量延伸到小瀑圈里。
         /// </summary>
         public static float DistanceToWaterfallBigFeature(Vector3 listener, out Vector3 nearest)
         {
             Vector3 root = WaterfallBigRoot;
             Vector3 p0 = root + WaterfallBig0Local;
             Vector3 p1 = root + WaterfallBig1Local;
-            Vector3 splash = WaterfallSplashFeature;
             nearest = root;
             float best = HorizontalDistance(listener, root);
             Consider(listener, p0, ref best, ref nearest);
             Consider(listener, p1, ref best, ref nearest);
-            Consider(listener, splash, ref best, ref nearest);
-            return best;
-        }
-
-        /// <summary>
-        /// 大瀑可听距：固定特征 ∪ 瀑面探针 ∪ 瀑盆内河面（底下那圈河）。
-        /// </summary>
-        public static float DistanceToWaterfallAudible(
-            Vector3 listener,
-            float fallShellDist,
-            Vector3 fallShellPoint,
-            bool hasFallShell,
-            float riverShellDist,
-            Vector3 riverShellPoint,
-            bool hasRiverShell,
-            out Vector3 nearest)
-        {
-            float best = DistanceToWaterfallBigFeature(listener, out nearest);
-            if (hasFallShell && fallShellDist < best)
-            {
-                best = fallShellDist;
-                nearest = fallShellPoint;
-            }
-
-            // 瀑底河圈：最近河样点属于瀑盆时，听者到该河面的 shell 也算瀑距。
-            if (hasRiverShell
-                && HorizontalDistance(riverShellPoint, WaterfallBigRoot) <= WaterfallBasinRiverMeters
-                && riverShellDist < best)
-            {
-                best = riverShellDist;
-                nearest = riverShellPoint;
-            }
-
             return best;
         }
 
@@ -237,8 +203,10 @@ namespace Game
             }
 
             // Small_1 = LsRs，Small_0 = LR（Boluo prefab 事件绑定）。
-            lsRs = root + WaterfallSmall1Local;
-            lr = root + WaterfallSmall0Local;
+            // 父节点有旋转，局部偏移必须先转到世界再加到根上。
+            Quaternion rot = WaterfallSmallRootRotation;
+            lsRs = root + rot * WaterfallSmall1Local;
+            lr = root + rot * WaterfallSmall0Local;
         }
 
         public static float HalfMetersFor(AmbienceEmitterKind kind)

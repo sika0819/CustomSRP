@@ -66,6 +66,28 @@ namespace Game.Tests
         }
 
         [Test]
+        public void CollectPendingMusic_IncludesCriticalNamedMusicAndRestMusic_ExcludesAmbience()
+        {
+            // 勿用 Music1_1：Editor 机常已有 StreamingAssets 副本 → IsLocalReady 跳过。
+            PresetBankCatalog.TryApplyUpgrade(new BankUpgradeData
+            {
+                banks = new List<BankRemoteInfo>
+                {
+                    new BankRemoteInfo { bankName = "Ocean_Calm_Quad", url = "https://x/ocean" },
+                    new BankRemoteInfo { bankName = "Music8_1", url = "https://x/m81" },
+                    new BankRemoteInfo { bankName = "Music9_9", url = "https://x/m9" },
+                    new BankRemoteInfo { bankName = "Campfire", url = "https://x/cf" },
+                },
+            });
+
+            List<BankRemoteInfo> music = BankUpgradeBootstrap.EditorCollectPendingMusicRemotes();
+            Assert.AreEqual(2, music.Count);
+            Assert.IsTrue(music.Exists(m => m.bankName == "Music8_1"));
+            Assert.IsTrue(music.Exists(m => m.bankName == "Music9_9"));
+            Assert.IsFalse(music.Exists(m => m.bankName == "Ocean_Calm_Quad"));
+        }
+
+        [Test]
         public void AbortOtherUser_True_StillAbortsOtherUserSlot()
         {
             // API 仍支持打断；预设/音乐入口传 abortOtherUser=true，未下载点击优先当前项。
@@ -153,6 +175,67 @@ namespace Game.Tests
             BankDownloader.ResetSession();
             Assert.AreEqual(3, BankDownloader.EditorStartupParallelSlots);
             Assert.AreEqual(3, BankDownloader.EditorMaxBackgroundSlots);
+        }
+
+        [Test]
+        public void Dequeue_UserBeforeMusic_MusicBeforePreset()
+        {
+            BankDownloader.EditorSeedQueue("Campfire", BankQueueKind.Startup);
+            BankDownloader.EditorSeedQueue("Music9_9", BankQueueKind.Normal);
+            BankDownloader.EditorSeedQueue("UserPreset", BankQueueKind.User);
+
+            Assert.IsTrue(BankDownloader.EditorTryDequeueNext(out string first, out BankQueueKind firstKind));
+            Assert.AreEqual("UserPreset", first);
+            Assert.AreEqual(BankQueueKind.User, firstKind);
+
+            Assert.IsTrue(BankDownloader.EditorTryDequeueNext(out string music, out _));
+            Assert.AreEqual("Music9_9", music);
+
+            Assert.IsTrue(BankDownloader.EditorTryDequeueNext(out string preset, out _));
+            Assert.AreEqual("Campfire", preset);
+        }
+
+        [Test]
+        public void Dequeue_ActiveMusicBlocksPreset()
+        {
+            BankDownloader.EditorPutActiveSlot("Music1_1", BankQueueKind.Normal);
+            BankDownloader.EditorSeedQueue("Ocean_Calm_Quad", BankQueueKind.Normal);
+
+            Assert.IsFalse(
+                BankDownloader.EditorTryDequeueNext(out _, out _),
+                "曲目还在传时不要开预设");
+        }
+
+        [Test]
+        public void FailedMusic_RequeuesAheadOfPresets()
+        {
+            BankDownloader.EditorSeedQueue("Campfire", BankQueueKind.Normal);
+            BankDownloader.EditorSeedQueue("Ocean_Calm_Quad", BankQueueKind.Normal);
+            BankDownloader.EditorSeedQueue("Music2_1", BankQueueKind.Normal);
+
+            Assert.IsTrue(BankDownloader.EditorFailAndRequeue("Music2_1"));
+            Assert.IsTrue(BankDownloader.HasUnresolvedFailure("Music2_1"));
+
+            Assert.IsTrue(BankDownloader.EditorTryDequeueNext(out string name, out _));
+            Assert.AreEqual("Music2_1", name);
+        }
+
+        [Test]
+        public void PresetPhase_StopsAtThreeActive()
+        {
+            BankDownloader.EditorPutActiveSlot("Campfire", BankQueueKind.Normal);
+            BankDownloader.EditorPutActiveSlot("Ocean_Calm_Quad", BankQueueKind.Normal);
+            BankDownloader.EditorPutActiveSlot("Rain", BankQueueKind.Normal);
+            BankDownloader.EditorSeedQueue("Wind", BankQueueKind.Normal);
+            BankDownloader.EditorSeedQueue("Lake_Quad", BankQueueKind.Normal);
+
+            Assert.IsFalse(
+                BankDownloader.EditorTryDequeueNext(out _, out _),
+                "预设同时不超过 3");
+
+            BankDownloader.EditorClearActives();
+            Assert.IsTrue(BankDownloader.EditorTryDequeueNext(out string name, out _));
+            Assert.AreEqual("Wind", name);
         }
     }
 }

@@ -1,11 +1,12 @@
 #ifndef CUSTOM_LIGHT_INCLUDED
 #define CUSTOM_LIGHT_INCLUDED
 
-// Adreno GLES3 only guarantees a handful of SSBO/BufferBlock slots. Oil + terrain
+// Adreno GLES3 and low Vulkan only guarantee a handful of SSBO slots. Oil + terrain
 // shaders previously declared 5–6 StructuredBuffers and failed to link
 // ("BufferBlock location or component exceeds max allowed") → blank island.
-// GLES path packs dir/other lights into CBUFFER mirrors (C# always uploads both).
-#if defined(SHADER_API_GLES3) || defined(SHADER_API_GLES)
+// GLES and Vulkan pack dir/other lights into CBUFFER mirrors (C# always uploads both).
+// Metal keeps the SSBO path (editor + iOS).
+#if defined(SHADER_API_GLES3) || defined(SHADER_API_GLES) || defined(SHADER_API_VULKAN)
 #define CUSTOM_SRP_LIGHT_CBUFFER 1
 #define CUSTOM_SRP_MAX_DIR_LIGHTS 4
 #define CUSTOM_SRP_MAX_OTHER_LIGHTS_GLES 8

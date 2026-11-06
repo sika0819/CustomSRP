@@ -79,7 +79,8 @@ half3 ImpastoPaintStack(
     half3 chr = litColor / max(luma, 1e-3h);
 
     // Buried underpaint / mid slab / raised peak — discrete stacked pigment.
-    half3 under = chr * (luma * 0.42h);
+    // 0.42 把海蓝槽打进近黑，远看是一块发脏的蓝黑。
+    half3 under = chr * (luma * 0.62h);
     half3 mid = chr * (luma * 0.88h);
     half3 peak = chr * min(luma * 1.08h, 1.12h);
 
@@ -102,7 +103,7 @@ half3 ImpastoPaintStack(
         -strokeDz * (10.0h * amt)));
     half facing = saturate(dot(flankN, L) * 0.55h + 0.45h);
     // 受光面停在颜料本色，背光面压暗。不再把脊顶抬成白光。
-    stacked *= lerp(0.46h, 1.04h, facing);
+    stacked *= lerp(0.68h, 1.02h, facing);
 
     // Back-lit troughs fall into underpaint (layer peek-through).
     half trough = saturate((0.48h - h) * 2.4h);
@@ -134,11 +135,10 @@ half3 ImpastoPigmentFlank(
     half ndotl = saturate(dot((half3)N, (half3)L) * 0.55h + 0.45h);
     half flat = saturate(dot((half3)geoN, (half3)L) * 0.55h + 0.45h);
     half shade = saturate(0.5h + (ndotl - flat) * 3.4h);
-    half3 shadow = half3(0.34h, 0.42h, 0.58h);
-    half3 body = half3(1.0h, 0.98h, 0.94h);
-    half3 mid = 0.5h * (shadow + body);
-    half3 lit = color * (lerp(shadow, body, shade) / mid);
-    return lerp(color, max(lit, 0.0h), amt);
+    // 只改明度。暖灰侧面会把海蓝搅成发脏的蓝黑。
+    half lift = lerp(0.62h, 1.04h, shade);
+    half3 lit = color * lift;
+    return lerp(color, lit, amt);
 }
 
 // Baked paint normal, lit like the sky canvas. Screen-space stroke derivatives

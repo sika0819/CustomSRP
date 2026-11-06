@@ -56,9 +56,22 @@ namespace Game
 
         void LateUpdate()
         {
-            if (!_showing || _still != null)
+            // panelSettings 一换，旧 VisualElement 还非 null，但已经不在面板上。
+            // 清数据冷启动会在 692×1523 → 840×1848 时换一次面板，进度和 Hide 打在旧树上，
+            // 新树保持 UXML 默认（「正在进入世界...」、不满屏）。
+            if (_showing)
+            {
+                if (_still != null && _still.panel != null)
+                    return;
+                Show(_tipText, _progress);
                 return;
-            Show(_tipText, _progress);
+            }
+
+            if (_document == null)
+                _document = GetComponent<UIDocument>();
+            VisualElement live = _document != null ? _document.rootVisualElement : null;
+            if (live != null && live.style.display != DisplayStyle.None)
+                Hide();
         }
 
         void OnEnable()
@@ -93,13 +106,18 @@ namespace Game
             CacheElements();
             if (_root != null)
             {
+                StretchFull(_root);
                 _root.style.display = DisplayStyle.Flex;
                 _root.style.opacity = 1f;
             }
 
+            if (_still != null)
+                StretchFull(_still);
+
             VisualElement panelRoot = _document != null ? _document.rootVisualElement : null;
             if (panelRoot != null && panelRoot != _root)
             {
+                StretchFull(panelRoot);
                 panelRoot.style.display = DisplayStyle.Flex;
                 panelRoot.style.opacity = 1f;
             }
@@ -115,6 +133,8 @@ namespace Game
             _progress = progress01;
             if (!string.IsNullOrEmpty(tip))
                 _tipText = tip;
+            if (_fill == null || _fill.panel == null || _tip == null || _tip.panel == null)
+                CacheElements();
 
             if (_fill != null)
             {
@@ -154,11 +174,9 @@ namespace Game
 
         public void Disarm()
         {
-            _showing = false;
-            if (_document == null)
-                _document = GetComponent<UIDocument>();
-            if (_document != null)
-                _document.enabled = false;
+            // 不要关 Document。真机关掉 UIDocument 会把上一帧冻在 Surface 上，
+            // 清数据后揭罩日志已经走完，屏幕仍停在加载封面。
+            Hide();
         }
 
         public static void HideIfAny()
@@ -169,10 +187,24 @@ namespace Game
 
         void OnScreenChanged()
         {
-            if (!_showing)
-                return;
             ScreenLayout.Apply(_document);
-            ApplyStillForOrientation();
+            if (_showing)
+                Show(_tipText, _progress);
+            else
+                Hide();
+        }
+
+        static void StretchFull(VisualElement element)
+        {
+            element.style.position = Position.Absolute;
+            element.style.left = 0f;
+            element.style.right = 0f;
+            element.style.top = 0f;
+            element.style.bottom = 0f;
+            element.style.marginLeft = 0f;
+            element.style.marginRight = 0f;
+            element.style.marginTop = 0f;
+            element.style.marginBottom = 0f;
         }
 
         void CacheElements()

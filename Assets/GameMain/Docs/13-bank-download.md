@@ -250,12 +250,12 @@ sequenceDiagram
 | 抢占立刻收尾 | `ReleaseWaitersOnAbort` → Abort 后 `FireDone`（保留 `.tmp` 回队续传）；蜂窝 Hold / 离岛 Pause 不 FireDone |
 | 同意链 last-wins | 弹窗中再 `EnsureReady`：先旧 `OnCancel`（按 captured id 匹配），再挂新 Ready |
 | 同预设再点 | Downloading 且 Intent 已命中 → 只 `PriorityBanks`，不再 `Start` |
-| 邻近环境音 | `occupyUserBusy: false`，不挡列表未下载点击 |
+| 邻近环境音 | `occupyUserBusy: false`，`preempt: false`，排进静默预设相位，不挡列表点击 |
 | 区域重开进度 | 同一门仅 `TryReopenActiveProgress`，不另起批、不 Toast |
 | Intent 最后点击优先 | 只有 `ShouldAutoEnterPreset`（UserClick / HealthRecommend）才 `RequestTransition`；静默 KickSilentAll 落盘**禁止**自动切 |
 | 未跳转保持完成态 | banks 齐 → `MarkLocalReady` + `ShouldShowRedDot` → `statedownloadsuccess` |
 | 已跳转无红点 | `PresetService.Apply` / 进岛 `RestorePlaybackFromAccount` 记 `MarkPlayed` |
-| 未齐且仍 busy | **不清** `_userTriggered`，继续转圈；勿因 2s 超时刷回未下载 |
+| 用户槽还在 | **不清** `_userTriggered`，继续转圈。离开用户槽后的失败显示重试，静默排队不再转圈 |
 | FeatureOn 流量会话开闸 | 回 Wi‑Fi 才 revoke；当前 serial 的 finally 才清 `_busy` |
 
 ---
@@ -288,26 +288,28 @@ stateDiagram-v2
 
 ## 7. BankDownloader 队列与就绪判定
 
-### 7.1 三队列优先级
+### 7.1 三档优先级
 
 ```mermaid
 flowchart TB
-  Pump[Runner 泵] --> U{UserQueue 非空?}
-  U -->|是| UserSlot[User 槽 preempt<br/>插队头 / 可打断非 User]
-  U -->|否| S{StartupQueue?}
-  S -->|是| StartSlot[Startup 并行槽≤3]
-  S -->|否| N[Normal 并行槽≤3]
+  Pump[Runner 泵] --> U{User 队列非空?}
+  U -->|是| UserSlot[用户槽<br/>区域门 / 点音乐 / 点预设]
+  U -->|否| M{静默还有 Music*?}
+  M -->|在排或在传 含失败重试| MusicSlot[只开曲目]
+  M -->|没有| PresetSlot[预设 / 氛围 同时最多 3]
 ```
 
-| `DownloadBanks` 参数 | 队列 | 典型调用方 |
+| 档 | 队列 | 谁 |
 |---|---|---|
-| `preempt=true` | **User** | 区域门、音乐、预设（点下载）；点击期间单槽 |
-| `prioritize=true` 且非 preempt | **Startup** | Bootstrap Critical（并发≤3） |
-| 两者 false | **Normal** | 静默 Rest（并发≤3）；预设点下仍是 `preempt=true` → User |
+| 用户主动 | **User** | 区域门、点音乐、点预设、点重试。`preempt` 可打断静默 |
+| 音乐列表 | Startup / Normal 里的 `Music*` | 静默 Wi‑Fi。失败自动重试插回音乐相位队首，仍在预设之前 |
+| 预设 / 氛围 | Normal 里的非 Music | 音乐相位排空后才开，同时最多 3 路 |
 
-预设/音乐：`preempt: true, abortOtherUserDownloads: true, preemptBusyBatch: true` → **User 队列**（打断 Startup / Normal / 其它 User；`keepBatch` 保同批；抢占 Abort `FireDone` 放旧 await；仅区域进度窗硬占用 Toast 拒绝）。
+邻近环境音自动 Kick 走 Normal，`preempt: false`，不进用户槽。静默 Critical 也不再 `prioritize` 进 Startup，避免氛围包排到曲目前面。
 
-静默 Rest：`CollectRestRemotes` **Music\* 先于预设/氛围**；Critical 走 Startup≤3，Rest 走 Normal≤3（Critical 排空后再泵；不全开、不全串行）。
+预设/音乐点击：`preempt: true, abortOtherUserDownloads: true` → **User**。流量窗「继续」只 `PriorityBanks` 本次点击 / 本区，不用同意链体积的全量列表。
+
+静默全量：`KickSilentAllRemaining` → `DownloadSilentOrdered` 先 `CollectPendingMusicRemotes` 整波入队并 await，再 Critical/Rest 非音乐。出队闸门在仍有 `Music*` 时不会启动预设。用户槽忙时全局单槽。
 
 ### 7.2 `IsLocalReady` 策略
 
@@ -431,7 +433,8 @@ sequenceDiagram
 | 波次 | 内容 | 队列 | 弹窗 / 触发 |
 |---|---|---|---|
 | Essential 本地 | Common_Init / Common_Music | 不解压 HTTP | — |
-| Critical∪Rest | catalog 全部待下 | Startup≤3 → Normal≤3（Rest 音乐优先再预设） | **关** → 静默全量零弹窗；**开** → Bootstrap 不下；用户确认 §4.6 后 `KickSilentAll` |
+| Critical∪Rest | catalog 全部待下 | 静默 **串行波次**：①整波 `Music*`（含 Critical 的 Music1_1）await 完 → ②Critical 非音乐 → ③Rest 非音乐；出队闸门仍挡预设；预设同时 ≤3 | **关** → 静默全量零弹窗；**开** → Bootstrap 不下；用户确认 §4.6 后 `KickSilentAll`。禁止 Critical∥Rest Forget，否则氛围占满 3 槽、曲目列表看似「完全没开始」 |
+| 用户点击 | 本次 / 本区 bank | User，可打断静默 | 点音乐、点预设、区域门、失败后点重试 |
 | Critical 判定 | — | — | 只看 `IsLocalReady`（禁止仅凭 Streaming version 跳过） |
 
 用户点下与 Bootstrap **共享同一 `BankDownloader` / 同一磁盘**。
@@ -500,8 +503,10 @@ sequenceDiagram
 | 进度 100% / 关窗后仍过不去 | 旧序 MD5 完才 Ready；`_busy` 强制固墙到 Flow finally | HTTP 后先 Move/Ready/Notify；盘齐不因 busy 锁门 |
 | 区域进度变成全量 | Flow pending=全部剩余 | 进度/await 只用 ZoneBanks |
 | 区域进度回退/总量缩水 | `PushProgress` 只计 Entries；完成即 Remove | catalog 定总量；`IsLocalReady` 计满 |
-| WiFi 全量后区域进度卡住 | 静默 Critical `preempt` 抢 User 队首 | 静默 Critical 仅 Startup，不 preempt |
-| 静默全量整表假转圈 | Pending 也当 Downloading | 仅 Downloading / 用户触发 Pending 转圈 |
+| WiFi 全量后区域进度卡住 | 静默 Critical `preempt` 抢 User 队首 | 静默一律 Normal；只有用户槽 preempt |
+| 静默预设插到曲目前面 | Critical 氛围包走 Startup，泵先抽 Startup | 出队先用户槽，再 Music*，预设同时 ≤3 |
+| 失败后图标变回未下载 | 自动重试把 Failed 改回 Pending 并追加到队尾 | 失败显示重试；Music* 重试插回音乐队首；点重试进用户槽 |
+| 静默全量整表假转圈 | Pending 也当 Downloading | 预设环只跟用户点击；音乐行仅真正 Downloading 或刚点下才转圈 |
 | 静默翻牌不稳/粘环 | `NotifyBankReady` 只 Invalidate；busy 早退 | 完成 `MarkLocalReady`；busy 清除 force 再刷 |
 
 排障总表见 [10-bug-index.md](10-bug-index.md)。

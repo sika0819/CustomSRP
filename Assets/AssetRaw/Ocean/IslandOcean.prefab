@@ -109,8 +109,8 @@ MonoBehaviour:
   followCamera: 0
   waveHeight: 0.2
   boundsPadding: 4
-  deepDay: {r: 0.12, g: 0.2, b: 0.34, a: 0.96}
-  deepNight: {r: 0.04, g: 0.06, b: 0.28, a: 0.98}
+  deepDay: {r: 0.08, g: 0.44, b: 0.7, a: 0.96}
+  deepNight: {r: 0.05, g: 0.22, b: 0.48, a: 0.98}
 --- !u!65 &132687481773070153
 BoxCollider:
   m_ObjectHideFlags: 0

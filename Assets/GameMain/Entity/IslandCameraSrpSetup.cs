@@ -281,7 +281,7 @@ namespace Game
 
         /// <summary>
         /// 按岛面状态设目标帧率：默认见 <see cref="DefaultFrameRate"/>，沉浸 25。
-        /// 再取热状态上限。原生半层 YieldsGpu 时不抢（overlay 自管 15/1）。
+        /// 再取热状态上限。原生半层 YieldsGpu 时不抢（overlay 最低 20，interval 1）。
         /// </summary>
         public static void ApplyTargetFrameRate()
         {

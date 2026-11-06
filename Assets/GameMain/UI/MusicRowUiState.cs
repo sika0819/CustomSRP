@@ -4,8 +4,8 @@ using Game.BoluoApi.Music;
 namespace Game
 {
     /// <summary>
-    /// 音乐列表行状态纯决议：盘上优先；仅真实 Downloading（或用户点过的 Pending）显示进度环。
-    /// 静默全量入队的 Pending 仍显示未下载，做到一个一个翻牌。
+    /// 音乐列表行状态纯决议：盘上优先；真正 Downloading 或用户刚点下才出进度环。
+    /// 传输失败（含自动重试还没轮到）显示重试。静默 Kick 的首次 Pending 仍是未下载。
     /// </summary>
     public static class MusicRowUiState
     {
@@ -16,7 +16,8 @@ namespace Game
             bool showRedDot,
             bool userPending,
             bool hasActiveItem,
-            BankDownloadState activeState)
+            BankDownloadState activeState,
+            bool failedAwaitingRetry = false)
         {
             if (!trackValid)
                 return MusicItemUiState.Failed;
@@ -27,24 +28,19 @@ namespace Game
             if (localReady)
                 return showRedDot ? MusicItemUiState.Succeeded : MusicItemUiState.Ready;
 
-            if (hasActiveItem)
-            {
-                switch (activeState)
-                {
-                    case BankDownloadState.Downloading:
-                        return MusicItemUiState.Downloading;
-                    case BankDownloadState.Pending:
-                        // 用户点过才对排队项转圈；静默 Kick 的 Pending 保持未下载。
-                        return userPending
-                            ? MusicItemUiState.Downloading
-                            : MusicItemUiState.NotDownloaded;
-                    case BankDownloadState.Failed:
-                        return MusicItemUiState.Failed;
-                }
-            }
-
+            // 用户刚点下、这轮还没出结果：进度环。失败收掉意图后才回到重试。
             if (userPending)
                 return MusicItemUiState.Downloading;
+
+            if (hasActiveItem && activeState == BankDownloadState.Downloading)
+                return MusicItemUiState.Downloading;
+
+            if (failedAwaitingRetry
+                || (hasActiveItem && activeState == BankDownloadState.Failed))
+                return MusicItemUiState.Failed;
+
+            if (hasActiveItem && activeState == BankDownloadState.Pending)
+                return MusicItemUiState.NotDownloaded;
 
             return MusicItemUiState.NotDownloaded;
         }

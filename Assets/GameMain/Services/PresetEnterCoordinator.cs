@@ -120,7 +120,8 @@ namespace Game
                 string bn = banks[i];
                 if (string.IsNullOrEmpty(bn))
                     continue;
-                if (!BankDownloader.IsLocalReady(bn))
+                if (!BankDownloader.IsLocalReady(bn)
+                    && !BankLoadGate.CanEnterWithoutOfficialFile(bn))
                     return false;
             }
 

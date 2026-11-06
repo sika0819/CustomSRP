@@ -398,6 +398,7 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
     half overlook = (half)smoothstep(120.0, 420.0, camDist);
     half3 viewDir = normalize((half3)(_WorldSpaceCameraPos - input.positionWS));
 
+    // 外海是材质 Shallow / Deep 的混合，不再换成写死的色。
     half3 albedo = lerp(_ShallowColor.rgb, _BaseColor.rgb, 0.45h);
     albedo *= (half)_AlbedoBoost;
 
@@ -552,7 +553,7 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
         float inFront = saturate((fragment.depth - sceneEye) * 4.0);
         half3 sceneCol = (half3)GetBufferColor(fragment, refractOffset).rgb;
         half refractMix = glass * (half)(1.0 - inFront) * lerp(0.5h, 0.25h, overlook);
-        half3 refractTint = lerp(half3(0.22h, 0.20h, 0.38h), half3(0.10h, 0.08h, 0.22h), night);
+        half3 refractTint = lerp(half3(0.58h, 0.74h, 0.88h), half3(0.24h, 0.36h, 0.55h), night);
         sceneCol *= refractTint;
         color = lerp(color, sceneCol, refractMix);
     }
@@ -586,10 +587,13 @@ half4 OilOceanNPRPassFragment(Varyings input) : SV_TARGET
         (half)_ReflectDistort,
         (half)_ReflectSteps);
 
-    // 深蓝紫叠色；夜晚压浅滩暖色。
+    // 釉改色相、留海水明暗。近白相乘在低强度下几乎看不出。
     half tintAmt = (half)_TintStrength * lerp(1.0h, 0.45h, night);
     half3 waterTint = lerp((half3)_TintDeep.rgb, (half3)_TintShallow.rgb, glass);
-    color = lerp(color, color * waterTint, tintAmt);
+    half tintPeak = max(waterTint.r, max(waterTint.g, waterTint.b));
+    half3 tintHue = waterTint / max(tintPeak, 1e-3h);
+    half waterLuma = max(color.r, max(color.g, color.b));
+    color = lerp(color, tintHue * waterLuma, tintAmt);
 
     // 对齐河：雾后叠一道太阳光痕（竖列 Glint + 世界车道），再画岸沫。
 #if defined(OIL_MOBILE_PERF)

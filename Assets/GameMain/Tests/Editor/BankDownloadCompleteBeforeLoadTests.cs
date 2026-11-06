@@ -12,6 +12,8 @@ namespace Game.Tests
     public sealed class BankDownloadCompleteBeforeLoadTests
     {
         const string Stem = "CompleteBeforeLoad_Bank";
+        const string Version = "1.0.0";
+        const string Md5 = "complete-before-load-md5";
 
         string _path;
 
@@ -26,6 +28,7 @@ namespace Game.Tests
                 AudioEnginePaths.PersistentBankPath,
                 Stem + AudioEnginePaths.BankExtension);
             File.WriteAllBytes(_path, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(Stem, Version, Md5, _path);
             PresetBankCatalog.TryApplyUpgrade(new BankUpgradeData
             {
                 banks = new List<BankRemoteInfo>
@@ -35,7 +38,8 @@ namespace Game.Tests
                         bankName = Stem,
                         url = "https://example.test/complete-before-load.wsbk",
                         size = "2",
-                        md5 = "",
+                        version = Version,
+                        md5 = Md5,
                     },
                 },
             });
@@ -47,6 +51,7 @@ namespace Game.Tests
         {
             if (!string.IsNullOrEmpty(_path) && File.Exists(_path))
                 File.Delete(_path);
+            BankDownloader.EditorForgetIdentity(Stem);
             BankDownloader.ResetSession();
             PresetBankCatalog.Clear();
             BankDownloader.InvalidateLocalReadyCache();

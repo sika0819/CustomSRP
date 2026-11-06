@@ -35,10 +35,10 @@ namespace CustomSRP
         public float boundsPadding = 4f;
 
         [Header("Deep")]
-        [Tooltip("清晨、白天、黄昏共用。")]
-        public Color deepDay = new Color(0.12f, 0.2f, 0.34f, 0.96f);
-        [Tooltip("夜晚。跟时段拨盘的 2 秒过渡一起变。")]
-        public Color deepNight = new Color(0.04f, 0.06f, 0.28f, 0.98f);
+        [Tooltip("已停用。白天深水改材质 Deep（_BaseColor），不要改这里。")]
+        public Color deepDay = new Color(0.08f, 0.44f, 0.70f, 0.96f);
+        [Tooltip("夜晚深水。跟时段拨盘的过渡一起盖住材质 Deep，天亮后材质色回来。")]
+        public Color deepNight = new Color(0.05f, 0.22f, 0.48f, 0.98f);
 
         const string MeshName = "OilOceanGrid";
 
@@ -172,25 +172,33 @@ namespace CustomSRP
         }
 
         /// <summary>
-        /// 白天和夜晚各用一套 Deep。着色器只读当前 _BaseColor。
+        /// 白天深水用材质 _BaseColor。只有夜晚和时段过渡才用属性块盖住它。
         /// 拨盘切时段时跟 <see cref="WeatherService.TimeLerp01"/> 一起过渡，进岛和预设是直接切。
         /// </summary>
         void ApplyDeepColor()
         {
             bool night = ResolveNight();
-            Color target = night ? deepNight : deepDay;
             WeatherService weather = Application.isPlaying ? WeatherService.Ensure() : null;
             bool transitioning = weather != null && weather.IsTimeTransitioning;
+            Color day = ReadMaterialDeep();
+            if (!night && !transitioning)
+            {
+                followingTimeLerp = false;
+                if (deepReady)
+                    ClearDeepOverride();
+                return;
+            }
+
             if (transitioning)
             {
                 if (!followingTimeLerp)
                 {
                     followingTimeLerp = true;
-                    deepLerpFrom = deepReady ? shownDeep : target;
+                    deepLerpFrom = deepReady ? shownDeep : (night ? day : deepNight);
                     deepLerpToNight = night;
                 }
 
-                Color to = deepLerpToNight ? deepNight : deepDay;
+                Color to = deepLerpToNight ? deepNight : day;
                 shownDeep = Color.Lerp(deepLerpFrom, to, weather.TimeLerp01);
                 deepReady = true;
                 PushDeep();
@@ -198,12 +206,22 @@ namespace CustomSRP
             }
 
             followingTimeLerp = false;
-            if (deepReady && shownDeep == target)
+            if (deepReady && shownDeep == deepNight)
                 return;
 
-            shownDeep = target;
+            shownDeep = deepNight;
             deepReady = true;
             PushDeep();
+        }
+
+        Color ReadMaterialDeep()
+        {
+            if (oceanRenderer == null)
+                oceanRenderer = GetComponent<MeshRenderer>();
+            Material mat = oceanRenderer != null ? oceanRenderer.sharedMaterial : null;
+            if (mat != null && mat.HasProperty(BaseColorId))
+                return mat.GetColor(BaseColorId);
+            return deepDay;
         }
 
         bool ResolveNight()

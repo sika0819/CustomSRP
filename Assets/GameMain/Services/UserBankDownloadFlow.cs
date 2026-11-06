@@ -143,7 +143,8 @@ namespace Game
                     // FeatureOn+WiFi：确认后（及之后）静默全量，同关弹窗；不占 User 进度批。
                     BackgroundDownloadCoordinator.KickSilentAllIfNeeded();
                 },
-                opts);
+                opts,
+                priorityBanks: clicked);
         }
 
         /// <summary>已过同意链时直接开进度窗下载（少见；一般用 <see cref="Start"/>）。</summary>
@@ -342,6 +343,23 @@ namespace Game
             bool abortOtherUserDownloads)
         {
             List<BankRemoteInfo> remotes = PresetBankCatalog.ResolveRemotes(pending);
+            if (preempt)
+            {
+                // 用户再点：先拉一次目录。失败项可能是空 url，也可能是旧 md5；不刷新就只会再弹检查线上。
+                try
+                {
+                    BankUpgradeData data = await BankUpgradeClient.RequestUpgradeBank(failFast: true);
+                    if (data != null)
+                        PresetBankCatalog.TryApplyUpgrade(data);
+                }
+                catch (Exception e)
+                {
+                    Log.Warning("[UserBankDownloadFlow] catalog refresh: " + e.Message);
+                }
+
+                remotes = PresetBankCatalog.ResolveRemotes(pending);
+            }
+
             if (remotes == null || remotes.Count == 0)
             {
                 Log.Warning("[UserBankDownloadFlow] no catalog remotes");

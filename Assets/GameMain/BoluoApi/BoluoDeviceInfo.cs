@@ -53,6 +53,17 @@ namespace Game.BoluoApi
         /// 创维闺蜜机：channel=BOLUOCWGMJ 或 originEnd=boluocwgmj（Editor 可经环境窗口覆盖）。
         /// 含标准版与 4K；画质分档用 <see cref="IsSkyworthGmjStandard"/> / <see cref="IsSkyworthGmj4K"/>。
         /// </summary>
+        /// <summary>
+        /// 测试渠道（BOLUOTESTANDROID / IOS / HARMONY）。正式渠道不弹 bank 诊断。
+        /// Editor 未切正式渠道时模拟的就是测试渠道。
+        /// </summary>
+        public static bool IsTestChannel()
+        {
+            string channel = GetChannel();
+            return !string.IsNullOrEmpty(channel)
+                && channel.IndexOf("TEST", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         public static bool IsSkyworthGmj()
         {
             return string.Equals(GetChannel(), DefaultChannelGmj, System.StringComparison.OrdinalIgnoreCase)

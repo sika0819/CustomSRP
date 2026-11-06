@@ -148,7 +148,7 @@ half3 OilNPROtherLights(
     half steps = max(shadeSteps * 0.5h, 2.0h);
     half3 sum = 0.0h;
 #if defined(CUSTOM_SRP_LIGHT_CBUFFER)
-    // GLES: no Forward+ tile SSBO — walk the packed other-light CBUFFER (cap 8).
+    // GLES / Vulkan: no Forward+ tile SSBO — walk the packed other-light CBUFFER (cap 8).
     int last = otherCount - 1;
 #if defined(OIL_MOBILE_PERF)
     last = min(last, 1);

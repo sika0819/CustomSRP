@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using Game;
+using Game.Native;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
@@ -67,12 +69,25 @@ namespace CustomSRP
             // 仍清屏并画 UI，Game 视图才认这台摄像机在渲染，加载条才能往前走。
             // 有 targetTexture 的离线相机（远树 Billboard 烘贴等）必须继续画世界，
             // 否则会把 CoverOnly 黑屏 +「正在进入世界」写进 Albedo。
-            if ((EnvItemStreamerLite.PrefillSuppressRender || IslandGpuReclaim.CoverOnly)
-                && camera.targetTexture == null)
+            bool coverGate = EnvItemStreamerLite.PrefillSuppressRender || IslandGpuReclaim.CoverOnly;
+            if (!coverGate)
+                ClearCoverBypassLogs();
+            if (coverGate && camera.targetTexture == null)
             {
                 if (camera.cameraType == CameraType.Game)
                     RenderCoverOnly(context, camera);
                 return;
+            }
+
+            // 铺装门闩开着但仍画世界：begin 打在绘制之前，卡住时最后一行没有 end。
+            float bypassStart = 0f;
+            bool bypassPair = false;
+            bool bypassWatch = false;
+            if (coverGate && camera.targetTexture != null)
+            {
+                bypassPair = NoteCoverBypassBegin(camera);
+                bypassStart = Time.realtimeSinceStartup;
+                bypassWatch = true;
             }
 
             // Push rain globals once per frame BEFORE any draw, so NPR shaders
@@ -203,6 +218,7 @@ namespace CustomSRP
 
             if (!camera.TryGetCullingParameters(out ScriptableCullingParameters cullingParameters))
             {
+                NoteCoverBypassEnd(camera, bypassStart, bypassPair, bypassWatch);
                 return;
             }
 
@@ -404,6 +420,58 @@ namespace CustomSRP
             {
                 CommandBufferPool.Release(commandBuffer);
             }
+
+            NoteCoverBypassEnd(camera, bypassStart, bypassPair, bypassWatch);
+        }
+
+        static readonly HashSet<EntityId> BypassBegan = new HashSet<EntityId>();
+        static int _bypassSlowLogs;
+        const int BypassSlowLogCap = 8;
+
+        static void ClearCoverBypassLogs()
+        {
+            if (BypassBegan.Count == 0 && _bypassSlowLogs == 0)
+                return;
+            BypassBegan.Clear();
+            _bypassSlowLogs = 0;
+        }
+
+        /// <summary>每台相机每次铺装只打一次 begin。返回 true 时本次绘制要配一条 end。</summary>
+        static bool NoteCoverBypassBegin(Camera camera)
+        {
+            if (!BypassBegan.Add(camera.GetEntityId()))
+                return false;
+            IslandEntryLog.Wait("coverBypass", "begin", "cam=" + CoverCamName(camera));
+            return true;
+        }
+
+        static void NoteCoverBypassEnd(Camera camera, float startedAt, bool paired, bool watch)
+        {
+            if (!watch)
+                return;
+            int ms = (int)((Time.realtimeSinceStartup - startedAt) * 1000f);
+            if (paired)
+            {
+                IslandEntryLog.Ok(
+                    "coverBypass",
+                    "end",
+                    "cam=" + CoverCamName(camera) + " ms=" + ms);
+            }
+
+            if (ms < 300 || _bypassSlowLogs >= BypassSlowLogCap)
+                return;
+            _bypassSlowLogs++;
+            IslandEntryLog.Wait(
+                "coverBypass",
+                "slow",
+                "cam=" + CoverCamName(camera) + " ms=" + ms);
+        }
+
+        static string CoverCamName(Camera camera)
+        {
+            if (camera == null || string.IsNullOrEmpty(camera.name))
+                return "none";
+            return camera.name.Replace(' ', '_');
         }
 
         static void RenderCoverOnly(ScriptableRenderContext context, Camera camera)

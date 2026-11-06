@@ -200,6 +200,10 @@ public class WanosMusicPlayerNative {
      */
     private volatile boolean pendingFocusPauseUi = false;
     private volatile boolean pendingFocusPauseUiCompetingLong = false;
+    /** 后台已经恢复出声，但 Unity 暂停着，等回前台再补一条 Restored。 */
+    private volatile boolean pendingUnityAudioRestored = false;
+    /** 随后又暂停：作废还没发出的 Restored，避免回前台把打断刷成播放中。 */
+    private volatile int unityRestoreGeneration = 0;
 
     // ---------------------------------------------------------------------------
     // 后台传输计划（Unity 在后台被 pause，UnitySendMessage 无法被处理）
@@ -246,6 +250,7 @@ public class WanosMusicPlayerNative {
                     // 不抬 userPaused：回焦仍走自动软续，不是用户暂停。
                     // 焦点回调已在主线程，当场写卡。再 post 会被抖音抢走会话，按钮停在播放图标。
                     systemSuspended = true;
+                    invalidatePendingUnityRestore("focus_pause");
                     publishFocusPausedCard();
                 }
 
@@ -801,8 +806,8 @@ public class WanosMusicPlayerNative {
     }
 
     /**
-     * 微信发语音取消：回到波萝保持暂停（{@code return_show_interrupt}）。
-     * QQ / B 站回到波萝才成对恢复。
+     * 微信语音还在进行：保持暂停，等系统把焦点还回来再自动续。
+     * QQ / B 站抢占：回到波萝保持暂停（{@code return_show_interrupt}），滑动或播放键才续。
      */
     private BoluoWeChatVoiceResumePolicy.Plan weChatVoiceReturnPlan(boolean returnedToBoluo) {
         return BoluoWeChatVoiceResumePolicy.plan(new BoluoWeChatVoiceResumePolicy.Input(
@@ -817,7 +822,8 @@ public class WanosMusicPlayerNative {
     }
 
     /**
-     * 微信发语音取消后回到波萝：保持暂停，等 Unity 显示音频打断、滑动再续。
+     * QQ / B 站抢占后回到波萝：保持暂停，等滑动或播放键再续。
+     * 微信语音不走这里，语音结束由焦点 GAIN 自动续。
      */
     public boolean shouldHoldWeChatInterruptOnReturn() {
         return "return_show_interrupt".equals(weChatVoiceReturnPlan(true).reason);
@@ -840,12 +846,22 @@ public class WanosMusicPlayerNative {
             return;
         }
         final BoluoWeChatVoiceResumePolicy.Plan weChatReturn = weChatVoiceReturnPlan(true);
+        if ("wechat_voice_hold".equals(weChatReturn.reason)) {
+            systemSuspended = true;
+            invalidatePendingUnityRestore("wechat_voice_hold");
+            Log.i(TAG, "reclaimFocusOnForeground hold wechat voice until GAIN");
+            reassertNowPlayingOnForeground();
+            flushDeferredFocusPauseUi("wechat_voice_hold");
+            return;
+        }
         final boolean holdWeChatInterrupt =
                 "return_show_interrupt".equals(weChatReturn.reason);
         if (holdWeChatInterrupt && !userGesture) {
             systemSuspended = true;
+            invalidatePendingUnityRestore("media_hold_return");
             Log.i(TAG, "reclaimFocusOnForeground hold wechat interrupt for swipe");
             reassertNowPlayingOnForeground();
+            flushDeferredFocusPauseUi("media_hold_return");
             return;
         }
         if (holdWeChatInterrupt) {
@@ -853,6 +869,10 @@ public class WanosMusicPlayerNative {
         }
         // 抢焦点可能因已持焦 / debounce 直接返回，卡片仍要重推。
         reassertNowPlayingOnForeground();
+        if (pendingUnityAudioRestored && !systemSuspended) {
+            pendingUnityAudioRestored = false;
+            notifyUnityAudioRestored("foreground_deferred");
+        }
         final boolean restoreWeChatVoices = weChatReturn.restoresMusicAndEffects();
         // 后台续播：禁止 reclaim→Reset。HOME 期间误调会把自己拆静音。
         // 例外：丢焦护栏仍 latch 时必须抢焦并恢复（切 QQ 音乐再回波萝）。
@@ -1329,16 +1349,67 @@ public class WanosMusicPlayerNative {
         pendingFocusPauseUi = false;
     }
 
+    private void invalidatePendingUnityRestore(String reason) {
+        unityRestoreGeneration++;
+        if (!pendingUnityAudioRestored) {
+            return;
+        }
+        pendingUnityAudioRestored = false;
+        Log.i(TAG, "[BoluoAudioFg] drop deferred unity restored reason=" + reason
+                + " gen=" + unityRestoreGeneration);
+    }
+
+    /** 回前台仍暂停：把后台没送出的打断补进 Unity，岛上才显示暂停。 */
+    private void flushDeferredFocusPauseUi(String reason) {
+        if (!pendingFocusPauseUi) {
+            Log.i(TAG, "[BoluoAudioFg] no deferred focusPauseUi reason=" + reason);
+            return;
+        }
+        final boolean longUi = pendingFocusPauseUiCompetingLong;
+        pendingFocusPauseUi = false;
+        Log.i(TAG, "[BoluoAudioFg] flush focusPauseUi reason=" + reason
+                + " competingLong=" + longUi);
+        mainHandler.post(() -> {
+            try {
+                String method = longUi ? "OnCompetingAudioMuted" : "OnSystemAudioMuted";
+                UnityPlayer.UnitySendMessage("BoluoMusicPlayerAndroid", method, "");
+            } catch (Exception e) {
+                Log.w(TAG, "flush focusPauseUi failed: " + e.getMessage());
+            }
+        });
+    }
+
     /** 原生已经 Resume_Music + Resume_ALL 之后再告诉 Unity，避免只对账音效。 */
     private void notifyUnityAudioRestored(String reason) {
         if (userPaused || shouldStop || remoteCommands.isPausedForTimerEnd()) {
             Log.i(TAG, "[BoluoAudioFg] skip unity restored user/timer reason=" + reason);
             return;
         }
+        if (systemSuspended && audioFocusManager.sawCompetingMediaEpisode()) {
+            Log.i(TAG, "[BoluoAudioFg] skip unity restored, media held reason=" + reason);
+            return;
+        }
+        // Unity 暂停时消息会整包积压。QQ 暂停之后这些旧 Restored 回前台会把岛刷成播放中。
+        if (effectivelyInBackground()) {
+            pendingUnityAudioRestored = true;
+            Log.i(TAG, "[BoluoAudioFg] defer unity restored reason=" + reason);
+            return;
+        }
         dropDeferredFocusPauseUi(reason);
+        pendingUnityAudioRestored = false;
+        final int gen = unityRestoreGeneration;
         Log.i(TAG, "[BoluoAudioFg] notify unity restored reason=" + reason
-                + " bg=" + appInBackground);
+                + " gen=" + gen);
         mainHandler.post(() -> {
+            if (gen != unityRestoreGeneration) {
+                Log.i(TAG, "[BoluoAudioFg] drop stale unity restored reason=" + reason
+                        + " gen=" + gen + " cur=" + unityRestoreGeneration);
+                return;
+            }
+            if (systemSuspended && audioFocusManager.sawCompetingMediaEpisode()) {
+                Log.i(TAG, "[BoluoAudioFg] drop unity restored, media held reason=" + reason);
+                return;
+            }
             try {
                 UnityPlayer.UnitySendMessage("BoluoMusicPlayerAndroid",
                         "OnAudioFocusUnduck", "");
@@ -3280,6 +3351,11 @@ public class WanosMusicPlayerNative {
         boolean music = "Resume_Music".equals(eventName);
         if (!all && !music) {
             return true;
+        }
+        // 微信还在说话：Unity 回前台补的 Resume 不能出声。语音结束的 GAIN 到了这里已不再活跃。
+        if (audioFocusManager.isWeChatVoiceSessionActive()) {
+            Log.i(TAG, "claimVoiceResume hold " + eventName + " (wechat voice still active)");
+            return false;
         }
         synchronized (voiceResumeLock) {
             long now = SystemClock.elapsedRealtime();

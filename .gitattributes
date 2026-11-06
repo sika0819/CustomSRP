@@ -10,3 +10,7 @@
 
 # 模型原文件
 *.fbx filter=lfs diff=lfs merge=lfs -text
+
+# 首包音频 bank（StreamingAssets/WanosBank；与 Android UnityExport 同源）
+*.wb filter=lfs diff=lfs merge=lfs -text
+*.wsbk filter=lfs diff=lfs merge=lfs -text

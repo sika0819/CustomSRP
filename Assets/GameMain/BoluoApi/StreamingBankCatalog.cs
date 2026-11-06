@@ -57,6 +57,31 @@ namespace Game.BoluoApi
             ByName.Clear();
         }
 
+#if UNITY_EDITOR
+        /// <summary>单测：注入一条首包 version + md5，不读 ProjectMetadata。</summary>
+        public static void EditorSet(string bankName, string version, string md5)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return;
+            ByName[stem] = new Entry
+            {
+                Version = version ?? "",
+                Md5 = md5 ?? "",
+                SizeKb = "",
+            };
+        }
+
+        /// <summary>单测：去掉注入项。假名不会碰到已加载的真实首包。</summary>
+        public static void EditorRemove(string bankName)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return;
+            ByName.Remove(stem);
+        }
+#endif
+
         public static UniTask EnsureLoadedAsync()
         {
             if (_loadState >= 2)

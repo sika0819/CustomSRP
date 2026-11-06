@@ -553,10 +553,6 @@ namespace Game
             if (banks == null || banks.Length == 0)
                 return BankUiState.AllReady;
 
-            bool anyFailed = false;
-            bool anyPending = false;
-            bool anyPendingInQueue = false;
-            bool anyDownloading = false;
             bool anyNoUrl = false;
             bool allReady = true;
 
@@ -573,66 +569,43 @@ namespace Game
 
                 if (BankDownloader.TryGetActiveItem(bn, out var active) && active != null)
                 {
-                    switch (active.State)
-                    {
-                        case BankDownloadState.Ready:
-                            break;
-                        case BankDownloadState.Skipped:
-                            // 空 url Skipped 不是就绪（IsLocalReady 已回落 Probe）；标不可下。
-                            if (string.Equals(
-                                    active.Error,
-                                    BankDownloadItem.UrlEmptyError,
-                                    System.StringComparison.Ordinal))
-                                anyNoUrl = true;
-                            break;
-                        case BankDownloadState.Failed:
-                            anyFailed = true;
-                            break;
-                        case BankDownloadState.Downloading:
-                            if (string.IsNullOrEmpty(active.Url))
-                                anyNoUrl = true;
-                            else
-                                anyDownloading = true;
-                            break;
-                        case BankDownloadState.Pending:
-                        default:
-                            if (string.IsNullOrEmpty(active.Url))
-                                anyNoUrl = true;
-                            else
-                            {
-                                anyPending = true;
-                                anyPendingInQueue = true;
-                            }
-                            break;
-                    }
+                    if (active.State == BankDownloadState.Skipped
+                        && string.Equals(
+                            active.Error,
+                            BankDownloadItem.UrlEmptyError,
+                            System.StringComparison.Ordinal))
+                        anyNoUrl = true;
+                    else if (active.State == BankDownloadState.Downloading
+                             && string.IsNullOrEmpty(active.Url))
+                        anyNoUrl = true;
+                    else if (active.State == BankDownloadState.Pending
+                             && string.IsNullOrEmpty(active.Url))
+                        anyNoUrl = true;
                     continue;
                 }
 
                 if (PresetBankCatalogGaps.IsUndownloadable(bn))
                 {
-                    // 无 catalog / url 空：不可下 → Failed，勿假 NotDownloaded 空点。
+                    // 无 catalog / url 空：不可下 → 重试，勿假 NotDownloaded 空点。
                     anyNoUrl = true;
-                }
-                else
-                {
-                    anyPending = true;
                 }
             }
 
             if (allReady)
                 return BankUiState.AllReady;
-            if (anyFailed)
-                return BankUiState.Failed;
-            if (anyNoUrl && !anyDownloading && !anyPending)
-                return BankUiState.Failed;
 
             bool userTriggered = item.UserTriggered || _userTriggered.Contains(item.PresetId);
-            // 仅真实 Downloading 转圈；用户点过才对排队 Pending 转圈。
-            // 静默 Kick 入队的 Pending 保持未下载，避免整表假转圈。
-            if (anyDownloading || (userTriggered && (anyPending || anyPendingInQueue)))
-                return BankUiState.Downloading;
-
-            return BankUiState.NotDownloaded;
+            bool userAttemptLive = CardUserAttemptLive(item.BankNames);
+            bool unresolved = anyNoUrl || CardHasUnresolvedFailure(item.BankNames);
+            switch (PresetCardUiState.Resolve(false, userTriggered, userAttemptLive, unresolved))
+            {
+                case PresetDownloadVisual.Downloading:
+                    return BankUiState.Downloading;
+                case PresetDownloadVisual.Retry:
+                    return BankUiState.Failed;
+                default:
+                    return BankUiState.NotDownloaded;
+            }
         }
 
         void ApplyItemState(int index, bool force)
@@ -872,7 +845,8 @@ namespace Game
             int presetId = captured.PresetId;
             bool saveSuppressPushed = false;
 
-            // 点击当下钉死意图并翻进度环；软占用由 Flow 抢占。
+            // 先清失败标记再翻进度环，否则卡片会停在重试图标上，看起来点了没反应。
+            BankDownloader.ArmUserRetry(banks);
             _userTriggered.Add(presetId);
             PendingDownloadIntent.SetPreset(
                 presetId,
@@ -932,20 +906,20 @@ namespace Game
             // 本路 pending 可能先结束，同包其它 bank 仍在后台队列；
             // 等本卡 banks 齐或队列空闲，勿过早清 _userTriggered 导致图标闪回未下载。
             bool allLocal = AreBanksLocallyReady(banks);
-            if (!allLocal)
+            if (!allLocal && CardUserAttemptLive(banks))
                 allLocal = await WaitPresetBanksSettled(banks);
 
             if (!allLocal)
             {
-                if (AnyPresetBankBusy(banks))
+                if (CardUserAttemptLive(banks))
                 {
-                    // 仍在下：保持转圈，等下一路 onBanksDone / 进度 tick。
+                    // 仍在用户槽：保持转圈，等这轮出结果。
                     if (Root != null)
                         RefreshAllStates(force: true);
                     return;
                 }
 
-                // 确认不齐且空闲：才清意图并刷失败/未下载。
+                // 这轮失败或已降回静默：收掉进度环，失败卡显示重试。
                 _userTriggered.Remove(presetId);
                 if (PendingDownloadIntent.IsPresetMatch(presetId))
                     PendingDownloadIntent.Clear();
@@ -1015,27 +989,44 @@ namespace Game
                     return true;
 
                 if (AnyPresetBankBusy(banks))
-                {
                     lastBusyAt = Time.realtimeSinceStartup;
-                }
                 else if (Time.realtimeSinceStartup - lastBusyAt >= idleGraceSeconds)
-                {
-                    // 队列已空仍不齐 → 真失败 / 无 Url。
                     return AreBanksLocallyReady(banks);
-                }
-
-                for (int i = 0; i < banks.Length; i++)
-                {
-                    string bn = banks[i];
-                    if (string.IsNullOrEmpty(bn) || BankDownloader.IsLocalReady(bn))
-                        continue;
-                    BankDownloader.InvalidateLocalReadyCache(bn);
-                }
 
                 await UniTask.Delay(100, DelayType.UnscaledDeltaTime);
             }
 
             return AreBanksLocallyReady(banks);
+        }
+
+        static bool CardUserAttemptLive(string[] banks)
+        {
+            if (banks == null)
+                return false;
+            for (int i = 0; i < banks.Length; i++)
+            {
+                string bn = banks[i];
+                if (!string.IsNullOrEmpty(bn) && BankDownloader.IsUserAttemptLive(bn))
+                    return true;
+            }
+
+            return false;
+        }
+
+        static bool CardHasUnresolvedFailure(string[] banks)
+        {
+            if (banks == null)
+                return false;
+            for (int i = 0; i < banks.Length; i++)
+            {
+                string bn = banks[i];
+                if (string.IsNullOrEmpty(bn) || BankDownloader.IsLocalReady(bn))
+                    continue;
+                if (BankDownloader.HasUnresolvedFailure(bn))
+                    return true;
+            }
+
+            return false;
         }
 
         static bool AnyPresetBankBusy(string[] banks)
@@ -1061,7 +1052,8 @@ namespace Game
                 string bn = banks[i];
                 if (string.IsNullOrEmpty(bn))
                     continue;
-                if (!BankDownloader.IsLocalReady(bn))
+                if (!BankDownloader.IsLocalReady(bn)
+                    && !BankLoadGate.CanEnterWithoutOfficialFile(bn))
                     return false;
             }
             return true;

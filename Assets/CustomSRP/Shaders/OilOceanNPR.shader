@@ -2,14 +2,15 @@ Shader "CustomSRP/OilOceanNPR"
 {
     Properties
     {
-        // 深灰蓝水体。昼夜两套 Deep 由 OilOceanSurface 写入，这里只收当前色。
-        _BaseColor ("Deep", Color) = (0.14, 0.18, 0.36, 0.96)
-        _ShallowColor ("Shallow", Color) = (0.22, 0.24, 0.42, 0.90)
+        // 白天深水。冷青蓝：红压低，蓝保持亮，避免发白、发灰、发黑。
+        _BaseColor ("Deep", Color) = (0.08, 0.44, 0.70, 0.96)
+        _ShallowColor ("Shallow", Color) = (0.16, 0.58, 0.80, 0.90)
         _FoamColor ("Titanium White", Color) = (0.94, 0.97, 1.0, 1)
         _GlintColor ("Ochre Sun Dash", Color) = (0.92, 0.78, 0.42, 1)
-        _TintShallow ("Tint Shallow", Color) = (0.78, 0.68, 0.48, 1)
-        _TintDeep ("Tint Deep", Color) = (0.28, 0.24, 0.42, 1)
-        _TintStrength ("Tint Strength", Range(0, 1)) = 0.4
+        // Deep 管外海，Shallow 只管看得见底的浅滩。Strength 为 0 时这两颗色不参与。
+        _TintShallow ("Tint Shallow", Color) = (0.35, 0.78, 1.0, 1)
+        _TintDeep ("Tint Deep", Color) = (0.25, 0.62, 1.0, 1)
+        _TintStrength ("Tint Strength", Range(0, 1)) = 0.55
 
         // 与河 _GlintMap 相同：单列竖带光痕，勿用横笔印章。
         _SparkleBrush ("Sun Glint Column", 2D) = "black" {}

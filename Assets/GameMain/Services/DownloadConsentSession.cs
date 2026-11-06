@@ -28,6 +28,8 @@ namespace Game
 
         static Phase _phase;
         static readonly List<string> _banks = new List<string>(16);
+        /// <summary>流量窗「继续」时只提升这批（本次点击 / 本区），不要用体积估算的全量列表。</summary>
+        static readonly List<string> _priorityBanks = new List<string>(8);
         static Action _onReady;
         static Action _onCancel;
         static Action _onWifiLater;
@@ -46,7 +48,8 @@ namespace Game
         public static void EnsureReady(
             IList<string> banks,
             Action onReady,
-            DownloadUiOptions opts = default)
+            DownloadUiOptions opts = default,
+            IList<string> priorityBanks = null)
         {
             _declinedCellularUntilWifi = false;
             Capture(
@@ -54,7 +57,8 @@ namespace Game
                 onReady,
                 opts.OnCancel,
                 opts.OnWifiConfirmLater,
-                opts.LockMoveDuringPrompt);
+                opts.LockMoveDuringPrompt,
+                priorityBanks ?? banks);
 
             if (_lockMove)
                 ApplyMoveLock(true);
@@ -153,6 +157,7 @@ namespace Game
         {
             _phase = Phase.Idle;
             _banks.Clear();
+            _priorityBanks.Clear();
             _onReady = null;
             _onCancel = null;
             _onWifiLater = null;
@@ -215,7 +220,7 @@ namespace Game
             Action onReady,
             Action onCancel = null)
         {
-            Capture(banks, onReady, onCancel, onWifiLater: null, lockMove: false);
+            Capture(banks, onReady, onCancel, onWifiLater: null, lockMove: false, priorityBanks: banks);
             _phase = Phase.MobileConfirm;
         }
 #endif
@@ -225,7 +230,8 @@ namespace Game
             Action onReady,
             Action onCancel,
             Action onWifiLater,
-            bool lockMove)
+            bool lockMove,
+            IList<string> priorityBanks)
         {
             // 弹窗 / 门禁占用中被新 EnsureReady 覆盖：先取消上一笔（Music/Preset OnCancel
             // 已捕获旧 album/presetId，不会误清新 Intent），再挂新回调。
@@ -242,6 +248,7 @@ namespace Game
 
             _banks.Clear();
             MergeBanks(banks);
+            ReplacePriorityBanks(priorityBanks);
             _onReady = onReady;
             if (onCancel != null)
                 _onCancel = onCancel;
@@ -259,6 +266,20 @@ namespace Game
             catch (Exception e)
             {
                 Log.Warning("[DownloadConsent] prev OnCancel: " + e.Message);
+            }
+        }
+
+        static void ReplacePriorityBanks(IList<string> banks)
+        {
+            _priorityBanks.Clear();
+            if (banks == null)
+                return;
+            for (int i = 0; i < banks.Count; i++)
+            {
+                string name = banks[i];
+                if (string.IsNullOrEmpty(name) || _priorityBanks.Contains(name))
+                    continue;
+                _priorityBanks.Add(name);
             }
         }
 
@@ -402,7 +423,9 @@ namespace Game
 
         static void OnMobileAllow()
         {
-            BankDownloader.PriorityBanks(_banks);
+            // 只插本次点击 / 本区。同意链体积用的全量列表留在 _banks，不能整表抬进用户槽。
+            if (_priorityBanks.Count > 0)
+                BankDownloader.PriorityBanks(_priorityBanks);
             // 开/关：会话开闸直到回 Wi‑Fi / 离岛。
             DownloadCellularGate.UserAllowCellularAlways();
             // 蜂窝确认后不再叠 Wi‑Fi 确认窗（文案是「已连 Wi‑Fi」）。
@@ -460,6 +483,7 @@ namespace Game
             _onCancel = null;
             _onWifiLater = null;
             _banks.Clear();
+            _priorityBanks.Clear();
             bool lockMove = _lockMove;
             _lockMove = false;
             if (lockMove)
@@ -493,6 +517,7 @@ namespace Game
             _onCancel = null;
             _onWifiLater = null;
             _banks.Clear();
+            _priorityBanks.Clear();
             _lockMove = false;
             // 有 OnCancel（岛门）时由对方在后退后解锁；否则会话自己放。
             if (lockMove && cancel == null)

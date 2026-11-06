@@ -160,10 +160,10 @@ doc/images/
 # YooAsset 整包（上面的 Android 规则盖不住 iOS 产物）
 Bundles/
 
-# 音频 bank
-Assets/StreamingAssets/WanosBank/
-*.wb
-*.wsbk
+# 音频 bank：首包 StreamingAssets/WanosBank 须可见（BuiltinStreamingRelativePaths）
+# 可选/CDN bank 仍可忽略其它路径下的大文件
+**/BanksOptional/
+**/BanksOptional/**
 
 # 地形高度图（二进制 YAML，单文件数十 MB）
 Assets/Terrain/**/*.asset

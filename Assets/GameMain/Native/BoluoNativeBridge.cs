@@ -47,6 +47,7 @@ namespace Game.Native
 
         void OnApplicationPause(bool paused)
         {
+            IslandEntryLog.Ok("app", paused ? "pause" : "resume");
             NativePushReceiver.Drain();
         }
 

@@ -34,8 +34,22 @@ namespace WanosAudio
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         static readonly HashSet<string> Failed =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        static readonly Dictionary<string, long> FailedStamp =
+            new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         static readonly Dictionary<string, int> Refs =
             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>最近一次 <see cref="LoadFromPath"/> 失败原因。成功时清空。</summary>
+        public static string LastLoadDetail { get; private set; }
+
+        /// <summary>
+        /// 非空表示拒绝这次原生 LoadBank。参数是 bank stem 与调用方传入的绝对路径。
+        /// 由 GameMain 安装：persistent 文件须有加载标记，或是刚校验通过的一次性放行。
+        /// </summary>
+        public static Func<string, string, string> PersistentLoadBlock;
+
+        /// <summary>原生 LoadBank 成功后。参数是调用方传入的原路径，不是循环补丁副本。</summary>
+        public static Action<string> AfterSuccessfulLoad;
 
         /// <summary>
         /// Bank 加载成功后触发。可被 <see cref="AmbienceZoneService"/> 等订阅，
@@ -112,6 +126,7 @@ namespace WanosAudio
                 NativeHeld.Clear();
                 InFlight.Clear();
                 Failed.Clear();
+                FailedStamp.Clear();
                 Refs.Clear();
                 PendingUnloads.Clear();
             }
@@ -182,73 +197,96 @@ namespace WanosAudio
         /// Cheap pre-check before calling native LoadBank.
         /// WIAEngine throws C++ on bad/unsupported headers (uncaught → SIGABRT).
         /// </summary>
-        public static bool IsLikelyValidBankFile(string absolutePath)
+        /// <summary>合法返回 null。否则是 BKHD / text-error-page / no-BankHeader 等短原因。</summary>
+        public static string ExplainInvalidBankFile(string absolutePath)
         {
             if (string.IsNullOrEmpty(absolutePath) || !File.Exists(absolutePath))
-                return false;
+                return "missing";
 
             try
             {
                 var info = new FileInfo(absolutePath);
                 if (info.Length < MinBankBytes)
-                    return false;
+                    return "too-small";
 
                 byte[] head = new byte[Math.Min(256, (int)Math.Min(info.Length, 256))];
                 using (var fs = File.OpenRead(absolutePath))
                 {
                     int n = fs.Read(head, 0, head.Length);
                     if (n < 4)
-                        return false;
+                        return "short-header";
 
-                    // Reject legacy BKHD — native loadBankHeader aborts on this fourCC.
                     if (StartsWith(head, n, BkhdFourCc))
-                    {
-                        Debug.LogWarning(
-                            $"[{LogTag}] reject BKHD bank (need Wanos BankHeader archive): {absolutePath}");
-                        return false;
-                    }
+                        return "BKHD";
 
-                    // Reject obvious text / HTML / JSON error bodies.
                     if (head[0] == '<' || head[0] == '{' || head[0] == '[' || head[0] == '#' || head[0] == '/')
-                        return false;
+                        return "text-error-page";
                     if (n >= 2 && head[0] == 0xEF && head[1] == 0xBB)
-                        return false;
+                        return "text-error-page";
 
-                    // Prefer Wanos "BankHeader" archive (patched .wb / .wsbk).
                     if (IndexOf(head, n, BankHeaderMarker) >= 0)
-                        return true;
+                        return null;
 
-                    Debug.LogWarning(
-                        $"[{LogTag}] reject unknown bank header (no BankHeader marker): {absolutePath}");
-                    return false;
+                    return "no-BankHeader";
                 }
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[{LogTag}] IsLikelyValidBankFile({absolutePath}): {e.Message}");
-                return false;
+                return "read-failed:" + e.Message;
             }
+        }
+
+        public static bool IsLikelyValidBankFile(string absolutePath)
+        {
+            string reason = ExplainInvalidBankFile(absolutePath);
+            if (reason == null)
+                return true;
+
+            if (reason == "BKHD")
+            {
+                Debug.LogWarning(
+                    $"[{LogTag}] reject BKHD bank (need Wanos BankHeader archive): {absolutePath}");
+            }
+            else if (reason == "no-BankHeader")
+            {
+                Debug.LogWarning(
+                    $"[{LogTag}] reject unknown bank header (no BankHeader marker): {absolutePath}");
+            }
+            else if (reason.StartsWith("read-failed", StringComparison.Ordinal))
+            {
+                Debug.LogWarning($"[{LogTag}] IsLikelyValidBankFile({absolutePath}): {reason}");
+            }
+
+            return false;
         }
 
         /// <summary>Load by absolute path (from downloader). Tag = bank stem.</summary>
         public static bool LoadFromPath(string bankName, string absolutePath)
         {
+            LastLoadDetail = null;
             if (!WanosNative.Instance.IsCreated)
             {
+                LastLoadDetail = "engine-not-created";
                 Debug.LogWarning($"[{LogTag}] LoadFromPath skipped — engine not created ({bankName})");
                 return false;
             }
 
             string stem = Strip(bankName);
             if (string.IsNullOrEmpty(stem))
+            {
+                LastLoadDetail = "empty-name";
                 return false;
+            }
 
             lock (Gate)
             {
                 if (Loaded.Contains(stem))
                     return true;
                 if (Failed.Contains(stem) || InFlight.Contains(stem))
+                {
+                    LastLoadDetail = Failed.Contains(stem) ? "already-failed" : "in-flight";
                     return false;
+                }
                 InFlight.Add(stem);
             }
 
@@ -256,12 +294,22 @@ namespace WanosAudio
             {
                 // Rain_Small 在原 bank 里只播一遍。加载副本，不改 StreamingAssets 原文件。
                 string loadPath = WanosBankSeamlessLoopPatch.ResolveEngineLoadPath(absolutePath);
-                if (!IsLikelyValidBankFile(loadPath))
+                string header = ExplainInvalidBankFile(loadPath);
+                if (header != null)
                 {
+                    LastLoadDetail = "header " + header;
                     Debug.LogWarning(
-                        $"[{LogTag}] skip native LoadBank — invalid/unsupported bank={stem} path={loadPath}");
-                    lock (Gate)
-                        Failed.Add(stem);
+                        $"[{LogTag}] skip native LoadBank — invalid/unsupported bank={stem} path={loadPath} reason={header}");
+                    RememberFailed(stem, loadPath);
+                    return false;
+                }
+
+                string blocked = PersistentLoadBlock?.Invoke(stem, absolutePath);
+                if (!string.IsNullOrEmpty(blocked))
+                {
+                    LastLoadDetail = "gate " + blocked;
+                    Debug.LogWarning(
+                        $"[{LogTag}] skip native LoadBank — unconfirmed bank={stem} path={absolutePath} reason={blocked}");
                     return false;
                 }
 
@@ -272,18 +320,17 @@ namespace WanosAudio
                 }
                 catch (Exception e)
                 {
-                    // Managed exceptions only; native C++ throw still aborts — validation above is the real guard.
+                    LastLoadDetail = "exception " + e.Message;
                     Debug.LogWarning($"[{LogTag}] LoadBank threw bank={stem}: {e.Message}");
-                    lock (Gate)
-                        Failed.Add(stem);
+                    RememberFailed(stem, loadPath);
                     return false;
                 }
 
                 if (r != WanosResult.Success)
                 {
+                    LastLoadDetail = "result=" + r;
                     Debug.LogWarning($"[{LogTag}] LoadBank failed bank={stem} result={r}");
-                    lock (Gate)
-                        Failed.Add(stem);
+                    RememberFailed(stem, loadPath);
                     return false;
                 }
 
@@ -291,6 +338,15 @@ namespace WanosAudio
                 {
                     Loaded.Add(stem);
                     Failed.Remove(stem);
+                    FailedStamp.Remove(stem);
+                }
+                try
+                {
+                    AfterSuccessfulLoad?.Invoke(absolutePath);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[{LogTag}] AfterSuccessfulLoad bank={stem}: {e.Message}");
                 }
                 OnBankLoaded?.Invoke(stem);
                 Debug.Log($"[{LogTag}] loaded bank={stem}");
@@ -319,15 +375,14 @@ namespace WanosAudio
                 return false;
             }
 
-            // 下载完成后文件可能已修好；允许对 Failed 条目再试一次（仍无效会再次记入 Failed）。
+            // 同一份文件已经让原生加载失败过就不要再送进去。真空圣境这类坏包会在 LoadBank 里把进程打崩。
+            // 文件大小或修改时间变了（重新下过）才允许再试。
             lock (Gate)
             {
-                if (Failed.Contains(stem))
-                {
-                    if (!IsLikelyValidBankFile(path))
-                        return false;
-                    Failed.Remove(stem);
-                }
+                if (Failed.Contains(stem)
+                    && FailedStamp.TryGetValue(stem, out long stamp)
+                    && stamp == FileStamp(path))
+                    return false;
             }
 
             return LoadFromPath(stem, path);
@@ -633,6 +688,34 @@ namespace WanosAudio
                     return i;
             }
             return -1;
+        }
+
+        static void RememberFailed(string stem, string path)
+        {
+            if (string.IsNullOrEmpty(stem))
+                return;
+            long stamp = FileStamp(path);
+            lock (Gate)
+            {
+                Failed.Add(stem);
+                FailedStamp[stem] = stamp;
+            }
+        }
+
+        /// <summary>size 与 mtime 合成戳；文件没了则用 -1，避免永远锁死。</summary>
+        static long FileStamp(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                return -1;
+            try
+            {
+                var fi = new FileInfo(path);
+                return (fi.Length << 1) ^ fi.LastWriteTimeUtc.Ticks;
+            }
+            catch
+            {
+                return -1;
+            }
         }
     }
 }

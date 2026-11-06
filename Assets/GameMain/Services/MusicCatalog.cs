@@ -17,8 +17,8 @@ namespace Game
     ///   BankUpgradeBootstrap.RunAsync()
     ///     └─ BankUpgradeClient.RequestUpgradeBank()  →  BankUpgradeData.musicLists
     ///          └─ MusicCatalog.SetServerData(musicLists)   ← 优先用线上
-    ///   MusicForm.OnOpen()  （服务未就绪时）
-    ///     └─ MusicCatalog.LoadAsync()  ← 本地兜底（线上没有/失败时）
+    ///   ProcedureIsland 揭罩前 WaitCatalog → EnsureReadyAsync
+    ///     └─ 超时才 LoadAsync 本地兜底；bank 下载等揭罩后 KickSilent
     /// </summary>
     public static class MusicCatalog
     {
@@ -86,15 +86,40 @@ namespace Game
         }
 
         /// <summary>
-        /// Await until catalog is ready (server or local). Used before critical BGM cue.
+        /// 先等 upgrade/bank 把 musicLists 写进来；超时或失败再读本地 MusicLists.json。
+        /// 避免启动先闪本地旧列表，再被线上覆盖。
         /// </summary>
         public static async UniTask EnsureReadyAsync(float timeoutSeconds = 8f)
         {
+            if (_albums != null && _fromServer)
+                return;
+
+            float deadline = Time.realtimeSinceStartup + Mathf.Max(0.5f, timeoutSeconds);
+            try
+            {
+                UniTask catalog = BankUpgradeBootstrap.WaitCatalogAsync();
+                if (!catalog.Status.IsCompleted())
+                {
+                    float remain = deadline - Time.realtimeSinceStartup;
+                    if (remain > 0f)
+                    {
+                        await UniTask.WhenAny(
+                            catalog,
+                            UniTask.Delay(
+                                TimeSpan.FromSeconds(remain),
+                                DelayType.UnscaledDeltaTime));
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[MusicCatalog] wait upgrade catalog: " + e.Message);
+            }
+
             if (_albums != null)
                 return;
 
             LoadAsync();
-            float deadline = Time.realtimeSinceStartup + Mathf.Max(0.5f, timeoutSeconds);
             while (_albums == null && Time.realtimeSinceStartup < deadline)
             {
                 if (!_loading && _albums == null)

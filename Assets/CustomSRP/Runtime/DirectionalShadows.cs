@@ -269,7 +269,7 @@ namespace CustomSRP
             buffer.SetBufferData(
                 _handles.matrixBuffer, Matrices,
                 0, 0, _lightCount * _settings.cascadeCount);
-            // GLES CBUFFER mirrors (Shadows.hlsl CUSTOM_SRP_SHADOW_CBUFFER).
+            // GLES / Vulkan CBUFFER mirrors (Shadows.hlsl CUSTOM_SRP_SHADOW_CBUFFER).
             UploadShadowCbufferMirrors(buffer);
             buffer.SetKeyword(
                 SoftCascadeBlendKeyword, _settings.softCascadeBlend);

@@ -138,6 +138,14 @@ Bundles/Android/DefaultPackage/OutputCache.manifest
 Bundles/Android/DefaultPackage/buildInfo.log
 Assets/StreamingAssets/package/
 Assets/StreamingAssets/package.meta
+
+# 首包 WanosBank：覆盖本机 ~/.gitignore_global 的 *.wb，必须进仓（LFS）
+# BuiltinStreamingRelativePaths（AudioEnginePaths）所列 bank 都应在此目录。
+!/Assets/StreamingAssets/WanosBank/
+!/Assets/StreamingAssets/WanosBank/**
+!/Assets/StreamingAssets/WanosBank/**/*.wb
+!/Assets/StreamingAssets/WanosBank/**/*.wsbk
+
 # Local / backup
 .local/
 _backup/

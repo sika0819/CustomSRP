@@ -294,7 +294,7 @@ namespace Game
 
         void OnCatalogReady()
         {
-            MusicCatalog.OnCatalogReady -= OnCatalogReady;
+            // 不在这里退订：先本地后线上时还要再刷一次，避免列表停在旧专辑。
             Root.schedule.Execute(SyncOpenToNowPlaying);
         }
 
@@ -1856,6 +1856,16 @@ namespace Game
             BankDownloadState activeState = hasActive && item != null
                 ? item.State
                 : BankDownloadState.Pending;
+            if (!localReady
+                && !hasActive
+                && BankDownloader.HasTerminalFailure(bankName))
+            {
+                hasActive = true;
+                activeState = BankDownloadState.Failed;
+            }
+
+            bool failedAwaitingRetry = !localReady
+                && BankDownloader.HasUnresolvedFailure(bankName);
 
             return MusicRowUiState.Resolve(
                 trackValid: true,
@@ -1864,7 +1874,8 @@ namespace Game
                 showRedDot: showRedDot,
                 userPending: userPending,
                 hasActiveItem: hasActive,
-                activeState: activeState);
+                activeState: activeState,
+                failedAwaitingRetry: failedAwaitingRetry);
         }
 
         /// <summary>
@@ -2009,6 +2020,8 @@ namespace Game
             string[] banks = { bankName };
             bool saveSuppressPushed = false;
 
+            // 失败态再点：清掉「不用再下」的标记，进度环才能出来。
+            BankDownloader.ArmUserRetry(banks);
             // 点击当下就钉死意图并翻成进度环；软占用由 Flow 抢占。
             _playAfterDownloadGen++;
             _pendingMusic = (album, track);
@@ -2173,12 +2186,32 @@ namespace Game
                     MarkHeard(albumData.Name, tracks[track].MusicName);
 
                 Log.Info($"[MusicForm] download ready → play album={album} track={track} bank={bankName}");
+                // #region agent log
+                MusicOverlapDebugLog.Write(
+                    "D",
+                    "MusicForm.PlayDownloadedTrackAsync",
+                    "download ready → PlayIndex",
+                    "{\"album\":" + album
+                    + ",\"track\":" + track
+                    + ",\"bank\":\"" + bankName
+                    + "\",\"gen\":" + gen
+                    + ",\"wasPlaying\":" + (GameEntry.Music != null && GameEntry.Music.IsPlaying ? "true" : "false") + "}");
+                // #endregion
                 GameEntry.Music?.PlayIndex(album, track, restart: true);
                 if (GameEntry.Music != null && !GameEntry.Music.IsPlaying && StillPendingDownload(gen, album, track))
                 {
                     await UniTask.Delay(150, DelayType.UnscaledDeltaTime);
                     if (StillPendingDownload(gen, album, track))
+                    {
+                        // #region agent log
+                        MusicOverlapDebugLog.Write(
+                            "D",
+                            "MusicForm.PlayDownloadedTrackAsync:retry150",
+                            "retry PlayIndex after 150ms",
+                            "{\"album\":" + album + ",\"track\":" + track + "}");
+                        // #endregion
                         GameEntry.Music.PlayIndex(album, track, restart: true);
+                    }
                 }
             }
             catch (Exception e)

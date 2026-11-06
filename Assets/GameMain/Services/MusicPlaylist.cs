@@ -91,6 +91,8 @@ namespace Game
 
         int _voiceCreateGeneration;
         ulong _voiceCreateId;
+        /// <summary>Realtime ms when current createInst Post was noted (0 = none).</summary>
+        long _voiceCreatePostedAtMs;
 
         /// <summary>Break_Music already posted for this voice (ListLoop / Shuffle).</summary>
         bool _breakPostedForVoice;
@@ -453,11 +455,32 @@ namespace Game
                     _hardReplayScheduled = true;
                 Log.Info(
                     $"[MusicPlaylist] defer post until Playing album={albumIndex} track={trackIndex} gen={gen}");
+                // #region agent log
+                MusicOverlapDebugLog.Write(
+                    "A",
+                    "MusicPlaylist.PlayIndex:defer",
+                    "defer post — no HardStop while createInst in flight",
+                    "{\"album\":" + albumIndex
+                    + ",\"track\":" + trackIndex
+                    + ",\"gen\":" + gen
+                    + ",\"inFlight\":true,\"voiceId\":" + _musicVoiceId
+                    + ",\"createId\":" + _voiceCreateId + "}");
+                // #endregion
                 TrackChanged?.Invoke();
                 NowPlayingService.PublishFromPlaylist();
                 return;
             }
 
+            // #region agent log
+            MusicOverlapDebugLog.Write(
+                "A",
+                "MusicPlaylist.PlayIndex:hardStop",
+                "PlayIndex will HardStop then deferred start",
+                "{\"album\":" + albumIndex
+                + ",\"track\":" + trackIndex
+                + ",\"gen\":" + gen
+                + ",\"inFlight\":false,\"voiceId\":" + _musicVoiceId + "}");
+            // #endregion
             HardStopMusicVoices(markStoppedByUser: false);
             // HardStop 会把 IsPlaying 拉回 false。普通点歌先乐观标记，避免列表闪回「未播放」。
             // 硬续要等真正 Post 成功才算在播，否则滑动续播闩会被提前清掉。
@@ -494,6 +517,24 @@ namespace Game
         /// </summary>
         void HardStopMusicVoices(bool markStoppedByUser)
         {
+            // #region agent log
+            long createAgeMs = _voiceCreatePostedAtMs > 0
+                ? Math.Max(0, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - _voiceCreatePostedAtMs)
+                : -1;
+            bool inFlightBefore = _voiceCreateInFlight;
+            MusicOverlapDebugLog.Write(
+                "E",
+                "MusicPlaylist.HardStopMusicVoices",
+                "HardStop before ClearVoiceCreateGate",
+                "{\"markUser\":" + (markStoppedByUser ? "true" : "false")
+                + ",\"inFlightBefore\":" + (inFlightBefore ? "true" : "false")
+                + ",\"createAgeMs\":" + createAgeMs
+                + ",\"createId\":" + _voiceCreateId
+                + ",\"musicVoice\":" + _musicVoiceId
+                + ",\"serial\":" + _musicSerialId
+                + ",\"album\":" + CurrentAlbumIndex
+                + ",\"track\":" + CurrentTrackIndex + "}");
+            // #endregion
             // 停播即放行闸，避免超时兜底把刚停的曲子又拉起来。
             ClearVoiceCreateGate();
             // agent.Stop 会 Post 一次 Stop_Music；有 serial 时此处只再补 Break，避免双 Stop。
@@ -861,6 +902,20 @@ namespace Game
                 _stoppedByUser,
                 wantPlay);
 
+            // #region agent log
+            MusicOverlapDebugLog.Write(
+                "A",
+                "MusicPlaylist.HandleVoicePlaying",
+                "Playing disposition",
+                "{\"voice\":" + instanceId
+                + ",\"matches\":" + (matches ? "true" : "false")
+                + ",\"isCreate\":" + (isCreateVoice ? "true" : "false")
+                + ",\"postedGen\":" + postedGen
+                + ",\"playGen\":" + _playGeneration
+                + ",\"disposition\":\"" + disposition + "\""
+                + ",\"inFlight\":" + (_voiceCreateInFlight ? "true" : "false") + "}");
+            // #endregion
+
             if (disposition == MusicPlayOverlapPolicy.PlayingDisposition.Continue)
             {
                 ClearVoiceCreateGate();
@@ -914,6 +969,15 @@ namespace Game
 
         void StopStaleVoice(ulong instanceId)
         {
+            // #region agent log
+            MusicOverlapDebugLog.Write(
+                "E",
+                "MusicPlaylist.StopStaleVoice",
+                "StopVoice for stale/superseded Playing",
+                "{\"voice\":" + instanceId
+                + ",\"musicVoice\":" + _musicVoiceId
+                + ",\"inFlight\":" + (_voiceCreateInFlight ? "true" : "false") + "}");
+            // #endregion
             try
             {
                 WanosInteraction.StopVoice(instanceId, 0);
@@ -943,6 +1007,17 @@ namespace Game
             _voiceCreateInFlight = true;
             _voiceCreateGeneration = generation;
             _voiceCreateId = voiceId;
+            _voiceCreatePostedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            // #region agent log
+            MusicOverlapDebugLog.Write(
+                "E",
+                "MusicPlaylist.NoteVoiceCreateInFlight",
+                "createInst gate armed",
+                "{\"gen\":" + generation
+                + ",\"voice\":" + voiceId
+                + ",\"album\":" + CurrentAlbumIndex
+                + ",\"track\":" + CurrentTrackIndex + "}");
+            // #endregion
             ScheduleVoiceCreateTimeout(generation, voiceId).Forget();
         }
 
@@ -951,6 +1026,7 @@ namespace Game
             _voiceCreateInFlight = false;
             _voiceCreateGeneration = 0;
             _voiceCreateId = 0;
+            _voiceCreatePostedAtMs = 0;
         }
 
         async UniTaskVoid ScheduleVoiceCreateTimeout(int generation, ulong voiceId)
@@ -978,6 +1054,19 @@ namespace Game
                 + $" — release gate gen={generation} voice={voiceId}");
             bool awaitingThis = _hardReplayAwaitingPlaying;
             bool waitingToPost = _hardReplayScheduled && !_hardReplayAwaitingPlaying;
+            // #region agent log
+            MusicOverlapDebugLog.Write(
+                "B",
+                "MusicPlaylist.ScheduleVoiceCreateTimeout",
+                "createInst timeout — gate release",
+                "{\"gen\":" + generation
+                + ",\"voice\":" + voiceId
+                + ",\"awaiting\":" + (awaitingThis ? "true" : "false")
+                + ",\"waitingToPost\":" + (waitingToPost ? "true" : "false")
+                + ",\"album\":" + CurrentAlbumIndex
+                + ",\"track\":" + CurrentTrackIndex
+                + ",\"musicVoice\":" + _musicVoiceId + "}");
+            // #endregion
             ClearVoiceCreateGate();
             if (awaitingThis)
             {
@@ -1310,6 +1399,17 @@ namespace Game
             if (!WanosBankStore.IsLoaded(bankName) && !WanosBankStore.Load(bankName))
             {
                 Debug.LogWarning($"[MusicPlaylist] skip play — bank not ready bank={bankName}");
+                // #region agent log
+                MusicOverlapDebugLog.Write(
+                    "C",
+                    "MusicPlaylist.TryStartTrack:bankMiss",
+                    "skip play — bank not ready",
+                    "{\"bank\":\"" + bankName
+                    + "\",\"gen\":" + generation
+                    + ",\"playGen\":" + _playGeneration
+                    + ",\"isPlayingFlag\":" + (IsPlaying ? "true" : "false")
+                    + ",\"musicVoice\":" + _musicVoiceId + "}");
+                // #endregion
                 PublishNowPlaying();
                 return false;
             }
@@ -1339,6 +1439,17 @@ namespace Game
 
             _musicSerialId = GameEntry.Sound.PlaySound(asset, MusicGroup);
             ulong postedVoice = _musicVoiceId;
+            // #region agent log
+            MusicOverlapDebugLog.Write(
+                "A",
+                "MusicPlaylist.TryStartTrack:posted",
+                "PlaySound posted",
+                "{\"asset\":\"" + asset
+                + "\",\"serial\":" + _musicSerialId
+                + ",\"gen\":" + generation
+                + ",\"playGen\":" + _playGeneration
+                + ",\"musicVoice\":" + _musicVoiceId + "}");
+            // #endregion
             if (generation >= 0 && generation != _playGeneration)
             {
                 // 连点抢先：刚起的 agent 立刻清掉。Stop 若被吞，记下 voice，Playing 时再停。

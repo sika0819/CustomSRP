@@ -42,8 +42,8 @@ struct OtherShadowBufferData
     float4x4 shadowMatrix;
 };
 
-// See Light.hlsl: Adreno GLES BufferBlock limit — pack cascades/matrices into CBUFFER.
-#if defined(SHADER_API_GLES3) || defined(SHADER_API_GLES)
+// See Light.hlsl: Adreno GLES / low Vulkan storage-buffer limit — pack cascades/matrices into CBUFFER.
+#if defined(SHADER_API_GLES3) || defined(SHADER_API_GLES) || defined(SHADER_API_VULKAN)
 #define CUSTOM_SRP_SHADOW_CBUFFER 1
 #define CUSTOM_SRP_MAX_SHADOW_CASCADES 4
 #define CUSTOM_SRP_MAX_SHADOW_MATRICES 16
@@ -293,7 +293,7 @@ float GetOtherShadow(
     OtherShadowData other, ShadowData global, Surface surfaceWS)
 {
 #if defined(CUSTOM_SRP_SHADOW_CBUFFER)
-    // GLES: no OtherShadow SSBO; point/spot never cast in this SRP anyway.
+    // GLES / Vulkan: no OtherShadow SSBO; point/spot never cast in this SRP anyway.
     return 1.0;
 #else
     float tileIndex = other.tileIndex;

@@ -95,6 +95,48 @@ namespace Game.BoluoApi
             return Path.Combine(PersistentBankPath, StripBankExtension(bankName ?? "unknown") + BankExtension);
         }
 
+        public static bool TryFindPersistentBank(string bankName, out string path)
+            => TryFindExistingBank(PersistentBankPath, bankName, out path);
+
+        /// <summary>
+        /// 编辑器里 StreamingAssets 是真实文件。Android jar 内不能 File.Exists，返回 false。
+        /// </summary>
+        public static bool TryFindStreamingBankFile(string bankName, out string path)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            path = null;
+            return false;
+#else
+            if (TryFindExistingBank(StreamingBankPath, bankName, out path))
+                return true;
+            return TryFindExistingBank(LegacyStreamingBankPath, bankName, out path);
+#endif
+        }
+
+        public static int BuiltinStreamingCount => BuiltinStreamingRelativePaths.Length;
+
+        public static string GetBuiltinStreamingRelative(int index)
+            => BuiltinStreamingRelativePaths[index];
+
+        public static bool TryGetBuiltinStreamingRelative(string bankName, out string relative)
+        {
+            relative = null;
+            string stem = StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return false;
+            for (int i = 0; i < BuiltinStreamingRelativePaths.Length; i++)
+            {
+                string candidate = BuiltinStreamingRelativePaths[i];
+                string fileStem = StripBankExtension(Path.GetFileName(candidate));
+                if (!string.Equals(fileStem, stem, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                relative = candidate;
+                return true;
+            }
+
+            return false;
+        }
+
         public static bool TryFindLocalBank(string bankName, out string path)
         {
             if (TryFindExistingBank(PersistentBankPath, bankName, out path))
@@ -190,6 +232,8 @@ namespace Game.BoluoApi
                     if (await StreamingAssetsUtil.CopyFileToAsync(relative, dest))
                     {
                         ok++;
+                        // 这次写入的是包内原件，不是下载到一半的文件。
+                        BankLoadGate.NoteEngineLoaded(dest);
                         Log.Info($"[AudioEnginePaths] extracted {relative} -> {dest}");
                     }
                     else

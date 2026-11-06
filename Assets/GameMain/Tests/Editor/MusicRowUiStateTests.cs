@@ -118,6 +118,17 @@ namespace Game.Tests
                     userPending: false,
                     hasActiveItem: true,
                     activeState: BankDownloadState.Failed));
+
+            Assert.AreEqual(
+                MusicItemUiState.Downloading,
+                MusicRowUiState.Resolve(
+                    trackValid: true,
+                    isPlaying: false,
+                    localReady: false,
+                    showRedDot: false,
+                    userPending: true,
+                    hasActiveItem: true,
+                    activeState: BankDownloadState.Failed));
         }
 
         [Test]
@@ -148,6 +159,38 @@ namespace Game.Tests
                     userPending: false,
                     hasActiveItem: false,
                     activeState: BankDownloadState.Pending));
+        }
+
+        [Test]
+        public void FailedAwaitingRetry_WithoutUserClick_IsRetryIcon()
+        {
+            Assert.AreEqual(
+                MusicItemUiState.Failed,
+                MusicRowUiState.Resolve(
+                    trackValid: true,
+                    isPlaying: false,
+                    localReady: false,
+                    showRedDot: false,
+                    userPending: false,
+                    hasActiveItem: true,
+                    activeState: BankDownloadState.Pending,
+                    failedAwaitingRetry: true));
+        }
+
+        [Test]
+        public void UserClick_Pending_IsDownloading_EvenAfterFailure()
+        {
+            Assert.AreEqual(
+                MusicItemUiState.Downloading,
+                MusicRowUiState.Resolve(
+                    trackValid: true,
+                    isPlaying: false,
+                    localReady: false,
+                    showRedDot: false,
+                    userPending: true,
+                    hasActiveItem: true,
+                    activeState: BankDownloadState.Pending,
+                    failedAwaitingRetry: true));
         }
     }
 }

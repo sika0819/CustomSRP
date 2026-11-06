@@ -38,6 +38,7 @@ namespace Game
         public static void BindAfterBuiltinInit()
         {
             WanosBankStore.SetPaths(WanosBankPaths.Instance);
+            BoluoApi.BankLoadGate.Install();
 
             ISoundManager manager = GameFrameworkEntry.GetModule<ISoundManager>();
             if (manager != null)

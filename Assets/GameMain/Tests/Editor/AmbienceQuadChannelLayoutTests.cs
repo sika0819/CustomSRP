@@ -59,6 +59,19 @@ namespace Game.Tests
         }
 
         [Test]
+        public void WaterfallSmall_DualPointsUseBoluoParentRotation()
+        {
+            AmbienceQuadChannelLayout.WaterfallDualWorldPoints(
+                AmbienceQuadChannelLayout.WaterfallSmallRoot,
+                big: false,
+                out Vector3 lsRs,
+                out Vector3 lr);
+            // Small_1 = LsRs，Small_0 = LR。世界坐标 = 根 + 父旋转 * 局部。
+            Assert.Less(Vector3.Distance(lsRs, new Vector3(423.07724f, 22.45272f, 600.65846f)), 0.02f);
+            Assert.Less(Vector3.Distance(lr, new Vector3(439.07724f, 22.45272f, 600.65845f)), 0.02f);
+        }
+
+        [Test]
         public void RiverOcean_BoluoMoveThresholdAndHalf()
         {
             Assert.AreEqual(100f, AmbienceQuadChannelLayout.MoveThresholdMeters, 0.01f);

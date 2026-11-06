@@ -42,7 +42,7 @@ namespace CustomSRP
 
         static readonly ProfilingSampler Sampler = new ProfilingSampler("Lighting");
 
-        // GLES CBUFFER mirrors (Light.hlsl CUSTOM_SRP_LIGHT_CBUFFER). Cap matches shader.
+        // GLES / Vulkan CBUFFER mirrors (Light.hlsl CUSTOM_SRP_LIGHT_CBUFFER). Cap matches shader.
         const int MaxOtherLightsGles = 8;
 
         static readonly int
@@ -302,8 +302,8 @@ namespace CustomSRP
                 _handles.otherBuffer, OtherLightDataArray, 0, 0, _otherLightCount);
             buffer.SetGlobalBuffer(OtherLightDataId, _handles.otherBuffer);
 
-            // Always mirror into CBUFFER arrays. GLES Oil/Terrain variants read these
-            // instead of StructuredBuffers (Adreno BufferBlock link limit).
+            // Always mirror into CBUFFER arrays. GLES and Vulkan variants read these
+            // instead of StructuredBuffers (Adreno storage-buffer link limit).
             UploadLightCbufferMirrors(buffer);
 
             // Planar mirror skipped tile bucketing; emit a 1×1 tile buffer so

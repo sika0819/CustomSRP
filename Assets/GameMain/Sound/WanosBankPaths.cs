@@ -9,6 +9,6 @@ namespace Game
         public static readonly WanosBankPaths Instance = new WanosBankPaths();
 
         public bool TryResolve(string bankName, out string absolutePath)
-            => AudioEnginePaths.TryFindLocalBank(bankName, out absolutePath);
+            => BankLoadGate.TryResolveForEngine(bankName, out absolutePath);
     }
 }

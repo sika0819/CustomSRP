@@ -11,6 +11,8 @@ namespace Game.Tests
     public sealed class BankLocalReadyProbeTests
     {
         const string Stem = "ProbeReady_UiTest";
+        const string Version = "1.0.0";
+        const string Md5 = "probe-md5";
 
         string _partialWsbk;
         string _goodWb;
@@ -39,7 +41,8 @@ namespace Game.Tests
                         bankName = Stem,
                         url = "https://example.test/probe.wsbk",
                         size = "2",
-                        md5 = "",
+                        version = Version,
+                        md5 = Md5,
                     },
                 },
             });
@@ -50,6 +53,7 @@ namespace Game.Tests
         {
             TryDelete(_partialWsbk);
             TryDelete(_goodWb);
+            BankDownloader.EditorForgetIdentity(Stem);
             PresetBankCatalog.Clear();
             BankDownloader.InvalidateLocalReadyCache();
         }
@@ -59,6 +63,7 @@ namespace Game.Tests
         {
             File.WriteAllBytes(_partialWsbk, new byte[64]);
             File.WriteAllBytes(_goodWb, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(Stem, Version, Md5, _goodWb);
             BankDownloader.InvalidateLocalReadyCache(Stem);
 
             Assert.IsTrue(
@@ -81,6 +86,7 @@ namespace Game.Tests
         public void Probe_FullWsbk_Ready()
         {
             File.WriteAllBytes(_partialWsbk, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(Stem, Version, Md5, _partialWsbk);
             BankDownloader.InvalidateLocalReadyCache(Stem);
 
             Assert.IsTrue(BankDownloader.ProbeLocalSatisfiesCatalog(Stem));

@@ -16,6 +16,9 @@ namespace Game.Editor.BuildTool
 
         static ForceEditorRecompile()
         {
+            // batchmode（含 -runTests）域重载后再 RequestScriptCompilation 会把测试跑丢。
+            if (Application.isBatchMode)
+                return;
             if (SessionState.GetBool(StampKey, false))
                 return;
             SessionState.SetBool(StampKey, true);

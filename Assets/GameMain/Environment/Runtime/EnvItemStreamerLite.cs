@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Game.Native;
 using UnityEngine;
 using UnityEngine.Rendering;
 using YooAsset;
@@ -816,10 +817,27 @@ namespace Game
             report?.Invoke(progressMin, "正在铺装环境...");
             // 二次进岛时 yield return null 交出去的那一帧不再回来。铺装在这一次调用里做完，
             // 同步 LoadAssetSync，中间不把协程交回玩家循环。
+            var prefillSw = Stopwatch.StartNew();
+            long nextPrefillBeatMs = 0;
             for (int k = 0; k < near.Count; k++)
             {
                 int idx = near[k];
                 Item item = _items[idx];
+                long prefillMs = prefillSw.ElapsedMilliseconds;
+                if (prefillMs >= nextPrefillBeatMs)
+                {
+                    nextPrefillBeatMs = prefillMs + 2000;
+                    string loc = string.IsNullOrEmpty(item.Location)
+                        ? "none"
+                        : item.Location.Replace(' ', '_');
+                    IslandEntryLog.Wait(
+                        "prefill",
+                        "tick",
+                        "k=" + k + "/" + total
+                        + " loc=" + loc
+                        + " cat=" + item.Category
+                        + " ms=" + prefillMs);
+                }
                 if (item.State == StateVisible && item.Go != null)
                 {
                     skippedVisible++;

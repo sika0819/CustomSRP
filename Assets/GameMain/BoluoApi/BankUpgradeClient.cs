@@ -134,11 +134,12 @@ namespace Game.BoluoApi
                 if (TryParseResponse(responseText, out var data, out bool deviceTokenExpired, out string failReason))
                     return data;
 
-                // 业务码 400「deviceToken 已过期」同样是 HTTP 200，原先在解析处直接失败，不会进 401 分支。
+                // 业务码「deviceToken 已过期 / 不一致」同样是 HTTP 200，原先在解析处直接失败，不会进 401 分支。
+                // 不一致时本地过期时间往往还没到；挤下线 / 退登 / 注销不在此列。
                 if (!didAuthRetry && deviceTokenExpired)
                 {
                     didAuthRetry = true;
-                    if (await RefreshExpiredDeviceTokenAsync("业务码 deviceToken 已过期"))
+                    if (await RefreshExpiredDeviceTokenAsync("业务码 deviceToken 需换票"))
                         continue;
                     Fail(string.IsNullOrEmpty(failReason)
                         ? "升级失败：deviceToken 已过期，刷新失败"
@@ -183,14 +184,28 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 服务端业务文案。本地过期时间可能还没到（或原生 expire=0 被写成 24h 占位），不能只看 Prefs。
+        /// 设备票被服务端拒绝，且不是挤下线、主动退登、注销。清本地票后静默换票再打一轮。
+        /// 本地过期时间可能还没到（或原生 expire=0 被写成 24h 占位），不能只看 Prefs。
+        /// 「deviceToken 不一致」同样要换，不能只认「过期」。
         /// </summary>
-        static bool IsDeviceTokenExpiredMessage(string msg)
+        public static bool IsSilentDeviceTokenRefresh(string msg)
         {
             if (string.IsNullOrEmpty(msg))
                 return false;
-            return msg.IndexOf("deviceToken", StringComparison.OrdinalIgnoreCase) >= 0
-                && msg.IndexOf("过期", StringComparison.Ordinal) >= 0;
+            if (msg.IndexOf("deviceToken", StringComparison.OrdinalIgnoreCase) < 0)
+                return false;
+            if (msg.IndexOf("用户", StringComparison.Ordinal) >= 0)
+                return false;
+            if (msg.IndexOf("注销", StringComparison.Ordinal) >= 0)
+                return false;
+            if (msg.IndexOf("其他设备", StringComparison.Ordinal) >= 0)
+                return false;
+            if (msg.IndexOf("退出", StringComparison.Ordinal) >= 0)
+                return false;
+            return msg.IndexOf("过期", StringComparison.Ordinal) >= 0
+                || msg.IndexOf("不一致", StringComparison.Ordinal) >= 0
+                || msg.IndexOf("无效", StringComparison.Ordinal) >= 0
+                || msg.IndexOf("鉴权", StringComparison.Ordinal) >= 0;
         }
 
         /// <summary>
@@ -273,11 +288,11 @@ namespace Game.BoluoApi
 
             if (resp.code != 0)
             {
-                deviceTokenExpired = IsDeviceTokenExpiredMessage(resp.msg);
+                deviceTokenExpired = IsSilentDeviceTokenRefresh(resp.msg);
                 failReason = string.IsNullOrEmpty(resp.msg)
                     ? $"升级失败：code={resp.code}"
                     : $"升级失败：{resp.msg}";
-                // 过期留给调用方清票换票；换票成功不弹。其它业务错误由调用方弹 Toast。
+                // 可静默换的设备票留给调用方清票再打；换票成功不弹。其它业务错误由调用方弹 Toast。
                 if (deviceTokenExpired)
                     Log.Warning($"[BankUpgrade] business error code={resp.code} msg={resp.msg}");
                 return false;

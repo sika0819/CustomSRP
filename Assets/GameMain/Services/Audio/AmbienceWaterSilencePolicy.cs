@@ -8,10 +8,9 @@ namespace Game
     {
         /// <summary>
         /// 贴瀑优先于湖的水平距离（米）。
-        /// 必须盖住大瀑 Enter（80）：原先 28 会在「已进瀑可听圈但仍更近湖」时把瀑掐掉，
-        /// 表现为走到瀑布没声、只剩湖。
+        /// 必须盖住大瀑已播停播距（100）：圈内更近的湖不能把瀑掐掉。
         /// </summary>
-        public const float PreferFallWithinMeters = 80f;
+        public const float PreferFallWithinMeters = 100f;
 
         /// <summary>湖/瀑 sticky 滞回（米）。</summary>
         public const float ExclusiveShareHysteresisMeters = 12f;

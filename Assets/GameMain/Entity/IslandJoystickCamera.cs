@@ -18,7 +18,7 @@ namespace Game
 
         [Header("Locomotion")]
         public float MoveSpeed = 9f;
-        public float StickYawSpeed = 70f;
+        public float StickYawSpeed = 45f;
         /// <summary>行走俯仰。平视 0°；预设站定时另有俯仰，开走后插值回这里。</summary>
         public float Pitch = 0f;
         /// <summary>

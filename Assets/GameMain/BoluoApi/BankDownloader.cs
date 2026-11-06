@@ -25,13 +25,14 @@ namespace Game.BoluoApi
     {
         /// <summary>空 url 跳过时写入 <see cref="Error"/>；IsLocalReady 不得当 Ready。</summary>
         public const string UrlEmptyError = "url empty";
+        public const string Md5EmptyError = "md5 empty";
 
         public string BankName;
         public string Url;
         public string Md5;
         public string SizeKb;
         public string Guid;
-        /// <summary>服务端 bank 内容版本（与 StreamingAssets ProjectMetadata.Version 比对）。</summary>
+        /// <summary>服务端 bank 内容版本。与 md5 一起决定本地是否就绪。</summary>
         public string Version;
         public string LocalPath;
         public BankDownloadState State = BankDownloadState.Pending;
@@ -39,6 +40,8 @@ namespace Game.BoluoApi
         public string Error;
         public string SkipReason;
         public int AttemptCount;
+        /// <summary>上次内容校验失败时 tmp 的实际 md5。再碰到同一个值就停止重下这条。</summary>
+        public string LastMismatchMd5;
     }
 
     public enum BankQueueKind : byte
@@ -50,7 +53,8 @@ namespace Game.BoluoApi
 
     /// <summary>
     /// 按 upgrade/bank 返回的 banks[] 下载到 <see cref="PersistentBankPath"/>。
-    /// 三队列：用户点击 / 启动优先 / 后台。启动最多 3 路，后台最多 3 路；点击插队并打断。
+    /// 三档：用户点击（区域门 / 音乐 / 预设）最先且可打断；静默先下完 Music*（含失败重试）；
+    /// 再下预设 / 氛围，同时最多 <see cref="MaxBackgroundSlots"/> 路。
     /// </summary>
     public static class BankDownloader
     {
@@ -66,9 +70,17 @@ namespace Game.BoluoApi
         /// <summary>静默 Rest（Normal）并发上限；与 Startup 同为≤3，避免全串行过慢、也禁止全开。</summary>
         const int MaxBackgroundSlots = 3;
         static int _startupParallelSlots = MaxStartupSlots;
+        static readonly HashSet<string> ServerGapToasted =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         static readonly Dictionary<string, QueueEntry> Entries =
             new Dictionary<string, QueueEntry>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// 自动重试用尽后仍失败的 stem。条目出队后 UI 仍显示重试，直到用户再点。
+        /// </summary>
+        static readonly HashSet<string> TerminalFailed =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// <see cref="LocalSatisfiesCatalog"/> 磁盘结果缓存。PresetForm 进度 tick 会高频调用；
@@ -152,8 +164,94 @@ namespace Game.BoluoApi
             StartupQueue.Clear();
             NormalQueue.Clear();
             Actives.Clear();
+            TerminalFailed.Clear();
+            ServerGapToasted.Clear();
             ProgressEpoch = 0;
             DownloadCellularGate.ResetForNewSession();
+        }
+
+        /// <summary>该 stem 是否已用尽自动重试、等用户再点。</summary>
+        public static bool HasTerminalFailure(string bankName)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                return false;
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            return !string.IsNullOrEmpty(stem) && TerminalFailed.Contains(stem);
+        }
+
+        /// <summary>
+        /// 传输失败且还没成功：含自动重试排队中、正在静默重下、以及用尽后的终态。
+        /// 真正 <see cref="BankDownloadState.Downloading"/> 时音乐行仍显示进度环；预设卡另看是否用户点击。
+        /// </summary>
+        public static bool HasUnresolvedFailure(string bankName)
+        {
+            if (HasTerminalFailure(bankName))
+                return true;
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return false;
+            if (!Entries.TryGetValue(stem, out QueueEntry entry) || entry?.Item == null)
+                return false;
+            if (entry.Item.State == BankDownloadState.Ready
+                || entry.Item.State == BankDownloadState.Skipped)
+                return false;
+            if (entry.Item.State == BankDownloadState.Failed)
+                return true;
+            return entry.RequeueCount > 0;
+        }
+
+        /// <summary>仍在用户槽排队或占用用户活跃槽（点音乐 / 点预设 / 区域门）。</summary>
+        public static bool IsUserAttemptLive(string bankName)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return false;
+            if (QueueContains(UserQueue, stem))
+                return true;
+            for (int i = 0; i < Actives.Count; i++)
+            {
+                ActiveSlot slot = Actives[i];
+                if (slot == null || slot.Kind != BankQueueKind.User)
+                    continue;
+                if (string.Equals(slot.BankName, stem, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 用户点重试：清掉「已经失败不用再下」的标记，并把仍停在 Failed / 空 url Skipped 的条目改回 Pending。
+        /// 自动重试次数只限制没人点时的循环，不拦住这一次。
+        /// </summary>
+        public static void ArmUserRetry(IList<string> bankNames)
+        {
+            if (bankNames == null || bankNames.Count == 0)
+                return;
+
+            for (int i = 0; i < bankNames.Count; i++)
+            {
+                string name = bankNames[i];
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                string stem = AudioEnginePaths.StripBankExtension(name);
+                if (string.IsNullOrEmpty(stem))
+                    continue;
+
+                ForgetTerminalFailure(stem);
+                if (!Entries.TryGetValue(stem, out QueueEntry entry) || entry?.Item == null)
+                    continue;
+                if (IsLocalReady(stem))
+                    continue;
+                // 正在传的槽等抢占 Abort 收尾，但点击已经续上重试额度。
+                if (entry.Item.State == BankDownloadState.Downloading)
+                {
+                    entry.RequeueCount = 0;
+                    continue;
+                }
+
+                ResetEntryForUserRetry(entry);
+            }
         }
 
         /// <summary>
@@ -195,10 +293,13 @@ namespace Game.BoluoApi
                     entry.LoadIntoEngine = true;
                 }
 
+                if (EntryNeedsUserRetryReset(entry))
+                    ResetEntryForUserRetry(entry);
                 PlaceInQueue(stem, BankQueueKind.User);
             }
 
             Log.Info($"[BankDownloader] PriorityBanks count={bankNames.Count}");
+            EnsureRunner();
         }
 
         /// <summary>开闸后续泵；禁止与 Priority / Allow 叠第二次 Resume。</summary>
@@ -248,6 +349,7 @@ namespace Game.BoluoApi
                 return;
             string stem = AudioEnginePaths.StripBankExtension(bankName);
             CacheLocalReady(stem, true);
+            ForgetTerminalFailure(stem);
             BumpProgressEpoch();
         }
 
@@ -260,7 +362,9 @@ namespace Game.BoluoApi
                 string n = bankNames[i];
                 if (string.IsNullOrEmpty(n))
                     continue;
-                CacheLocalReady(AudioEnginePaths.StripBankExtension(n), true);
+                string stem = AudioEnginePaths.StripBankExtension(n);
+                CacheLocalReady(stem, true);
+                ForgetTerminalFailure(stem);
             }
 
             BumpProgressEpoch();
@@ -342,6 +446,81 @@ namespace Game.BoluoApi
             };
             InvalidateLocalReadyCache(stem);
         }
+
+        /// <summary>单测：标成自动重试用尽。</summary>
+        public static void EditorNoteTerminalFailure(string bankName) =>
+            RememberTerminalFailure(bankName);
+
+        /// <summary>单测：读写自动重试轮次。</summary>
+        public static void EditorSetRequeueCount(string bankName, int count)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem) || !Entries.TryGetValue(stem, out QueueEntry entry) || entry == null)
+                return;
+            entry.RequeueCount = count;
+        }
+
+        public static int EditorGetRequeueCount(string bankName)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem) || !Entries.TryGetValue(stem, out QueueEntry entry) || entry == null)
+                return -1;
+            return entry.RequeueCount;
+        }
+
+        /// <summary>单测：把 bank 放进指定队列（不跑 HTTP）。</summary>
+        public static void EditorSeedQueue(string bankName, BankQueueKind kind)
+        {
+            if (string.IsNullOrEmpty(bankName))
+                return;
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (!Entries.TryGetValue(stem, out QueueEntry entry) || entry?.Item == null)
+            {
+                entry = new QueueEntry
+                {
+                    Item = new BankDownloadItem
+                    {
+                        BankName = stem,
+                        Url = "https://example.test/" + stem,
+                        State = BankDownloadState.Pending,
+                    },
+                    Kind = kind,
+                };
+                Entries[stem] = entry;
+            }
+
+            entry.Kind = kind;
+            entry.Item.State = BankDownloadState.Pending;
+            PlaceInQueue(stem, kind);
+        }
+
+        /// <summary>单测：走一档出队。</summary>
+        public static bool EditorTryDequeueNext(out string bankName, out BankQueueKind kind) =>
+            TryDequeueNext(out bankName, out kind);
+
+        /// <summary>单测：模拟可重试失败，按音乐优先插回队列。</summary>
+        public static bool EditorFailAndRequeue(string bankName)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem) || !Entries.TryGetValue(stem, out QueueEntry entry) || entry?.Item == null)
+                return false;
+            entry.Item.State = BankDownloadState.Failed;
+            entry.Item.Error = "test-fail";
+            if (entry.RequeueCount >= MaxFailedRequeuePasses)
+                return false;
+            EnqueueFailedRetry(entry);
+            return true;
+        }
+
+        /// <summary>单测：清掉活跃槽，便于测预设并发上限。</summary>
+        public static void EditorClearActives() => Actives.Clear();
+
+        public static bool EditorShouldFinishWithoutRestart(
+            BankDownloadState state,
+            string error,
+            int requeueCount,
+            bool userRetry) =>
+            ShouldFinishWithoutRestart(state, error, requeueCount, userRetry);
 
         /// <summary>单测：走完成通知（MarkLocalReady + OnBankLocalReady）。</summary>
         public static void EditorNotifyBankReady(string bankName) => NotifyBankReady(bankName);
@@ -440,6 +619,42 @@ namespace Game.BoluoApi
             return true;
         }
 
+        /// <summary>单测：写入已接受的 version + md5（只进内存，按文件 size/mtime）。</summary>
+        public static void EditorRememberIdentity(string bankName, string version, string md5, string path = null)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem) || string.IsNullOrEmpty(md5))
+                return;
+            if (string.IsNullOrEmpty(path))
+                path = Path.Combine(PersistentBankPath, stem + AudioEnginePaths.BankExtension);
+            var fi = new FileInfo(path);
+            if (!fi.Exists || fi.Length <= 0)
+                return;
+            BankMd5Cache.Load().Set(stem, fi.Length, fi.LastWriteTimeUtc.Ticks, md5, version ?? "");
+        }
+
+        /// <summary>单测：丢掉该 bank 的身份记录；若曾落盘则把缓存文件一并改回。</summary>
+        public static void EditorForgetIdentity(string bankName)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return;
+            var cache = BankMd5Cache.Load();
+            if (cache.Remove(stem))
+                cache.Save();
+        }
+
+        /// <summary>单测：读已接受的 version / md5（不校验 size/mtime）。</summary>
+        public static bool EditorTryGetIdentity(string bankName, out string version, out string md5)
+        {
+            version = null;
+            md5 = null;
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return false;
+            return BankMd5Cache.Load().TryPeek(stem, out version, out md5);
+        }
+
         /// <summary>单测：当前 Startup 并行槽上限。</summary>
         public static int EditorStartupParallelSlots => _startupParallelSlots;
 
@@ -474,16 +689,34 @@ namespace Game.BoluoApi
             {
                 if (item.State == BankDownloadState.Ready)
                     return true;
-                // streaming version match 等 Skipped 仍算就绪；空 url 跳过必须回落 Probe（通常 false）。
+                // 线上缺 url / md5：有本地文件就当就绪，预设可以切；没有文件再回落探针。
                 if (item.State == BankDownloadState.Skipped
-                    && !string.Equals(item.Error, BankDownloadItem.UrlEmptyError, StringComparison.Ordinal))
+                    && IsServerGapError(item.Error))
+                {
+                    if (ProbeLocalSatisfiesCatalog(bankName))
+                    {
+                        AcceptLocalDespiteServerGap(item);
+                        return true;
+                    }
+                }
+                else if (item.State == BankDownloadState.Skipped)
                     return true;
-                // Downloading：完整本地文件仍算就绪（UI 已下载）；仅残缺/缺失才 false。
+                // Downloading：完整本地文件仍算就绪。探针暂时失败时不要把已记下的正向结果写成未下载。
                 if (item.State == BankDownloadState.Downloading)
                 {
+                    string stem = AudioEnginePaths.StripBankExtension(bankName);
                     bool probeWhileDl = ProbeLocalSatisfiesCatalog(bankName);
-                    CacheLocalReady(AudioEnginePaths.StripBankExtension(bankName), probeWhileDl);
-                    return probeWhileDl;
+                    if (probeWhileDl)
+                    {
+                        CacheLocalReady(stem, true);
+                        return true;
+                    }
+
+                    if (LocalReadyCache.TryGetValue(stem, out LocalReadyCacheEntry held) && held.Ready)
+                        return true;
+
+                    CacheLocalReady(stem, false);
+                    return false;
                 }
             }
 
@@ -538,6 +771,108 @@ namespace Game.BoluoApi
             return false;
         }
 
+        enum LocalIdentityKind : byte
+        {
+            None = 0,
+            Cache = 1,
+            Streaming = 2,
+            /// <summary>这条 size+mtime 的缓存 md5 与服务端不同，不必再哈希。</summary>
+            CachedMd5Mismatch = 3,
+        }
+
+        /// <summary>
+        /// 同步身份，不读盘哈希。服务端 md5 非空，且至少一条成立才就绪：
+        /// 缓存 md5 对上（mtime 变了但体积和 md5 没变也算，并回写当前 mtime；
+        /// version 空着或变了但字节没变则回写成服务端 version）；
+        /// 或没有这条缓存时，首包 version 与 md5 都等于服务端。
+        /// </summary>
+        static LocalIdentityKind MatchLocalIdentity(
+            string stem,
+            long size,
+            long mtimeTicks,
+            string remoteVersion,
+            string remoteMd5,
+            bool stampVersion)
+        {
+            if (string.IsNullOrEmpty(stem) || string.IsNullOrEmpty(remoteMd5))
+                return LocalIdentityKind.None;
+
+            var cache = BankMd5Cache.Load();
+            if (cache.TryGet(stem, size, mtimeTicks, out string cachedMd5, out string cachedVersion))
+                return AcceptCachedMd5(
+                    cache, stem, size, mtimeTicks, cachedMd5, cachedVersion, remoteVersion, remoteMd5, stampVersion);
+
+            // 同一体积且已接受的 md5 等于服务端：修改时间被拷贝、进引擎或文件系统精度改过，
+            // 不能当成未下载。md5 不同则留给校验线程重算，不能记成「这批字节已经对不上」。
+            if (cache.TryPeek(stem, out string peekedVersion, out string peekedMd5)
+                && cache.TryGetStoredSize(stem, out long storedSize)
+                && storedSize == size
+                && string.Equals(peekedMd5, remoteMd5, StringComparison.OrdinalIgnoreCase))
+            {
+                return AcceptCachedMd5(
+                    cache,
+                    stem,
+                    size,
+                    mtimeTicks,
+                    peekedMd5,
+                    peekedVersion,
+                    remoteVersion,
+                    remoteMd5,
+                    stampVersion);
+            }
+
+            if (!string.IsNullOrEmpty(remoteVersion)
+                && StreamingBankCatalog.IsSameVersionAsStreaming(stem, remoteVersion)
+                && StreamingBankCatalog.TryGetMd5(stem, out string streamingMd5)
+                && string.Equals(streamingMd5, remoteMd5, StringComparison.OrdinalIgnoreCase))
+            {
+                if (stampVersion)
+                {
+                    cache.Set(stem, size, mtimeTicks, remoteMd5, remoteVersion);
+                    cache.Save();
+                }
+
+                return LocalIdentityKind.Streaming;
+            }
+
+            return LocalIdentityKind.None;
+        }
+
+        static LocalIdentityKind AcceptCachedMd5(
+            BankMd5Cache cache,
+            string stem,
+            long size,
+            long mtimeTicks,
+            string cachedMd5,
+            string cachedVersion,
+            string remoteVersion,
+            string remoteMd5,
+            bool stampVersion)
+        {
+            if (!string.Equals(cachedMd5, remoteMd5, StringComparison.OrdinalIgnoreCase))
+                return LocalIdentityKind.CachedMd5Mismatch;
+
+            string versionToStore = !string.IsNullOrEmpty(remoteVersion)
+                ? remoteVersion
+                : (cachedVersion ?? "");
+            bool versionDrift = !string.Equals(
+                cachedVersion ?? "",
+                versionToStore,
+                StringComparison.OrdinalIgnoreCase);
+            bool mtimeDrift = !cache.TryGet(stem, size, mtimeTicks, out _, out _);
+
+            if (stampVersion && (versionDrift || mtimeDrift))
+            {
+                cache.Set(stem, size, mtimeTicks, remoteMd5, versionToStore);
+                cache.Save();
+            }
+
+            return LocalIdentityKind.Cache;
+        }
+
+        static bool IdentityAccepted(LocalIdentityKind kind) =>
+            kind == LocalIdentityKind.Cache || kind == LocalIdentityKind.Streaming;
+
         static bool PathSatisfiesCatalog(string path, string stem, BankRemoteInfo remote)
         {
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
@@ -555,10 +890,23 @@ namespace Game.BoluoApi
 
                 if (remote == null)
                     return true;
-                if (!string.IsNullOrEmpty(remote.version)
-                    && StreamingBankCatalog.IsSameVersionAsStreaming(stem, remote.version))
+
+                // 体积只否决明显偏小的残缺文件，不能单独算就绪。
+                if (RejectedByRemoteSize(fi.Length, remote.size))
+                    return false;
+
+                // 这条记录没有 url / md5：有文件就先用。不要在探针里弹 toast，
+                // 目录占位（只有名字）和还没下完都会走到这里，不是线上坏包。
+                if (string.IsNullOrEmpty(remote.url) || string.IsNullOrEmpty(remote.md5))
                     return true;
-                return FileMatchesRemoteSize(fi.Length, remote);
+
+                return IdentityAccepted(MatchLocalIdentity(
+                    stem,
+                    fi.Length,
+                    fi.LastWriteTimeUtc.Ticks,
+                    remote.version,
+                    remote.md5,
+                    stampVersion: true));
             }
             catch
             {
@@ -673,6 +1021,14 @@ namespace Game.BoluoApi
             return length >= expected * 9 / 10;
         }
 
+        /// <summary>catalog 给了 size 且本地明显小于 90% 时否决。没给 size 则不否决。</summary>
+        static bool RejectedByRemoteSize(long length, string sizeKb)
+        {
+            if (length <= 0 || string.IsNullOrEmpty(sizeKb))
+                return false;
+            return !FileMatchesRemoteSize(length, new BankRemoteInfo { size = sizeKb });
+        }
+
         public static async UniTask<bool> WaitLocalReady(string bankName, float timeoutSeconds)
         {
             if (IsLocalReady(bankName))
@@ -779,16 +1135,36 @@ namespace Game.BoluoApi
             await StreamingBankCatalog.EnsureLoadedAsync();
             await VerifyLocalReadyAsync(all);
 
-            // 跳过条件：首包 ProjectMetadata.version 与服务端一致（已解压到盘），或本地 MD5 命中。
+            // 跳过条件：已接受的 md5 与服务端一致（version 空或只改了修改时间也算），或首包 version 与 md5 都一致。
             // bank.version 是 bank 内容版本（如 1.0.0），不能和 Application.version 比。
 
             for (int i = 0; i < all.Count; i++)
             {
                 var item = all[i];
-                if (item.State == BankDownloadState.Pending && string.IsNullOrEmpty(item.Url))
+                if (item.State == BankDownloadState.Pending
+                    && (string.IsNullOrEmpty(item.Url) || string.IsNullOrEmpty(item.Md5)))
                 {
-                    item.State = BankDownloadState.Skipped;
-                    item.Error = BankDownloadItem.UrlEmptyError;
+                    if (ProbeLocalSatisfiesCatalog(item.BankName))
+                    {
+                        AcceptLocalDespiteServerGap(item);
+                        Log.Warning(
+                            "[BankDownloader] server gap use local bank=" + item.BankName +
+                            " url=" + item.Url + " md5=" + item.Md5 +
+                            " path=" + item.LocalPath);
+                    }
+                    else
+                    {
+                        bool noUrl = string.IsNullOrEmpty(item.Url);
+                        item.State = BankDownloadState.Skipped;
+                        item.Error = noUrl ? BankDownloadItem.UrlEmptyError : BankDownloadItem.Md5EmptyError;
+                        Log.Error(
+                            "[BankDownloader] server gap no local bank=" + item.BankName +
+                            " version=" + item.Version +
+                            " url=" + item.Url +
+                            " md5=" + item.Md5 +
+                            " path=" + item.LocalPath);
+                        NoteServerGap(item);
+                    }
                 }
             }
 
@@ -896,6 +1272,7 @@ namespace Game.BoluoApi
             }
 
             Log.Info($"[BankDownloader] done ready={ready} failed={failed} skipped={skipped}");
+            LogBatchSummary(all);
             onComplete?.Invoke(all);
             return all;
         }
@@ -964,23 +1341,41 @@ namespace Game.BoluoApi
             var kind = preempt ? BankQueueKind.User
                 : prioritize ? BankQueueKind.Startup
                 : BankQueueKind.Normal;
+            bool userRetry = preempt;
 
             if (Entries.TryGetValue(item.BankName, out var entry))
             {
                 entry.LoadIntoEngine |= loadIntoEngine;
-                if (kind > entry.Kind)
+                if (preempt)
+                    entry.Kind = BankQueueKind.User;
+                else if (entry.Kind == BankQueueKind.User && !IsUserAttemptLive(item.BankName))
                     entry.Kind = kind;
+                else if (kind > entry.Kind)
+                    entry.Kind = kind;
+                // 用户再点：失败 / 空 url 跳过不能当成已结束。自动轮次上限只留给没人点的循环。
+                if (userRetry && EntryNeedsUserRetryReset(entry))
+                    ResetEntryForUserRetry(entry);
                 if (entry.Item.State == BankDownloadState.Pending ||
                     entry.Item.State == BankDownloadState.Failed)
                 {
                     if (!string.IsNullOrEmpty(item.Url))
                         entry.Item.Url = item.Url;
-                    if (!string.IsNullOrEmpty(item.Md5))
+                    if (!string.IsNullOrEmpty(item.Md5)
+                        && !string.Equals(entry.Item.Md5, item.Md5, StringComparison.OrdinalIgnoreCase))
+                    {
                         entry.Item.Md5 = item.Md5;
+                        entry.Item.LastMismatchMd5 = null;
+                    }
+                    else if (!string.IsNullOrEmpty(item.Md5))
+                    {
+                        entry.Item.Md5 = item.Md5;
+                    }
                     if (!string.IsNullOrEmpty(item.SizeKb))
                         entry.Item.SizeKb = item.SizeKb;
                     if (!string.IsNullOrEmpty(item.Guid))
                         entry.Item.Guid = item.Guid;
+                    if (!string.IsNullOrEmpty(item.Version))
+                        entry.Item.Version = item.Version;
                 }
 
                 if (onDone != null)
@@ -988,10 +1383,11 @@ namespace Game.BoluoApi
                 if (onProgress != null)
                     entry.OnProgress.Add(onProgress);
 
-                if (entry.Item.State == BankDownloadState.Ready ||
-                    entry.Item.State == BankDownloadState.Skipped ||
-                    (entry.Item.State == BankDownloadState.Failed &&
-                     entry.RequeueCount >= MaxFailedRequeuePasses))
+                if (ShouldFinishWithoutRestart(
+                        entry.Item.State,
+                        entry.Item.Error,
+                        entry.RequeueCount,
+                        userRetry))
                 {
                     CopyItemState(item, entry.Item);
                     onDone?.Invoke(entry.Item);
@@ -1102,6 +1498,17 @@ namespace Game.BoluoApi
                    && stem.StartsWith("Music", StringComparison.OrdinalIgnoreCase);
         }
 
+        static bool QueueContains(List<string> queue, string bankName)
+        {
+            for (int i = 0; i < queue.Count; i++)
+            {
+                if (string.Equals(queue[i], bankName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+
         static bool RemoveFromQueue(List<string> queue, string bankName)
         {
             for (int i = queue.Count - 1; i >= 0; i--)
@@ -1141,10 +1548,9 @@ namespace Game.BoluoApi
 
         static int DesiredMaxSlots()
         {
+            // 用户槽插队期间单槽，并打断静默。静默音乐 / 预设各自不超过 3，且不同时把两档加超。
             if (UserQueue.Count > 0 || HasActiveKind(BankQueueKind.User))
                 return 1;
-            if (StartupQueue.Count > 0 || HasActiveKind(BankQueueKind.Startup))
-                return _startupParallelSlots;
             return MaxBackgroundSlots;
         }
 
@@ -1235,10 +1641,21 @@ namespace Game.BoluoApi
                     continue;
                 }
 
-                if (string.IsNullOrEmpty(entry.Item.Url))
+                if (string.IsNullOrEmpty(entry.Item.Url) || string.IsNullOrEmpty(entry.Item.Md5))
                 {
+                    if (ProbeLocalSatisfiesCatalog(bankName))
+                    {
+                        AcceptLocalDespiteServerGap(entry.Item);
+                        NotifyBankReady(bankName);
+                        FireDone(entry);
+                        Entries.Remove(bankName);
+                        continue;
+                    }
+
+                    bool noUrl = string.IsNullOrEmpty(entry.Item.Url);
                     entry.Item.State = BankDownloadState.Skipped;
-                    entry.Item.Error = BankDownloadItem.UrlEmptyError;
+                    entry.Item.Error = noUrl ? BankDownloadItem.UrlEmptyError : BankDownloadItem.Md5EmptyError;
+                    NoteServerGap(entry.Item);
                     FireDone(entry);
                     Entries.Remove(bankName);
                     continue;
@@ -1298,6 +1715,14 @@ namespace Game.BoluoApi
                 return true;
             }
 
+            // 静默：还有 Music*（在排或在传，含失败重试）就只开音乐，不开预设。
+            // 已在传的预设不在这里 Abort，只是不再往预设相位加新任务。
+            if (SilentMusicOutstanding())
+                return TryTakeQueuedMusic(out bankName, out kind);
+
+            if (CountActiveNonMusic() >= MaxBackgroundSlots)
+                return false;
+
             if (StartupQueue.Count > 0)
             {
                 bankName = StartupQueue[0];
@@ -1306,9 +1731,7 @@ namespace Game.BoluoApi
                 return true;
             }
 
-            if (NormalQueue.Count > 0
-                && !HasActiveKind(BankQueueKind.Startup)
-                && !HasActiveKind(BankQueueKind.User))
+            if (NormalQueue.Count > 0 && !HasActiveKind(BankQueueKind.User))
             {
                 bankName = NormalQueue[0];
                 NormalQueue.RemoveAt(0);
@@ -1317,6 +1740,90 @@ namespace Game.BoluoApi
             }
 
             return false;
+        }
+
+        /// <summary>静默队列或静默活跃槽里还有曲目 bank。</summary>
+        static bool SilentMusicOutstanding()
+        {
+            if (QueueHasMusic(StartupQueue) || QueueHasMusic(NormalQueue))
+                return true;
+            for (int i = 0; i < Actives.Count; i++)
+            {
+                ActiveSlot slot = Actives[i];
+                if (slot == null || slot.Kind == BankQueueKind.User)
+                    continue;
+                if (IsMusicBankName(slot.BankName))
+                    return true;
+            }
+
+            return false;
+        }
+
+        static bool QueueHasMusic(List<string> queue)
+        {
+            for (int i = 0; i < queue.Count; i++)
+            {
+                if (IsMusicBankName(queue[i]))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 先取 Normal 队首的 Music*（失败重试插在这里），再取 Startup / Normal 里其余曲目。
+        /// </summary>
+        static bool TryTakeQueuedMusic(out string bankName, out BankQueueKind kind)
+        {
+            bankName = null;
+            kind = BankQueueKind.Normal;
+            if (NormalQueue.Count > 0 && IsMusicBankName(NormalQueue[0]))
+            {
+                bankName = NormalQueue[0];
+                NormalQueue.RemoveAt(0);
+                return true;
+            }
+
+            if (TryRemoveFirstMusic(StartupQueue, out bankName))
+            {
+                kind = BankQueueKind.Startup;
+                return true;
+            }
+
+            if (TryRemoveFirstMusic(NormalQueue, out bankName))
+                return true;
+
+            return false;
+        }
+
+        static bool TryRemoveFirstMusic(List<string> queue, out string bankName)
+        {
+            for (int i = 0; i < queue.Count; i++)
+            {
+                if (!IsMusicBankName(queue[i]))
+                    continue;
+                bankName = queue[i];
+                queue.RemoveAt(i);
+                return true;
+            }
+
+            bankName = null;
+            return false;
+        }
+
+        static int CountActiveNonMusic()
+        {
+            int n = 0;
+            for (int i = 0; i < Actives.Count; i++)
+            {
+                ActiveSlot slot = Actives[i];
+                if (slot == null || slot.Kind == BankQueueKind.User)
+                    continue;
+                if (!IsMusicBankName(slot.BankName))
+                    n++;
+            }
+
+            return n;
         }
 
         static async UniTaskVoid RunSlot(QueueEntry entry, BankQueueKind kind)
@@ -1385,11 +1892,7 @@ namespace Game.BoluoApi
                     IsRetryableItem(entry.Item) &&
                     entry.RequeueCount < MaxFailedRequeuePasses)
                 {
-                    entry.RequeueCount++;
-                    entry.Item.State = BankDownloadState.Pending;
-                    entry.Item.Progress = 0f;
-                    entry.Item.AttemptCount = 0;
-                    PlaceInQueue(bankName, entry.Kind);
+                    EnqueueFailedRetry(entry);
                     Log.Warning(
                         $"[BankDownloader] requeue {bankName} pass={entry.RequeueCount}/" +
                         $"{MaxFailedRequeuePasses} kind={entry.Kind}");
@@ -1402,6 +1905,8 @@ namespace Game.BoluoApi
                     return;
                 }
 
+                if (entry.Item.State == BankDownloadState.Failed)
+                    RememberTerminalFailure(bankName);
                 FireDone(entry);
                 Entries.Remove(bankName);
             }
@@ -1409,6 +1914,79 @@ namespace Game.BoluoApi
             {
                 Actives.Remove(slot);
             }
+        }
+
+        static bool EntryNeedsUserRetryReset(QueueEntry entry)
+        {
+            if (entry?.Item == null)
+                return false;
+            if (entry.Item.State == BankDownloadState.Failed)
+                return true;
+            return entry.Item.State == BankDownloadState.Skipped
+                   && string.Equals(
+                       entry.Item.Error,
+                       BankDownloadItem.UrlEmptyError,
+                       StringComparison.Ordinal);
+        }
+
+        static void ResetEntryForUserRetry(QueueEntry entry)
+        {
+            if (entry?.Item == null)
+                return;
+            entry.RequeueCount = 0;
+            entry.Item.State = BankDownloadState.Pending;
+            entry.Item.Progress = 0f;
+            entry.Item.AttemptCount = 0;
+            entry.Item.Error = null;
+            // 上次把空文件哈希记成 Error 后，下一次会立刻判 md5 stable 并只弹检查线上。
+            entry.Item.LastMismatchMd5 = null;
+            ForgetTerminalFailure(entry.Item.BankName);
+            BumpProgressEpoch();
+        }
+
+        /// <summary>
+        /// 已结束、不必再下：Ready，或非空 url 的 Skipped。
+        /// 用户再点时 Failed / 空 url Skipped 必须重下；后台仍受 <see cref="MaxFailedRequeuePasses"/> 限制。
+        /// </summary>
+        static bool ShouldFinishWithoutRestart(
+            BankDownloadState state,
+            string error,
+            int requeueCount,
+            bool userRetry)
+        {
+            if (state == BankDownloadState.Ready)
+                return true;
+            bool urlEmptySkip = state == BankDownloadState.Skipped
+                                && string.Equals(
+                                    error,
+                                    BankDownloadItem.UrlEmptyError,
+                                    StringComparison.Ordinal);
+            if (state == BankDownloadState.Skipped && !urlEmptySkip)
+                return true;
+            if (userRetry)
+                return false;
+            if (urlEmptySkip)
+                return true;
+            return state == BankDownloadState.Failed
+                   && requeueCount >= MaxFailedRequeuePasses;
+        }
+
+        static void RememberTerminalFailure(string bankName)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return;
+            if (TerminalFailed.Add(stem))
+                BumpProgressEpoch();
+        }
+
+        static void ForgetTerminalFailure(string bankName)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return;
+            if (TerminalFailed.Remove(stem))
+                BumpProgressEpoch();
         }
 
         static void RequeueAfterAbort(string bankName, BankQueueKind kind)
@@ -1422,6 +2000,36 @@ namespace Game.BoluoApi
                 StartupQueue.Add(bankName);
             else
                 NormalQueue.Insert(0, bankName);
+        }
+
+        /// <summary>
+        /// 自动重试：退出用户槽。Music* 插回静默音乐相位队首（预设之前）；预设失败只排在预设相位队尾。
+        /// 用户点击失败时 FireDone，进度环收掉，图标回到重试；静默批次的回调留到真正结束。
+        /// </summary>
+        static void EnqueueFailedRetry(QueueEntry entry)
+        {
+            if (entry?.Item == null || string.IsNullOrEmpty(entry.Item.BankName))
+                return;
+
+            bool releaseUser = entry.Kind == BankQueueKind.User;
+            string bankName = entry.Item.BankName;
+            entry.RequeueCount++;
+            entry.Item.State = BankDownloadState.Pending;
+            entry.Item.Progress = 0f;
+            entry.Item.AttemptCount = 0;
+            entry.Kind = BankQueueKind.Normal;
+
+            RemoveFromQueue(UserQueue, bankName);
+            RemoveFromQueue(StartupQueue, bankName);
+            RemoveFromQueue(NormalQueue, bankName);
+            if (IsMusicBankName(bankName))
+                NormalQueue.Insert(0, bankName);
+            else
+                NormalQueue.Add(bankName);
+
+            BumpProgressEpoch();
+            if (releaseUser)
+                FireDone(entry);
         }
 
         static void NotifyBankReady(string bankName)
@@ -1469,11 +2077,7 @@ namespace Game.BoluoApi
                 string name = names[i];
                 if (!Entries.TryGetValue(name, out var entry))
                     continue;
-                entry.RequeueCount++;
-                entry.Item.State = BankDownloadState.Pending;
-                entry.Item.Progress = 0f;
-                entry.Item.AttemptCount = 0;
-                PlaceInQueue(name, entry.Kind);
+                EnqueueFailedRetry(entry);
             }
 
             return true;
@@ -1520,7 +2124,7 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// 本地 bank 就绪：缓存(size+mtime+md5) 命中则跳过；否则 ThreadPool 算 MD5。
+        /// 本地 bank 就绪：version 与 md5 都对上则跳过。缓存未命中时 ThreadPool 算 MD5。
         /// </summary>
         static async UniTask<bool> VerifyLocalReadyAsync(List<BankDownloadItem> list)
         {
@@ -1574,42 +2178,55 @@ namespace Game.BoluoApi
                     continue;
                 }
 
-                // 首包已解压且 ProjectMetadata 版本 == 服务端 version → 跳过重下。
-                if (StreamingBankCatalog.IsSameVersionAsStreaming(item.BankName, item.Version))
-                {
-                    item.State = BankDownloadState.Ready;
-                    item.Progress = 1f;
-                    item.LocalPath = verifyPath;
-                    item.SkipReason = $"streaming version match {item.Version}";
-                    string seedMd5 = item.Md5;
-                    if (string.IsNullOrEmpty(seedMd5))
-                        StreamingBankCatalog.TryGetMd5(item.BankName, out seedMd5);
-                    if (!string.IsNullOrEmpty(seedMd5))
-                    {
-                        cache.Set(item.BankName, size, mtimeTicks, seedMd5);
-                        cacheDirty = true;
-                    }
-
-                    versionHits++;
+                // 体积只否决明显偏小的残缺文件。线上缺 url 或 md5 时，完整本地文件直接就绪。
+                string sizeKb = !string.IsNullOrEmpty(item.SizeKb) ? item.SizeKb : remoteForPromote?.size;
+                if (RejectedByRemoteSize(size, sizeKb))
                     continue;
-                }
 
-                if (string.IsNullOrEmpty(item.Md5))
+                bool noUrl = string.IsNullOrEmpty(item.Url)
+                             && string.IsNullOrEmpty(remoteForPromote?.url);
+                string remoteVersion = !string.IsNullOrEmpty(item.Version)
+                    ? item.Version
+                    : remoteForPromote?.version;
+                string remoteMd5 = !string.IsNullOrEmpty(item.Md5)
+                    ? item.Md5
+                    : remoteForPromote?.md5;
+                if (noUrl || string.IsNullOrEmpty(remoteMd5))
                 {
                     item.State = BankDownloadState.Ready;
                     item.Progress = 1f;
                     item.LocalPath = verifyPath;
-                    continue;
-                }
-
-                if (cache.Matches(item.BankName, size, mtimeTicks, item.Md5))
-                {
-                    item.State = BankDownloadState.Ready;
-                    item.Progress = 1f;
-                    item.LocalPath = verifyPath;
+                    item.Error = null;
+                    item.SkipReason = noUrl ? "no url, use local" : "no md5, use local";
                     cacheHits++;
                     continue;
                 }
+
+                var identity = MatchLocalIdentity(
+                    item.BankName, size, mtimeTicks, remoteVersion, remoteMd5, stampVersion: true);
+                if (IdentityAccepted(identity))
+                {
+                    item.State = BankDownloadState.Ready;
+                    item.Progress = 1f;
+                    item.LocalPath = verifyPath;
+                    if (identity == LocalIdentityKind.Streaming)
+                    {
+                        item.SkipReason = $"streaming version+md5 {remoteVersion}";
+                        versionHits++;
+                    }
+                    else
+                        cacheHits++;
+                    continue;
+                }
+
+                if (identity == LocalIdentityKind.CachedMd5Mismatch
+                    || string.IsNullOrEmpty(remoteMd5))
+                    continue;
+
+                if (string.IsNullOrEmpty(item.Md5))
+                    item.Md5 = remoteMd5;
+                if (string.IsNullOrEmpty(item.Version))
+                    item.Version = remoteVersion;
 
                 toHash.Add(new Md5Job
                 {
@@ -1642,7 +2259,7 @@ namespace Game.BoluoApi
                         item.Progress = 1f;
                         item.LocalPath = job.Path;
                         matched++;
-                        cache.Set(item.BankName, job.Size, job.MtimeTicks, item.Md5);
+                        cache.Set(item.BankName, job.Size, job.MtimeTicks, item.Md5, item.Version ?? "");
                         cacheDirty = true;
                     }
                     else
@@ -1740,8 +2357,13 @@ namespace Game.BoluoApi
         {
             if (item == null || string.IsNullOrEmpty(item.Error))
                 return true;
-            if (item.Error.StartsWith("md5 mismatch", StringComparison.OrdinalIgnoreCase))
+            if (item.Error.StartsWith("md5 mismatch", StringComparison.OrdinalIgnoreCase)
+                || item.Error.StartsWith("empty body", StringComparison.OrdinalIgnoreCase)
+                || item.Error.StartsWith("md5 unreadable", StringComparison.OrdinalIgnoreCase))
                 return true;
+            if (item.Error.StartsWith("md5 stable", StringComparison.OrdinalIgnoreCase)
+                || item.Error.StartsWith("header ", StringComparison.OrdinalIgnoreCase))
+                return false;
             return Http.IsRetryableNetworkError(item.Error)
                    || item.Error.IndexOf("stall", StringComparison.OrdinalIgnoreCase) >= 0
                    || item.Error.IndexOf("no network", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -1795,28 +2417,61 @@ namespace Game.BoluoApi
                 if (File.Exists(localPath))
                 {
                     long len = 0;
-                    try { len = new FileInfo(localPath).Length; } catch { /* ignore */ }
-                    bool versionOk = StreamingBankCatalog.IsSameVersionAsStreaming(
-                        item.BankName, item.Version);
-                    bool sizeOk = sizeHint == null
-                                  || string.IsNullOrEmpty(sizeHint.size)
-                                  || FileMatchesRemoteSize(len, sizeHint);
-                    if (versionOk
-                        || (sizeOk
-                            && (string.IsNullOrEmpty(item.Md5)
-                                || await LocalFileMd5MatchesAsync(localPath, item.Md5))))
+                    long mtimeTicks = 0;
+                    try
                     {
-                        TryDelete(item.LocalPath + ".tmp");
-                        item.LocalPath = localPath;
-                        RememberLocalMd5(item);
-                        item.State = BankDownloadState.Ready;
-                        item.Progress = 1f;
-                        item.Error = null;
-                        onProgress?.Invoke(item);
-                        Log.Info(
-                            $"[BankDownloader] skip HTTP, local ready {item.BankName}" +
-                            (versionOk ? $" version={item.Version}" : ""));
-                        return false;
+                        var fi = new FileInfo(localPath);
+                        len = fi.Length;
+                        mtimeTicks = fi.LastWriteTimeUtc.Ticks;
+                    }
+                    catch { /* ignore */ }
+
+                    string version = !string.IsNullOrEmpty(item.Version)
+                        ? item.Version
+                        : catalogRemote?.version;
+                    string md5 = !string.IsNullOrEmpty(item.Md5)
+                        ? item.Md5
+                        : catalogRemote?.md5;
+                    string sizeKb = !string.IsNullOrEmpty(sizeHint?.size) ? sizeHint.size : item.SizeKb;
+                    if (len > 0 && !RejectedByRemoteSize(len, sizeKb))
+                    {
+                        var identity = MatchLocalIdentity(
+                            item.BankName, len, mtimeTicks, version, md5, stampVersion: true);
+                        bool accept = IdentityAccepted(identity);
+                        if (!accept
+                            && identity != LocalIdentityKind.CachedMd5Mismatch
+                            && !string.IsNullOrEmpty(md5)
+                            && await LocalFileMd5MatchesAsync(localPath, md5))
+                        {
+                            if (string.IsNullOrEmpty(item.Version))
+                                item.Version = version;
+                            if (string.IsNullOrEmpty(item.Md5))
+                                item.Md5 = md5;
+                            var cache = BankMd5Cache.Load();
+                            cache.Set(item.BankName, len, mtimeTicks, md5, version);
+                            cache.Save();
+                            accept = true;
+                        }
+
+                        if (accept)
+                        {
+                            TryDelete(item.LocalPath + ".tmp");
+                            item.LocalPath = localPath;
+                            if (string.IsNullOrEmpty(item.Version))
+                                item.Version = version ?? "";
+                            if (string.IsNullOrEmpty(item.Md5))
+                                item.Md5 = md5 ?? "";
+                            RememberLocalMd5(item);
+                            item.State = BankDownloadState.Ready;
+                            item.Progress = 1f;
+                            item.Error = null;
+                            onProgress?.Invoke(item);
+                            Log.Info(
+                                "[BankDownloader] skip HTTP, local ready " + item.BankName +
+                                " version=" + version +
+                                " md5=" + md5);
+                            return false;
+                        }
                     }
                 }
 
@@ -1843,6 +2498,7 @@ namespace Game.BoluoApi
                 bool stalled = false;
                 bool httpOk = false;
                 string httpErr = null;
+                long httpCode = 0;
                 string tmpPath = item.LocalPath + ".tmp";
                 long resumeFrom = GetExistingLength(tmpPath);
                 bool resume = resumeFrom > 0;
@@ -1934,10 +2590,14 @@ namespace Game.BoluoApi
                     }
                     else
                     {
+                        httpCode = req.responseCode;
                         httpErr =
                             $"{req.error ?? $"code={req.responseCode}"} bytes={req.downloadedBytes} resume={resume}";
                         anyNetworkFail = anyNetworkFail || Http.IsRetryableNetworkError(req);
                     }
+
+                    if (httpCode == 0)
+                        httpCode = req.responseCode;
                 }
 
                 if (!httpOk)
@@ -1947,9 +2607,6 @@ namespace Game.BoluoApi
                                      || string.Equals(httpErr, "range ignored", StringComparison.Ordinal)
                                      || string.Equals(httpErr, "range not satisfiable", StringComparison.Ordinal)
                                      || Http.IsRetryableNetworkError(httpErr);
-                    if (!retryable)
-                        TryDelete(tmpPath);
-
                     item.Progress = resumeFrom > 0 && retryable
                         ? ResolveProgressFromFile(item, tmpPath)
                         : 0f;
@@ -1958,84 +2615,156 @@ namespace Game.BoluoApi
 
                     if (!retryable || attempt >= max)
                     {
-                        Log.Error($"[BankDownloader] fail {item.BankName}: {httpErr} attempt={attempt}/{max}");
+                        LogHttpFail(item, httpErr, httpCode, tmpPath, attempt, max, terminal: true);
                         if (!retryable)
                             TryDelete(tmpPath);
                         break;
                     }
 
-                    Log.Warning(
-                        $"[BankDownloader] {item.BankName} attempt={attempt}/{max} retry in {delay:0.#}s " +
-                        $"err={httpErr} keepTmp={retryable} tmpBytes={GetExistingLength(tmpPath)}");
+                    LogHttpFail(item, httpErr, httpCode, tmpPath, attempt, max, terminal: false);
                     await UniTask.Delay(TimeSpan.FromSeconds(delay), DelayType.UnscaledDeltaTime);
                     delay = Mathf.Min(delay * 2f, Retry.RetryMaxSeconds);
                     continue;
                 }
 
-                // HTTP 齐后先 Move → Ready → NotifyBankReady，再 MD5。
-                // 大文件校验可长达数十秒；区域门 / 列表须在传输完成后立刻 IsLocalReady。
-                try
-                {
-                    string dir = Path.GetDirectoryName(item.LocalPath);
-                    if (!string.IsNullOrEmpty(dir))
-                        Directory.CreateDirectory(dir);
-                    if (File.Exists(tmpPath))
-                    {
-                        if (File.Exists(item.LocalPath))
-                            File.Delete(item.LocalPath);
-                        File.Move(tmpPath, item.LocalPath);
-                    }
-                    else if (!File.Exists(item.LocalPath))
-                    {
-                        // Probe 可能已 size-promote；两边都没有才算失败。
-                        throw new FileNotFoundException(
-                            "tmp missing after HTTP and final bank absent", tmpPath);
-                    }
-                }
-                catch (Exception e)
-                {
-                    TryDelete(tmpPath);
-                    item.State = BankDownloadState.Failed;
-                    item.Error = e.Message;
-                    Log.Error($"[BankDownloader] move fail {item.BankName}: {e.Message}");
-                    break;
-                }
-
-                item.State = BankDownloadState.Ready;
-                item.Progress = 1f;
-                item.Error = null;
-                NotifyBankReady(item.BankName);
-                onProgress?.Invoke(item);
-
+                // 先校验 .tmp，通过后再替换正式文件。失败则删 tmp，上一份还在。
                 if (!string.IsNullOrEmpty(item.Md5))
                 {
-                    string actual = await RunOffMainAsync(() => ComputeMd5(item.LocalPath));
+                    string actual = await RunOffMainAsync(() => ComputeMd5(tmpPath));
+                    long bytes = GetExistingLength(tmpPath);
+                    // 空包 / 读不出哈希不是线上内容错，按可重试的下载失败处理，避免一次就锁成 md5 stable。
+                    if (bytes <= 0 || string.Equals(actual, "Error", StringComparison.Ordinal))
+                    {
+                        TryDelete(tmpPath);
+                        item.State = BankDownloadState.Failed;
+                        item.Progress = 0f;
+                        item.Error = bytes <= 0 ? "empty body" : "md5 unreadable";
+                        Log.Warning(
+                            "[BankDownloader] empty download bank=" + item.BankName +
+                            " version=" + item.Version +
+                            " url=" + item.Url +
+                            " path=" + item.LocalPath +
+                            " bytes=" + bytes +
+                            " keptPrevious=" + (File.Exists(item.LocalPath) ? "1" : "0") +
+                            " attempt=" + attempt + "/" + max);
+                        if (attempt >= max)
+                            break;
+                        await UniTask.Delay(TimeSpan.FromSeconds(delay), DelayType.UnscaledDeltaTime);
+                        delay = Mathf.Min(delay * 2f, Retry.RetryMaxSeconds);
+                        continue;
+                    }
+
                     if (!string.Equals(actual, item.Md5, StringComparison.OrdinalIgnoreCase))
                     {
-                        TryDelete(item.LocalPath);
-                        InvalidateLocalReadyCache(item.BankName);
+                        bool stable = !string.IsNullOrEmpty(item.LastMismatchMd5)
+                                      && string.Equals(item.LastMismatchMd5, actual, StringComparison.OrdinalIgnoreCase);
+                        item.LastMismatchMd5 = actual;
+                        TryDelete(tmpPath);
                         item.State = BankDownloadState.Failed;
-                        item.Error = $"md5 mismatch expect={item.Md5} actual={actual}";
                         item.Progress = 0f;
-                        if (attempt >= max)
+                        item.Error = (stable ? "md5 stable" : "md5 mismatch")
+                                     + $" expect={item.Md5} actual={actual}";
+                        Log.Error(
+                            "[BankDownloader] md5 fail bank=" + item.BankName +
+                            " version=" + item.Version +
+                            " url=" + item.Url +
+                            " path=" + item.LocalPath +
+                            " expect=" + item.Md5 +
+                            " actual=" + actual +
+                            " bytes=" + bytes +
+                            " keptPrevious=" + (File.Exists(item.LocalPath) ? "1" : "0") +
+                            " stable=" + (stable ? "1" : "0") +
+                            " attempt=" + attempt + "/" + max);
+                        if (stable || attempt >= max)
                         {
-                            Log.Error($"[BankDownloader] {item.Error} bank={item.BankName}");
+                            if (stable)
+                                NoteContentTerminal(item.BankName, "md5 与线上不一致");
                             break;
                         }
 
-                        Log.Warning($"[BankDownloader] md5 mismatch {item.BankName}, retry in {delay:0.#}s");
                         await UniTask.Delay(TimeSpan.FromSeconds(delay), DelayType.UnscaledDeltaTime);
                         delay = Mathf.Min(delay * 2f, Retry.RetryMaxSeconds);
                         continue;
                     }
                 }
 
+                string header = WanosAudio.WanosBankStore.ExplainInvalidBankFile(tmpPath);
+                if (header != null)
+                {
+                    long bytes = GetExistingLength(tmpPath);
+                    TryDelete(tmpPath);
+                    item.State = BankDownloadState.Failed;
+                    item.Progress = 0f;
+                    item.Error = "header " + header;
+                    Log.Error(
+                        "[BankDownloader] header fail bank=" + item.BankName +
+                        " version=" + item.Version +
+                        " url=" + item.Url +
+                        " path=" + item.LocalPath +
+                        " reason=" + header +
+                        " bytes=" + bytes +
+                        " keptPrevious=" + (File.Exists(item.LocalPath) ? "1" : "0"));
+                    NoteContentTerminal(item.BankName, "文件头不合法 " + header);
+                    break;
+                }
+
+                try
+                {
+                    ReplaceWithVerifiedTemp(tmpPath, item.LocalPath);
+                }
+                catch (Exception e)
+                {
+                    TryDelete(tmpPath);
+                    item.State = BankDownloadState.Failed;
+                    item.Error = e.Message;
+                    Log.Error(
+                        "[BankDownloader] move fail bank=" + item.BankName +
+                        " version=" + item.Version +
+                        " url=" + item.Url +
+                        " path=" + item.LocalPath +
+                        " err=" + e.Message +
+                        " keptPrevious=" + (File.Exists(item.LocalPath) ? "1" : "0"));
+                    break;
+                }
+
+                item.State = BankDownloadState.Ready;
+                item.Progress = 1f;
+                item.Error = null;
+                item.LastMismatchMd5 = null;
                 RememberLocalMd5(item);
-                Log.Info($"[BankDownloader] ready {item.BankName} path={item.LocalPath} attempts={attempt}");
+                NotifyBankReady(item.BankName);
+                onProgress?.Invoke(item);
+                Log.Info(
+                    "[BankDownloader] ready " + item.BankName +
+                    " version=" + item.Version +
+                    " md5=" + item.Md5 +
+                    " path=" + item.LocalPath +
+                    " attempts=" + attempt);
                 return false;
             }
 
             return anyNetworkFail;
+        }
+
+        public static bool TryGetCachedSize(string bankName, out long size)
+            => BankMd5Cache.Load().TryGetStoredSize(bankName, out size);
+
+        public static bool CacheMatchesFile(string bankName, long size, long mtimeTicks)
+            => BankMd5Cache.Load().TryGet(bankName, size, mtimeTicks, out _, out _);
+
+        public static void EditorSetMd5Cache(
+            string bankName, long size, long mtimeTicks, string md5, string version)
+        {
+            var cache = BankMd5Cache.Load();
+            cache.Set(bankName, size, mtimeTicks, md5, version);
+            cache.Save();
+        }
+
+        public static void EditorRemoveMd5Cache(string bankName)
+        {
+            var cache = BankMd5Cache.Load();
+            cache.Remove(bankName);
+            cache.Save();
         }
 
         static void RememberLocalMd5(BankDownloadItem item)
@@ -2049,7 +2778,7 @@ namespace Game.BoluoApi
             {
                 var fi = new FileInfo(item.LocalPath);
                 var cache = BankMd5Cache.Load();
-                cache.Set(item.BankName, fi.Length, fi.LastWriteTimeUtc.Ticks, item.Md5);
+                cache.Set(item.BankName, fi.Length, fi.LastWriteTimeUtc.Ticks, item.Md5, item.Version ?? "");
                 cache.Save();
             }
             catch
@@ -2228,6 +2957,8 @@ namespace Game.BoluoApi
             }
 
             var sw = Stopwatch.StartNew();
+            // 校验已通过。标记要等原生加载成功才落盘；这次先一次性放行。
+            BankLoadGate.AllowVerifiedThisSession(path);
             bool ok = WanosAudio.WanosBankStore.LoadFromPath(item.BankName, path);
             sw.Stop();
             if (sw.ElapsedMilliseconds >= 200)
@@ -2237,17 +2968,31 @@ namespace Game.BoluoApi
             }
             if (!ok)
             {
-                // 探测具体原因
-                string reason = WanosAudio.WanosBankStore.IsLoaded(item.BankName)
-                    ? "already-loaded-but-returned-false"
-                    : (!System.IO.File.Exists(path)
-                        ? "file-missing"
-                        : "header-invalid-or-native-fail");
-                Log.Warning($"[BankDownloader] TryLoadBank FAIL bank={item.BankName} ok=False path={path} reason={reason} size={(System.IO.File.Exists(path) ? new System.IO.FileInfo(path).Length : -1)}");
+                string detail = WanosAudio.WanosBankStore.LastLoadDetail;
+                if (string.IsNullOrEmpty(detail))
+                {
+                    detail = WanosAudio.WanosBankStore.IsLoaded(item.BankName)
+                        ? "already-loaded-but-returned-false"
+                        : (!File.Exists(path) ? "file-missing" : "header-invalid-or-native-fail");
+                }
+
+                Log.Warning(
+                    "[BankDownloader] load fail bank=" + item.BankName +
+                    " version=" + item.Version +
+                    " url=" + item.Url +
+                    " path=" + path +
+                    " detail=" + detail +
+                    " — 不中断后续 bank");
+                if (IsContentLoadDetail(detail))
+                    NoteContentTerminal(item.BankName, detail);
             }
             else
             {
-                Log.Info($"[BankDownloader] TryLoadBank OK bank={item.BankName} path={path}");
+                Log.Info(
+                    "[BankDownloader] TryLoadBank OK bank=" + item.BankName +
+                    " version=" + item.Version +
+                    " md5=" + item.Md5 +
+                    " path=" + path);
             }
         }
 
@@ -2259,6 +3004,184 @@ namespace Game.BoluoApi
                     File.Delete(path);
             }
             catch { /* ignore */ }
+        }
+
+        static bool IsServerGapError(string error) =>
+            string.Equals(error, BankDownloadItem.UrlEmptyError, StringComparison.Ordinal)
+            || string.Equals(error, BankDownloadItem.Md5EmptyError, StringComparison.Ordinal);
+
+        static void AcceptLocalDespiteServerGap(BankDownloadItem item)
+        {
+            if (item == null)
+                return;
+            bool noUrl = string.IsNullOrEmpty(item.Url);
+            bool noMd5 = string.IsNullOrEmpty(item.Md5);
+            item.State = BankDownloadState.Ready;
+            item.Progress = 1f;
+            item.Error = null;
+            if (string.IsNullOrEmpty(item.SkipReason))
+                item.SkipReason = noUrl ? "no url, use local" : "no md5, use local";
+            MarkLocalReady(item.BankName);
+        }
+
+        /// <summary>
+        /// 目录缺 url/md5：只打日志。本地有就直接用，不弹「已使用本地」。
+        /// 真正坏包走 <see cref="NoteContentTerminal"/>。
+        /// </summary>
+        static void NoteServerGap(BankDownloadItem item)
+        {
+            if (item == null)
+                return;
+            bool noUrl = string.IsNullOrEmpty(item.Url);
+            bool noMd5 = string.IsNullOrEmpty(item.Md5);
+            if (!noUrl && !noMd5)
+                return;
+
+            string stem = AudioEnginePaths.StripBankExtension(item.BankName);
+            if (string.IsNullOrEmpty(stem))
+                return;
+
+            string missing = noUrl && noMd5
+                ? "目录缺 url 与 md5"
+                : noUrl
+                    ? "目录缺 url"
+                    : "目录缺 md5";
+            Log.Warning(
+                "[BankDownloader] " + stem + " " + missing +
+                " — 有本地则静默使用，不弹提示");
+        }
+
+        static void NoteContentTerminal(string bankName, string reason)
+        {
+            string stem = AudioEnginePaths.StripBankExtension(bankName);
+            if (string.IsNullOrEmpty(stem))
+                return;
+            string text = stem + " 无法播放（" + reason + "）";
+            Log.Warning("[BankDownloader] " + text);
+            if (!ServerGapToasted.Add(stem))
+                return;
+            ShowTestReminder(text);
+        }
+
+        static void ShowTestReminder(string text)
+        {
+            if (!BoluoDeviceInfo.IsTestChannel())
+                return;
+            Game.UiDialogService.ShowRequestFailure(text);
+        }
+
+        static bool IsContentLoadDetail(string detail)
+        {
+            if (string.IsNullOrEmpty(detail))
+                return false;
+            if (detail == "engine-not-created"
+                || detail == "empty-name"
+                || detail == "already-failed"
+                || detail == "in-flight"
+                || detail == "file-missing"
+                || detail == "already-loaded-but-returned-false"
+                || detail.StartsWith("gate ", StringComparison.Ordinal))
+                return false;
+            return true;
+        }
+
+        static void LogHttpFail(
+            BankDownloadItem item,
+            string httpErr,
+            long httpCode,
+            string tmpPath,
+            int attempt,
+            int max,
+            bool terminal)
+        {
+            string line =
+                "[BankDownloader] http fail bank=" + item.BankName +
+                " version=" + item.Version +
+                " url=" + item.Url +
+                " path=" + item.LocalPath +
+                " http=" + httpCode +
+                " err=" + httpErr +
+                " keptPrevious=" + (File.Exists(item.LocalPath) ? "1" : "0") +
+                " tmpBytes=" + GetExistingLength(tmpPath) +
+                " attempt=" + attempt + "/" + max;
+            if (terminal)
+                Log.Error(line);
+            else
+                Log.Warning(line);
+        }
+
+        static void LogBatchSummary(List<BankDownloadItem> all)
+        {
+            if (all == null)
+                return;
+            var updated = new StringBuilder();
+            var failed = new StringBuilder();
+            var kept = new StringBuilder();
+            for (int i = 0; i < all.Count; i++)
+            {
+                BankDownloadItem item = all[i];
+                if (item == null || string.IsNullOrEmpty(item.BankName))
+                    continue;
+                if (item.State == BankDownloadState.Ready)
+                {
+                    if (updated.Length > 0)
+                        updated.Append(',');
+                    updated.Append(item.BankName);
+                    continue;
+                }
+
+                bool contentFail = item.State == BankDownloadState.Failed
+                    || (item.State == BankDownloadState.Skipped
+                        && string.Equals(item.Error, BankDownloadItem.UrlEmptyError, StringComparison.Ordinal));
+                if (!contentFail)
+                    continue;
+                if (failed.Length > 0)
+                    failed.Append(',');
+                failed.Append(item.BankName);
+                failed.Append(':');
+                failed.Append(string.IsNullOrEmpty(item.Error) ? item.State.ToString() : item.Error);
+                if (!string.IsNullOrEmpty(item.LocalPath) && File.Exists(item.LocalPath))
+                {
+                    if (kept.Length > 0)
+                        kept.Append(',');
+                    kept.Append(item.BankName);
+                }
+            }
+
+            Log.Info(
+                "[BankDownloader] batch updated=[" + updated +
+                "] failed=[" + failed +
+                "] keptPrevious=[" + kept + "]");
+        }
+
+        /// <summary>校验已通过的 tmp 换成正式文件。第二步失败时把上一份放回去。</summary>
+        static void ReplaceWithVerifiedTemp(string tmpPath, string finalPath)
+        {
+            string dir = Path.GetDirectoryName(finalPath);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+            if (!File.Exists(tmpPath))
+                throw new FileNotFoundException("verified tmp missing", tmpPath);
+            if (!File.Exists(finalPath))
+            {
+                File.Move(tmpPath, finalPath);
+                return;
+            }
+
+            string bak = finalPath + ".replacing";
+            TryDelete(bak);
+            File.Move(finalPath, bak);
+            try
+            {
+                File.Move(tmpPath, finalPath);
+                TryDelete(bak);
+            }
+            catch
+            {
+                if (!File.Exists(finalPath) && File.Exists(bak))
+                    File.Move(bak, finalPath);
+                throw;
+            }
         }
 
         struct Md5Job
@@ -2279,7 +3202,8 @@ namespace Game.BoluoApi
         }
 
         /// <summary>
-        /// path 旁路缓存：bankName → size + mtime + expectedMd5。命中则跳过读盘哈希。
+        /// path 旁路缓存：bankName → size + mtime + md5 + version。命中则跳过读盘哈希。
+        /// 旧的 4 列行 version 为空。
         /// </summary>
         sealed class BankMd5Cache
         {
@@ -2287,7 +3211,8 @@ namespace Game.BoluoApi
             static BankMd5Cache _instance;
             static readonly object Gate = new object();
 
-            readonly Dictionary<string, Entry> _map = new Dictionary<string, Entry>(128);
+            readonly Dictionary<string, Entry> _map =
+                new Dictionary<string, Entry>(128, StringComparer.OrdinalIgnoreCase);
             bool _loaded;
 
             struct Entry
@@ -2295,6 +3220,7 @@ namespace Game.BoluoApi
                 public long Size;
                 public long MtimeTicks;
                 public string Md5;
+                public string Version;
             }
 
             public static BankMd5Cache Load()
@@ -2310,31 +3236,82 @@ namespace Game.BoluoApi
                 }
             }
 
-            public bool Matches(string bankName, long size, long mtimeTicks, string md5)
+            public bool TryGet(
+                string bankName, long size, long mtimeTicks, out string md5, out string version)
             {
-                if (string.IsNullOrEmpty(bankName) || string.IsNullOrEmpty(md5))
+                md5 = null;
+                version = null;
+                string stem = AudioEnginePaths.StripBankExtension(bankName);
+                if (string.IsNullOrEmpty(stem))
                     return false;
                 lock (Gate)
                 {
-                    if (!_map.TryGetValue(bankName, out var entry))
+                    if (!_map.TryGetValue(stem, out var entry))
                         return false;
-                    return entry.Size == size &&
-                           entry.MtimeTicks == mtimeTicks &&
-                           string.Equals(entry.Md5, md5, StringComparison.OrdinalIgnoreCase);
+                    if (entry.Size != size || entry.MtimeTicks != mtimeTicks)
+                        return false;
+                    if (string.IsNullOrEmpty(entry.Md5))
+                        return false;
+                    md5 = entry.Md5;
+                    version = entry.Version ?? "";
+                    return true;
                 }
             }
 
-            public void Set(string bankName, long size, long mtimeTicks, string md5)
+            public bool TryGetStoredSize(string bankName, out long size)
             {
-                if (string.IsNullOrEmpty(bankName) || string.IsNullOrEmpty(md5))
+                size = 0;
+                string stem = AudioEnginePaths.StripBankExtension(bankName);
+                if (string.IsNullOrEmpty(stem))
+                    return false;
+                lock (Gate)
+                {
+                    if (!_map.TryGetValue(stem, out var entry) || string.IsNullOrEmpty(entry.Md5))
+                        return false;
+                    size = entry.Size;
+                    return size > 0;
+                }
+            }
+
+            public bool TryPeek(string bankName, out string version, out string md5)
+            {
+                version = null;
+                md5 = null;
+                string stem = AudioEnginePaths.StripBankExtension(bankName);
+                if (string.IsNullOrEmpty(stem))
+                    return false;
+                lock (Gate)
+                {
+                    if (!_map.TryGetValue(stem, out var entry) || string.IsNullOrEmpty(entry.Md5))
+                        return false;
+                    version = entry.Version ?? "";
+                    md5 = entry.Md5;
+                    return true;
+                }
+            }
+
+            public bool Remove(string bankName)
+            {
+                string stem = AudioEnginePaths.StripBankExtension(bankName);
+                if (string.IsNullOrEmpty(stem))
+                    return false;
+                lock (Gate)
+                    return _map.Remove(stem);
+            }
+
+            public void Set(string bankName, long size, long mtimeTicks, string md5, string version)
+            {
+                string stem = AudioEnginePaths.StripBankExtension(bankName);
+                if (string.IsNullOrEmpty(stem) || string.IsNullOrEmpty(md5))
                     return;
                 lock (Gate)
                 {
-                    _map[bankName] = new Entry
+                    _map[stem] = new Entry
                     {
                         Size = size,
                         MtimeTicks = mtimeTicks,
                         Md5 = md5,
+                        Version = version ?? "",
                     };
                 }
             }
@@ -2358,6 +3335,8 @@ namespace Game.BoluoApi
                             sb.Append(kv.Value.MtimeTicks);
                             sb.Append('\t');
                             sb.Append(kv.Value.Md5);
+                            sb.Append('\t');
+                            sb.Append(kv.Value.Version ?? "");
                             sb.Append('\n');
                         }
 
@@ -2394,11 +3373,19 @@ namespace Game.BoluoApi
                             continue;
                         if (!long.TryParse(parts[2], out long mtime))
                             continue;
-                        string name = parts[0].Trim().TrimStart('\uFEFF');
+                        string name = AudioEnginePaths.StripBankExtension(
+                            parts[0].Trim().TrimStart('\uFEFF'));
                         string md5 = parts[3].Trim();
+                        string version = parts.Length >= 5 ? parts[4].Trim() : "";
                         if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(md5))
                             continue;
-                        _map[name] = new Entry { Size = size, MtimeTicks = mtime, Md5 = md5 };
+                        _map[name] = new Entry
+                        {
+                            Size = size,
+                            MtimeTicks = mtime,
+                            Md5 = md5,
+                            Version = version,
+                        };
                     }
                 }
                 catch (Exception e)

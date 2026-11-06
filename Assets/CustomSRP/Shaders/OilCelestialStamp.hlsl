@@ -1,6 +1,8 @@
 #ifndef CUSTOM_OIL_CELESTIAL_STAMP_INCLUDED
 #define CUSTOM_OIL_CELESTIAL_STAMP_INCLUDED
 
+#include "OilPaintNoise.hlsl"
+
 // Water celestial reflection: stamp by camera→mirror-body hit on the water plane
 // so low sun/moon sit under the sky disc on finite ocean meshes.
 
@@ -212,7 +214,7 @@ half3 OilWaterStampBodyOnSurface(
     half coverA = smoothstep(0.10h, 0.48h, c.a);
     half coverR = 1.0h - smoothstep(0.50h, 1.20h, (half)r);
     half coverage = coverA * coverR * glazeAmt;
-    // Sun punchy; moon = pale cool veil (impasto≈0.55).
+    // Sun impasto 1 and moon 0.55 both stay opaque. The cool veil is impasto ≤ 0.5.
     coverage *= impasto > 0.5h ? 0.95h : 0.30h;
     coverage *= lerp(1.25h, 1.05h, (half)elev);
     if (impasto <= 0.5h)
@@ -227,11 +229,16 @@ half3 OilWaterStampBodyOnSurface(
         return sky;
     }
 
+    // Sun is impasto 1. Moon is 0.55: reflect Moon_Oil, do not HDR-punch it white.
     half3 paint = c.rgb * (half3)discColor;
-    if (impasto > 0.5h)
+    if (impasto > 0.75h)
     {
         paint = paint * lerp(1.25h, 1.85h, saturate((half)intensity));
         paint = lerp(paint, waterTint, 0.04h);
+    }
+    else if (impasto > 0.5h)
+    {
+        paint = lerp(OilMoonAlbedo(c.rgb), waterTint, 0.08h);
     }
     else
     {
@@ -247,7 +254,7 @@ half3 OilWaterStampBodyOnSurface(
 
     half3 stamp = lerp(sky, paint, saturate(coverage));
     // Sun core additive punch only (does not grow radius).
-    if (impasto > 0.5h)
+    if (impasto > 0.75h)
     {
         half core = coverR * coverA * glazeAmt;
         stamp = stamp + paint * core * 0.55h;
@@ -257,9 +264,9 @@ half3 OilWaterStampBodyOnSurface(
     half glowBand = smoothstep(0.50h, 0.98h, (half)r)
         * (1.0h - smoothstep(1.05h, glowOut, (half)r));
 #if defined(OIL_MOBILE_PERF)
-    half glowW = impasto > 0.5h ? 0.38h : 0.08h;
+    half glowW = impasto > 0.75h ? 0.38h : 0.08h;
 #else
-    half glowW = impasto > 0.5h ? 0.48h : 0.11h;
+    half glowW = impasto > 0.75h ? 0.48h : 0.11h;
 #endif
     half glowMask = glowBand * (half)glow * glazeAmt * glowW;
     half3 glowTint = lerp((half3)glowColor, paint, 0.45h);
@@ -267,7 +274,7 @@ half3 OilWaterStampBodyOnSurface(
     {
         glowTint = lerp(glowTint, half3(0.55h, 0.72h, 0.95h), 0.55h);
     }
-    if (impasto > 0.5h)
+    if (impasto > 0.75h)
     {
         stamp = stamp + glowTint * saturate(glowMask);
     }
@@ -367,11 +374,8 @@ half3 OilWaterPaintStars(
         return sky;
     }
 
-    float tintPick = OilCelestialHash22(cell + float2(2.2, 8.8)).x;
-    half3 tint = tintPick > 0.5
-        ? half3(1.02h, 0.96h, 0.82h)
-        : half3(0.78h, 0.88h, 1.06h);
-    half3 spark = lerp(s.rgb * tint, waterTint, 0.35h);
+    half3 tint = half3(1.04h, 0.97h, 0.84h);
+    half3 spark = lerp(s.rgb * tint, waterTint, 0.18h);
     return sky + spark * soft;
 }
 

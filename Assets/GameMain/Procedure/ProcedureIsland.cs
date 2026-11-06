@@ -266,6 +266,8 @@ namespace Game
             // Force path: wipe leftover Panel/Dialog from a stuck prior session once.
             UnlockLocomotionAfterUncover(closeLoadingCover: false, clearOverlayForms: true);
             BootLoadingService.MarkEntryGpuSettled();
+            // 强制揭罩也放行 bank 下载，避免永远卡在 WaitAfterUncover。
+            BankUpgradeBootstrap.NotifyAfterUncover();
             IslandEntryLog.Ok("island", "forceReady");
             NativeBridgeFacade.NotifyIslandReady();
         }
@@ -977,8 +979,19 @@ namespace Game
 
                     bool loadingFormOpen = GameEntry.UI != null
                         && GameEntry.UI.HasUIForm(UiAssets.LoadingForm);
-                    if (!BootLoadingService.IsVisible && !loadingFormOpen)
+                    // Hide 故意不 Close LoadingForm（关 Document 会把篝火静帧冻在屏幕上），
+                    // HasForm 会一直为 true。用它当「还盖着」会在 IsVisible 已是 false 后再空等
+                    // UncoverCapSeconds，真机清数据后就是加载页多卡 30 秒。
+                    bool coverGone = !BootLoadingService.IsVisible && !BootLoadingService.IsHiding;
+                    if (coverGone)
+                    {
+                        // #region agent log
+                        Log.Info(
+                            "[CoverDebug] uncover done hasForm=" + (loadingFormOpen ? 1 : 0)
+                            + " screen=" + Screen.width + "x" + Screen.height);
+                        // #endregion
                         _phase = Phase.Done;
+                    }
                     else if (!_uncoverForced
                         && _uncoverSince > 0f
                         && Time.realtimeSinceStartup - _uncoverSince >= UncoverCapSeconds)
@@ -1065,6 +1078,9 @@ namespace Game
 
             if (Stale("afterAudio"))
                 return;
+
+            // 起播门禁已过：放行静默 bank 下载（目录在揭罩前已更新）。
+            BankUpgradeBootstrap.NotifyAfterUncover();
 
             // 淡出前清一次残留 Panel/Dialog。此后用户已可点 HUD，再关会把刚打开的预设弹走。
             UnlockLocomotionAfterUncover(closeLoadingCover: false, clearOverlayForms: true);
@@ -1153,7 +1169,14 @@ namespace Game
 
             try
             {
+                IslandEntryLog.Wait("coverWarm", "banksBegin");
+                float banksStart = Time.realtimeSinceStartup;
                 await BankUpgradeBootstrap.EnsureLocalBanksReadyAsync();
+                await BankUpgradeBootstrap.WaitCatalogWithTimeoutAsync(20f);
+                IslandEntryLog.Ok(
+                    "coverWarm",
+                    "banksEnd",
+                    "ms=" + ((Time.realtimeSinceStartup - banksStart) * 1000f).ToString("F0"));
                 if (gen != _uncoverGeneration || _playbackWarmed)
                     return;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -1180,6 +1203,8 @@ namespace Game
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
             await BankUpgradeBootstrap.EnsureLocalBanksReadyAsync();
+            await BankUpgradeBootstrap.WaitCatalogWithTimeoutAsync(20f);
+            await MusicCatalog.EnsureReadyAsync(8f);
             Log.Info("[Hitch] audio banks ms=" + sw.ElapsedMilliseconds);
             if (gen != _uncoverGeneration)
                 return;
@@ -1259,6 +1284,8 @@ namespace Game
                 NowPlayingService.PublishPlayingForced();
             Log.Info("[Hitch] audio PublishPlayingForced ms=" + sw.ElapsedMilliseconds
                 + " allowAudible=" + allowAudible);
+            // 目录已在揭罩前更新；此处放行与以往相同的静默 bank 下载。
+            BankUpgradeBootstrap.NotifyAfterUncover();
             BankUpgradeBootstrap.WaitCriticalThenCueAsync(45f).Forget();
         }
 

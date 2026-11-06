@@ -47,11 +47,11 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _AlbedoBoost: 1
+    - _AlbedoBoost: 0.6
     - _BumpCross: 0.85
     - _BumpScale: 0.64
     - _BumpTile: 80
-    - _DepthVertical: 4
+    - _DepthVertical: 2.3
     - _DstBlend: 10
     - _FoamStrength: 1.35
     - _IntersectionClipping: 0
@@ -61,12 +61,12 @@ Material:
     - _IntersectionTiling: 0.2
     - _PaintContrast: 3
     - _PaintRelief: 1
-    - _PaintTile: 80
+    - _PaintTile: 50
     - _PremulAlpha: 1
-    - _ReflectDistort: 0.35
+    - _ReflectDistort: 0.197
     - _ReflectSteps: 3
-    - _ReflectStrength: 0.52
-    - _RefractionStrength: 1
+    - _ReflectStrength: 0.324
+    - _RefractionStrength: 0.761
     - _ShadeSteps: 3
     - _ShoreFoamWidth: 8
     - _SrcBlend: 1
@@ -75,17 +75,17 @@ Material:
     - _StrokeWarp: 1.05
     - _SunPathStrength: 2.85
     - _SunPathWidth: 4.2
-    - _TintStrength: 0.36
+    - _TintStrength: 0.55
     - _ZWrite: 0
     m_Colors:
-    - _BaseColor: {r: 0.12, g: 0.2, b: 0.34, a: 0.96}
+    - _BaseColor: {r: 0.08, g: 0.44, b: 0.7, a: 0.96}
     - _BumpScroll: {r: 0.015, g: -0.01, b: -0.025, a: 0.018}
     - _BumpTiling: {r: 1, g: 2, b: 2, a: 1}
     - _FoamColor: {r: 0.94, g: 0.97, b: 1, a: 1}
     - _GlintColor: {r: 1, g: 0.9, b: 0.42, a: 1}
-    - _ShallowColor: {r: 0.2, g: 0.28, b: 0.4, a: 0.9}
-    - _TintDeep: {r: 0.22, g: 0.28, b: 0.4, a: 1}
+    - _ShallowColor: {r: 0.16, g: 0.58, b: 0.8, a: 0.9}
+    - _TintDeep: {r: 0.99215686, g: 0.95686275, b: 0.8352941, a: 1}
     - _TintHighlight: {r: 0.8851015, g: 0.9263436, b: 0.9622642, a: 1}
-    - _TintShallow: {r: 0.48, g: 0.72, b: 0.88, a: 1}
+    - _TintShallow: {r: 1, g: 0.96078426, b: 0.8431372, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

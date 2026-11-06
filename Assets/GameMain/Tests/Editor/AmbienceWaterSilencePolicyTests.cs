@@ -30,7 +30,7 @@ namespace Game.Tests
         [Test]
         public void PreferFall_WhenWithinPreferRadius()
         {
-            // 湖更近，但人已在大瀑 Enter（80）内 → 仍保留瀑。
+            // 湖更近，但人已在贴瀑优先圈内 → 仍保留瀑。
             Assert.IsFalse(
                 AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
                     bestLakeDist: 10f,
@@ -48,11 +48,11 @@ namespace Game.Tests
         [Test]
         public void PreferLake_WhenCloserAndOutsideFallRadius()
         {
-            // 须在 PreferFallWithinMeters(80) 外，否则贴瀑优先。
+            // 须在 PreferFallWithinMeters 外，否则贴瀑优先。
             Assert.IsTrue(
                 AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
                     bestLakeDist: 15f,
-                    bestFallDist: 90f,
+                    bestFallDist: 120f,
                     lakePlaying: false,
                     fallPlaying: false));
         }
@@ -60,18 +60,18 @@ namespace Game.Tests
         [Test]
         public void Hysteresis_KeepsPlayingLake()
         {
-            // 双方都在 80m 外：瀑略近，但湖在播且在滞回内 → 继续湖。
+            // 双方都在贴瀑优先圈外：瀑略近，但湖在播且在滞回内 → 继续湖。
             Assert.IsTrue(
                 AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
-                    bestLakeDist: 85f,
-                    bestFallDist: 90f,
+                    bestLakeDist: 105f,
+                    bestFallDist: 110f,
                     lakePlaying: true,
                     fallPlaying: false));
 
             Assert.IsTrue(
                 AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
-                    bestLakeDist: 90f,
-                    bestFallDist: 85f,
+                    bestLakeDist: 110f,
+                    bestFallDist: 105f,
                     lakePlaying: true,
                     fallPlaying: false));
         }
@@ -81,8 +81,8 @@ namespace Game.Tests
         {
             Assert.IsFalse(
                 AmbienceWaterSilencePolicy.PreferLakeOverWaterfall(
-                    bestLakeDist: 85f,
-                    bestFallDist: 90f,
+                    bestLakeDist: 105f,
+                    bestFallDist: 110f,
                     lakePlaying: false,
                     fallPlaying: true));
         }

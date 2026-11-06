@@ -11,6 +11,8 @@ namespace Game.Tests
     public sealed class UserBankDownloadFlowProgressTests
     {
         const string ReadyStem = "ZoneProg_Ready";
+        const string ReadyVersion = "1.0.0";
+        const string ReadyMd5 = "zone-prog-md5";
         const string ActiveStem = "ZoneProg_Active";
         const string MissingStem = "ZoneProg_Missing";
         const string OtherStem = "ZoneProg_OtherSilent";
@@ -29,6 +31,7 @@ namespace Game.Tests
                 AudioEnginePaths.PersistentBankPath,
                 ReadyStem + AudioEnginePaths.BankExtension);
             File.WriteAllBytes(_readyPath, new byte[2048]);
+            BankDownloader.EditorRememberIdentity(ReadyStem, ReadyVersion, ReadyMd5, _readyPath);
 
             PresetBankCatalog.TryApplyUpgrade(new BankUpgradeData
             {
@@ -38,9 +41,10 @@ namespace Game.Tests
                     {
                         bankName = ReadyStem,
                         url = "https://example.test/ready.wsbk",
-                        // 2 KB；SetUp 写 2048 字节以满足 FileMatchesRemoteSize。
+                        // 2 KB；偏小文件会被体积否决。就绪还要对上 version + md5。
                         size = "2",
-                        md5 = "",
+                        version = ReadyVersion,
+                        md5 = ReadyMd5,
                     },
                     new BankRemoteInfo
                     {
@@ -73,6 +77,7 @@ namespace Game.Tests
         {
             if (!string.IsNullOrEmpty(_readyPath) && File.Exists(_readyPath))
                 File.Delete(_readyPath);
+            BankDownloader.EditorForgetIdentity(ReadyStem);
             BankDownloader.ResetSession();
             PresetBankCatalog.Clear();
             BankDownloader.InvalidateLocalReadyCache();
